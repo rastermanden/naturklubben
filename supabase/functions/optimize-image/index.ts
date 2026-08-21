@@ -17,7 +17,7 @@
 // så vi falder tilbage til det hvis SUPABASE_SECRET_KEY ikke er sat.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { Image } from 'https://deno.land/x/imagescript@1.3.0/mod.ts'
+import { Image } from 'https://deno.land/x/imagescript@v1.3.1/mod.ts'
 
 const WEB_MAX_WIDTH = 1600
 const THUMBNAIL_MAX_WIDTH = 400
@@ -105,6 +105,12 @@ Deno.serve(async (req) => {
     // Fejler optimeringen, forbliver originalen synlig i galleriet via
     // useDisplayUrl's signerede-URL-fallback -- vi blokerer ikke uploadet.
     console.error('optimize-image fejlede', { photoId, storagePath, error })
-    return jsonResponse({ error: 'Billedoptimering fejlede' }, 500)
+    return jsonResponse(
+      {
+        error: 'Billedoptimering fejlede',
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      500,
+    )
   }
 })
