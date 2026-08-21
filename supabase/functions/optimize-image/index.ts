@@ -7,7 +7,11 @@
 //
 // Bruger `imagescript` -- et rent Deno/WASM-billedbibliotek uden native
 // afhængigheder (kører derfor problemfrit i Edge Runtime, i modsætning til
-// fx Sharp/libvips). Output er WebP, som imagescript understøtter direkte.
+// fx Sharp/libvips). Output er JPEG: deno.land/x's registry for
+// imagescript stoppede med at indeksere nye tags efter 1.3.0 (senere
+// versioner mangler et Deno-kompatibelt mod.ts-entrypoint i kildekoden),
+// og præcis den version har ingen encodeWEBP-implementering -- kun
+// encodeJPEG er tilgængelig i den faktisk deploybare version.
 //
 // Bruger Secret key til at omgå RLS, så den kan skrive optimerede filer
 // og opdatere andres photos-rækker. Secret key er reserveret og
@@ -17,12 +21,12 @@
 // så vi falder tilbage til det hvis SUPABASE_SECRET_KEY ikke er sat.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { Image } from 'https://deno.land/x/imagescript@v1.3.1/mod.ts'
+import { Image } from 'https://deno.land/x/imagescript@1.3.0/mod.ts'
 
 const WEB_MAX_WIDTH = 1600
 const THUMBNAIL_MAX_WIDTH = 400
-const WEB_WEBP_QUALITY = 80
-const THUMBNAIL_WEBP_QUALITY = 75
+const WEB_JPEG_QUALITY = 80
+const THUMBNAIL_JPEG_QUALITY = 75
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -66,30 +70,30 @@ Deno.serve(async (req) => {
     const bytes = new Uint8Array(await original.arrayBuffer())
 
     const basePath = storagePath.replace(/\.[^/.]+$/, '')
-    const webPath = `${basePath}.webp`
-    const thumbnailPath = `${basePath}-thumb.webp`
+    const webPath = `${basePath}.jpg`
+    const thumbnailPath = `${basePath}-thumb.jpg`
 
     const web = await Image.decode(bytes)
     if (web.width > WEB_MAX_WIDTH) {
       web.resize(WEB_MAX_WIDTH, Image.RESIZE_AUTO)
     }
-    const webBytes = await web.encodeWEBP(WEB_WEBP_QUALITY)
+    const webBytes = await web.encodeJPEG(WEB_JPEG_QUALITY)
 
     const thumbnail = await Image.decode(bytes)
     if (thumbnail.width > THUMBNAIL_MAX_WIDTH) {
       thumbnail.resize(THUMBNAIL_MAX_WIDTH, Image.RESIZE_AUTO)
     }
-    const thumbnailBytes = await thumbnail.encodeWEBP(THUMBNAIL_WEBP_QUALITY)
+    const thumbnailBytes = await thumbnail.encodeJPEG(THUMBNAIL_JPEG_QUALITY)
 
     const { error: webUploadError } = await supabase.storage
       .from('photos-optimized')
-      .upload(webPath, webBytes, { contentType: 'image/webp', upsert: true })
+      .upload(webPath, webBytes, { contentType: 'image/jpeg', upsert: true })
     if (webUploadError) throw webUploadError
 
     const { error: thumbnailUploadError } = await supabase.storage
       .from('photos-optimized')
       .upload(thumbnailPath, thumbnailBytes, {
-        contentType: 'image/webp',
+        contentType: 'image/jpeg',
         upsert: true,
       })
     if (thumbnailUploadError) throw thumbnailUploadError
