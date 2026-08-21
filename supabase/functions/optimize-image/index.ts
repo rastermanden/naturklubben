@@ -9,9 +9,12 @@
 // afhængigheder (kører derfor problemfrit i Edge Runtime, i modsætning til
 // fx Sharp/libvips). Output er WebP, som imagescript understøtter direkte.
 //
-// Kræver SUPABASE_SECRET_KEY sat som function-secret (se
-// .github/workflows/deploy-functions.yml), da den omgår RLS for at kunne
-// skrive optimerede filer og opdatere andres photos-rækker.
+// Bruger Secret key til at omgå RLS, så den kan skrive optimerede filer
+// og opdatere andres photos-rækker. Secret key er reserveret og
+// auto-injiceres af platformen i alle Edge Functions (kan ikke sættes
+// manuelt via `supabase secrets set`, se .github/workflows/deploy-functions.yml)
+// -- SUPABASE_SERVICE_ROLE_KEY er det historiske reserverede variabelnavn,
+// så vi falder tilbage til det hvis SUPABASE_SECRET_KEY ikke er sat.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Image } from 'https://deno.land/x/imagescript@1.3.0/mod.ts'
@@ -50,7 +53,8 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SECRET_KEY')!,
+      (Deno.env.get('SUPABASE_SECRET_KEY') ??
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!,
     )
 
     const { data: original, error: downloadError } = await supabase.storage
