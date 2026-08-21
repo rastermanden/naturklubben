@@ -22,6 +22,20 @@ Oprettet manuelt i #2:
 - `photos-optimized` (public) -- alle kan læse. Kun `optimize-image`-edge-functionen
   (Secret key, omgår RLS) kan skrive -- der er bevidst ingen insert-policy for andre.
 
+## Edge Functions
+
+- `optimize-image` (#13): kaldes fra klienten (`useUploadPhotos`) lige efter en upload.
+  Henter originalen fra `photos-original`, laver en web-str­ørrelse (maks. 1600px bredde)
+  og en thumbnail (maks. 400px bredde) som WebP via `imagescript`, uploader begge til
+  `photos-optimized`, og opdaterer `photos`-rækkens `optimized_path`/`thumbnail_path`.
+  Fejler den (fx før den er deployet endnu, eller på et ugyldigt billede), forbliver
+  originalen synlig i galleriet via en signeret URL -- uploadet blokeres ikke.
+- Deployes **ikke** manuelt -- `.github/workflows/deploy-functions.yml` kører
+  `supabase functions deploy` ikke-interaktivt ved push til `main`, når noget under
+  `supabase/functions/` ændres. Kræver `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`
+  og `SUPABASE_SECRET_KEY` som GitHub-secrets (se #2) -- workflowet sætter selv
+  Secret key som function-secret via `supabase secrets set` før deploy.
+
 ## Migrations
 
 Filnavngivning: `<timestamp>_<beskrivelse>.sql` i `supabase/migrations/`. Se `CLAUDE.md`
