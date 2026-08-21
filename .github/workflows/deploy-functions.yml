@@ -13,9 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned frem for "latest" -- "latest" beder actionen om at slå den
+      # nyeste release op via GitHub's API, som er stødt på rate limiting
+      # og fejlet deploys uden relation til selve koden.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.115.0
 
       # Secret-navne der starter med SUPABASE_ er reserverede af
       # platformen og injiceres automatisk i alle Edge Functions -- de
