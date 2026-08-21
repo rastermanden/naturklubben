@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth'
 import { navLinks } from './navLinks'
 import { BurgerMenu } from './BurgerMenu'
+import { Footer } from './Footer'
 
 export function Layout() {
   const { session, signOut } = useAuth()
@@ -89,6 +90,8 @@ export function Layout() {
       <div className="flex-1">
         <Outlet />
       </div>
+
+      <Footer />
     </div>
   )
 }
