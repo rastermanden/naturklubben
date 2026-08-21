@@ -27,6 +27,13 @@ export default defineConfig({
             // index.html, ikke manifestets icons-liste -- skal derfor
             // eksplicit bedes precachet.
             includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+            // Uden dette registreres der ingen service worker under
+            // `npm run dev` -- installer-knappen (beforeinstallprompt)
+            // kræver én, så den ville aldrig dukke op lokalt i dev.
+            devOptions: {
+              enabled: true,
+              type: 'module',
+            },
             manifest: {
               name: 'Naturklubben',
               short_name: 'Naturklubben',
