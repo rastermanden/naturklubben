@@ -1,41 +1,69 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { toFriendlyAuthError } from '../features/auth/authErrors'
 
-function LoginPage() {
-  const navigate = useNavigate()
-  const location = useLocation()
+function SignupPage() {
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-
-  const from = (location.state as { from?: string } | null)?.from ?? '/'
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
     setSubmitting(true)
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
+      options: { data: { full_name: fullName } },
     })
 
     setSubmitting(false)
-    if (signInError) {
-      setError(toFriendlyAuthError(signInError.message))
+    if (signUpError) {
+      setError(toFriendlyAuthError(signUpError.message))
       return
     }
-    navigate(from, { replace: true })
+    setSubmitted(true)
+  }
+
+  if (submitted) {
+    return (
+      <main className="mx-auto flex min-h-svh max-w-sm flex-col justify-center gap-4 p-6 text-center">
+        <h1 className="text-2xl font-semibold text-green-900">
+          Tjek din e-mail
+        </h1>
+        <p className="text-green-800">
+          Vi har sendt dig en bekræftelsesmail. Klik på linket i mailen for at
+          aktivere din bruger.
+        </p>
+        <Link to="/login" className="underline">
+          Tilbage til login
+        </Link>
+      </main>
+    )
   }
 
   return (
     <main className="mx-auto flex min-h-svh max-w-sm flex-col justify-center gap-6 p-6">
-      <h1 className="text-2xl font-semibold text-green-900">Log ind</h1>
+      <h1 className="text-2xl font-semibold text-green-900">Opret bruger</h1>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1 text-sm text-green-900">
+          Navn
+          <input
+            type="text"
+            required
+            autoComplete="name"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            className="rounded border border-green-300 px-3 py-2 text-base"
+          />
+        </label>
+
         <label className="flex flex-col gap-1 text-sm text-green-900">
           E-mail
           <input
@@ -53,7 +81,8 @@ function LoginPage() {
           <input
             type="password"
             required
-            autoComplete="current-password"
+            minLength={6}
+            autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             className="rounded border border-green-300 px-3 py-2 text-base"
@@ -71,23 +100,18 @@ function LoginPage() {
           disabled={submitting}
           className="rounded bg-green-800 px-4 py-2 text-white disabled:opacity-60"
         >
-          {submitting ? 'Logger ind…' : 'Log ind'}
+          {submitting ? 'Opretter…' : 'Opret bruger'}
         </button>
       </form>
 
-      <div className="flex flex-col gap-1 text-sm text-green-800">
-        <Link to="/glemt-adgangskode" className="underline">
-          Glemt adgangskode?
+      <span className="text-sm text-green-800">
+        Har du allerede en bruger?{' '}
+        <Link to="/login" className="underline">
+          Log ind
         </Link>
-        <span>
-          Ny i klubben?{' '}
-          <Link to="/opret" className="underline">
-            Opret bruger
-          </Link>
-        </span>
-      </div>
+      </span>
     </main>
   )
 }
 
-export default LoginPage
+export default SignupPage
