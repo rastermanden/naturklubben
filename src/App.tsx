@@ -1,3 +1,4 @@
+import ProfilePage from './pages/ProfilePage'
 import { Route, Routes } from 'react-router-dom'
 import ActivitiesPage from './pages/ActivitiesPage'
 import CalendarPage from './pages/CalendarPage'
@@ -40,6 +41,14 @@ function App() {
           element={
             <ProtectedRoute>
               <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profil"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
             </ProtectedRoute>
           }
         />
