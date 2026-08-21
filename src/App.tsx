@@ -8,39 +8,42 @@ import HeroPage from './pages/HeroPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
+import { Layout } from './components/Layout'
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<HeroPage />} />
-      <Route path="/aktiviteter" element={<ActivitiesPage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/opret" element={<SignupPage />} />
-      <Route path="/glemt-adgangskode" element={<ForgotPasswordPage />} />
-      <Route
-        path="/kalender"
-        element={
-          <ProtectedRoute>
-            <CalendarPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/billeder"
-        element={
-          <ProtectedRoute>
-            <GalleryPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/chat"
-        element={
-          <ProtectedRoute>
-            <ChatPage />
-          </ProtectedRoute>
-        }
-      />
+      <Route element={<Layout />}>
+        <Route path="/" element={<HeroPage />} />
+        <Route path="/aktiviteter" element={<ActivitiesPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/opret" element={<SignupPage />} />
+        <Route path="/glemt-adgangskode" element={<ForgotPasswordPage />} />
+        <Route
+          path="/kalender"
+          element={
+            <ProtectedRoute>
+              <CalendarPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/billeder"
+          element={
+            <ProtectedRoute>
+              <GalleryPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/chat"
+          element={
+            <ProtectedRoute>
+              <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+      </Route>
     </Routes>
   )
 }
