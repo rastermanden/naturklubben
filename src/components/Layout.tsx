@@ -4,6 +4,7 @@ import { useAuth } from '../features/auth/useAuth'
 import { navLinks } from './navLinks'
 import { BurgerMenu } from './BurgerMenu'
 import { Footer } from './Footer'
+import { InstallAppButton } from './InstallAppButton'
 
 export function Layout() {
   const { session, signOut } = useAuth()
@@ -54,6 +55,7 @@ export function Layout() {
               Log ind
             </NavLink>
           )}
+          <InstallAppButton className="rounded border border-green-300 px-3 py-1 text-green-800" />
         </nav>
 
         <button
