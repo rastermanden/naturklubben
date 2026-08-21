@@ -23,6 +23,10 @@ export default defineConfig({
       ? [
           VitePWA({
             registerType: 'autoUpdate',
+            // favicon.svg/apple-touch-icon.png refereres kun via <link> i
+            // index.html, ikke manifestets icons-liste -- skal derfor
+            // eksplicit bedes precachet.
+            includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
             manifest: {
               name: 'Naturklubben',
               short_name: 'Naturklubben',
@@ -33,8 +37,52 @@ export default defineConfig({
               display: 'standalone',
               theme_color: '#166534',
               background_color: '#ffffff',
-              // Rigtige ikoner (192/512/maskable) tilføjes i PWA-finish-issuet.
-              icons: [],
+              icons: [
+                {
+                  src: 'pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png',
+                  purpose: 'any',
+                },
+                {
+                  src: 'pwa-512x512.png',
+                  sizes: '512x512',
+                  type: 'image/png',
+                  purpose: 'any',
+                },
+                {
+                  src: 'maskable-icon-512x512.png',
+                  sizes: '512x512',
+                  type: 'image/png',
+                  purpose: 'maskable',
+                },
+              ],
+            },
+            workbox: {
+              // Precacher app-shellen (HTML/JS/CSS/ikoner), så appen stadig
+              // åbner og viser en meningsfuld tilstand offline -- hver sides
+              // egne loading/fejl-tilstande tager over for data, der ikke er
+              // hentet endnu.
+              navigateFallback: `${basePath}index.html`,
+              runtimeCaching: [
+                {
+                  // Optimerede/originale billeder fra Supabase Storage --
+                  // stale-while-revalidate, så tidligere sete billeder vises
+                  // med det samme selv offline, og opdateres i baggrunden
+                  // næste gang der er netværk.
+                  urlPattern:
+                    /^https:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/public\/.*/,
+                  handler: 'StaleWhileRevalidate',
+                  options: {
+                    cacheName: 'supabase-storage-images',
+                    expiration: {
+                      maxEntries: 200,
+                      maxAgeSeconds: 30 * 24 * 60 * 60,
+                    },
+                    cacheableResponse: { statuses: [0, 200] },
+                  },
+                },
+              ],
             },
           }),
         ]

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth'
 import { navLinks } from './navLinks'
+import { InstallAppButton } from './InstallAppButton'
 
 interface BurgerMenuProps {
   open: boolean
@@ -89,7 +90,8 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
           ))}
         </nav>
 
-        <div className="mt-auto border-t border-green-100 pt-4">
+        <div className="mt-auto flex flex-col gap-1 border-t border-green-100 pt-4">
+          <InstallAppButton className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-lg text-green-800" />
           {session ? (
             <button
               type="button"
