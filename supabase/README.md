@@ -32,9 +32,11 @@ Oprettet manuelt i #2:
   originalen synlig i galleriet via en signeret URL -- uploadet blokeres ikke.
 - Deployes **ikke** manuelt -- `.github/workflows/deploy-functions.yml` kører
   `supabase functions deploy` ikke-interaktivt ved push til `main`, når noget under
-  `supabase/functions/` ændres. Kræver `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`
-  og `SUPABASE_SECRET_KEY` som GitHub-secrets (se #2) -- workflowet sætter selv
-  Secret key som function-secret via `supabase secrets set` før deploy.
+  `supabase/functions/` ændres. Kræver `SUPABASE_ACCESS_TOKEN` og `SUPABASE_PROJECT_REF`
+  som GitHub-secrets (se #2). Secret key skal **ikke** sættes manuelt som
+  function-secret -- variabelnavne der starter med `SUPABASE_` er reserverede og
+  auto-injiceres af platformen i alle Edge Functions (`supabase secrets set` afviser
+  dem eksplicit).
 
 ## Migrations
 
