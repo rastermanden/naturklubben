@@ -1,0 +1,66 @@
+name: Sync Supabase auth-URL'er
+
+# Supabase afgør ud fra projektets Site URL og listen over tilladte
+# redirect-URL'er, hvor et link i en bekræftelses- eller nulstillingsmail må
+# lande. Peger de forkert, ryger nye medlemmer ud på en 404 i stedet for
+# app'ens bekræftelsesside -- og et `emailRedirectTo` fra klienten, der ikke
+# står på listen, bliver bare ignoreret til fordel for Site URL.
+#
+# Derfor holdes de to indstillinger her som kode og skubbes til projektet ved
+# hver push til main. Kaldet er idempotent, så det er også selvhelbredende,
+# hvis nogen kommer til at ændre dem i dashboardet.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # Tjekket ligger i shellen, ikke i en `if:` -- secrets-konteksten er
+      # ikke tilgængelig i et steps `if:`-udtryk.
+      - name: Sæt Site URL og tilladte redirect-URL'er
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF || vars.SUPABASE_PROJECT_REF }}
+          # Kan overstyres med en repo-variabel, hvis appen flytter adresse.
+          APP_URL: ${{ vars.APP_URL || 'https://rastermanden.github.io/naturklubben/' }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::warning::SUPABASE_ACCESS_TOKEN/SUPABASE_PROJECT_REF mangler -- auth-URL'erne blev ikke synkroniseret."
+            exit 0
+          fi
+
+          base="${APP_URL%/}/"
+
+          # `**` matcher også på tværs af /, så ét mønster dækker både
+          # /velkommen, /ny-adgangskode og PR-previewenes egne kopier under
+          # /pr-preview/pr-<nr>/. localhost er med, så flowet kan afprøves
+          # under `npm run dev`.
+          allow_list="${base}**,http://localhost:5173/**"
+
+          body=$(jq -n --arg site "${base%/}" --arg allow "$allow_list" \
+            '{site_url: $site, uri_allow_list: $allow}')
+
+          response=$(mktemp)
+          status=$(curl -sS --max-time 30 -o "$response" -w '%{http_code}' \
+            -X PATCH "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/config/auth" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "$body")
+
+          if [ "$status" != "200" ]; then
+            echo "::error::Supabase svarede $status på opdateringen af auth-URL'erne."
+            # Svaret ved en fejl er en kort fejlbesked -- ikke hele auth-configen.
+            cat "$response" >&2
+            exit 1
+          fi
+
+          # Kun de to felter ekkoes: hele auth-configen indeholder bl.a.
+          # SMTP- og OAuth-hemmeligheder og hører ikke hjemme i en log.
+          jq -r '"Site URL: \(.site_url)\nRedirect-URL'"'"'er: \(.uri_allow_list)"' "$response" \
+            | tee -a "$GITHUB_STEP_SUMMARY"

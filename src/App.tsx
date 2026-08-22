@@ -8,7 +8,9 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import GalleryPage from './pages/GalleryPage'
 import HeroPage from './pages/HeroPage'
 import LoginPage from './pages/LoginPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import SignupPage from './pages/SignupPage'
+import WelcomePage from './pages/WelcomePage'
 import { AdminRoute } from './features/admin/AdminRoute'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
 import { Layout } from './components/Layout'
@@ -22,6 +24,9 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/opret" element={<SignupPage />} />
         <Route path="/glemt-adgangskode" element={<ForgotPasswordPage />} />
+        {/* Landingssider for links i mails fra Supabase. */}
+        <Route path="/velkommen" element={<WelcomePage />} />
+        <Route path="/ny-adgangskode" element={<ResetPasswordPage />} />
         <Route
           path="/kalender"
           element={

@@ -92,6 +92,46 @@ Admins vedligeholder listen på `/admin` i appen. At fjerne en adresse spærrer 
 _nye_ oprettelser -- en allerede oprettet bruger i `auth.users` bliver ikke slettet af
 det og kan fortsat logge ind.
 
+## Auth-URL'er: hvor links i mails lander
+
+Supabase afgør ud fra to projektindstillinger, hvor et link i en bekræftelses- eller
+nulstillingsmail må sende folk hen:
+
+| Indstilling                      | Værdi                                                                        |
+| -------------------------------- | ---------------------------------------------------------------------------- |
+| Site URL                         | `https://rastermanden.github.io/naturklubben`                                |
+| Redirect URLs (`uri_allow_list`) | `https://rastermanden.github.io/naturklubben/**`, `http://localhost:5173/**` |
+
+De sættes **ikke** i hånden i dashboardet: `.github/workflows/sync-auth-config.yml`
+skubber dem til Management API'et ved hver push til `main` (og kan køres manuelt med
+_Run workflow_). Kaldet er idempotent og retter derfor også op på sig selv, hvis nogen
+ændrer felterne i dashboardet. Adressen kan overstyres med repo-variablen `APP_URL`.
+Workflowet bruger de samme `SUPABASE_ACCESS_TOKEN`/`SUPABASE_PROJECT_REF`-secrets som
+function-deployet.
+
+Hvorfor det er nødvendigt: klienten beder selv om at komme tilbage til
+`.../naturklubben/velkommen` (`emailRedirectTo` i `src/pages/SignupPage.tsx`), men
+Supabase ignorerer et `emailRedirectTo`, der ikke matcher listen, og bruger Site URL i
+stedet. Stod Site URL til roden af domænet, endte alle nye medlemmer på GitHubs
+"There isn't a GitHub Pages site here"-404 i stedet for en kvittering.
+
+Wildcarden `/naturklubben/**` dækker også PR-previewenes kopier af appen
+(`/naturklubben/pr-preview/pr-<nr>/velkommen`), så signup-flowet kan afprøves på et
+preview-link -- mod previewets egen database.
+
+De to sider, links kan lande på:
+
+- `/velkommen` (`src/pages/WelcomePage.tsx`) -- bekræftet e-mail. Sessionen kommer med i
+  URL'ens fragment, og siden viser enten en velkomst eller en forklaring på, at linket er
+  udløbet/brugt.
+- `/ny-adgangskode` (`src/pages/ResetPasswordPage.tsx`) -- vælg en ny adgangskode efter
+  "Glemt adgangskode".
+
+Begge stier findes ikke som filer på GitHub Pages. Derfor udgiver buildet en `404.html`
+(se `spaFallback` i `vite.config.ts`), som sender browseren videre til app'ens
+`index.html` med stien -- og med query og fragment i behold, for det er dér, sessionen
+ligger. `src/lib/spaRedirect.ts` pakker stien ud igen, før React Router læser adressen.
+
 ## Notifikationer på nye chatbeskeder
 
 Flowet, ende til ende:
