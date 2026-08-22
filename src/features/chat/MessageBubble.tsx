@@ -76,11 +76,12 @@ export function MessageBubble({
           isOwn ? { backgroundColor: color } : { backgroundColor: color + '22' }
         }
       >
-        {!isOwn && (
-          <p className="mb-0.5 text-xs font-medium" style={{ color }}>
-            {name}
-          </p>
-        )}
+        <p
+          className={`mb-0.5 text-xs font-medium ${isOwn ? 'text-right text-white/80' : ''}`}
+          style={isOwn ? undefined : { color }}
+        >
+          {name}
+        </p>
         <p className="whitespace-pre-wrap break-words">{message.content}</p>
         <p className="mt-1 text-right text-xs opacity-70" title={fullTimestamp}>
           {formatRelativeTime(message.created_at)}
