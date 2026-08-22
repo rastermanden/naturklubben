@@ -6,15 +6,16 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 
 ## Skema
 
-| Tabel                | Formål                                                                                                                           | RLS                                                                                                                                         |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`           | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.                         | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                          |
-| `activities`         | Offentligt indhold om klubbens aktiviteter (#10).                                                                                | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                        |
-| `events`             | Kalenderbegivenheder (#11).                                                                                                      | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                    |
-| `photos`             | Metadata for uploadede billeder -- selve filerne ligger i Storage (#12).                                                         | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne. `optimized_path`/`thumbnail_path` sættes af edge-functionen i #13. |
-| `messages`           | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                                                       | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                          |
-| `push_subscriptions` | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                 |
-| `allowed_emails`     | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                               |
+| Tabel                    | Formål                                                                                                                           | RLS                                                                                                                                         |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profiles`               | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.                         | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                          |
+| `activities`             | Offentligt indhold om klubbens aktiviteter (#10).                                                                                | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                        |
+| `events`                 | Kalenderbegivenheder (#11).                                                                                                      | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                    |
+| `photos`                 | Metadata for uploadede billeder -- selve filerne ligger i Storage (#12).                                                         | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne. `optimized_path`/`thumbnail_path` sættes af edge-functionen i #13. |
+| `messages`               | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                                                       | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                          |
+| `push_subscriptions`     | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                 |
+| `allowed_emails`         | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                               |
+| `probation_applications` | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                      | Alle kan indsende; kun admins kan læse og behandle ansøgningerne.                                                                           |
 
 ## Storage buckets
 
@@ -91,6 +92,20 @@ listen (klienten oversætter fejlen til en dansk besked i `src/features/auth/aut
 Admins vedligeholder listen på `/admin` i appen. At fjerne en adresse spærrer kun for
 _nye_ oprettelser -- en allerede oprettet bruger i `auth.users` bliver ikke slettet af
 det og kan fortsat logge ind.
+
+## Ansøgninger om prøvemedlemskab
+
+Offentlige besøgende kan sende en ansøgning fra `/proevemedlemskab`. Den gemmes i
+`probation_applications`, som kun admins kan læse i `/admin`.
+
+Når en admin godkender en ansøgning, kalder klienten SQL-funktionen
+`approve_probation_application()`, som atomisk:
+
+1. tilføjer ansøgerens e-mail til `allowed_emails`, og
+2. markerer ansøgningen som godkendt.
+
+Afvisning bruger `reject_probation_application()`, som markerer ansøgningen som
+afvist, så personen kan sende en ny ansøgning senere.
 
 ## Auth-URL'er: hvor links i mails lander
 
