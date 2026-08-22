@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../features/auth/useAuth'
 import { MessageBubble } from '../features/chat/MessageBubble'
+import { OnlineMembers } from '../features/chat/OnlineMembers'
 import { useMessages } from '../features/chat/useMessages'
+import { useOnlinePresence } from '../features/chat/useOnlinePresence'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 
@@ -13,6 +15,7 @@ function ChatPage() {
   const userId = session!.user.id
   const { messagesQuery, sendMessage } = useMessages()
   const { data: profiles, refetch: refetchProfiles } = useProfilesMap()
+  const onlineUserIds = useOnlinePresence(userId)
 
   const [draft, setDraft] = useState('')
   const [sendError, setSendError] = useState<string | null>(null)
@@ -107,6 +110,11 @@ function ChatPage() {
         </div>
         <NotificationToggle userId={userId} />
       </div>
+      <OnlineMembers
+        onlineUserIds={onlineUserIds}
+        profiles={profiles}
+        currentUserId={userId}
+      />
 
       {messagesQuery.isPending && (
         <p className="py-12 text-center text-green-700">Henter beskeder…</p>
