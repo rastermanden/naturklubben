@@ -28,6 +28,23 @@ function addMessage(current: Message[] | undefined, message: Message) {
   return [...current, message]
 }
 
+/**
+ * Beder chat-push-edge-functionen sende en notifikation til de andre
+ * medlemmers telefoner. Samme mønster som optimize-image efter en upload:
+ * beskeden er allerede gemt og vist, så en fejl her må ikke vælte afsendelsen
+ * -- så går de andre bare glip af *notifikationen*, ikke af beskeden, som de
+ * stadig får live via Realtime.
+ *
+ * Kun besked-id'et sendes med; functionen slår selv indholdet op og nægter at
+ * sende for en besked, kalderen ikke selv har skrevet.
+ */
+async function notifyOthers(messageId: string) {
+  const { error } = await supabase.functions.invoke('chat-push', {
+    body: { messageId },
+  })
+  if (error) console.warn('Notifikationer kunne ikke sendes', error)
+}
+
 export function useMessages() {
   const queryClient = useQueryClient()
 
@@ -82,6 +99,7 @@ export function useMessages() {
       queryClient.setQueryData<Message[]>(queryKey, (current) =>
         addMessage(current, message),
       )
+      void notifyOthers(message.id)
     },
   })
 

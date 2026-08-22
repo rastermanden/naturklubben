@@ -30,3 +30,34 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      # VAPID-nøgleparret identificerer afsenderen over for browsernes
+      # push-tjenester (RFC 8292) og er ikke reserveret af platformen, så det
+      # skal sættes eksplicit. Det sker her -- ikke fra nogens terminal --
+      # og kun når nøglerne findes som repo-secrets, så en tom værdi ikke
+      # overskriver en fungerende opsætning.
+      # Tjekket ligger i shellen, ikke i en `if:` -- secrets-konteksten er
+      # ikke tilgængelig i et steps `if:`-udtryk.
+      - name: Sæt VAPID-secrets
+        run: |
+          if [ -z "$VAPID_PUBLIC_KEY" ] || [ -z "$VAPID_PRIVATE_KEY" ]; then
+            echo "::warning::VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY mangler som repo-secrets -- chat-push kan ikke sende notifikationer."
+            exit 0
+          fi
+          supabase secrets set \
+            VAPID_PUBLIC_KEY="$VAPID_PUBLIC_KEY" \
+            VAPID_PRIVATE_KEY="$VAPID_PRIVATE_KEY" \
+            VAPID_SUBJECT="$VAPID_SUBJECT" \
+            --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ vars.VAPID_SUBJECT || 'mailto:naturklubben@example.com' }}
+
+      - name: Deploy chat-push
+        run: supabase functions deploy chat-push --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}

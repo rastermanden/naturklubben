@@ -3,6 +3,7 @@ import { useAuth } from '../features/auth/useAuth'
 import { MessageBubble } from '../features/chat/MessageBubble'
 import { useMessages } from '../features/chat/useMessages'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
+import { NotificationToggle } from '../features/notifications/NotificationToggle'
 
 const MAX_MESSAGE_LENGTH = 2000
 const SCROLL_BOTTOM_THRESHOLD = 80
@@ -99,9 +100,12 @@ function ChatPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 sm:p-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-green-900">Chat</h1>
-        <p className="text-green-700">Fælles snak for alle medlemmer.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-green-900">Chat</h1>
+          <p className="text-green-700">Fælles snak for alle medlemmer.</p>
+        </div>
+        <NotificationToggle userId={userId} />
       </div>
 
       {messagesQuery.isPending && (
