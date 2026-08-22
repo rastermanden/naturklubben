@@ -1,4 +1,19 @@
-create table public.probation_applications (
+-- Ansøgninger om prøvemedlemskab (#7-flow: hvem må oprette en bruger).
+--
+-- Filen hed oprindeligt 20260822151000_probation_applications.sql -- samme
+-- versionsnummer som 20260822151000_update_seed_activities.sql, der blev
+-- merget først. `supabase db push` sporer anvendte migrations på
+-- versionsnummeret alene (primærnøgle i supabase_migrations.schema_migrations),
+-- så da denne fil landede på main, var versionen allerede registreret, og
+-- migrationen blev sprunget over uden fejl. Tabellen blev derfor aldrig
+-- oprettet i produktion, og admin-panelet fik "Ansøgningerne kunne ikke
+-- hentes", fordi PostgREST ikke kunne finde tabellen.
+--
+-- Derfor er versionsnummeret unikt nu, og hele filen er skrevet idempotent, så
+-- den også kan køre i et miljø (fx en preview-database), hvor den gamle version
+-- nåede at blive anvendt.
+
+create table if not exists public.probation_applications (
   id bigint generated always as identity primary key,
   full_name text not null check (char_length(btrim(full_name)) > 0),
   email citext not null,
@@ -9,13 +24,13 @@ create table public.probation_applications (
   reviewed_by uuid references auth.users (id) on delete set null
 );
 
-create unique index probation_applications_one_pending_per_email
+create unique index if not exists probation_applications_one_pending_per_email
   on public.probation_applications (email)
   where status = 'pending';
 
 alter table public.probation_applications enable row level security;
 
-create function public.prevent_probation_application_for_allowed_email()
+create or replace function public.prevent_probation_application_for_allowed_email()
 returns trigger
 language plpgsql
 security definer set search_path = public
@@ -34,9 +49,15 @@ begin
 end;
 $$;
 
+drop trigger if exists probation_applications_block_allowed_email
+  on public.probation_applications;
+
 create trigger probation_applications_block_allowed_email
   before insert on public.probation_applications
   for each row execute function public.prevent_probation_application_for_allowed_email();
+
+drop policy if exists "Anyone can apply for probation"
+  on public.probation_applications;
 
 create policy "Anyone can apply for probation"
   on public.probation_applications for insert
@@ -46,6 +67,9 @@ create policy "Anyone can apply for probation"
     and reviewed_at is null
     and reviewed_by is null
   );
+
+drop policy if exists "Admins can read probation applications"
+  on public.probation_applications;
 
 create policy "Admins can read probation applications"
   on public.probation_applications for select
@@ -119,3 +143,7 @@ $$;
 
 grant execute on function public.approve_probation_application(bigint) to authenticated;
 grant execute on function public.reject_probation_application(bigint) to authenticated;
+
+-- PostgREST cacher skemaet. Uden det her signal svarer API'et videre med
+-- "Could not find the table ... in the schema cache", indtil cachen udløber.
+notify pgrst, 'reload schema';

@@ -12,6 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Unikke migration-versioner
+        # supabase db push sporer anvendte migrations på versionsnummeret alene.
+        # Deler to filer nummer, bliver den, der merges sidst, sprunget over uden
+        # fejl -- og tabellen mangler så i produktion (skete for
+        # probation_applications). Fang det i PR'en i stedet.
+        run: |
+          dupes=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed 's/_.*//' | sort | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "::error::Flere migrations deler versionsnummer: $dupes"
+            exit 1
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
