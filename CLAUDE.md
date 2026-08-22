@@ -54,16 +54,27 @@ lokale terminal. Derfor gælder:
   CI/CD-workflowet i #5. Intet manuelt deploy-trin.
 - Ved merge til `main` deployer samme CI/CD-workflow automatisk til den offentlige
   GitHub Pages-URL.
-- **PR-preview'et bygges mod PR'ens egen Supabase Preview Branch**, ikke mod produktion.
-  `pr-preview.yml` slår branchen op i Supabase's Management API ud fra branch-navn/PR-nummer
-  og bygger med dens URL og publishable key. Så de to preview-lag hænger automatisk sammen:
-  UI'et fra preview-linket taler med den database, PR'ens egne migrationer er kørt på.
-  Går opslaget galt, fejler preview-buildet med en fejlbesked -- det bygger **ikke** stille
-  videre mod produktion (undtagen hvis secrets slet ikke er tilgængelige, fx en fork-PR,
-  hvor det logges som en advarsel).
+- **Rører PR'en `supabase/`, bygges preview'et mod PR'ens egen Supabase Preview Branch**,
+  ikke mod produktion. `pr-preview.yml` slår branchen op i Supabase's Management API ud fra
+  branch-navn/PR-nummer og bygger med dens URL og publishable key. Så de to preview-lag
+  hænger automatisk sammen: UI'et fra preview-linket taler med den database, PR'ens egne
+  migrationer er kørt på. Går opslaget galt, fejler preview-buildet med en fejlbesked -- det
+  bygger **ikke** stille videre mod produktion.
+- **Rører PR'en ikke `supabase/`, bygges preview'et mod produktionsdatabasen** -- med en
+  synlig advarsel i job-loggen og i job-opsummeringen. Det er ikke en nødløsning, men den
+  eneste mulige: Supabase's GitHub-integration opretter kun en Preview Branch for PR'er med
+  ændringer i `supabase/`-mappen, og skriver ellers "This pull request has been ignored ...
+  because there are no changes detected in `supabase` directory" i en PR-kommentar. En
+  sådan PR indfører per definition ingen skemaændringer, så produktionsskemaet **er** PR'ens
+  skema. Vent derfor ikke på et Supabase-preview-link på en ren frontend-PR, og lad være med
+  at "fikse" workflowet, så det fejler på dem. Bemærk til gengæld, at preview'et af en ren
+  frontend-PR taler med de rigtige produktionsdata.
+  (Ønskes en branch på hver PR, kan opførslen ændres under Project Integrations Settings i
+  Supabase-dashboardet -- det er et manuelt dashboard-trin og koster en branch pr. PR.
+  Workflowet bruger automatisk branchen, hvis den findes.)
 - Preview-databasen er tom bortset fra det, migrationerne opretter: ingen brugere, billeder
-  eller beskeder. Skal en PR testes som logget ind, skal man oprette en bruger på selve
-  preview'et.
+  eller beskeder. Skal en PR med migrationer testes som logget ind, skal man oprette en
+  bruger på selve preview'et.
 
 ## Secrets/nøgler
 

@@ -32,10 +32,22 @@ jobs:
       # migrationer i PR'en er usynlige i preview'et, og alt hvad de tilføjer
       # (tabeller, kolonner, RLS-policies) ser ud til at mangle.
       #
-      # Supabase opretter branchen parallelt med dette workflow, så vi poller,
-      # til den dukker op. Branch-projektets ref og publishable key hentes fra
-      # Management API'et og skrives til GITHUB_ENV, hvor build-trinnet nedenfor
-      # samler dem op.
+      # MEN: Supabase's GitHub-integration opretter kun en Preview Branch for
+      # PR'er, der rører `supabase/`-mappen. For alle andre PR'er skriver botten
+      # "This pull request has been ignored ... because there are no changes
+      # detected in supabase directory" og laver ingen branch. Derfor afgør vi
+      # først, om PR'ens diff overhovedet rører `supabase/`:
+      #
+      #   - Rører den `supabase/` → der SKAL komme en branch. Vi poller på den,
+      #     og fejler buildet, hvis den udebliver: et preview af en migration
+      #     mod produktionsskemaet ville være direkte misvisende.
+      #   - Rører den ikke `supabase/` → PR'en indfører ingen skemaændringer, så
+      #     produktionsskemaet ér PR'ens skema. Vi kigger kort efter en branch
+      #     alligevel (i tilfælde af at integrationens indstilling er ændret til
+      #     "alle PR'er"), og bygger ellers mod produktion.
+      #
+      # Branch-projektets ref og publishable key hentes fra Management API'et og
+      # skrives til GITHUB_ENV, hvor build-trinnet nedenfor samler dem op.
       - if: github.event.action != 'closed'
         name: Find PR'ens Supabase Preview Branch
         env:
@@ -45,19 +57,22 @@ jobs:
           PR_NUMBER: ${{ github.event.number }}
           FALLBACK_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
           FALLBACK_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
 
-          # Bruges kun, når branching slet ikke er tilgængelig for kørslen (fx en
-          # PR fra en fork, hvor secrets ikke deles). Et preview mod produktion er
-          # bedre end intet preview -- men det skal siges højt, ikke ske i stilhed.
+          # Bruges, når der hverken er eller kommer en Preview Branch. Det er kun
+          # forsvarligt, når PR'en ingen skemaændringer har (eller når branching
+          # slet ikke er tilgængelig for kørslen, fx en fork-PR uden secrets) --
+          # og det skal siges højt, ikke ske i stilhed.
           use_production() {
             echo "::warning::$1 -- preview'et bygges mod PRODUKTIONS-Supabase."
             {
               echo "VITE_SUPABASE_URL=$FALLBACK_URL"
               echo "VITE_SUPABASE_PUBLISHABLE_KEY=$FALLBACK_KEY"
             } >> "$GITHUB_ENV"
-            echo "⚠️ Preview bygget mod **produktions**-databasen." >> "$GITHUB_STEP_SUMMARY"
+            echo "⚠️ Preview bygget mod **produktions**-databasen: $1" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           }
 
@@ -70,11 +85,44 @@ jobs:
               -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "$1"
           }
 
+          # Hele PR'ens diff mod base -- ikke kun sidste push. Det er samme
+          # datagrundlag, som Supabase's integration selv bruger.
+          touches_supabase=false
+          page=1
+          while [ "$page" -le 10 ]; do
+            files=$(curl -sS --max-time 30 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/files?per_page=100&page=$page")
+            if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$files"; then
+              # Kan vi ikke se diffen, antager vi det dyre tilfælde: PR'en kan
+              # indeholde migrationer, og så må vi ikke falde tilbage til produktion.
+              echo "::warning::Kunne ikke hente PR'ens filliste -- antager ændringer i supabase/."
+              touches_supabase=true
+              break
+            fi
+            if jq -e 'any(.[]; .filename | startswith("supabase/"))' >/dev/null 2>&1 <<<"$files"; then
+              touches_supabase=true
+              break
+            fi
+            if [ "$(jq 'length' <<<"$files")" -lt 100 ]; then break; fi
+            page=$((page + 1))
+          done
+
+          if [ "$touches_supabase" = true ]; then
+            # ~4 minutter. Branchen plejer at være oprettet efter under ét.
+            attempts=24
+            echo "PR'en ændrer filer i supabase/ -- venter på dens Preview Branch."
+          else
+            # Kort høflighedspoll: normalt findes der ingen branch at vente på.
+            attempts=3
+            echo "PR'en ændrer ingen filer i supabase/ -- Supabase opretter derfor normalt ingen Preview Branch."
+          fi
+
           branch_ref=""
           publishable=""
 
-          # ~4 minutter. Branchen plejer at være oprettet efter under ét.
-          for attempt in $(seq 1 24); do
+          for attempt in $(seq 1 "$attempts"); do
             if [ -z "$branch_ref" ]; then
               branches=$(api "https://api.supabase.com/v1/projects/$PARENT_REF/branches")
               if jq -e 'type == "array"' >/dev/null 2>&1 <<<"$branches"; then
@@ -103,12 +151,16 @@ jobs:
             fi
 
             [ -n "$branch_ref" ] && [ -n "$publishable" ] && break
-            echo "Venter på Supabase Preview Branch for '$GIT_BRANCH' (forsøg $attempt/24)…"
-            sleep 10
+            echo "Venter på Supabase Preview Branch for '$GIT_BRANCH' (forsøg $attempt/$attempts)…"
+            if [ "$attempt" -lt "$attempts" ]; then sleep 10; fi
           done
 
           if [ -z "$branch_ref" ] || [ -z "$publishable" ]; then
+            if [ "$touches_supabase" != true ]; then
+              use_production "PR'en har ingen ændringer i supabase/, så Supabase opretter ingen Preview Branch"
+            fi
             echo "::error::Kunne ikke finde en Supabase Preview Branch for '$GIT_BRANCH'."
+            echo "PR'en ændrer filer i supabase/, så der burde være oprettet en branch." >&2
             echo "Tjek at Preview Branching er slået til for projektet (se issue #2)," >&2
             echo "og at SUPABASE_ACCESS_TOKEN/SUPABASE_PROJECT_REF stadig er gyldige." >&2
             exit 1
