@@ -71,6 +71,12 @@ lokale terminal. Derfor gælder:
   Aldrig Secret key i klientkode.
 - **Server-side** (kun Edge Functions): Supabase **Secret key** (`SUPABASE_SECRET_KEY`) —
   aldrig i klienten eller i build-workflowet til frontend.
+- **Push-notifikationer** (kun Edge Functions): `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
+  og valgfrit `VAPID_SUBJECT`. Sættes som repo-secrets og skubbes videre som
+  function-secrets af `deploy-functions.yml` — aldrig fra en terminal. Den offentlige
+  nøgle bygges bevidst **ikke** ind i frontenden; klienten henter den fra
+  `chat-push`-functionen, så nøglerne kan roteres uden et nyt frontend-build. Se
+  `supabase/README.md`.
 - **CI-only** (kun brugt af GitHub Actions, aldrig af en udvikler lokalt):
   `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` — bruges til at deploye Edge Functions
   ikke-interaktivt og til at slå PR'ens Preview Branch op, så preview-buildet rammer den
@@ -91,9 +97,10 @@ lokale terminal. Derfor gælder:
 src/
   pages/        # HeroPage, ActivitiesPage, CalendarPage, GalleryPage, ChatPage, LoginPage, ...
   components/    # delte UI-komponenter: Navbar, BurgerMenu, ...
-  features/      # feature-specifik logik: auth, calendar, gallery, chat
+  features/      # feature-specifik logik: auth, calendar, gallery, chat, notifications
   lib/           # supabaseClient.ts, queryClient.ts
   hooks/
+  sw.ts          # service worker (vite-plugin-pwa injectManifest): precaching + push
 supabase/
   migrations/    # SQL-migrations, deployes automatisk ved merge til main (se ovenfor)
   functions/     # Edge Functions, deployes via GitHub Actions (se #13)

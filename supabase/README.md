@@ -6,14 +6,15 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 
 ## Skema
 
-| Tabel            | Formål                                                                                                          | RLS                                                                                                                                         |
-| ---------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`       | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.        | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                          |
-| `activities`     | Offentligt indhold om klubbens aktiviteter (#10).                                                               | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                        |
-| `events`         | Kalenderbegivenheder (#11).                                                                                     | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                    |
-| `photos`         | Metadata for uploadede billeder -- selve filerne ligger i Storage (#12).                                        | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne. `optimized_path`/`thumbnail_path` sættes af edge-functionen i #13. |
-| `messages`       | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                                      | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                          |
-| `allowed_emails` | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`. | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                               |
+| Tabel                | Formål                                                                                                                           | RLS                                                                                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profiles`           | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.                         | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                          |
+| `activities`         | Offentligt indhold om klubbens aktiviteter (#10).                                                                                | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                        |
+| `events`             | Kalenderbegivenheder (#11).                                                                                                      | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                    |
+| `photos`             | Metadata for uploadede billeder -- selve filerne ligger i Storage (#12).                                                         | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne. `optimized_path`/`thumbnail_path` sættes af edge-functionen i #13. |
+| `messages`           | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                                                       | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                          |
+| `push_subscriptions` | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                 |
+| `allowed_emails`     | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                               |
 
 ## Storage buckets
 
@@ -34,6 +35,19 @@ Oprettet manuelt i #2:
   version har ingen `encodeWEBP`, kun `encodeJPEG`.)
   Fejler den (fx før den er deployet endnu, eller på et ugyldigt billede), forbliver
   originalen synlig i galleriet via en signeret URL -- uploadet blokeres ikke.
+- `chat-push` (#14): sender Web Push-notifikationer, når nogen skriver i chatten.
+  Kaldes af afsenderens egen klient lige efter beskeden er indsat (samme mønster som
+  `optimize-image` efter en upload). Klienten sender kun besked-id'et med -- functionen
+  slår selv indholdet op og afviser (403) en besked, kalderen ikke selv har skrevet, samt
+  beskeder ældre end 5 minutter, så et gentaget kald ikke kan bruges til at spamme.
+  Den sender til alle abonnementer undtagen afsenderens egne og sletter automatisk
+  rækker, hvor push-tjenesten svarer 404/410 (appen afinstalleret, abonnementet roteret).
+  Et `GET` mod samme function returnerer `{ publicKey }` -- den VAPID-nøgle, klienten skal
+  abonnere med. Den hentes derfra i stedet for at bygges ind i frontenden, så nøglerne kun
+  findes ét sted og kan roteres uden et nyt frontend-build.
+  Selve protokollen (RFC 8291-kryptering + RFC 8292/VAPID-signering) er implementeret
+  direkte oven på WebCrypto i `webpush.ts` -- `web-push` fra npm er bygget til Node
+  (`node:crypto`/`node:https`) og er ikke et sikkert kort i Edge Runtime.
 - Deployes **ikke** manuelt -- `.github/workflows/deploy-functions.yml` kører
   `supabase functions deploy` ikke-interaktivt ved push til `main`, når noget under
   `supabase/functions/` ændres. Kræver `SUPABASE_ACCESS_TOKEN` og `SUPABASE_PROJECT_REF`
@@ -77,3 +91,45 @@ listen (klienten oversætter fejlen til en dansk besked i `src/features/auth/aut
 Admins vedligeholder listen på `/admin` i appen. At fjerne en adresse spærrer kun for
 _nye_ oprettelser -- en allerede oprettet bruger i `auth.users` bliver ikke slettet af
 det og kan fortsat logge ind.
+
+## Notifikationer på nye chatbeskeder
+
+Flowet, ende til ende:
+
+1. Medlemmet slår notifikationer til på `/chat`. Browseren opretter et
+   `PushSubscription` med den VAPID-nøgle, `chat-push` udleverer, og klienten gemmer
+   endpoint + nøgler i `push_subscriptions`.
+2. Nogen sender en besked. Klienten indsætter rækken og kalder bagefter `chat-push` med
+   besked-id'et.
+3. `chat-push` krypterer et smugkig af beskeden til hver abonnent og POSTer det til
+   deres push-tjeneste.
+4. Service workeren (`src/sw.ts`) modtager `push`, viser notifikationen, og
+   `notificationclick` åbner eller fokuserer chatten.
+
+Fejler trin 2-4, går man kun glip af _notifikationen_ -- beskeden selv er gemt og kommer
+stadig live ind via Realtime.
+
+### VAPID-nøgler
+
+`chat-push` skal have et VAPID-nøglepar for at kunne sende. Det sættes som function-secrets
+af `deploy-functions.yml` ud fra repo-secrets -- aldrig fra nogens terminal:
+
+| Repo-secret / variable | Hvad                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| `VAPID_PUBLIC_KEY`     | Offentlig P-256-nøgle, base64url (65 bytes). Udleveres til klienten af functionens `GET`. |
+| `VAPID_PRIVATE_KEY`    | Privat nøgle, base64url (32 bytes). Forlader aldrig Edge Function-miljøet.                |
+| `VAPID_SUBJECT` (var)  | Kontakt-URL, fx `mailto:...`. RFC 8292 kræver et kontaktpunkt. Har en default.            |
+
+Mangler nøglerne, springer workflowet secret-steppet over med en advarsel, og `chat-push`
+svarer 503 -- chatten virker uændret, der kommer bare ingen notifikationer.
+
+Roteres nøgleparret, skal alle medlemmer slå notifikationer til igen: browseren nægter at
+genabonnere med en ny nøgle, så klienten smider det gamle abonnement væk først.
+
+### Hvad der ikke virker hvor
+
+- **iOS/iPadOS**: Safari giver først en webapp adgang til push, når den ligger på
+  hjemmeskærmen. I en almindelig Safari-fane findes `PushManager` slet ikke, og
+  UI'et beder i stedet om at få appen lagt på hjemmeskærmen.
+- **PR-previews**: service workeren bygges kun i produktionsbuildet (se `vite.config.ts`),
+  så notifikationer kan ikke afprøves på et preview-link -- kun på den udgivne app.

@@ -60,6 +60,15 @@ export default defineConfig(({ command, mode }) => {
         ? [
             VitePWA({
               registerType: 'autoUpdate',
+              // injectManifest frem for den genererede service worker: kun en
+              // service worker, vi selv skriver, kan have `push`- og
+              // `notificationclick`-handlers, og det er dem, der giver
+              // notifikationer på telefonen ved nye chatbeskeder (#14).
+              // Caching-opsætningen, der før stod i `workbox` herunder, er
+              // flyttet 1:1 til src/sw.ts.
+              strategies: 'injectManifest',
+              srcDir: 'src',
+              filename: 'sw.ts',
               // favicon.svg/apple-touch-icon.png refereres kun via <link> i
               // index.html, ikke manifestets icons-liste -- skal derfor
               // eksplicit bedes precachet.
@@ -102,43 +111,8 @@ export default defineConfig(({ command, mode }) => {
                   },
                 ],
               },
-              workbox: {
-                // Precacher app-shellen (HTML/JS/CSS/ikoner), så appen stadig
-                // åbner og viser en meningsfuld tilstand offline -- hver sides
-                // egne loading/fejl-tilstande tager over for data, der ikke er
-                // hentet endnu.
-                navigateFallback: `${basePath}index.html`,
-                // Produktions-service-workeren har scope /naturklubben/ og
-                // fanger derfor ALLE navigationer derunder -- også
-                // /naturklubben/pr-preview/pr-<nr>/. Uden denne denylist
-                // besvarer NavigationRoute en preview-URL med produktionens
-                // egen precachede index.html, så preview'ets index.html og
-                // bundle aldrig hentes: previewet bliver hvidt for alle, der
-                // har været forbi forsiden én gang og dermed har SW'en
-                // installeret. At slå PWA fra i preview-builds hjælper ikke --
-                // det er produktionens SW, der kaprer dem.
-                navigateFallbackDenylist: [
-                  new RegExp(`^${basePath}pr-preview/`),
-                ],
-                runtimeCaching: [
-                  {
-                    // Optimerede/originale billeder fra Supabase Storage --
-                    // stale-while-revalidate, så tidligere sete billeder vises
-                    // med det samme selv offline, og opdateres i baggrunden
-                    // næste gang der er netværk.
-                    urlPattern:
-                      /^https:\/\/[^/]+\.supabase\.co\/storage\/v1\/object\/public\/.*/,
-                    handler: 'StaleWhileRevalidate',
-                    options: {
-                      cacheName: 'supabase-storage-images',
-                      expiration: {
-                        maxEntries: 200,
-                        maxAgeSeconds: 30 * 24 * 60 * 60,
-                      },
-                      cacheableResponse: { statuses: [0, 200] },
-                    },
-                  },
-                ],
+              injectManifest: {
+                globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
               },
             }),
           ]
