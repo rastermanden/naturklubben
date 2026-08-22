@@ -1,3 +1,10 @@
+-- citext skal oprettes eksplicit: den er tilgængelig i Supabase, men ikke
+-- installeret som standard. Uden denne linje fejler migrationen med
+-- 'type "citext" does not exist' på enhver frisk database -- fx den
+-- Preview Branch, Supabase's GitHub-integration bygger for hver PR, hvilket
+-- stoppede hele migrationskørslen og dermed også alle senere migrationer.
+create extension if not exists citext;
+
 -- Tabel over tilladte e-mailadresser. Kun disse kan oprette en ny bruger.
 create table public.allowed_emails (
   email citext primary key
