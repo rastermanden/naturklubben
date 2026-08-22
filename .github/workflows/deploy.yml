@@ -28,8 +28,12 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          # Begge nøgler ender alligevel i klient-bundlen, så de kan ligge som
+          # enten variable eller secret -- vi læser begge steder, så et build
+          # ikke stille bygger med tom env, fordi værdien blev lagt det
+          # "forkerte" sted. Vite-configen fejler buildet, hvis de er tomme.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
       # Deployer til roden af gh-pages-branchen. keep_files: true bevarer
       # pr-preview/pr-<nr>/-undermapperne, som pr-preview.yml pusher til samme branch.

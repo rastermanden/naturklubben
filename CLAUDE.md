@@ -68,6 +68,13 @@ lokale terminal. Derfor gælder:
   ikke-interaktivt.
 - Supabase er skiftet til det nye Publishable/Secret-nøglesystem (ikke de gamle
   `anon`/`service_role` JWT-nøgler) — se #2 for detaljer.
+- `VITE_SUPABASE_URL` og `VITE_SUPABASE_PUBLISHABLE_KEY` **skal** være sat i repoets
+  Actions-indstillinger (Settings → Secrets and variables → Actions), som enten variable
+  eller secrets — begge workflows læser begge steder. Uden dem inliner Vite tomme
+  strenge, guarden i `src/lib/supabaseClient.ts` folder til et ubetinget `throw`, og hele
+  app-grafen bliver tree-shaket væk: builder _lykkes_, men bundlen indeholder ingen app,
+  er identisk fra commit til commit, og gh-pages får derfor intet nyt at committe.
+  `vite.config.ts` fejler nu buildet i stedet for at udgive sådan en bundle.
 
 ## Mappestruktur (frontend)
 
