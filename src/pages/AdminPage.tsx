@@ -4,6 +4,10 @@ import {
   toFriendlyAllowedEmailError,
   useAllowedEmails,
 } from '../features/admin/useAllowedEmails'
+import {
+  toFriendlyProbationApplicationError,
+  useProbationApplications,
+} from '../features/probation/useProbationApplications'
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('da-DK', {
@@ -17,6 +21,8 @@ function AdminPage() {
   const { session } = useAuth()
   const userId = session!.user.id
   const { allowedEmailsQuery, addEmail, removeEmail } = useAllowedEmails(userId)
+  const { applicationsQuery, approveApplication, rejectApplication } =
+    useProbationApplications()
 
   const [email, setEmail] = useState('')
   const [note, setNote] = useState('')
@@ -60,7 +66,44 @@ function AdminPage() {
     }
   }
 
+  async function handleApprove(applicationId: number, applicantEmail: string) {
+    setError(null)
+    setSuccessMsg(null)
+
+    try {
+      await approveApplication.mutateAsync(applicationId)
+      setSuccessMsg(
+        `${applicantEmail} er godkendt og kan nu oprette en bruger.`,
+      )
+    } catch (mutationError) {
+      setError(toFriendlyProbationApplicationError(mutationError))
+    }
+  }
+
+  async function handleReject(applicationId: number, applicantEmail: string) {
+    if (
+      !window.confirm(
+        `Afvis ansøgningen fra ${applicantEmail}?\n\nAnsøgningen fjernes fra admin-listen, men personen kan sende en ny ansøgning senere.`,
+      )
+    ) {
+      return
+    }
+
+    setError(null)
+    setSuccessMsg(null)
+
+    try {
+      await rejectApplication.mutateAsync(applicationId)
+      setSuccessMsg(`Ansøgningen fra ${applicantEmail} er afvist.`)
+    } catch (mutationError) {
+      setError(toFriendlyProbationApplicationError(mutationError))
+    }
+  }
+
   const emails = allowedEmailsQuery.data ?? []
+  const applications = applicationsQuery.data ?? []
+  const handlingApplication =
+    approveApplication.isPending || rejectApplication.isPending
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 sm:p-6">
@@ -71,6 +114,17 @@ function AdminPage() {
           e-mailadresser på listen kan gennemføre en tilmelding.
         </p>
       </div>
+
+      {successMsg && (
+        <p role="status" className="text-sm text-green-700">
+          {successMsg}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-red-700">
+          {error}
+        </p>
+      )}
 
       <form
         onSubmit={handleSubmit}
@@ -109,18 +163,73 @@ function AdminPage() {
         >
           {addEmail.isPending ? 'Tilføjer…' : 'Tilføj til listen'}
         </button>
-
-        {successMsg && (
-          <p role="status" className="text-sm text-green-700">
-            {successMsg}
-          </p>
-        )}
-        {error && (
-          <p role="alert" className="text-sm text-red-700">
-            {error}
-          </p>
-        )}
       </form>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-medium text-green-900">
+          Ansøgninger om prøvemedlemskab
+          {applications.length > 0 && ` (${applications.length})`}
+        </h2>
+
+        {applicationsQuery.isPending && (
+          <p className="text-sm text-green-700">Henter ansøgninger…</p>
+        )}
+
+        {applicationsQuery.isError && (
+          <p role="alert" className="text-sm text-red-700">
+            Ansøgningerne kunne ikke hentes:{' '}
+            {toFriendlyProbationApplicationError(applicationsQuery.error)}
+          </p>
+        )}
+
+        {applicationsQuery.isSuccess && applications.length === 0 && (
+          <p className="text-sm text-green-700">
+            Der ligger ingen åbne ansøgninger lige nu.
+          </p>
+        )}
+
+        <ul className="flex flex-col gap-2">
+          {applications.map((application) => (
+            <li
+              key={application.id}
+              className="flex flex-col gap-3 rounded-lg border border-green-200 px-4 py-3"
+            >
+              <div className="space-y-1">
+                <p className="text-green-950">{application.full_name}</p>
+                <p className="text-sm text-green-800">{application.email}</p>
+                <p className="text-sm text-green-700">
+                  Ansøgt {formatDate(application.created_at)}
+                </p>
+                <p className="whitespace-pre-wrap text-sm text-green-900">
+                  {application.motivation}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleApprove(application.id, application.email)
+                  }
+                  disabled={handlingApplication}
+                  className="min-h-11 rounded-lg bg-green-800 px-4 py-2 text-white disabled:opacity-50"
+                >
+                  Godkend
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleReject(application.id, application.email)
+                  }
+                  disabled={handlingApplication}
+                  className="min-h-11 rounded-lg border border-red-300 px-4 py-2 text-red-700 disabled:opacity-50"
+                >
+                  Afvis
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section className="flex flex-col gap-3">
         <h2 className="font-medium text-green-900">

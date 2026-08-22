@@ -8,6 +8,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import GalleryPage from './pages/GalleryPage'
 import HeroPage from './pages/HeroPage'
 import LoginPage from './pages/LoginPage'
+import ProbationApplicationPage from './pages/ProbationApplicationPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import SignupPage from './pages/SignupPage'
 import WelcomePage from './pages/WelcomePage'
@@ -22,6 +23,10 @@ function App() {
         <Route path="/" element={<HeroPage />} />
         <Route path="/aktiviteter" element={<ActivitiesPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/proevemedlemskab"
+          element={<ProbationApplicationPage />}
+        />
         <Route path="/opret" element={<SignupPage />} />
         <Route path="/glemt-adgangskode" element={<ForgotPasswordPage />} />
         {/* Landingssider for links i mails fra Supabase. */}

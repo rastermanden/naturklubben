@@ -44,6 +44,14 @@ function HeroPage() {
               Log ind
             </Link>
           )}
+          {!session && (
+            <Link
+              to="/proevemedlemskab"
+              className="min-h-11 flex items-center rounded border border-green-800 px-5 py-2 text-green-800"
+            >
+              Ansøg om prøvemedlemskab
+            </Link>
+          )}
           <Link
             to="/aktiviteter"
             className="min-h-11 flex items-center rounded border border-green-800 px-5 py-2 text-green-800"

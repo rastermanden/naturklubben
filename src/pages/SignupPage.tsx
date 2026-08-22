@@ -121,6 +121,12 @@ function SignupPage() {
           Log ind
         </Link>
       </span>
+      <span className="text-sm text-green-800">
+        Ikke inviteret endnu?{' '}
+        <Link to="/proevemedlemskab" className="underline">
+          Ansøg om prøvemedlemskab
+        </Link>
+      </span>
     </main>
   )
 }
