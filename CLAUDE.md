@@ -54,8 +54,16 @@ lokale terminal. Derfor gælder:
   CI/CD-workflowet i #5. Intet manuelt deploy-trin.
 - Ved merge til `main` deployer samme CI/CD-workflow automatisk til den offentlige
   GitHub Pages-URL.
-- Kombinér gerne de to preview-lag ved test af en PR, der rører både frontend og database:
-  GitHub Pages-preview-linket for UI'et og Supabase Preview Branch-endpointet for data.
+- **PR-preview'et bygges mod PR'ens egen Supabase Preview Branch**, ikke mod produktion.
+  `pr-preview.yml` slår branchen op i Supabase's Management API ud fra branch-navn/PR-nummer
+  og bygger med dens URL og publishable key. Så de to preview-lag hænger automatisk sammen:
+  UI'et fra preview-linket taler med den database, PR'ens egne migrationer er kørt på.
+  Går opslaget galt, fejler preview-buildet med en fejlbesked -- det bygger **ikke** stille
+  videre mod produktion (undtagen hvis secrets slet ikke er tilgængelige, fx en fork-PR,
+  hvor det logges som en advarsel).
+- Preview-databasen er tom bortset fra det, migrationerne opretter: ingen brugere, billeder
+  eller beskeder. Skal en PR testes som logget ind, skal man oprette en bruger på selve
+  preview'et.
 
 ## Secrets/nøgler
 
@@ -65,7 +73,8 @@ lokale terminal. Derfor gælder:
   aldrig i klienten eller i build-workflowet til frontend.
 - **CI-only** (kun brugt af GitHub Actions, aldrig af en udvikler lokalt):
   `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` — bruges til at deploye Edge Functions
-  ikke-interaktivt.
+  ikke-interaktivt og til at slå PR'ens Preview Branch op, så preview-buildet rammer den
+  rigtige database.
 - Supabase er skiftet til det nye Publishable/Secret-nøglesystem (ikke de gamle
   `anon`/`service_role` JWT-nøgler) — se #2 for detaljer.
 - `VITE_SUPABASE_URL` og `VITE_SUPABASE_PUBLISHABLE_KEY` **skal** være sat i repoets

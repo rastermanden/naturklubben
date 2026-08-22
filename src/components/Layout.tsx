@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { useAuth } from '../features/auth/useAuth'
 import { navLinks } from './navLinks'
 import { BurgerMenu } from './BurgerMenu'
@@ -8,11 +9,15 @@ import { InstallAppButton } from './InstallAppButton'
 
 export function Layout() {
   const { session, signOut } = useAuth()
+  const { isAdmin } = useIsAdmin()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const burgerButtonRef = useRef<HTMLButtonElement>(null)
 
-  const visibleLinks = navLinks.filter((link) => !link.requiresAuth || session)
+  const visibleLinks = navLinks.filter(
+    (link) =>
+      (!link.requiresAuth || session) && (!link.requiresAdmin || isAdmin),
+  )
 
   return (
     <div className="flex min-h-svh flex-col">

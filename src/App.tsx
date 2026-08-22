@@ -1,6 +1,7 @@
 import ProfilePage from './pages/ProfilePage'
 import { Route, Routes } from 'react-router-dom'
 import ActivitiesPage from './pages/ActivitiesPage'
+import AdminPage from './pages/AdminPage'
 import CalendarPage from './pages/CalendarPage'
 import ChatPage from './pages/ChatPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
@@ -8,6 +9,7 @@ import GalleryPage from './pages/GalleryPage'
 import HeroPage from './pages/HeroPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
+import { AdminRoute } from './features/admin/AdminRoute'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
 import { Layout } from './components/Layout'
 
@@ -41,6 +43,16 @@ function App() {
           element={
             <ProtectedRoute>
               <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminRoute>
+                <AdminPage />
+              </AdminRoute>
             </ProtectedRoute>
           }
         />

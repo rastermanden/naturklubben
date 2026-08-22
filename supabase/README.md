@@ -6,13 +6,14 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 
 ## Skema
 
-| Tabel        | Formål                                                                                                   | RLS                                                                                                                                         |
-| ------------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`   | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag. | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                          |
-| `activities` | Offentligt indhold om klubbens aktiviteter (#10).                                                        | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                        |
-| `events`     | Kalenderbegivenheder (#11).                                                                              | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                    |
-| `photos`     | Metadata for uploadede billeder -- selve filerne ligger i Storage (#12).                                 | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne. `optimized_path`/`thumbnail_path` sættes af edge-functionen i #13. |
-| `messages`   | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                               | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                          |
+| Tabel            | Formål                                                                                                          | RLS                                                                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profiles`       | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.        | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                          |
+| `activities`     | Offentligt indhold om klubbens aktiviteter (#10).                                                               | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                        |
+| `events`         | Kalenderbegivenheder (#11).                                                                                     | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                    |
+| `photos`         | Metadata for uploadede billeder -- selve filerne ligger i Storage (#12).                                        | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne. `optimized_path`/`thumbnail_path` sættes af edge-functionen i #13. |
+| `messages`       | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                                      | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                          |
+| `allowed_emails` | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`. | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                               |
 
 ## Storage buckets
 
@@ -49,6 +50,30 @@ automatisk produktionsdeploy).
 
 ## Admin-adgang
 
-`profiles.is_admin` styrer hvem der kan redigere `activities`. Der er ingen UI til at
-sætte flaget endnu -- sæt det manuelt i Table Editor for de(n) bruger(e), der skal kunne
-redigere aktivitetsindholdet.
+`profiles.is_admin` styrer, hvem der kan redigere `activities` og administrere
+allowlisten `allowed_emails` (siden `/admin` i appen).
+
+- Flaget kan **ikke** sættes af brugeren selv: triggeren `profiles_protect_admin_flag`
+  afviser en ændring af `is_admin`, medmindre den, der ændrer det, allerede er admin --
+  eller kalder uden en bruger-session (service-role, SQL-editoren, Table Editor og
+  migrations).
+- Den første admin er klubbens ejer, som sættes i migrationerne
+  `20260822130000_admin_allowed_emails.sql` (forfremmer en eksisterende bruger) og
+  `20260822140000_admin_from_allowlist.sql` (dækker tilfældet, hvor brugeren først
+  oprettes bagefter).
+- Skal en anden være admin, er der to veje -- begge kræver SQL-editoren eller Table
+  Editor, for der er bevidst ingen UI til at gøre andre til admin:
+  1. Findes brugeren allerede: sæt `is_admin` på profil-rækken.
+  2. Har personen ikke oprettet sig endnu: sæt `is_admin` på deres række i
+     `allowed_emails`. `handle_new_user`-triggeren læser flaget og sætter det på
+     profilen, når de opretter sig. Panelet viser et Admin-mærkat på de rækker.
+
+## Allowlist til signup
+
+`allowed_emails` afgør, hvem der kan oprette en bruger. Triggeren `check_allowed_email`
+på `auth.users` afviser en signup med `Email not allowed`, hvis adressen ikke står på
+listen (klienten oversætter fejlen til en dansk besked i `src/features/auth/authErrors.ts`).
+
+Admins vedligeholder listen på `/admin` i appen. At fjerne en adresse spærrer kun for
+_nye_ oprettelser -- en allerede oprettet bruger i `auth.users` bliver ikke slettet af
+det og kan fortsat logge ind.

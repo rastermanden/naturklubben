@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { useAuth } from '../features/auth/useAuth'
 import { navLinks } from './navLinks'
 import { InstallAppButton } from './InstallAppButton'
@@ -12,6 +13,7 @@ interface BurgerMenuProps {
 
 export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
   const { session, signOut } = useAuth()
+  const { isAdmin } = useIsAdmin()
   const panelRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -31,7 +33,10 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open, onClose, triggerRef])
 
-  const visibleLinks = navLinks.filter((link) => !link.requiresAuth || session)
+  const visibleLinks = navLinks.filter(
+    (link) =>
+      (!link.requiresAuth || session) && (!link.requiresAdmin || isAdmin),
+  )
 
   function closeAndReturnFocus() {
     onClose()

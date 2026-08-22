@@ -2,6 +2,8 @@ export interface NavLink {
   to: string
   label: string
   requiresAuth: boolean
+  /** Vises kun for brugere med profiles.is_admin. */
+  requiresAdmin?: boolean
 }
 
 export const navLinks: NavLink[] = [
@@ -11,4 +13,5 @@ export const navLinks: NavLink[] = [
   { to: '/billeder', label: 'Billeder', requiresAuth: true },
   { to: '/chat', label: 'Chat', requiresAuth: true },
   { to: '/profil', label: 'Profil', requiresAuth: true },
+  { to: '/admin', label: 'Admin', requiresAuth: true, requiresAdmin: true },
 ]
