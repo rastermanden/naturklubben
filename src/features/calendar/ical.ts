@@ -80,7 +80,6 @@ export function generateIcal(
   events: CalendarEvent[],
   calendarName = 'Naturklubben',
 ): string {
-  const vevents = events.map(buildVevent).join('\r\n')
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -88,7 +87,7 @@ export function generateIcal(
     `X-WR-CALNAME:${escapeText(calendarName)}`,
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    vevents,
+    ...events.map(buildVevent),
     'END:VCALENDAR',
   ].join('\r\n')
 }

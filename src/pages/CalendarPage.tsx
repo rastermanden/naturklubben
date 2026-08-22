@@ -8,6 +8,13 @@ import {
 } from '../features/calendar/useEvents'
 import { useAuth } from '../features/auth/useAuth'
 
+// Feed-URL til live iCal-abonnement (webcal://). Udledes af SUPABASE_URL så
+// der ikke er brug for en ekstra env-variabel.
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+const CALENDAR_FEED_URL = supabaseUrl
+  ? `${supabaseUrl}/functions/v1/calendar-feed`
+  : null
+
 const dateFormatter = new Intl.DateTimeFormat('da-DK', {
   weekday: 'long',
   day: 'numeric',
@@ -237,6 +244,14 @@ function CalendarPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          {CALENDAR_FEED_URL && (
+            <a
+              href={CALENDAR_FEED_URL.replace(/^https?:\/\//, 'webcal://')}
+              className="inline-flex min-h-11 items-center rounded border border-green-700 px-5 py-2 text-green-800 hover:bg-green-50"
+            >
+              Abonnér på kalender
+            </a>
+          )}
           {eventsQuery.data && eventsQuery.data.length > 0 && (
             <button
               type="button"
