@@ -108,6 +108,18 @@ export default defineConfig(({ command, mode }) => {
                 // egne loading/fejl-tilstande tager over for data, der ikke er
                 // hentet endnu.
                 navigateFallback: `${basePath}index.html`,
+                // Produktions-service-workeren har scope /naturklubben/ og
+                // fanger derfor ALLE navigationer derunder -- også
+                // /naturklubben/pr-preview/pr-<nr>/. Uden denne denylist
+                // besvarer NavigationRoute en preview-URL med produktionens
+                // egen precachede index.html, så preview'ets index.html og
+                // bundle aldrig hentes: previewet bliver hvidt for alle, der
+                // har været forbi forsiden én gang og dermed har SW'en
+                // installeret. At slå PWA fra i preview-builds hjælper ikke --
+                // det er produktionens SW, der kaprer dem.
+                navigateFallbackDenylist: [
+                  new RegExp(`^${basePath}pr-preview/`),
+                ],
                 runtimeCaching: [
                   {
                     // Optimerede/originale billeder fra Supabase Storage --
