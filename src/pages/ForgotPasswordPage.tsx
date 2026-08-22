@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { appUrl } from '../features/auth/authRedirect'
 import { toFriendlyAuthError } from '../features/auth/authErrors'
 
 function ForgotPasswordPage() {
@@ -14,8 +15,10 @@ function ForgotPasswordPage() {
     setError(null)
     setSubmitting(true)
 
-    const { error: resetError } =
-      await supabase.auth.resetPasswordForEmail(email)
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      email,
+      { redirectTo: appUrl('ny-adgangskode') },
+    )
 
     setSubmitting(false)
     if (resetError) {

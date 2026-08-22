@@ -33,6 +33,14 @@ npm run format          # prettier --write
 npm run format:check    # prettier --check
 ```
 
+## Links fra mails og dybe links
+
+Bekræftelses- og nulstillingsmails fra Supabase lander på `/velkommen` og
+`/ny-adgangskode` i appen. GitHub Pages har ingen SPA-fallback, så buildet udgiver en
+`404.html`, der sender vilkårlige stier videre til `index.html` med sti, query og
+fragment i behold. Hvilke URL'er Supabase overhovedet må sende folk hen til, styres af
+`.github/workflows/sync-auth-config.yml` -- se `supabase/README.md`.
+
 ## Mappestruktur
 
 ```

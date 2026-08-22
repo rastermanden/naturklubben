@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { appUrl } from '../features/auth/authRedirect'
 import { toFriendlyAuthError } from '../features/auth/authErrors'
 
 function SignupPage() {
@@ -19,7 +20,13 @@ function SignupPage() {
     const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName } },
+      options: {
+        data: { full_name: fullName },
+        // Uden denne lander bekræftelsesmailens link på projektets Site URL --
+        // altså et andet sted end appen -- og brugeren ser en 404 i stedet for
+        // en kvittering. Se src/features/auth/authRedirect.ts.
+        emailRedirectTo: appUrl('velkommen'),
+      },
     })
 
     setSubmitting(false)
@@ -37,8 +44,12 @@ function SignupPage() {
           Tjek din e-mail
         </h1>
         <p className="text-green-800">
-          Vi har sendt dig en bekræftelsesmail. Klik på linket i mailen for at
-          aktivere din bruger.
+          Vi har sendt en bekræftelsesmail til <strong>{email}</strong>. Klik på
+          linket i mailen for at aktivere din bruger — så er du logget ind med
+          det samme.
+        </p>
+        <p className="text-sm text-green-700">
+          Kan du ikke finde mailen, så kig i spam-mappen.
         </p>
         <Link to="/login" className="underline">
           Tilbage til login

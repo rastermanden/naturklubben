@@ -11,3 +11,21 @@ export function toFriendlyAuthError(message: string): string {
   }
   return known[message] ?? 'Der skete en fejl. Prøv igen om lidt.'
 }
+
+/**
+ * Oversætter fejlen i et mail-links URL (`#error_code=...`) til en dansk
+ * besked. Supabase bruger samme fejlkoder til bekræftelses- og
+ * nulstillingslinks, så teksten om, hvad man så gør, kommer fra kaldet.
+ */
+export function toFriendlyLinkError(
+  errorCode: string | null,
+  errorDescription: string | null,
+): string {
+  if (errorCode === 'otp_expired' || /expired/i.test(errorDescription ?? '')) {
+    return 'Linket er udløbet eller allerede brugt.'
+  }
+  if (errorCode === 'access_denied') {
+    return 'Linket kunne ikke bruges. Det er måske allerede brugt én gang.'
+  }
+  return 'Linket i mailen virkede ikke.'
+}
