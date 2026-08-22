@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { EventForm } from '../features/calendar/EventForm'
+import { downloadIcal } from '../features/calendar/ical'
 import {
   useEvents,
   type CalendarEvent,
@@ -50,6 +51,7 @@ function EventDetails({
   onClose,
   onEdit,
   onDelete,
+  onIcal,
 }: {
   event: CalendarEvent
   isOwner: boolean
@@ -58,6 +60,7 @@ function EventDetails({
   onClose: () => void
   onEdit: () => void
   onDelete: () => void
+  onIcal: () => void
 }) {
   const start = new Date(event.start_at)
   const end = event.end_at ? new Date(event.end_at) : null
@@ -115,25 +118,35 @@ function EventDetails({
           </p>
         )}
 
-        {isOwner && (
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={deleting}
-              className="min-h-11 rounded border border-red-700 px-4 py-2 text-red-700 disabled:opacity-60"
-            >
-              {deleting ? 'Sletter…' : 'Slet'}
-            </button>
-            <button
-              type="button"
-              onClick={onEdit}
-              className="min-h-11 rounded bg-green-800 px-4 py-2 text-white"
-            >
-              Redigér
-            </button>
-          </div>
-        )}
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onIcal}
+            className="min-h-11 rounded border border-green-700 px-4 py-2 text-green-800 hover:bg-green-50"
+          >
+            Tilføj til kalender
+          </button>
+
+          {isOwner && (
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={deleting}
+                className="min-h-11 rounded border border-red-700 px-4 py-2 text-red-700 disabled:opacity-60"
+              >
+                {deleting ? 'Sletter…' : 'Slet'}
+              </button>
+              <button
+                type="button"
+                onClick={onEdit}
+                className="min-h-11 rounded bg-green-800 px-4 py-2 text-white"
+              >
+                Redigér
+              </button>
+            </div>
+          )}
+        </div>
       </article>
     </div>
   )
@@ -223,13 +236,24 @@ function CalendarPage() {
             Klubbens kommende ture og arrangementer.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => openForm('new')}
-          className="min-h-11 rounded bg-green-800 px-5 py-2 text-white"
-        >
-          Opret begivenhed
-        </button>
+        <div className="flex flex-wrap gap-3">
+          {eventsQuery.data && eventsQuery.data.length > 0 && (
+            <button
+              type="button"
+              onClick={() => downloadIcal(eventsQuery.data, 'naturklubben-kalender.ics')}
+              className="min-h-11 rounded border border-green-700 px-5 py-2 text-green-800 hover:bg-green-50"
+            >
+              Eksportér kalender
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => openForm('new')}
+            className="min-h-11 rounded bg-green-800 px-5 py-2 text-white"
+          >
+            Opret begivenhed
+          </button>
+        </div>
       </div>
 
       {eventsQuery.isLoading && (
@@ -379,6 +403,7 @@ function CalendarPage() {
           onClose={() => setSelectedEvent(null)}
           onEdit={() => openForm(selectedEvent)}
           onDelete={removeSelectedEvent}
+          onIcal={() => downloadIcal([selectedEvent], `${selectedEvent.title.replace(/[/\\:*?"<>|]/g, '-')}.ics`)}
         />
       )}
 
