@@ -11,7 +11,7 @@ function ChatPage() {
   const { session } = useAuth()
   const userId = session!.user.id
   const { messagesQuery, sendMessage } = useMessages()
-  const { data: profiles } = useProfilesMap()
+  const { data: profiles, refetch: refetchProfiles } = useProfilesMap()
 
   const [draft, setDraft] = useState('')
   const [sendError, setSendError] = useState<string | null>(null)
@@ -20,7 +20,21 @@ function ChatPage() {
 
   const listRef = useRef<HTMLUListElement>(null)
   const previousMessageCount = useRef(0)
+  const lookedUpAuthorIds = useRef(new Set<string>())
   const messages = messagesQuery.data ?? []
+
+  // Profilkortet caches i 5 minutter, så en besked fra et medlem, der er kommet
+  // til siden hen, ville ellers stå uden navn. Hent kortet igen — én gang per
+  // ukendt afsender, så en manglende profil ikke udløser en uendelig løkke.
+  useEffect(() => {
+    if (!profiles || !messagesQuery.data) return
+    const unknownAuthorIds = messagesQuery.data
+      .map((message) => message.user_id)
+      .filter((id) => !profiles[id] && !lookedUpAuthorIds.current.has(id))
+    if (unknownAuthorIds.length === 0) return
+    unknownAuthorIds.forEach((id) => lookedUpAuthorIds.current.add(id))
+    void refetchProfiles()
+  }, [messagesQuery.data, profiles, refetchProfiles])
 
   function scrollToBottom(behavior: ScrollBehavior) {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior })
