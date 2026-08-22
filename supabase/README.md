@@ -63,6 +63,14 @@ Filnavngivning: `<timestamp>_<beskrivelse>.sql` i `supabase/migrations/`. Se `CL
 for hele arbejdsgangen (skriv → commit → PR → Preview Branch-validering → merge →
 automatisk produktionsdeploy).
 
+**Timestampet skal være unikt på tværs af alle migrations.** Supabase sporer anvendte
+migrations på versionsnummeret alene (primærnøgle i
+`supabase_migrations.schema_migrations`), så deler to filer nummer, bliver den, der
+merges sidst, sprunget over ved deploy -- uden fejl nogen steder. Det skete for
+`probation_applications`, som derfor aldrig blev oprettet i produktion. To PR'er, der
+laves parallelt, kan nemt ramme samme minut, så vælg et nyt nummer, hvis en anden fil
+allerede har det. CI (`ci.yml`) fejler på dubletter.
+
 ## Admin-adgang
 
 `profiles.is_admin` styrer, hvem der kan redigere `activities` og administrere

@@ -48,6 +48,14 @@ export function toFriendlyProbationApplicationError(error: unknown): string {
     return 'Du har ikke rettigheder til at behandle ansøgningen.'
   if (code === 'P0002')
     return 'Ansøgningen blev ikke fundet. Opdater siden og prøv igen.'
+  // PGRST205 (nyere PostgREST) og 42P01 (Postgres) betyder begge, at tabellen
+  // ikke findes -- i praksis at migrationen ikke er deployet endnu.
+  if (code === 'PGRST205' || code === '42P01')
+    return 'Ansøgninger er ikke slået til i databasen endnu. Kontakt den, der passer appen.'
+  // supabase-js kaster PostgrestError: et almindeligt objekt, ikke en Error.
+  // Uden det her faldt enhver ukendt fejl igennem til den intetsigende tekst
+  // nedenfor, så en reel fejlbesked aldrig nåede skærmen.
+  if (message) return message
   if (error instanceof Error) return error.message
   return 'Der skete en fejl. Prøv igen om lidt.'
 }
