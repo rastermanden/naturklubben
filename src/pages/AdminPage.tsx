@@ -151,7 +151,14 @@ function AdminPage() {
               className="flex items-center justify-between gap-3 rounded-lg border border-green-200 px-4 py-3"
             >
               <div className="min-w-0">
-                <p className="truncate text-green-950">{entry.email}</p>
+                <p className="truncate text-green-950">
+                  {entry.email}
+                  {entry.is_admin && (
+                    <span className="ml-2 rounded bg-green-800 px-2 py-0.5 align-middle text-xs text-white">
+                      Admin
+                    </span>
+                  )}
+                </p>
                 <p className="truncate text-xs text-green-700">
                   {entry.note ? `${entry.note} · ` : ''}
                   Tilføjet {formatDate(entry.created_at)}

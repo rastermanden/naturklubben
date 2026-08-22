@@ -57,10 +57,16 @@ allowlisten `allowed_emails` (siden `/admin` i appen).
   afviser en ændring af `is_admin`, medmindre den, der ændrer det, allerede er admin --
   eller kalder uden en bruger-session (service-role, SQL-editoren, Table Editor og
   migrations).
-- Den første admin sættes i migrationen `20260822130000_admin_allowed_emails.sql`, som
-  forfremmer klubbens ejer. Skal en anden også være admin, sættes `is_admin` i Supabase
-  Table Editor på den pågældende profil-række. Der er bevidst ingen UI til at gøre andre
-  til admin.
+- Den første admin er klubbens ejer, som sættes i migrationerne
+  `20260822130000_admin_allowed_emails.sql` (forfremmer en eksisterende bruger) og
+  `20260822140000_admin_from_allowlist.sql` (dækker tilfældet, hvor brugeren først
+  oprettes bagefter).
+- Skal en anden være admin, er der to veje -- begge kræver SQL-editoren eller Table
+  Editor, for der er bevidst ingen UI til at gøre andre til admin:
+  1. Findes brugeren allerede: sæt `is_admin` på profil-rækken.
+  2. Har personen ikke oprettet sig endnu: sæt `is_admin` på deres række i
+     `allowed_emails`. `handle_new_user`-triggeren læser flaget og sætter det på
+     profilen, når de opretter sig. Panelet viser et Admin-mærkat på de rækker.
 
 ## Allowlist til signup
 

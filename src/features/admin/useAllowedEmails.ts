@@ -5,6 +5,8 @@ export interface AllowedEmail {
   email: string
   note: string | null
   created_at: string
+  /** Sættes kun i SQL. Brugeren, der opretter sig med adressen, bliver admin. */
+  is_admin: boolean
 }
 
 export interface AllowedEmailInput {
@@ -17,7 +19,7 @@ const queryKey = ['allowed_emails']
 async function fetchAllowedEmails(): Promise<AllowedEmail[]> {
   const { data, error } = await supabase
     .from('allowed_emails')
-    .select('email, note, created_at')
+    .select('email, note, created_at, is_admin')
     .order('created_at', { ascending: false })
 
   if (error) throw error
