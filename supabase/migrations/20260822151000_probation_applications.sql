@@ -15,6 +15,29 @@ create unique index probation_applications_one_pending_per_email
 
 alter table public.probation_applications enable row level security;
 
+create function public.prevent_probation_application_for_allowed_email()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if exists (
+    select 1
+    from public.allowed_emails
+    where email = new.email
+  ) then
+    raise exception 'Email already allowed'
+      using errcode = '23505';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger probation_applications_block_allowed_email
+  before insert on public.probation_applications
+  for each row execute function public.prevent_probation_application_for_allowed_email();
+
 create policy "Anyone can apply for probation"
   on public.probation_applications for insert
   to anon, authenticated

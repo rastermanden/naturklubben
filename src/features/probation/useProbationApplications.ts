@@ -35,7 +35,13 @@ export function toFriendlyProbationApplicationError(error: unknown): string {
     typeof error === 'object' && error !== null && 'code' in error
       ? String((error as { code: unknown }).code)
       : ''
+  const message =
+    typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message: unknown }).message)
+      : ''
 
+  if (code === '23505' && message === 'Email already allowed')
+    return 'Den e-mail kan allerede oprette en bruger.'
   if (code === '23505')
     return 'Der ligger allerede en åben ansøgning på den e-mail.'
   if (code === '42501')
