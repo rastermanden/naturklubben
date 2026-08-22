@@ -29,7 +29,7 @@ values
   (
     'Madkoordinering',
     'Vi planlægger indkøb, menuer og fordeling af madopgaver til fælles arrangementer.',
-    'trash-2',
+    null,
     3
   ),
   (
