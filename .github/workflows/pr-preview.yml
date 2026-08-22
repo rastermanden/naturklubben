@@ -32,8 +32,12 @@ jobs:
         run: npm run build
         env:
           VITE_BASE_PATH: /naturklubben/pr-preview/pr-${{ github.event.number }}/
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          # Begge nøgler ender alligevel i klient-bundlen, så de kan ligge som
+          # enten variable eller secret -- vi læser begge steder, så et build
+          # ikke stille bygger med tom env, fordi værdien blev lagt det
+          # "forkerte" sted. Vite-configen fejler buildet, hvis de er tomme.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
       # Håndterer både deploy (åbnet/opdateret PR) og oprydning (lukket PR)
       # automatisk ud fra event-typen ovenfor.
