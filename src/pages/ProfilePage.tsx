@@ -44,7 +44,9 @@ function ProfilePage() {
     void load()
   }, [userId])
 
-  async function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAvatarChange(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -58,7 +60,9 @@ function ProfilePage() {
         .upload(path, file, { upsert: true })
       if (uploadError) throw uploadError
 
-      const { data: urlData } = supabase.storage.from('photos').getPublicUrl(path)
+      const { data: urlData } = supabase.storage
+        .from('photos')
+        .getPublicUrl(path)
       setAvatarUrl(urlData.publicUrl)
     } catch {
       setErrorMsg('Billedet kunne ikke uploades. Prøv igen.')
@@ -75,7 +79,11 @@ function ProfilePage() {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ full_name: fullName || null, chat_color: chatColor, avatar_url: avatarUrl })
+        .update({
+          full_name: fullName || null,
+          chat_color: chatColor,
+          avatar_url: avatarUrl,
+        })
         .eq('id', userId)
       if (error) throw error
       setSuccessMsg('Profilen er gemt.')
@@ -144,7 +152,10 @@ function ProfilePage() {
 
         {/* Name */}
         <div className="flex flex-col gap-1">
-          <label htmlFor="fullName" className="text-sm font-medium text-green-900">
+          <label
+            htmlFor="fullName"
+            className="text-sm font-medium text-green-900"
+          >
             Navn
           </label>
           <input
@@ -170,7 +181,10 @@ function ProfilePage() {
                 className="h-9 w-9 rounded-full transition-transform hover:scale-110 focus:scale-110"
                 style={{
                   backgroundColor: color,
-                  outline: chatColor === color ? `3px solid ${color}` : '3px solid transparent',
+                  outline:
+                    chatColor === color
+                      ? `3px solid ${color}`
+                      : '3px solid transparent',
                   outlineOffset: '2px',
                 }}
               />
