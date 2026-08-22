@@ -6,6 +6,8 @@ export function toFriendlyAuthError(message: string): string {
     'Email not confirmed': 'Bekræft venligst din e-mail, før du logger ind.',
     'Password should be at least 6 characters':
       'Adgangskoden skal være på mindst 6 tegn.',
+    'Email not allowed':
+      'Denne e-mailadresse er ikke inviteret til Naturklubben.',
   }
   return known[message] ?? 'Der skete en fejl. Prøv igen om lidt.'
 }
