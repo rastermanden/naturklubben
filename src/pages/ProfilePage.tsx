@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../features/auth/useAuth'
 import { supabase } from '../lib/supabaseClient'
 
+// Skal matche file_size_limit på avatars-bucketten (se migrationen
+// 20260822120000_avatars_bucket.sql).
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024
+
 const PRESET_COLORS = [
   '#16a34a', // grøn
   '#2563eb', // blå
@@ -47,25 +51,71 @@ function ProfilePage() {
   async function handleAvatarChange(
     event: React.ChangeEvent<HTMLInputElement>,
   ) {
-    const file = event.target.files?.[0]
+    const input = event.target
+    const file = input.files?.[0]
+    // Nulstil med det samme, så det virker at vælge den *samme* fil igen efter
+    // en fejl -- ellers udløser browseren ingen change-event anden gang.
+    input.value = ''
     if (!file) return
 
-    setUploading(true)
+    setSuccessMsg(null)
     setErrorMsg(null)
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Filen er ikke et billede.')
+      return
+    }
+    if (file.size > MAX_AVATAR_SIZE) {
+      setErrorMsg('Billedet er for stort (maks. 5 MB).')
+      return
+    }
+
+    setUploading(true)
     try {
-      const ext = file.name.split('.').pop()
-      const path = `avatars/${userId}.${ext}`
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      // Unikt filnavn frem for et fast `<user-id>.<ext>`: den offentlige URL
+      // ændrer sig ved hvert upload, så browseren og Storage-CDN'et ikke bliver
+      // ved med at vise det gamle billede.
+      const path = `${userId}/${crypto.randomUUID()}.${ext}`
+
       const { error: uploadError } = await supabase.storage
-        .from('photos')
-        .upload(path, file, { upsert: true })
+        .from('avatars')
+        .upload(path, file, { contentType: file.type })
       if (uploadError) throw uploadError
 
       const { data: urlData } = supabase.storage
-        .from('photos')
+        .from('avatars')
         .getPublicUrl(path)
-      setAvatarUrl(urlData.publicUrl)
-    } catch {
-      setErrorMsg('Billedet kunne ikke uploades. Prøv igen.')
+      const publicUrl = urlData.publicUrl
+
+      // Gemmes med det samme -- at vælge et billede er en handling i sig selv,
+      // og oprydningen nedenfor sletter den gamle fil, så profiles.avatar_url
+      // ikke må nå at pege på noget, der er væk.
+      const { error: saveError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', userId)
+      if (saveError) throw saveError
+
+      setAvatarUrl(publicUrl)
+      setSuccessMsg('Profilbilledet er gemt.')
+
+      // Bedste indsats: fjern tidligere avatarer, så mappen ikke vokser.
+      const { data: existing } = await supabase.storage
+        .from('avatars')
+        .list(userId)
+      const stale = (existing ?? [])
+        .map((item) => `${userId}/${item.name}`)
+        .filter((name) => name !== path)
+      if (stale.length > 0) {
+        await supabase.storage.from('avatars').remove(stale)
+      }
+    } catch (error) {
+      setErrorMsg(
+        error instanceof Error
+          ? `Billedet kunne ikke uploades: ${error.message}`
+          : 'Billedet kunne ikke uploades. Prøv igen.',
+      )
     } finally {
       setUploading(false)
     }
@@ -87,8 +137,12 @@ function ProfilePage() {
         .eq('id', userId)
       if (error) throw error
       setSuccessMsg('Profilen er gemt.')
-    } catch {
-      setErrorMsg('Profilen kunne ikke gemmes. Prøv igen.')
+    } catch (error) {
+      setErrorMsg(
+        error instanceof Error
+          ? `Profilen kunne ikke gemmes: ${error.message}`
+          : 'Profilen kunne ikke gemmes. Prøv igen.',
+      )
     } finally {
       setSaving(false)
     }
