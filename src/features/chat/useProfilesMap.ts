@@ -21,9 +21,11 @@ async function fetchProfiles(): Promise<Record<string, ProfileSummary>> {
   )
 }
 
+export const profilesMapQueryKey = ['profiles', 'map'] as const
+
 export function useProfilesMap() {
   return useQuery({
-    queryKey: ['profiles', 'map'],
+    queryKey: profilesMapQueryKey,
     queryFn: fetchProfiles,
     staleTime: 5 * 60 * 1000,
   })

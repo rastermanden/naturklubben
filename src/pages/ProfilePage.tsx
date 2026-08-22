@@ -1,5 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../features/auth/useAuth'
+import { profilesMapQueryKey } from '../features/chat/useProfilesMap'
 import { supabase } from '../lib/supabaseClient'
 
 // Skal matche file_size_limit på avatars-bucketten (se migrationen
@@ -22,6 +24,7 @@ const PRESET_COLORS = [
 function ProfilePage() {
   const { session } = useAuth()
   const userId = session!.user.id
+  const queryClient = useQueryClient()
 
   const [fullName, setFullName] = useState('')
   const [chatColor, setChatColor] = useState('#16a34a')
@@ -97,6 +100,7 @@ function ProfilePage() {
         .eq('id', userId)
       if (saveError) throw saveError
 
+      await queryClient.invalidateQueries({ queryKey: profilesMapQueryKey })
       setAvatarUrl(publicUrl)
       setSuccessMsg('Profilbilledet er gemt.')
 
@@ -136,6 +140,7 @@ function ProfilePage() {
         })
         .eq('id', userId)
       if (error) throw error
+      await queryClient.invalidateQueries({ queryKey: profilesMapQueryKey })
       setSuccessMsg('Profilen er gemt.')
     } catch (error) {
       setErrorMsg(
