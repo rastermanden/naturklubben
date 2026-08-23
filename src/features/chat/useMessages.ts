@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabaseClient'
 
 export interface Message {
   id: string
-  user_id: string
+  user_id: string | null
   content: string
   created_at: string
   reply_to_message_id: string | null
@@ -13,13 +13,13 @@ export interface Message {
 
 export interface ReplyPreview {
   id: string
-  user_id: string
+  user_id: string | null
   content: string
 }
 
 interface MessageRow {
   id: string
-  user_id: string
+  user_id: string | null
   content: string
   created_at: string
   reply_to_message_id?: string | null
@@ -152,6 +152,18 @@ export function useMessages() {
           if (needsReplyRefetch(current, message)) {
             void queryClient.invalidateQueries({ queryKey })
           }
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        (payload) => {
+          const updated = payload.new as Message
+          queryClient.setQueryData<Message[]>(queryKey, (current) =>
+            current?.map((message) =>
+              message.id === updated.id ? updated : message,
+            ),
+          )
         },
       )
       .on(

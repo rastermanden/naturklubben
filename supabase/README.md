@@ -6,19 +6,20 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 
 ## Skema
 
-| Tabel                                      | Formål                                                                                                                           | RLS                                                                                                                                                                                                               |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`                                 | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.                         | Alle autentificerede kan læse; ejeren kan kun opdatere profilfelterne. `is_admin` kan kun ændres via `set_admin_role()`.                                                                                          |
-| `activities`                               | Offentligt indhold om klubbens aktiviteter (#10).                                                                                | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                                                                                              |
-| `events`                                   | Kalenderbegivenheder (#11).                                                                                                      | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                                                                                          |
-| `photos`                                   | Metadata og vedvarende optimeringsstatus for uploadede billeder -- selve filerne ligger i Storage (#12/#89).                     | Autentificerede kan læse. Oprettelse/genforsøg går gennem `upsert_photo_upload`; direkte INSERT/UPDATE/DELETE er revoked, så klienten ikke kan skrive serverejede status/outputfelter eller omgå sikker sletning. |
-| `messages`                                 | Gruppechat, ét fælles rum (#14), med valgfri reference til den besked, der svares på (#84). Del af `supabase_realtime`.          | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                                                                                                |
-| `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                                                                                       |
-| `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                                                                                                     |
-| `admin_role_changes`                       | Uforanderligt revisionsspor med aktør, medlem, gammel/ny rolle og tidspunkt.                                                     | Kun admins kan læse; ingen klientrolle kan indsætte, ændre eller slette.                                                                                                                                          |
-| `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                      | Alle kan indsende; kun admins kan læse og behandle ansøgningerne.                                                                                                                                                 |
-| `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                       | Ingen policies og ingen grants -- kun `probation-notifications` med Secret key kan læse rækken.                                                                                                                   |
-| `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                        | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                                                                                                |
+| Tabel                                      | Formål                                                                                                                                                  | RLS                                                                                                                                                                                                               |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profiles`                                 | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag og en kortvarig serverstyret slettereservation. | Alle autentificerede kan læse; ejeren kan kun opdatere profilfelter uden en aktiv slettereservation. `is_admin` ændres via `set_admin_role()`.                                                                    |
+| `activities`                               | Offentligt indhold om klubbens aktiviteter (#10).                                                                                                       | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                                                                                              |
+| `events`                                   | Kalenderbegivenheder (#11). Opretterreferencen nulstilles ved kontosletning, så fælles historik bevares anonymt.                                        | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne, mens admins kan slette alle.                                                                                                             |
+| `photos`                                   | Metadata og vedvarende optimeringsstatus for uploadede billeder -- selve filerne ligger i Storage (#12/#89).                                            | Autentificerede kan læse. Oprettelse/genforsøg går gennem `upsert_photo_upload`; direkte INSERT/UPDATE/DELETE er revoked, så klienten ikke kan skrive serverejede status/outputfelter eller omgå sikker sletning. |
+| `messages`                                 | Gruppechat, ét fælles rum (#14), med valgfri svarreference (#84). Afsenderreferencen nulstilles ved kontosletning. Del af `supabase_realtime`.          | Kun autentificerede kan læse/skrive; afsender kan slette egne, og admins kan slette alle.                                                                                                                         |
+| `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder.                        | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                                                                                       |
+| `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                                         | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                                                                                                     |
+| `admin_role_changes`                       | Uforanderligt revisionsspor med aktør, medlem, gammel/ny rolle og tidspunkt.                                                                            | Kun admins kan læse; ingen klientrolle kan indsætte, ændre eller slette.                                                                                                                                          |
+| `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                                             | Ingen offentlig insert-policy; kun den service-role-beskyttede submit-RPC kan oprette, og kun admins kan læse/behandle.                                                                                           |
+| `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                                              | Ingen policies og ingen grants -- kun `probation-notifications` med Secret key kan læse rækken.                                                                                                                   |
+| `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                                               | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                                                                                                |
+| `private.probation_submission_attempts`    | Kortlivede HMAC-hashes til server-side rate limiting; indeholder aldrig rå IP, subnet eller e-mail.                                                     | `private` eksponeres ikke gennem Data API'et; ingen grants til `anon`/`authenticated`.                                                                                                                            |
 
 ## Storage buckets
 
@@ -55,6 +56,8 @@ Oprettet manuelt i #2:
   Fejler den, forbliver originalen synlig i galleriet via en signeret URL, og uploaderen
   kan genforsøge fra galleriet. `photos` er med i Realtime; klienten poller desuden kun,
   mens et ikke-fastlåst arbejde er aktivt, og stopper igen ved terminal status/unmount.
+  #86's database-trigger blokerer alle claim/completion-writes under en aktiv
+  kontoslettereservation; et output fra en overhalet worker ryddes derfor igen.
 - `chat-push` (#14): sender Web Push-notifikationer, når nogen skriver i chatten.
   Kaldes af afsenderens egen klient lige efter beskeden er indsat (samme mønster som
   `optimize-image` efter en upload). Klienten sender kun besked-id'et med -- functionen
@@ -77,8 +80,23 @@ Oprettet manuelt i #2:
   Secret key. Postgres køer kaldet efter commit med `pg_net`, og `pg_cron` genforsøger
   midlertidige fejl. Funktionen deployes derfor med `--no-verify-jwt`, men hvert POST
   laver sin egen token/admin-kontrol, før en leveringsstatus kan tages til behandling.
+- `submit-probation-application` (#87): eneste offentlige indgang til nye
+  prøvemedlemskabsansøgninger. Functionen validerer input, bruger Cloudflares
+  platform-satte `CF-Connecting-IP`, HMAC-hasher misbrugssignaler og kalder en
+  service-role-only RPC, som rate-limiter og opretter ansøgning/push/outbox atomisk.
+  Den er offentlig uden gateway-JWT, men klienten kan hverken vælge signalerne eller
+  kalde den interne RPC direkte.
 - Fælles VAPID- og Web Push-kode ligger i `supabase/functions/_shared/`, så chat og
   prøvemedlemskaber bruger præcis samme afsendernøgle og krypteringskode.
+- `delete-account` (#86): kræver standard gateway-JWT, validerer tokenet igen med
+  `auth.getUser`, kræver den eksakte bekræftelsestekst og afviser sessioner, hvis
+  `last_sign_in_at` er mere end fem minutter gammel. Klienten genautentificerer med
+  `signInWithPassword`; adgangskoden sendes kun til Supabase Auth og aldrig til
+  functionen. En service-role-RPC reserverer sletningen under en fælles Postgres
+  advisory lock, så to admins ikke samtidig kan passere sidste-admin-reglen. Mens
+  reservationen er frisk, blokerer RLS nye brugerwrites og Storage-uploads.
+  Functionen tømmer derefter brugerens paginerede præfiks i `avatars`,
+  `photos-original` og `photos-optimized`, før Auth-brugeren slettes.
 - Deployes **ikke** manuelt -- `.github/workflows/deploy-functions.yml` kører
   `supabase functions deploy` ikke-interaktivt ved push til `main`, når noget under
   `supabase/functions/` ændres. Kræver `SUPABASE_ACCESS_TOKEN` og `SUPABASE_PROJECT_REF`
@@ -114,6 +132,54 @@ PR'ens Supabase Preview Branch, ikke med en lokal mockdatabase:
 Filnavngivning: `<timestamp>_<beskrivelse>.sql` i `supabase/migrations/`. Se `CLAUDE.md`
 for hele arbejdsgangen (skriv → commit → PR → Preview Branch-validering → merge →
 automatisk produktionsdeploy).
+
+## Kontosletning og dataopbevaring
+
+Produktbeslutningen i #86 er en hybrid mellem sletning og anonymisering:
+
+| Data                                                  | Ved kontosletning                                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Auth-bruger, profil, avatar, allowlist-adgang         | Slettes permanent.                                                                                            |
+| Originale og optimerede galleribilleder samt metadata | Slettes permanent.                                                                                            |
+| Kalenderdeltagelser og push-abonnementer              | Slettes via eksisterende `ON DELETE CASCADE`.                                                                 |
+| Chatbeskeder                                          | Bevares, men `user_id` sættes til `NULL` og klienten viser “Tidligere medlem”; admins kan fortsat slette dem. |
+| Kalenderbegivenheder                                  | Bevares, men `created_by` sættes til `NULL`; admins kan fortsat slette dem.                                   |
+| Prøvemedlemsansøgninger med samme e-mail              | Slettes af Auth-delete-triggeren, hvis de stadig findes.                                                      |
+| Adminrolle-audit (#96)                                | Bevares, men både bruger-id og navnesnapshots erstattes med en fælles anonym værdi.                           |
+
+Storage, Postgres og Auth Admin kan ikke indgå i én fælles transaktion.
+Slettefunktionerne er derfor eksplicit genoptagelige:
+
+1. `delete-account` reserverer først sletningen og blokerer nye writes.
+2. Hver Storage-bucket listes gentagne gange fra offset 0 og slettes i batches, indtil
+   præfikset er tomt. Allerede manglende objekter er succes ved retry.
+3. Først derefter slettes Auth-brugeren; databasecascade og trigger rydder resten.
+4. Fejler Storage, bevares konto og metadata, selv om enkelte filer kan være slettet.
+   Klienten viser ingen succes og et nyt kald fortsætter med de resterende filer.
+5. Fejler Auth Admin efter Storage, er filerne allerede væk, men et nyt kald kan
+   genkøre reservationen og fuldføre Auth-/databasefasen.
+
+`profiles.deletion_reserved_at` udløber efter 15 minutter, så en strandet
+providerfejl ikke spærrer et medlem permanent. Sidste-admin-kontrollen køres igen ved
+hvert retry; reservation og kontrol serialiseres under samme advisory lock, så der
+ikke er et TOCTOU-vindue mellem to samtidige administratorer. En separat trigger
+bruger samme låserækkefølge som adminrolle-RPC'en (#96) -- rollelock først og
+kontosletningslock bagefter -- så en samtidig nedgradering hverken kan give TOCTOU
+eller deadlock og ikke kan efterlade klubben uden admins.
+
+Retention for prøvemedlemskab håndhæves dagligt af det idempotent planlagte
+`pg_cron`-job `purge-expired-probation-applications`:
+
+- godkendte og afviste ansøgninger slettes 90 dage efter `reviewed_at`;
+- uafgjorte ansøgninger slettes 12 måneder efter `created_at`;
+- den tilknyttede push-række slettes via `ON DELETE CASCADE`.
+
+Jobbet er adskilt fra #87's rate-limit-oprydning
+`cleanup-probation-submission-attempts`. Rate-limit-tabellen indeholder kun
+HMAC-hashes af e-mail/IP/netværk og ryddes separat efter 25 timer; den rå e-mail
+og netværksadresse gemmes ikke dér. Inaktive medlemskonti slettes ikke
+automatisk; de gennemgås manuelt efter 24 måneder, fordi der endnu ikke findes
+et sikkert varslingsflow. Den offentlige formulering findes på `/datapolitik`.
 
 **Timestampet skal være unikt på tværs af alle migrations.** Supabase sporer anvendte
 migrations på versionsnummeret alene (primærnøgle i
@@ -159,8 +225,52 @@ det og kan fortsat logge ind.
 
 Offentlige besøgende kan sende en ansøgning fra `/proevemedlemskab`. Indsendelsen
 beder først om Web Push-tilladelse, så svaret kan nå ansøgeren uden en ekstern
-mailudbyder. Ansøgning, push-abonnement og notification-token gemmes atomisk via
-`submit_probation_application()`; kun admins kan læse ansøgningen i `/admin`.
+mailudbyder. Klienten kalder Edge Functionen `submit-probation-application` -- aldrig
+databasens submit-RPC direkte. Kun admins kan læse en oprettet ansøgning i `/admin`.
+
+Functionen bruger kun `CF-Connecting-IP`, som Cloudflare sætter på trafik fra sin
+edge til Supabase-origin. `X-Forwarded-For` ignoreres bevidst: en allerede
+eksisterende kæde kan indeholde caller-kontrollerede adresser. Mangler den trusted
+header, indeholder den flere værdier, eller kan adressen ikke parses, fejler
+indsendelsen lukket med 503 i stedet for at køre uden rate limit. IPv4 normaliseres
+til eksakt adresse og `/24`, IPv6 til eksakt adresse og `/64`; IPv4-mappet IPv6
+normaliseres som IPv4.
+
+IP, subnet og trimmet/lowercase e-mail HMAC-hashes i tre domæneadskilte inputs med
+den auto-injicerede Supabase Secret key. Hashene har fast SHA-256-format. Rå IP og
+subnet sendes aldrig til Postgres eller function-logs; body, e-mail, push-token,
+endpoint og hashes logges heller ikke. Rotation af Secret key gør gamle hashes
+usammenlignelige og nulstiller derfor højst de kortlivede limiter-vinduer.
+
+Den interne `submit_probation_application_limited()` kan kun køres som
+`service_role`. Under deterministisk ordnede transaktionslåse registrerer den
+forsøget, kontrollerer alle overlappende glidende vinduer og opretter derefter
+ansøgning, push-abonnement og notification-outbox i samme transaktion:
+
+| Signal                  | Grænse                   |
+| ----------------------- | ------------------------ |
+| Eksakt IP               | 3 forsøg på 15 minutter  |
+| Eksakt IP               | 10 forsøg på 24 timer    |
+| Normaliseret e-mail     | 3 forsøg på 24 timer     |
+| IPv4 `/24` / IPv6 `/64` | 25 forsøg på 24 timer    |
+| Global nødgrænse        | 1.000 forsøg på 24 timer |
+
+Den globale grænse er kun en nødbremse mod et distribueret angreb, ikke den normale
+limiter. En lav grænse ville være let at udnytte til availability-DoS; 1.000 lader
+de mere præcise IP/net/e-mail-grænser gøre det daglige arbejde, men sætter stadig et
+loft over database- og adminbelastning. Et stort distribueret botnet kan fortsat
+ramme loftet. CAPTCHA/Turnstile tilføjes først, hvis det problem ses i praksis:
+ellers ville det indføre ekstern tracking, konto/secrets og manuelle dashboardtrin.
+Honeypots, `Origin`, user-agent og klienttimere bruges ikke som sikkerhed, fordi de
+er trivielt manipulerbare.
+
+Allerede tilladte e-mails og e-mails med en pending ansøgning er server-side no-ops.
+De får samme HTTP 202, response-body og 400--500 ms responstidsklasse som en reel
+ny ansøgning, så formularen ikke kan bruges til at enumerere medlems-/ansøgerstatus.
+Kun den reelle nye ansøgning opretter adminrække og outbox. Rate limit returnerer
+429 med `Retry-After`; UI'et viser ventetiden på dansk. De kortlivede limiter-rækker
+indeholder kun HMAC-hashes og slettes automatisk efter 25 timer. Ansøgningernes
+generelle dataretention ejes separat af #86 og ændres ikke af spam-beskyttelsen.
 
 Når en admin godkender en ansøgning, kalder klienten SQL-funktionen
 `approve_probation_application()`, som atomisk:
@@ -211,8 +321,14 @@ VAPID-nøgle eller andre server-secrets i frontenden.
 
 Konsekvensen er, at browseren skal understøtte Web Push og have tilladelse, før
 ansøgningen kan sendes. På iPhone/iPad kræver Safari, at appen først er lagt på
-hjemmeskærmen. PR-previews har ingen service worker og kan derfor validere
-migration/RLS/UI, men ikke selve push-leveringen; den prøves på den udgivne PWA.
+hjemmeskærmen. `supabase/config.toml` gør, at GitHub-integrationen deployer
+submit-functionen til PR'ens Supabase Preview Branch. `pr-preview.yml` sender
+automatisk en request med en caller-sat, ugyldig `CF-Connecting-IP` og kræver, at
+Cloudflare enten afviser den ved edge eller overskriver den. Derefter sendes en
+spoofet, multipel `X-Forwarded-For`; den skal ignoreres, mens platformens
+`CF-Connecting-IP` får requestet frem til body-valideringen (HTTP 400).
+PR-previews har ingen service worker og kan derfor ikke afprøve selve
+push-leveringen -- kun submit/migration/RLS/UI.
 
 ## Auth-URL'er: hvor links i mails lander
 

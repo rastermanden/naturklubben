@@ -24,10 +24,16 @@ export function MessageBubble({
     return () => clearInterval(id)
   }, [])
 
-  const name = author?.full_name ?? 'Medlem'
-  const color = author?.chat_color ?? '#16a34a'
+  const isFormerMember = message.user_id === null
+  const name = isFormerMember
+    ? 'Tidligere medlem'
+    : (author?.full_name ?? 'Medlem')
+  const color = isFormerMember ? '#64748b' : (author?.chat_color ?? '#16a34a')
   const fullTimestamp = new Date(message.created_at).toLocaleString('da-DK')
-  const replyName = replyAuthor?.full_name ?? 'Medlem'
+  const replyName =
+    message.reply_to?.user_id === null
+      ? 'Tidligere medlem'
+      : (replyAuthor?.full_name ?? 'Medlem')
   const replyExcerpt = message.reply_to?.content.trim().replace(/\s+/g, ' ')
   const textColor = isOwn ? readableTextColor(color) : '#052e16'
 

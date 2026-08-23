@@ -174,6 +174,56 @@ jobs:
           echo "✅ Preview bygget mod Supabase Preview Branch \`$branch_ref\`." >> "$GITHUB_STEP_SUMMARY"
 
       - if: github.event.action != 'closed'
+        name: Kontrollér trusted IP-header i Preview
+        # Supabase GitHub-integrationen deployer functionen fra config.toml til
+        # Preview Branch. Cloudflare skal enten afvise en caller-sat
+        # CF-Connecting-IP eller overskrive den. Derefter skal en spoofet,
+        # multipel X-Forwarded-For ignoreres, så den platform-satte
+        # CF-Connecting-IP stadig lader requestet nå body-valideringen (HTTP 400).
+        run: |
+          set -euo pipefail
+          endpoint="$VITE_SUPABASE_URL/functions/v1/submit-probation-application"
+          common_args=(
+           --silent --show-error --max-time 30
+           --request POST "$endpoint"
+           --oauth2-bearer "$VITE_SUPABASE_PUBLISHABLE_KEY"
+           --header 'Content-Type: application/json'
+           --header "apikey: $VITE_SUPABASE_PUBLISHABLE_KEY"
+           --data '{}'
+          )
+
+          spoof_status=$(curl "${common_args[@]}" \
+           --output /tmp/probation-cf-spoof.json \
+           --write-out '%{http_code}' \
+           --header 'CF-Connecting-IP: caller-controlled-invalid-value')
+          if [ "$spoof_status" = "403" ] && grep -q 'error code: 1000' /tmp/probation-cf-spoof.json; then
+           echo "Cloudflare afviste caller-sat CF-Connecting-IP."
+          elif [ "$spoof_status" = "400" ]; then
+           echo "Cloudflare overskrev caller-sat CF-Connecting-IP."
+          else
+           echo "::error::Uventet HTTP $spoof_status ved spoofet CF-Connecting-IP."
+           exit 1
+          fi
+
+          status=""
+
+          for attempt in $(seq 1 24); do
+           status=$(curl "${common_args[@]}" \
+             --output /tmp/probation-header-check.json \
+             --write-out '%{http_code}' \
+             --header 'X-Forwarded-For: 203.0.113.9, 192.0.2.1') || status="000"
+           [ "$status" = "400" ] && break
+           echo "Venter på Preview-functionen (forsøg $attempt/24, HTTP $status)…"
+           if [ "$attempt" -lt 24 ]; then sleep 10; fi
+          done
+
+          if [ "$status" != "400" ]; then
+           echo "::error::Preview-functionen gav HTTP $status; forventede 400 med platformens CF-header og ignoreret XFF."
+           exit 1
+          fi
+          echo "✅ Supabase Preview afviste/overskrev spoofet CF-Connecting-IP og functionen ignorerede spoofet X-Forwarded-For." >> "$GITHUB_STEP_SUMMARY"
+
+      - if: github.event.action != 'closed'
         name: Build preview
         # VITE_SUPABASE_* kommer fra trinnet ovenfor via GITHUB_ENV og må derfor
         # ikke sættes her -- en env-nøgle på selve trinnet ville overskrive dem

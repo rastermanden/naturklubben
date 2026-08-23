@@ -29,6 +29,12 @@ function ChatPage() {
   const previousMessageCount = useRef(0)
   const lookedUpAuthorIds = useRef(new Set<string>())
   const messages = messagesQuery.data ?? []
+  const replyingToName =
+    replyingTo?.user_id === null
+      ? 'Tidligere medlem'
+      : replyingTo
+        ? (profiles?.[replyingTo.user_id]?.full_name ?? 'Medlem')
+        : null
 
   // Profilkortet caches i 5 minutter, så en besked fra et medlem, der er kommet
   // til siden hen, ville ellers stå uden navn. Hent kortet igen — én gang per
@@ -37,7 +43,10 @@ function ChatPage() {
     if (!profiles || !messagesQuery.data) return
     const unknownAuthorIds = messagesQuery.data
       .map((message) => message.user_id)
-      .filter((id) => !profiles[id] && !lookedUpAuthorIds.current.has(id))
+      .filter(
+        (id): id is string =>
+          id !== null && !profiles[id] && !lookedUpAuthorIds.current.has(id),
+      )
     if (unknownAuthorIds.length === 0) return
     unknownAuthorIds.forEach((id) => lookedUpAuthorIds.current.add(id))
     void refetchProfiles()
@@ -181,9 +190,11 @@ function ChatPage() {
               <MessageBubble
                 key={message.id}
                 message={message}
-                author={profiles?.[message.user_id]}
+                author={
+                  message.user_id ? profiles?.[message.user_id] : undefined
+                }
                 replyAuthor={
-                  message.reply_to
+                  message.reply_to?.user_id
                     ? profiles?.[message.reply_to.user_id]
                     : undefined
                 }
@@ -222,9 +233,7 @@ function ChatPage() {
         {replyingTo && (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-950">
             <p role="status" aria-live="polite" className="min-w-0">
-              <span className="font-medium">
-                Svarer {profiles?.[replyingTo.user_id]?.full_name ?? 'Medlem'}
-              </span>
+              <span className="font-medium">Svarer {replyingToName}</span>
               <span className="block truncate opacity-75">
                 {replyingTo.content}
               </span>
@@ -250,9 +259,7 @@ function ChatPage() {
             placeholder="Skriv en besked…"
             aria-label={
               replyingTo
-                ? `Skriv et svar til ${
-                    profiles?.[replyingTo.user_id]?.full_name ?? 'Medlem'
-                  }`
+                ? `Skriv et svar til ${replyingToName}`
                 : 'Skriv en besked'
             }
             className="min-h-11 flex-1 resize-none rounded-lg border border-green-300 px-4 py-2 text-green-950"

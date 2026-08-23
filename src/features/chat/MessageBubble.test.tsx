@@ -83,4 +83,25 @@ describe('MessageBubble', () => {
         .textContent,
     ).toBe('Den oprindelige besked er ikke tilgængelig.')
   })
+
+  it('shows no stable identity for an anonymized message', () => {
+    render(
+      <MessageBubble
+        message={{
+          ...message,
+          user_id: null,
+          content: 'Fælles historik',
+          reply_to_message_id: null,
+          reply_to: null,
+        }}
+        author={undefined}
+        replyAuthor={undefined}
+        isOwn={false}
+        onReply={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Tidligere medlem')).toBeTruthy()
+    expect(screen.getByText('Fælles historik')).toBeTruthy()
+  })
 })
