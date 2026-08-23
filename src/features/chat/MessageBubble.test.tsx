@@ -1,0 +1,86 @@
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Message } from './useMessages'
+import { MessageBubble } from './MessageBubble'
+
+afterEach(cleanup)
+
+const message: Message = {
+  id: 'message-2',
+  user_id: 'member-2',
+  content: 'God idé!',
+  created_at: '2026-08-23T12:01:00.000Z',
+  reply_to_message_id: 'message-1',
+  reply_to: {
+    id: 'message-1',
+    user_id: 'member-1',
+    content: 'Vi mødes ved søen.',
+  },
+}
+
+const author = {
+  full_name: 'Bo',
+  avatar_url: null,
+  chat_color: '#166534',
+}
+
+const replyAuthor = {
+  full_name: 'Ada',
+  avatar_url: null,
+  chat_color: '#15803d',
+}
+
+describe('MessageBubble', () => {
+  it('shows the referenced author and message excerpt', () => {
+    render(
+      <MessageBubble
+        message={message}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Ada').textContent).toBe('Ada')
+    expect(screen.getByText('Vi mødes ved søen.').textContent).toBe(
+      'Vi mødes ved søen.',
+    )
+  })
+
+  it('exposes a named reply action', () => {
+    const onReply = vi.fn()
+    render(
+      <MessageBubble
+        message={message}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={onReply}
+      />,
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Svar på besked fra Bo' }),
+    )
+
+    expect(onReply).toHaveBeenCalledWith(message)
+  })
+
+  it('shows a neutral fallback when a live reply parent is unavailable', () => {
+    render(
+      <MessageBubble
+        message={{ ...message, reply_to: null }}
+        author={author}
+        replyAuthor={undefined}
+        isOwn={false}
+        onReply={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByText('Den oprindelige besked er ikke tilgængelig.')
+        .textContent,
+    ).toBe('Den oprindelige besked er ikke tilgængelig.')
+  })
+})
