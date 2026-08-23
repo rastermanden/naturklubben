@@ -12,6 +12,7 @@ export const navLinks: NavLink[] = [
   { to: '/kalender', label: 'Kalender', requiresAuth: true },
   { to: '/billeder', label: 'Billeder', requiresAuth: true },
   { to: '/chat', label: 'Chat', requiresAuth: true },
+  { to: '/medlemmer', label: 'Medlemmer', requiresAuth: true },
   { to: '/profil', label: 'Profil', requiresAuth: true },
   { to: '/admin', label: 'Admin', requiresAuth: true, requiresAdmin: true },
 ]
