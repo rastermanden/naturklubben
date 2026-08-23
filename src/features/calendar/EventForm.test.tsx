@@ -28,13 +28,64 @@ describe('EventForm errors', () => {
     fireEvent.submit(end.closest('form')!)
 
     const error = await screen.findByText(
-      'Sluttidspunktet skal være efter starttidspunktet.',
+      'Sluttidspunktet må ikke være før starttidspunktet.',
     )
     expect(end.getAttribute('aria-invalid')).toBe('true')
     expect(end.getAttribute('aria-describedby')).toBe(error.id)
     expect(screen.queryByRole('alert')).toBeNull()
     expect(document.activeElement).toBe(end)
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('accepts an omitted end time and an end time equal to the start', () => {
+    const onSubmit = vi.fn()
+    const { unmount } = render(
+      <EventForm
+        submitting={false}
+        error={null}
+        onSubmit={onSubmit}
+        onCancel={() => undefined}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Titel'), {
+      target: { value: 'Morgentur' },
+    })
+    fireEvent.change(screen.getByLabelText('Starter'), {
+      target: { value: '2026-08-24T10:00' },
+    })
+    fireEvent.submit(screen.getByLabelText('Starter').closest('form')!)
+
+    expect(onSubmit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ end_at: null }),
+    )
+    unmount()
+
+    render(
+      <EventForm
+        submitting={false}
+        error={null}
+        onSubmit={onSubmit}
+        onCancel={() => undefined}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('Titel'), {
+      target: { value: 'Morgentur' },
+    })
+    fireEvent.change(screen.getByLabelText('Starter'), {
+      target: { value: '2026-08-24T10:00' },
+    })
+    fireEvent.change(screen.getByLabelText('Slutter'), {
+      target: { value: '2026-08-24T10:00' },
+    })
+    fireEvent.submit(screen.getByLabelText('Slutter').closest('form')!)
+
+    expect(onSubmit).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        start_at: new Date('2026-08-24T10:00').toISOString(),
+        end_at: new Date('2026-08-24T10:00').toISOString(),
+      }),
+    )
   })
 
   it('keeps submission failures as form-level alerts', () => {
