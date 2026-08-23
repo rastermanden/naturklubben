@@ -6,17 +6,18 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 
 ## Skema
 
-| Tabel                    | Formål                                                                                                                           | RLS                                                                                                                                         |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`               | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.                         | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                          |
-| `activities`             | Offentligt indhold om klubbens aktiviteter (#10).                                                                                | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                        |
-| `events`                 | Kalenderbegivenheder (#11).                                                                                                      | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                    |
-| `photos`                 | Metadata for uploadede billeder -- selve filerne ligger i Storage (#12).                                                         | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne. `optimized_path`/`thumbnail_path` sættes af edge-functionen i #13. |
-| `messages`               | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                                                       | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                          |
-| `push_subscriptions`     | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                 |
-| `allowed_emails`         | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                               |
-| `probation_applications` | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                      | Alle kan indsende; kun admins kan læse og behandle ansøgningerne.                                                                           |
-| `push_vapid_keys`        | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                        | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                          |
+| Tabel                                      | Formål                                                                                                                           | RLS                                                                                                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profiles`                                 | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.                         | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                          |
+| `activities`                               | Offentligt indhold om klubbens aktiviteter (#10).                                                                                | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                        |
+| `events`                                   | Kalenderbegivenheder (#11).                                                                                                      | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                    |
+| `photos`                                   | Metadata for uploadede billeder -- selve filerne ligger i Storage (#12).                                                         | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne. `optimized_path`/`thumbnail_path` sættes af edge-functionen i #13. |
+| `messages`                                 | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                                                       | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                          |
+| `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                 |
+| `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                               |
+| `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                      | Alle kan indsende; kun admins kan læse og behandle ansøgningerne.                                                                           |
+| `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                       | Ingen policies og ingen grants -- kun `probation-notifications` med Secret key kan læse rækken.                                             |
+| `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                        | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                          |
 
 ## Storage buckets
 
@@ -52,6 +53,15 @@ Oprettet manuelt i #2:
   Selve protokollen (RFC 8291-kryptering + RFC 8292/VAPID-signering) er implementeret
   direkte oven på WebCrypto i `webpush.ts` -- `web-push` fra npm er bygget til Node
   (`node:crypto`/`node:https`) og er ikke et sikkert kort i Edge Runtime.
+- `probation-notifications` (#82): leverer Web Push til admins ved nye
+  prøvemedlemskabsansøgninger og til ansøgeren ved godkendelse/afvisning. Funktionen
+  modtager kun et ansøgnings-id og en tilfældig, servergenereret notification-token
+  (eller en admins JWT); navn, afgørelse og push-endpoints slås op server-side med
+  Secret key. Postgres køer kaldet efter commit med `pg_net`, og `pg_cron` genforsøger
+  midlertidige fejl. Funktionen deployes derfor med `--no-verify-jwt`, men hvert POST
+  laver sin egen token/admin-kontrol, før en leveringsstatus kan tages til behandling.
+- Fælles VAPID- og Web Push-kode ligger i `supabase/functions/_shared/`, så chat og
+  prøvemedlemskaber bruger præcis samme afsendernøgle og krypteringskode.
 - Deployes **ikke** manuelt -- `.github/workflows/deploy-functions.yml` kører
   `supabase functions deploy` ikke-interaktivt ved push til `main`, når noget under
   `supabase/functions/` ændres. Kræver `SUPABASE_ACCESS_TOKEN` og `SUPABASE_PROJECT_REF`
@@ -106,8 +116,10 @@ det og kan fortsat logge ind.
 
 ## Ansøgninger om prøvemedlemskab
 
-Offentlige besøgende kan sende en ansøgning fra `/proevemedlemskab`. Den gemmes i
-`probation_applications`, som kun admins kan læse i `/admin`.
+Offentlige besøgende kan sende en ansøgning fra `/proevemedlemskab`. Indsendelsen
+beder først om Web Push-tilladelse, så svaret kan nå ansøgeren uden en ekstern
+mailudbyder. Ansøgning, push-abonnement og notification-token gemmes atomisk via
+`submit_probation_application()`; kun admins kan læse ansøgningen i `/admin`.
 
 Når en admin godkender en ansøgning, kalder klienten SQL-funktionen
 `approve_probation_application()`, som atomisk:
@@ -117,6 +129,49 @@ Når en admin godkender en ansøgning, kalder klienten SQL-funktionen
 
 Afvisning bruger `reject_probation_application()`, som markerer ansøgningen som
 afvist, så personen kan sende en ny ansøgning senere.
+
+Begge afgørelser sætter samtidig `decision_notification_status = 'pending'`.
+Tilsvarende starter en ny ansøgning med `admin_notification_status = 'pending'`.
+Det er en holdbar outbox på selve ansøgningen:
+
+1. RPC'en køer et `pg_net`-kald til `probation-notifications` i samme
+   databasetransaktion. HTTP-kaldet starter først efter commit.
+2. Edge Functionen tager status atomisk som `sending`, sender push og afslutter som
+   `sent` eller `failed`. Et stigende forsøgsnummer forhindrer et gammelt,
+   timeoutet kald i at overskrive resultatet fra et nyere forsøg.
+3. Et `pg_cron`-job, oprettet af migrationen, genkøer uløste leveringer hvert femte
+   minut (højst ti leveringsforsøg). Et forsøg, der døde i `sending`, køes igen
+   efter 15 minutter og kan derefter tages af claim-funktionen.
+4. Klienten kalder også functionen efter RPC'en for at vise resultatet med det samme.
+   Claim-funktionen gør det samtidige databasekald og klientkald idempotent.
+5. Fejl ændrer aldrig den egentlige ansøgningsstatus. Admin-panelet beholder afgjorte
+   ansøgninger med uløste leveringer og viser en genforsøgsknap; ansøgerens
+   kvitteringsside gør det samme for den første admin-notifikation.
+
+Admins slår push til direkte på `/admin`. Der kræves ingen ny nøgle eller udbyder:
+`probation-notifications` genbruger det selv-genererende VAPID-nøglepar fra
+`push_vapid_keys`.
+
+Ansøgerens push-endpoint accepteres kun, hvis det er HTTPS og tilhører de kendte
+browser-push-tjenester fra Google, Mozilla, Apple eller Microsoft. Den samme
+allowlist håndhæves igen umiddelbart før Edge Functionen kalder endpointet, så et
+manipuleret abonnement ikke kan bruges til server-side requests mod vilkårlige
+adresser.
+
+### Hvorfor Web Push og ikke e-mail
+
+Supabase Auths indbyggede mail kan kun sende auth-handlinger som bekræftelse,
+password reset, magic link og invitation. Den kan ikke sende en vilkårlig
+godkendt/afvist-besked til en person, som endnu ikke er bruger. SMTP eller en
+mail-API ville derfor kræve en ny ekstern konto og et manuelt oprettet secret, i
+strid med projektets kode-only-princip. Web Push bruger den allerede deployede,
+selvkonfigurerende infrastruktur og eksponerer hverken Secret key, privat
+VAPID-nøgle eller andre server-secrets i frontenden.
+
+Konsekvensen er, at browseren skal understøtte Web Push og have tilladelse, før
+ansøgningen kan sendes. På iPhone/iPad kræver Safari, at appen først er lagt på
+hjemmeskærmen. PR-previews har ingen service worker og kan derfor validere
+migration/RLS/UI, men ikke selve push-leveringen; den prøves på den udgivne PWA.
 
 ## Auth-URL'er: hvor links i mails lander
 

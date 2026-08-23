@@ -30,6 +30,29 @@ export interface VapidDetails {
   subject: string
 }
 
+const supportedPushHosts = new Set([
+  'fcm.googleapis.com',
+  'updates.push.services.mozilla.com',
+  'push.services.mozilla.com',
+  'web.push.apple.com',
+])
+
+export function isSupportedPushEndpoint(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint)
+    return (
+      url.protocol === 'https:' &&
+      !url.username &&
+      !url.password &&
+      (url.port === '' || url.port === '443') &&
+      (supportedPushHosts.has(url.hostname) ||
+        url.hostname.endsWith('.notify.windows.com'))
+    )
+  } catch {
+    return false
+  }
+}
+
 export function base64UrlToBytes(value: string): Uint8Array {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/')
   const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
@@ -242,6 +265,12 @@ export async function sendPushNotification(
   vapid: VapidDetails,
   ttlSeconds = 12 * 60 * 60,
 ): Promise<SendResult> {
+  if (!isSupportedPushEndpoint(subscription.endpoint)) {
+    throw new Error(
+      'Push-endpointet tilhører ikke en understøttet push-tjeneste',
+    )
+  }
+
   const body = await encryptPayload(subscription, payload)
   const authorization = await createVapidAuthorization(
     subscription.endpoint,

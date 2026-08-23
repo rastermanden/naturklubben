@@ -71,3 +71,13 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      - name: Deploy probation-notifications
+        # Postgres køer leveringen med pg_net efter commit og autoriserer hvert
+        # request med ansøgningens tilfældige token. Functionen laver selv samme
+        # token/admin-kontrol, så gateway-JWT er bevidst slået fra for dette ene
+        # server-til-server endpoint.
+        run: supabase functions deploy probation-notifications --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}

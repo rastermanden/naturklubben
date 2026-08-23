@@ -73,7 +73,7 @@ registerRoute(
   }),
 )
 
-interface ChatPushPayload {
+interface PushPayload {
   title?: string
   body?: string
   tag?: string
@@ -84,15 +84,15 @@ interface ChatPushPayload {
 
 // `renotify` og `vibrate` findes i alle browsere, der understøtter Web Push,
 // men er ikke med i TypeScripts NotificationOptions.
-type ChatNotificationOptions = NotificationOptions & {
+type PushNotificationOptions = NotificationOptions & {
   renotify?: boolean
   vibrate?: number[]
 }
 
-function parsePayload(event: PushEvent): ChatPushPayload {
+function parsePayload(event: PushEvent): PushPayload {
   if (!event.data) return {}
   try {
-    return event.data.json() as ChatPushPayload
+    return event.data.json() as PushPayload
   } catch {
     return { body: event.data.text() }
   }
@@ -105,7 +105,7 @@ self.addEventListener('push', (event) => {
     `${self.location.origin}${basePath}`,
   )
 
-  const options: ChatNotificationOptions = {
+  const options: PushNotificationOptions = {
     body: payload.body ?? 'Der er skrevet noget nyt i chatten.',
     icon: `${basePath}pwa-192x192.png`,
     badge: `${basePath}pwa-192x192.png`,
