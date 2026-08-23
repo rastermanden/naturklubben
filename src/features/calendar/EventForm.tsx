@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
+import { useErrorFocus } from '../../hooks/useErrorFocus'
 import type { CalendarEvent, EventInput } from './useEvents'
 
 interface EventFormProps {
@@ -31,6 +32,8 @@ export function EventForm({
   const [endAt, setEndAt] = useState(toLocalDateTime(event?.end_at))
   const [validationError, setValidationError] = useState<string | null>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
+  const endInputRef = useRef<HTMLInputElement>(null)
+  const focusEndError = useErrorFocus(endInputRef)
   const dialogRef = useDialogFocus<HTMLDivElement>({
     onClose: onCancel,
     initialFocusRef: titleInputRef,
@@ -42,6 +45,7 @@ export function EventForm({
 
     if (endAt && new Date(endAt) < new Date(startAt)) {
       setValidationError('Sluttidspunktet skal være efter starttidspunktet.')
+      focusEndError()
       return
     }
 
@@ -78,6 +82,7 @@ export function EventForm({
           <label className="flex flex-col gap-1 text-sm text-green-900">
             Titel
             <input
+              id="event-title"
               ref={titleInputRef}
               required
               maxLength={120}
@@ -90,6 +95,7 @@ export function EventForm({
           <label className="flex flex-col gap-1 text-sm text-green-900">
             Beskrivelse
             <textarea
+              id="event-description"
               rows={4}
               value={description}
               onChange={(changeEvent) =>
@@ -102,6 +108,7 @@ export function EventForm({
           <label className="flex flex-col gap-1 text-sm text-green-900">
             Sted
             <input
+              id="event-location"
               value={location}
               onChange={(changeEvent) => setLocation(changeEvent.target.value)}
               className={inputClass}
@@ -112,6 +119,7 @@ export function EventForm({
             <label className="flex flex-col gap-1 text-sm text-green-900">
               Starter
               <input
+                id="event-start-at"
                 type="datetime-local"
                 required
                 value={startAt}
@@ -123,17 +131,27 @@ export function EventForm({
             <label className="flex flex-col gap-1 text-sm text-green-900">
               Slutter
               <input
+                id="event-end-at"
+                ref={endInputRef}
                 type="datetime-local"
                 min={startAt}
                 value={endAt}
                 onChange={(changeEvent) => setEndAt(changeEvent.target.value)}
+                aria-invalid={validationError ? true : undefined}
+                aria-describedby={
+                  validationError ? 'event-form-error' : undefined
+                }
                 className={inputClass}
               />
             </label>
           </div>
 
           {(validationError || error) && (
-            <p role="alert" className="text-sm text-red-700">
+            <p
+              id="event-form-error"
+              role={validationError ? undefined : 'alert'}
+              className="text-sm text-red-700"
+            >
               {validationError ?? error}
             </p>
           )}

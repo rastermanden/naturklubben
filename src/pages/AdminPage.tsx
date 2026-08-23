@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useAuth } from '../features/auth/useAuth'
 import {
   toFriendlyAllowedEmailError,
@@ -11,6 +11,7 @@ import {
 } from '../features/probation/useProbationApplications'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { AdminRolesSection } from '../features/admin/AdminRolesSection'
+import { useErrorFocus } from '../hooks/useErrorFocus'
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('da-DK', {
@@ -33,8 +34,12 @@ function AdminPage() {
 
   const [email, setEmail] = useState('')
   const [note, setNote] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviteEmailInvalid, setInviteEmailInvalid] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const emailRef = useRef<HTMLInputElement>(null)
+  const focusInviteError = useErrorFocus(emailRef)
 
   function showDeliveryFailure(
     delivery: NotificationDelivery,
@@ -42,7 +47,7 @@ function AdminPage() {
   ) {
     setSuccessMsg(savedMessage)
     if (delivery.status === 'failed') {
-      setError(
+      setActionError(
         delivery.error ??
           'Beslutningen er gemt, men notifikationen kunne ikke leveres. Prøv igen fra kortet.',
       )
@@ -51,7 +56,9 @@ function AdminPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    setError(null)
+    setActionError(null)
+    setInviteError(null)
+    setInviteEmailInvalid(false)
     setSuccessMsg(null)
 
     const trimmed = email.trim().toLowerCase()
@@ -63,7 +70,14 @@ function AdminPage() {
       setNote('')
       setSuccessMsg(`${trimmed} kan nu oprette en bruger.`)
     } catch (mutationError) {
-      setError(toFriendlyAllowedEmailError(mutationError))
+      const duplicate =
+        typeof mutationError === 'object' &&
+        mutationError !== null &&
+        'code' in mutationError &&
+        String(mutationError.code) === '23505'
+      setInviteError(toFriendlyAllowedEmailError(mutationError))
+      setInviteEmailInvalid(duplicate)
+      if (duplicate) focusInviteError()
     }
   }
 
@@ -76,18 +90,22 @@ function AdminPage() {
       return
     }
 
-    setError(null)
+    setActionError(null)
+    setInviteError(null)
+    setInviteEmailInvalid(false)
     setSuccessMsg(null)
     try {
       await removeEmail.mutateAsync(emailToRemove)
       setSuccessMsg(`${emailToRemove} er fjernet fra listen.`)
     } catch (mutationError) {
-      setError(toFriendlyAllowedEmailError(mutationError))
+      setActionError(toFriendlyAllowedEmailError(mutationError))
     }
   }
 
   async function handleApprove(applicationId: number, applicantEmail: string) {
-    setError(null)
+    setActionError(null)
+    setInviteError(null)
+    setInviteEmailInvalid(false)
     setSuccessMsg(null)
 
     try {
@@ -97,7 +115,7 @@ function AdminPage() {
         `${applicantEmail} er godkendt og kan nu oprette en bruger.`,
       )
     } catch (mutationError) {
-      setError(toFriendlyProbationApplicationError(mutationError))
+      setActionError(toFriendlyProbationApplicationError(mutationError))
     }
   }
 
@@ -110,7 +128,9 @@ function AdminPage() {
       return
     }
 
-    setError(null)
+    setActionError(null)
+    setInviteError(null)
+    setInviteEmailInvalid(false)
     setSuccessMsg(null)
 
     try {
@@ -120,7 +140,7 @@ function AdminPage() {
         `Ansøgningen fra ${applicantEmail} er afvist.`,
       )
     } catch (mutationError) {
-      setError(toFriendlyProbationApplicationError(mutationError))
+      setActionError(toFriendlyProbationApplicationError(mutationError))
     }
   }
 
@@ -128,7 +148,9 @@ function AdminPage() {
     applicationId: number,
     kind: 'admin' | 'decision',
   ) {
-    setError(null)
+    setActionError(null)
+    setInviteError(null)
+    setInviteEmailInvalid(false)
     setSuccessMsg(null)
     try {
       const delivery = await retryNotification.mutateAsync({
@@ -138,12 +160,12 @@ function AdminPage() {
       if (delivery.status === 'sent') {
         setSuccessMsg('Notifikationen blev leveret.')
       } else {
-        setError(
+        setActionError(
           delivery.error ?? 'Notifikationen kunne ikke leveres. Prøv igen.',
         )
       }
     } catch (mutationError) {
-      setError(toFriendlyProbationApplicationError(mutationError))
+      setActionError(toFriendlyProbationApplicationError(mutationError))
     }
   }
 
@@ -168,9 +190,9 @@ function AdminPage() {
           {successMsg}
         </p>
       )}
-      {error && (
+      {actionError && (
         <p role="alert" className="text-sm text-red-700">
-          {error}
+          {actionError}
         </p>
       )}
 
@@ -194,12 +216,18 @@ function AdminPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           E-mail
           <input
+            id="admin-invite-email"
+            ref={emailRef}
             type="email"
             required
             autoComplete="off"
             placeholder="navn@eksempel.dk"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            aria-invalid={inviteEmailInvalid ? true : undefined}
+            aria-describedby={
+              inviteEmailInvalid ? 'admin-invite-error' : undefined
+            }
             className="rounded border border-green-300 bg-white px-3 py-2 text-base text-green-950"
           />
         </label>
@@ -207,6 +235,7 @@ function AdminPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           Note (valgfri)
           <input
+            id="admin-invite-note"
             type="text"
             placeholder="Fx “Anne fra bestyrelsen”"
             value={note}
@@ -214,6 +243,16 @@ function AdminPage() {
             className="rounded border border-green-300 bg-white px-3 py-2 text-base text-green-950"
           />
         </label>
+
+        {inviteError && (
+          <p
+            id="admin-invite-error"
+            role={inviteEmailInvalid ? undefined : 'alert'}
+            className="text-sm text-red-700"
+          >
+            {inviteError}
+          </p>
+        )}
 
         <button
           type="submit"

@@ -4,6 +4,7 @@ import { DeleteAccountSection } from '../features/account/DeleteAccountSection'
 import { useAuth } from '../features/auth/useAuth'
 import { ChatColorOption } from '../features/chat/ChatColorOption'
 import { profilesMapQueryKey } from '../features/chat/useProfilesMap'
+import { useErrorFocus } from '../hooks/useErrorFocus'
 import { readableTextColor } from '../lib/colorContrast'
 import { supabase } from '../lib/supabaseClient'
 
@@ -37,7 +38,12 @@ function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [errorSource, setErrorSource] = useState<'avatar' | 'profile' | null>(
+    null,
+  )
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const avatarButtonRef = useRef<HTMLButtonElement>(null)
+  const focusAvatarError = useErrorFocus(avatarButtonRef)
 
   useEffect(() => {
     async function load() {
@@ -67,13 +73,18 @@ function ProfilePage() {
 
     setSuccessMsg(null)
     setErrorMsg(null)
+    setErrorSource(null)
 
     if (!file.type.startsWith('image/')) {
       setErrorMsg('Filen er ikke et billede.')
+      setErrorSource('avatar')
+      focusAvatarError()
       return
     }
     if (file.size > MAX_AVATAR_SIZE) {
       setErrorMsg('Billedet er for stort (maks. 5 MB).')
+      setErrorSource('avatar')
+      focusAvatarError()
       return
     }
 
@@ -121,11 +132,13 @@ function ProfilePage() {
         await supabase.storage.from('avatars').remove(stale)
       }
     } catch (error) {
+      setErrorSource('avatar')
       setErrorMsg(
         error instanceof Error
           ? `Billedet kunne ikke uploades: ${error.message}`
           : 'Billedet kunne ikke uploades. Prøv igen.',
       )
+      focusAvatarError()
     } finally {
       setUploading(false)
     }
@@ -136,6 +149,7 @@ function ProfilePage() {
     setSaving(true)
     setSuccessMsg(null)
     setErrorMsg(null)
+    setErrorSource(null)
     try {
       const { error } = await supabase
         .from('profiles')
@@ -151,6 +165,7 @@ function ProfilePage() {
       await queryClient.invalidateQueries({ queryKey: profilesMapQueryKey })
       setSuccessMsg('Profilen er gemt.')
     } catch (error) {
+      setErrorSource('profile')
       setErrorMsg(
         error instanceof Error
           ? `Profilen kunne ikke gemmes: ${error.message}`
@@ -181,10 +196,14 @@ function ProfilePage() {
         {/* Avatar preview & upload */}
         <div className="flex flex-col items-center gap-3">
           <button
+            ref={avatarButtonRef}
             type="button"
             onClick={() => fileInputRef.current?.click()}
             className="relative group"
             aria-label="Skift profilbillede"
+            aria-describedby={
+              errorSource === 'avatar' ? 'profile-form-error' : undefined
+            }
           >
             {avatarUrl ? (
               <img
@@ -209,9 +228,15 @@ function ProfilePage() {
             </span>
           </button>
           <input
+            id="profile-avatar"
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            aria-label="Vælg profilbillede"
+            aria-invalid={errorSource === 'avatar' ? true : undefined}
+            aria-describedby={
+              errorSource === 'avatar' ? 'profile-form-error' : undefined
+            }
             className="sr-only"
             onChange={handleAvatarChange}
           />
@@ -252,6 +277,7 @@ function ProfilePage() {
               />
             ))}
             <input
+              id="profile-chat-color"
               type="color"
               value={chatColor}
               onChange={(e) => setChatColor(e.target.value)}
@@ -289,7 +315,11 @@ function ProfilePage() {
           </p>
         )}
         {errorMsg && (
-          <p role="alert" className="text-sm text-red-700">
+          <p
+            id="profile-form-error"
+            role={errorSource === 'avatar' ? undefined : 'alert'}
+            className="text-sm text-red-700"
+          >
             {errorMsg}
           </p>
         )}

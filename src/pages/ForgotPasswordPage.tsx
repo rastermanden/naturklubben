@@ -55,6 +55,7 @@ function ForgotPasswordPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           E-mail
           <input
+            id="forgot-password-email"
             type="email"
             required
             autoComplete="email"
@@ -65,7 +66,11 @@ function ForgotPasswordPage() {
         </label>
 
         {error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p
+            id="forgot-password-error"
+            role="alert"
+            className="text-sm text-red-700"
+          >
             {error}
           </p>
         )}

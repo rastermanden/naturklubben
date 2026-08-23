@@ -2,10 +2,12 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ACCOUNT_DELETION_CONFIRMATION,
+  AccountDeletionError,
   accountDeletionErrorMessage,
   clearDeletedAccountSession,
   deleteAccount,
 } from './deleteAccount'
+import { useErrorFocus } from '../../hooks/useErrorFocus'
 
 interface DeleteAccountDialogProps {
   email: string
@@ -24,7 +26,13 @@ export function DeleteAccountDialog({
   const [confirmation, setConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorField, setErrorField] = useState<
+    'password' | 'confirmation' | null
+  >(null)
   const passwordRef = useRef<HTMLInputElement>(null)
+  const confirmationRef = useRef<HTMLInputElement>(null)
+  const focusPasswordError = useErrorFocus(passwordRef)
+  const focusConfirmationError = useErrorFocus(confirmationRef)
   const canDelete =
     password.length > 0 &&
     confirmation === ACCOUNT_DELETION_CONFIRMATION &&
@@ -32,7 +40,9 @@ export function DeleteAccountDialog({
 
   useEffect(() => {
     passwordRef.current?.focus()
+  }, [])
 
+  useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === 'Escape' && !deleting) onClose()
     }
@@ -47,11 +57,26 @@ export function DeleteAccountDialog({
 
     setDeleting(true)
     setError(null)
+    setErrorField(null)
     try {
       await deleteRequest(email, password)
       onDeleted()
     } catch (caught) {
       setError(accountDeletionErrorMessage(caught))
+      if (
+        caught instanceof AccountDeletionError &&
+        (caught.code === 'invalid_password' ||
+          caught.code === 'recent_login_required')
+      ) {
+        setErrorField('password')
+        focusPasswordError()
+      } else if (
+        caught instanceof AccountDeletionError &&
+        caught.code === 'invalid_confirmation'
+      ) {
+        setErrorField('confirmation')
+        focusConfirmationError()
+      }
       setDeleting(false)
     }
   }
@@ -96,12 +121,17 @@ export function DeleteAccountDialog({
           <label className="flex flex-col gap-1 text-sm text-green-950">
             Nuværende adgangskode
             <input
+              id="delete-account-password"
               ref={passwordRef}
               type="password"
               autoComplete="current-password"
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              aria-invalid={errorField === 'password' ? true : undefined}
+              aria-describedby={
+                errorField === 'password' ? 'delete-account-error' : undefined
+              }
               disabled={deleting}
               className="rounded border border-green-300 px-3 py-2 text-base"
             />
@@ -111,18 +141,30 @@ export function DeleteAccountDialog({
             Skriv <strong>{ACCOUNT_DELETION_CONFIRMATION}</strong> for at
             bekræfte
             <input
+              id="delete-account-confirmation"
+              ref={confirmationRef}
               type="text"
               autoComplete="off"
               required
               value={confirmation}
               onChange={(event) => setConfirmation(event.target.value)}
+              aria-invalid={errorField === 'confirmation' ? true : undefined}
+              aria-describedby={
+                errorField === 'confirmation'
+                  ? 'delete-account-error'
+                  : undefined
+              }
               disabled={deleting}
               className="rounded border border-green-300 px-3 py-2 text-base"
             />
           </label>
 
           {error && (
-            <p role="alert" className="text-sm text-red-700">
+            <p
+              id="delete-account-error"
+              role={errorField ? undefined : 'alert'}
+              className="text-sm text-red-700"
+            >
               {error}
             </p>
           )}

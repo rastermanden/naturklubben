@@ -132,4 +132,51 @@ describe('DeleteAccountDialog', () => {
     )
     expect(onDeleted).not.toHaveBeenCalled()
   })
+
+  it('links an invalid-password error to the password and focuses it', async () => {
+    render(
+      <DeleteAccountDialog
+        email="medlem@example.com"
+        onClose={() => undefined}
+        onDeleted={() => undefined}
+        deleteRequest={() =>
+          Promise.reject(new AccountDeletionError('invalid_password'))
+        }
+      />,
+    )
+    fillConfirmation()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Slet min konto permanent' }),
+    )
+
+    const error = await screen.findByText('Adgangskoden er forkert. Prøv igen.')
+    const password = screen.getByLabelText('Nuværende adgangskode')
+    expect(password.getAttribute('aria-invalid')).toBe('true')
+    expect(password.getAttribute('aria-describedby')).toBe(error.id)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(document.activeElement).toBe(password)
+  })
+
+  it('links a confirmation error to the confirmation and focuses it after submit', async () => {
+    render(
+      <DeleteAccountDialog
+        email="medlem@example.com"
+        onClose={() => undefined}
+        onDeleted={() => undefined}
+        deleteRequest={() =>
+          Promise.reject(new AccountDeletionError('invalid_confirmation'))
+        }
+      />,
+    )
+    fillConfirmation()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Slet min konto permanent' }),
+    )
+
+    const error = await screen.findByText(/Skriv SLET MIN KONTO præcis/)
+    const confirmation = screen.getByLabelText(/Skriv SLET MIN KONTO/)
+    expect(confirmation.getAttribute('aria-invalid')).toBe('true')
+    expect(confirmation.getAttribute('aria-describedby')).toBe(error.id)
+    expect(document.activeElement).toBe(confirmation)
+  })
 })

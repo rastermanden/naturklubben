@@ -17,6 +17,7 @@ import {
 } from '../features/gallery/gallerySearchParams'
 import { useRetryPhotoOptimization } from '../features/gallery/useRetryPhotoOptimization'
 import type { Photo } from '../features/gallery/types'
+import { useErrorFocus } from '../hooks/useErrorFocus'
 
 const EMPTY_PHOTOS: Photo[] = []
 
@@ -43,6 +44,9 @@ function GalleryPage() {
   const [caption, setCaption] = useState('')
   const [eventId, setEventId] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
+  const [formErrorSource, setFormErrorSource] = useState<
+    'files' | 'camera' | null
+  >(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -75,12 +79,19 @@ function GalleryPage() {
   // vælgeren; det andet med `capture`, så kameraet åbner direkte.
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+  const fileButtonRef = useRef<HTMLButtonElement>(null)
+  const cameraButtonRef = useRef<HTMLButtonElement>(null)
+  const focusFileError = useErrorFocus(fileButtonRef)
+  const focusCameraError = useErrorFocus(cameraButtonRef)
 
   function setGalleryParam(key: 'event' | 'photo', value: string | null) {
     setSearchParams((current) => updateGallerySearchParam(current, key, value))
   }
 
-  function handleFilesSelected(files: FileList | null) {
+  function handleFilesSelected(
+    files: FileList | null,
+    source: 'files' | 'camera',
+  ) {
     if (!files || files.length === 0) return
     const fileArray = Array.from(files)
     const validFiles = fileArray.filter((file) => !validateFiles([file]))
@@ -91,6 +102,11 @@ function GalleryPage() {
     setFormError(
       validationErrors.length > 0 ? validationErrors.join(' ') : null,
     )
+    setFormErrorSource(validationErrors.length > 0 ? source : null)
+    if (validationErrors.length > 0) {
+      if (source === 'files') focusFileError()
+      else focusCameraError()
+    }
     if (validFiles.length > 0) {
       upload.enqueue({
         files: validFiles,
@@ -108,7 +124,7 @@ function GalleryPage() {
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault()
     setDragActive(false)
-    handleFilesSelected(event.dataTransfer.files)
+    handleFilesSelected(event.dataTransfer.files, 'files')
   }
 
   function retryPhoto(photo: Photo) {
@@ -139,6 +155,7 @@ function GalleryPage() {
         <label className="flex min-w-60 flex-col gap-1 text-sm text-green-900">
           Filtrér efter begivenhed
           <select
+            id="gallery-filter-event"
             value={eventFilter ?? ''}
             onChange={(event) =>
               setGalleryParam('event', event.target.value || null)
@@ -183,6 +200,7 @@ function GalleryPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           Billedtekst (valgfri)
           <input
+            id="gallery-upload-caption"
             type="text"
             value={caption}
             onChange={(event) => setCaption(event.target.value)}
@@ -194,6 +212,7 @@ function GalleryPage() {
           <label className="flex flex-col gap-1 text-sm text-green-900">
             Knyt til begivenhed (valgfri)
             <select
+              id="gallery-upload-event"
               value={eventId}
               onChange={(event) => setEventId(event.target.value)}
               className="min-h-11 rounded border border-green-300 bg-white px-3 py-2 text-base"
@@ -216,33 +235,55 @@ function GalleryPage() {
         )}
 
         <input
+          id="gallery-upload-files"
           ref={fileInputRef}
           type="file"
+          aria-label="Vælg billeder fra enheden"
           accept="image/*"
           multiple
-          onChange={(event) => handleFilesSelected(event.target.files)}
+          onChange={(event) => handleFilesSelected(event.target.files, 'files')}
+          aria-invalid={formErrorSource === 'files' ? true : undefined}
+          aria-describedby={
+            formErrorSource === 'files' ? 'gallery-upload-error' : undefined
+          }
           className="sr-only"
         />
         <input
+          id="gallery-upload-camera"
           ref={cameraInputRef}
           type="file"
+          aria-label="Tag et billede med kameraet"
           accept="image/*"
           capture="environment"
-          onChange={(event) => handleFilesSelected(event.target.files)}
+          onChange={(event) =>
+            handleFilesSelected(event.target.files, 'camera')
+          }
+          aria-invalid={formErrorSource === 'camera' ? true : undefined}
+          aria-describedby={
+            formErrorSource === 'camera' ? 'gallery-upload-error' : undefined
+          }
           className="sr-only"
         />
 
         <div className="grid gap-2 sm:flex sm:flex-wrap">
           <button
+            ref={fileButtonRef}
             type="button"
             onClick={() => fileInputRef.current?.click()}
+            aria-describedby={
+              formErrorSource === 'files' ? 'gallery-upload-error' : undefined
+            }
             className="min-h-11 rounded-lg bg-green-800 px-5 py-2 text-white"
           >
             Vælg billeder
           </button>
           <button
+            ref={cameraButtonRef}
             type="button"
             onClick={() => cameraInputRef.current?.click()}
+            aria-describedby={
+              formErrorSource === 'camera' ? 'gallery-upload-error' : undefined
+            }
             className="min-h-11 rounded-lg border border-green-800 px-5 py-2 text-green-900"
           >
             Tag billede
@@ -255,7 +296,7 @@ function GalleryPage() {
         </p>
 
         {formError && (
-          <p role="alert" className="text-sm text-red-700">
+          <p id="gallery-upload-error" className="text-sm text-red-700">
             {formError}
           </p>
         )}
