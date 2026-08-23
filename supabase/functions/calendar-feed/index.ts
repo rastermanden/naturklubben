@@ -59,7 +59,6 @@ function foldLine(line: string): string {
 interface CalendarEvent {
   id: string
   title: string
-  description: string | null
   location: string | null
   start_at: string
   end_at: string | null
@@ -81,10 +80,6 @@ function buildVevent(event: CalendarEvent, dtstamp: string): string {
   }
 
   lines.push(foldLine(`SUMMARY:${escapeText(event.title)}`))
-
-  if (event.description) {
-    lines.push(foldLine(`DESCRIPTION:${escapeText(event.description)}`))
-  }
 
   if (event.location) {
     lines.push(foldLine(`LOCATION:${escapeText(event.location)}`))
@@ -131,19 +126,33 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Brug anon-rollen — endpointet er offentligt, og RLS på events-tabellen
-    // styrer, hvad der er synligt for ikke-autentificerede kaldere.
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-    )
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const publishableKeysJson = Deno.env.get('SUPABASE_PUBLISHABLE_KEYS')
+    if (!supabaseUrl || !publishableKeysJson) {
+      console.error('calendar-feed: missing Supabase environment variables')
+      return new Response('Internal Server Error', { status: 500 })
+    }
+
+    const publishableKeys = JSON.parse(publishableKeysJson) as Record<
+      string,
+      unknown
+    >
+    const publishableKey = publishableKeys.default
+    if (typeof publishableKey !== 'string' || !publishableKey) {
+      console.error('calendar-feed: missing default Supabase publishable key')
+      return new Response('Internal Server Error', { status: 500 })
+    }
+
+    // The publishable key assumes the anon role. That role can only read the
+    // deliberately data-minimized view, not the member-only events table.
+    const supabase = createClient(supabaseUrl, publishableKey)
 
     const startOfToday = new Date()
     startOfToday.setUTCHours(0, 0, 0, 0)
 
     const { data, error } = await supabase
-      .from('events')
-      .select('id, title, description, location, start_at, end_at')
+      .from('calendar_feed_events')
+      .select('id, title, location, start_at, end_at')
       .gte('start_at', startOfToday.toISOString())
       .order('start_at', { ascending: true })
 

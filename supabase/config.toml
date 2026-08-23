@@ -1,5 +1,9 @@
 # Supabase Preview Branching deploys functions declared here, so PR previews can
 # exercise the public submission boundary against the PR's own database.
+[functions.calendar-feed]
+enabled = true
+verify_jwt = false
+
 [functions.submit-probation-application]
 enabled = true
 verify_jwt = false
