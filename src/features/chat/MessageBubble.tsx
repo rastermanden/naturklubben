@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Avatar } from '../../components/Avatar'
+import { readableTextColor } from '../../lib/colorContrast'
 import { formatRelativeTime } from './formatRelativeTime'
 import type { Message } from './useMessages'
 import type { ProfileSummary } from './useProfilesMap'
@@ -22,6 +23,7 @@ export function MessageBubble({
   const name = author?.full_name ?? 'Medlem'
   const color = author?.chat_color ?? '#16a34a'
   const fullTimestamp = new Date(message.created_at).toLocaleString('da-DK')
+  const textColor = isOwn ? readableTextColor(color) : '#052e16'
 
   return (
     <li className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
@@ -35,19 +37,19 @@ export function MessageBubble({
         />
       )}
       <div
-        className={`max-w-[75%] rounded-2xl px-4 py-2 ${isOwn ? 'text-white' : 'text-green-950'}`}
-        style={
-          isOwn ? { backgroundColor: color } : { backgroundColor: color + '22' }
-        }
+        className="max-w-[75%] rounded-2xl px-4 py-2"
+        style={{
+          backgroundColor: isOwn ? color : color + '22',
+          color: textColor,
+        }}
       >
         <p
-          className={`mb-0.5 text-xs font-medium ${isOwn ? 'text-right text-white/80' : ''}`}
-          style={isOwn ? undefined : { color }}
+          className={`mb-0.5 text-xs font-medium ${isOwn ? 'text-right' : ''}`}
         >
           {name}
         </p>
         <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        <p className="mt-1 text-right text-xs opacity-70" title={fullTimestamp}>
+        <p className="mt-1 text-right text-xs" title={fullTimestamp}>
           {formatRelativeTime(message.created_at)}
         </p>
       </div>

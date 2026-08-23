@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { AttendanceSection } from '../features/calendar/AttendanceSection'
 import { EventForm } from '../features/calendar/EventForm'
 import { downloadIcal } from '../features/calendar/ical'
@@ -8,6 +8,7 @@ import {
   type EventInput,
 } from '../features/calendar/useEvents'
 import { useAuth } from '../features/auth/useAuth'
+import { useDialogFocus } from '../hooks/useDialogFocus'
 
 // Feed-URL til live iCal-abonnement (webcal://). Udledes af SUPABASE_URL så
 // der ikke er brug for en ekstra env-variabel.
@@ -74,13 +75,20 @@ function EventDetails({
 }) {
   const start = new Date(event.start_at)
   const end = event.end_at ? new Date(event.end_at) : null
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useDialogFocus<HTMLDivElement>({
+    onClose,
+    initialFocusRef: closeButtonRef,
+  })
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="event-title"
+      tabIndex={-1}
     >
       <article className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
         <div className="flex items-start justify-between gap-4">
@@ -88,6 +96,7 @@ function EventDetails({
             {event.title}
           </h2>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             aria-label="Luk"

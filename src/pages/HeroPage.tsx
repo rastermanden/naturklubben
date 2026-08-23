@@ -10,7 +10,7 @@ function HeroPage() {
   const { data: activities } = useActivities(3)
 
   return (
-    <>
+    <main>
       <section className="flex min-h-[70svh] flex-col items-center justify-center gap-6 bg-green-50 p-6 text-center">
         <div className="flex flex-col gap-3">
           <h1 className="text-4xl font-semibold text-green-900 sm:text-5xl">
@@ -86,7 +86,7 @@ function HeroPage() {
           </div>
         </section>
       )}
-    </>
+    </main>
   )
 }
 

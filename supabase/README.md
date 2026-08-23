@@ -8,13 +8,14 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 
 | Tabel                                      | Formål                                                                                                                           | RLS                                                                                                                                         |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`                                 | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.                         | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                          |
+| `profiles`                                 | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.                         | Alle autentificerede kan læse; ejeren kan kun opdatere profilfelterne. `is_admin` kan kun ændres via `set_admin_role()`.                    |
 | `activities`                               | Offentligt indhold om klubbens aktiviteter (#10).                                                                                | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                        |
 | `events`                                   | Kalenderbegivenheder (#11).                                                                                                      | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                    |
 | `photos`                                   | Metadata for uploadede billeder -- selve filerne ligger i Storage (#12).                                                         | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne. `optimized_path`/`thumbnail_path` sættes af edge-functionen i #13. |
 | `messages`                                 | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                                                       | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                          |
 | `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                 |
 | `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                               |
+| `admin_role_changes`                       | Uforanderligt revisionsspor med aktør, medlem, gammel/ny rolle og tidspunkt.                                                     | Kun admins kan læse; ingen klientrolle kan indsætte, ændre eller slette.                                                                    |
 | `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                      | Ingen offentlig insert-policy; kun den service-role-beskyttede submit-RPC kan oprette, og kun admins kan læse/behandle.                     |
 | `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                       | Ingen policies og ingen grants -- kun `probation-notifications` med Secret key kan læse rækken.                                             |
 | `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                        | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                          |
@@ -93,23 +94,25 @@ allerede har det. CI (`ci.yml`) fejler på dubletter.
 
 ## Admin-adgang
 
-`profiles.is_admin` styrer, hvem der kan redigere `activities` og administrere
-allowlisten `allowed_emails` (siden `/admin` i appen).
+`profiles.is_admin` styrer, hvem der kan redigere `activities` og bruge siden `/admin`.
 
-- Flaget kan **ikke** sættes af brugeren selv: triggeren `profiles_protect_admin_flag`
-  afviser en ændring af `is_admin`, medmindre den, der ændrer det, allerede er admin --
-  eller kalder uden en bruger-session (service-role, SQL-editoren, Table Editor og
-  migrations).
+- En klient kan ikke opdatere `profiles.is_admin` eller `allowed_emails.is_admin`
+  direkte. Autentificerede brugere har kun kolonnebegrænset UPDATE på de almindelige
+  profilfelter og kolonnebegrænset INSERT på allowlisten.
+- Eksisterende admins ændrer roller med `set_admin_role(target_user_id, make_admin)`.
+  Den `SECURITY DEFINER`-funktion serialiserer alle rolleændringer, kontrollerer aktørens
+  rolle efter låsen og afviser atomisk at fjerne den sidste admin. Derfor kan samtidige
+  nedgraderinger ikke efterlade klubben uden en administrator.
+- Samme transaktion opdaterer en eventuel matchende `allowed_emails.is_admin` og skriver
+  en række i `admin_role_changes`. Audit-rækkerne kan læses af admins i panelet, men
+  ingen klientrolle kan skrive eller slette dem.
 - Den første admin er klubbens ejer, som sættes i migrationerne
   `20260822130000_admin_allowed_emails.sql` (forfremmer en eksisterende bruger) og
   `20260822140000_admin_from_allowlist.sql` (dækker tilfældet, hvor brugeren først
   oprettes bagefter).
-- Skal en anden være admin, er der to veje -- begge kræver SQL-editoren eller Table
-  Editor, for der er bevidst ingen UI til at gøre andre til admin:
-  1. Findes brugeren allerede: sæt `is_admin` på profil-rækken.
-  2. Har personen ikke oprettet sig endnu: sæt `is_admin` på deres række i
-     `allowed_emails`. `handle_new_user`-triggeren læser flaget og sætter det på
-     profilen, når de opretter sig. Panelet viser et Admin-mærkat på de rækker.
+- Eksisterende medlemmer administreres i appens admin-panel. Bootstrap af en admin, der
+  endnu ikke har oprettet sig, kan fortsat ske i en migration ved at sætte
+  `allowed_emails.is_admin`; `handle_new_user` kopierer flaget til profilen ved signup.
 
 ## Allowlist til signup
 

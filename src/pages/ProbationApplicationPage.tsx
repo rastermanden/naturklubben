@@ -131,7 +131,7 @@ function ProbationApplicationPage() {
         <button
           type="submit"
           disabled={submitApplication.isPending}
-          className="rounded bg-green-800 px-4 py-2 text-white disabled:opacity-60"
+          className="min-h-11 rounded bg-green-800 px-4 py-2 text-white disabled:opacity-60"
         >
           {submitApplication.isPending
             ? 'Sender…'
