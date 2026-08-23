@@ -102,6 +102,12 @@ Oprettet manuelt i #2:
   reservationen er frisk, blokerer RLS nye brugerwrites og Storage-uploads.
   Functionen tømmer derefter brugerens paginerede præfiks i `avatars`,
   `photos-original` og `photos-optimized`, før Auth-brugeren slettes.
+- `export-account` (#129): kræver samme gateway-JWT, server-side tokenvalidering
+  og højst fem minutter gamle genlogin som kontosletning. Functionen filtrerer
+  eksplicit profil, egne beskeder, egne billedmetadata og egne tilmeldinger på
+  den validerede brugers id. Billedreferencer får signerede Storage-URL'er med 15
+  minutters levetid, og svaret kan downloades som JSON uden andre medlemmers
+  private data.
 - Deployes **ikke** manuelt -- `.github/workflows/deploy-functions.yml` kører
   `supabase functions deploy` ikke-interaktivt ved push til `main`, når noget under
   `supabase/functions/` ændres. Kræver `SUPABASE_ACCESS_TOKEN` og `SUPABASE_PROJECT_REF`

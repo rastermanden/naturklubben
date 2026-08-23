@@ -8,9 +8,11 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { AccountDeletionError } from './deleteAccount'
+import { AccountExportError } from './exportAccount'
 import {
   DeleteAccountDialog,
   DeleteAccountSection,
+  ExportAccountDialog,
 } from './DeleteAccountSection'
 
 vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
@@ -44,6 +46,89 @@ describe('DeleteAccountDialog', () => {
     expect(document.activeElement).toBe(cancel)
     fireEvent.keyDown(document, { key: 'Tab' })
     expect(document.activeElement).toBe(password)
+  })
+
+  describe('ExportAccountDialog', () => {
+    it('blocks duplicate requests, downloads on success, and can download again', async () => {
+      let finishExport: ((data: { version: number }) => void) | undefined
+      const exportRequest = vi.fn(
+        () =>
+          new Promise<{ version: number }>((resolve) => {
+            finishExport = resolve
+          }),
+      )
+      const download = vi.fn()
+
+      render(
+        <ExportAccountDialog
+          email="medlem@example.com"
+          onClose={() => undefined}
+          exportRequest={exportRequest}
+          download={download}
+        />,
+      )
+      fireEvent.change(screen.getByLabelText('Nuværende adgangskode'), {
+        target: { value: 'hemmelig' },
+      })
+      const exportButton = screen.getByRole('button', {
+        name: 'Hent data som JSON',
+      })
+      fireEvent.click(exportButton)
+      fireEvent.click(exportButton)
+
+      expect(exportRequest).toHaveBeenCalledTimes(1)
+      expect(
+        screen.getByRole('button', { name: 'Samler dine data…' }),
+      ).toBeTruthy()
+
+      finishExport?.({ version: 1 })
+      expect((await screen.findByRole('status')).textContent).toContain(
+        'Din dataudlevering er hentet.',
+      )
+      expect(download).toHaveBeenCalledWith({ version: 1 })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Download igen' }))
+      expect(download).toHaveBeenCalledTimes(2)
+    })
+
+    it('shows and focuses an invalid-password error', async () => {
+      render(
+        <ExportAccountDialog
+          email="medlem@example.com"
+          onClose={() => undefined}
+          exportRequest={() =>
+            Promise.reject(new AccountExportError('invalid_password'))
+          }
+        />,
+      )
+      const password = screen.getByLabelText('Nuværende adgangskode')
+      fireEvent.change(password, { target: { value: 'forkert' } })
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Hent data som JSON' }),
+      )
+
+      const error = await screen.findByText(
+        'Adgangskoden er forkert. Prøv igen.',
+      )
+      expect(password.getAttribute('aria-invalid')).toBe('true')
+      expect(password.getAttribute('aria-describedby')).toBe(error.id)
+      expect(document.activeElement).toBe(password)
+    })
+
+    it('is available next to account deletion', () => {
+      render(
+        <MemoryRouter>
+          <DeleteAccountSection email="medlem@example.com" />
+        </MemoryRouter>,
+      )
+
+      expect(
+        screen.getByRole('button', { name: 'Hent mine data' }),
+      ).toBeTruthy()
+      expect(
+        screen.getByRole('button', { name: 'Start kontosletning' }),
+      ).toBeTruthy()
+    })
   })
 
   it('closes on Escape and returns focus to the trigger', () => {

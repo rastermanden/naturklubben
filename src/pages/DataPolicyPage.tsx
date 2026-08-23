@@ -93,13 +93,28 @@ function DataPolicyPage() {
 
         <section>
           <h2 className="text-xl font-semibold text-green-900">
+            Din ret til dataudlevering
+          </h2>
+          <p className="mt-2">
+            Fra profilsiden kan du hente en maskinlæsbar JSON-kopi af din
+            profil, dine egne chatbeskeder, metadata for dine billeder og dine
+            aktivitetstilmeldinger. Billedfilerne henvises med personlige,
+            signerede links, som udløber efter 15 minutter. Udleveringen kræver,
+            at du bekræfter din nuværende adgangskode igen, og den indeholder
+            ikke andre medlemmers profiler, beskeder eller private oplysninger.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold text-green-900">
             Adgang og sikkerhed
           </h2>
           <p className="mt-2">
             Medlemsdata er beskyttet af adgangskontrol i databasen. Følsomme
             operationer udføres server-side og udleder altid identiteten fra den
-            godkendte login-session. Kontosletning kræver både den nuværende
-            adgangskode og en særskilt tekstbekræftelse.
+            godkendte login-session. Dataudlevering og kontosletning kræver den
+            nuværende adgangskode; kontosletning kræver desuden en særskilt
+            tekstbekræftelse.
           </p>
         </section>
       </div>
