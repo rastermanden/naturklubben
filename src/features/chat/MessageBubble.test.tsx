@@ -84,6 +84,21 @@ describe('MessageBubble', () => {
     ).toBe('Den oprindelige besked er ikke tilgængelig.')
   })
 
+  it('shows the sender avatar on own messages too', () => {
+    const { container } = render(
+      <MessageBubble
+        message={{ ...message, user_id: 'member-1' }}
+        author={{ ...author, avatar_url: 'https://example.test/bo.jpg' }}
+        replyAuthor={replyAuthor}
+        isOwn
+        onReply={vi.fn()}
+      />,
+    )
+
+    const avatar = container.querySelector('img')
+    expect(avatar?.getAttribute('src')).toBe('https://example.test/bo.jpg')
+  })
+
   it('shows no stable identity for an anonymized message', () => {
     render(
       <MessageBubble
