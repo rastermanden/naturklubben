@@ -228,11 +228,12 @@ describe('DeleteAccountDialog', () => {
     const deleteButton = screen.getByRole('button', {
       name: 'Slet min konto permanent',
     })
+    const password = screen.getByLabelText('Nuværende adgangskode')
     deleteButton.focus()
     fireEvent.click(deleteButton)
+    password.focus()
 
     const error = await screen.findByText('Adgangskoden er forkert. Prøv igen.')
-    const password = screen.getByLabelText('Nuværende adgangskode')
     expect(password.getAttribute('aria-invalid')).toBe('true')
     expect(password.getAttribute('aria-describedby')).toBe(error.id)
     expect(screen.queryByRole('alert')).toBeNull()

@@ -64,7 +64,7 @@ describe('auth form errors', () => {
     expect(document.activeElement).toBe(email)
   })
 
-  it('announces a field error when its target already has focus', async () => {
+  it('does not make a field error live when its target already has focus', async () => {
     auth.signInWithPassword.mockResolvedValue({
       error: { message: 'Invalid login credentials' },
     })
@@ -78,9 +78,9 @@ describe('auth form errors', () => {
     email.focus()
     fireEvent.submit(email.closest('form')!)
 
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      'Forkert e-mail eller adgangskode.',
-    )
+    const error = await screen.findByText('Forkert e-mail eller adgangskode.')
+    expectLinkedError(email, error)
+    expect(screen.queryByRole('alert')).toBeNull()
     expect(document.activeElement).toBe(email)
   })
 
@@ -130,7 +130,7 @@ describe('auth form errors', () => {
     expect(document.activeElement).toBe(email)
   })
 
-  it('does not carry an announcement to a normally focused different field', async () => {
+  it('keeps each field error non-live while moving focus between fields', async () => {
     auth.signUp
       .mockResolvedValueOnce({
         error: { message: 'User already registered' },
@@ -150,9 +150,11 @@ describe('auth form errors', () => {
     fireEvent.change(password, { target: { value: 'hemmelig' } })
     email.focus()
     fireEvent.submit(email.closest('form')!)
-    expect((await screen.findByRole('alert')).textContent).toContain(
-      'allerede en bruger',
-    )
+    expect(
+      (await screen.findByText('Der findes allerede en bruger med den e-mail.'))
+        .textContent,
+    ).toContain('allerede en bruger')
+    expect(screen.queryByRole('alert')).toBeNull()
 
     fireEvent.change(password, { target: { value: 'kort' } })
     submit.focus()
@@ -161,6 +163,31 @@ describe('auth form errors', () => {
     await screen.findByText('Adgangskoden skal være på mindst 6 tegn.')
     expect(screen.queryByRole('alert')).toBeNull()
     expect(document.activeElement).toBe(password)
+  })
+
+  it('keeps unknown signup failures as form-level alerts', async () => {
+    auth.signUp.mockResolvedValue({
+      error: { message: 'network unavailable' },
+    })
+    renderPage(<SignupPage />)
+
+    fireEvent.change(screen.getByLabelText('Navn'), {
+      target: { value: 'Maja Medlem' },
+    })
+    const email = screen.getByLabelText('E-mail')
+    fireEvent.change(email, { target: { value: 'maja@example.com' } })
+    fireEvent.change(screen.getByLabelText('Adgangskode'), {
+      target: { value: 'hemmelig' },
+    })
+    fireEvent.submit(email.closest('form')!)
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Der skete en fejl. Prøv igen om lidt.',
+    )
+    expect(email.getAttribute('aria-invalid')).toBeNull()
+    expect(
+      screen.getByLabelText('Adgangskode').getAttribute('aria-invalid'),
+    ).toBeNull()
   })
 
   it('keeps password-reset request errors as form-level alerts', async () => {

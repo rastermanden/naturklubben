@@ -205,6 +205,7 @@ describe('GalleryPage', () => {
 
     const fileInput = screen.getByLabelText('Vælg billeder fra enheden')
     const chooser = screen.getByRole('button', { name: 'Vælg billeder' })
+    chooser.focus()
     fireEvent.change(fileInput, {
       target: {
         files: [new File(['billede'], 'foto.jpg', { type: 'image/jpeg' })],

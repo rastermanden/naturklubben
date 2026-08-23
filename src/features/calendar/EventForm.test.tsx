@@ -24,6 +24,7 @@ describe('EventForm errors', () => {
     })
     const end = screen.getByLabelText('Slutter')
     fireEvent.change(end, { target: { value: '2026-08-24T09:00' } })
+    end.focus()
     fireEvent.submit(end.closest('form')!)
 
     const error = await screen.findByText(
@@ -34,5 +35,20 @@ describe('EventForm errors', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     expect(document.activeElement).toBe(end)
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('keeps submission failures as form-level alerts', () => {
+    render(
+      <EventForm
+        submitting={false}
+        error="Begivenheden kunne ikke gemmes."
+        onSubmit={() => undefined}
+        onCancel={() => undefined}
+      />,
+    )
+
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Begivenheden kunne ikke gemmes.',
+    )
   })
 })

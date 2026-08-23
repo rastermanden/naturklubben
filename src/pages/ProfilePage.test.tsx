@@ -42,6 +42,7 @@ describe('ProfilePage form errors', () => {
 
     const fileInput = screen.getByLabelText('Vælg profilbillede')
     const trigger = screen.getByRole('button', { name: 'Skift profilbillede' })
+    trigger.focus()
     fireEvent.change(fileInput, {
       target: {
         files: [new File(['tekst'], 'avatar.txt', { type: 'text/plain' })],

@@ -57,6 +57,7 @@ describe('AdminPage invite form errors', () => {
 
     const email = screen.getByLabelText('E-mail')
     fireEvent.change(email, { target: { value: 'medlem@example.com' } })
+    email.focus()
     fireEvent.submit(email.closest('form')!)
 
     const error = await screen.findByText('Den e-mail står allerede på listen.')
@@ -64,5 +65,20 @@ describe('AdminPage invite form errors', () => {
     expect(email.getAttribute('aria-describedby')).toBe(error.id)
     expect(screen.queryByRole('alert')).toBeNull()
     expect(document.activeElement).toBe(email)
+  })
+
+  it('keeps non-field invite failures as form-level alerts', async () => {
+    mocks.addEmail.mockRejectedValue({ code: 'unexpected' })
+    render(<AdminPage />)
+
+    const email = screen.getByLabelText('E-mail')
+    fireEvent.change(email, { target: { value: 'medlem@example.com' } })
+    fireEvent.submit(email.closest('form')!)
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Den e-mail står allerede på listen.',
+    )
+    expect(email.getAttribute('aria-invalid')).toBeNull()
+    expect(email.getAttribute('aria-describedby')).toBeNull()
   })
 })

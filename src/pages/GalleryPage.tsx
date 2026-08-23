@@ -83,15 +83,8 @@ function GalleryPage() {
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const fileButtonRef = useRef<HTMLButtonElement>(null)
   const cameraButtonRef = useRef<HTMLButtonElement>(null)
-  const [focusFileError, fileErrorAnnouncement] = useErrorFocus(fileButtonRef)
-  const [focusCameraError, cameraErrorAnnouncement] =
-    useErrorFocus(cameraButtonRef)
-  const errorAnnouncement =
-    formErrorSource === 'files'
-      ? fileErrorAnnouncement
-      : formErrorSource === 'camera'
-        ? cameraErrorAnnouncement
-        : 0
+  const focusFileError = useErrorFocus(fileButtonRef)
+  const focusCameraError = useErrorFocus(cameraButtonRef)
 
   function setGalleryParam(key: 'event' | 'photo', value: string | null) {
     setSearchParams((current) => updateGallerySearchParam(current, key, value))
@@ -305,12 +298,7 @@ function GalleryPage() {
         </p>
 
         {formError && (
-          <p
-            key={errorAnnouncement}
-            id="gallery-upload-error"
-            role={errorAnnouncement > 0 ? 'alert' : undefined}
-            className="text-sm text-red-700"
-          >
+          <p id="gallery-upload-error" className="text-sm text-red-700">
             {formError}
           </p>
         )}

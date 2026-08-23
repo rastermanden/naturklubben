@@ -34,16 +34,8 @@ export function DeleteAccountDialog({
   >(null)
   const passwordRef = useRef<HTMLInputElement>(null)
   const confirmationRef = useRef<HTMLInputElement>(null)
-  const [focusPasswordError, passwordErrorAnnouncement] =
-    useErrorFocus(passwordRef)
-  const [focusConfirmationError, confirmationErrorAnnouncement] =
-    useErrorFocus(confirmationRef)
-  const errorAnnouncement =
-    errorField === 'password'
-      ? passwordErrorAnnouncement
-      : errorField === 'confirmation'
-        ? confirmationErrorAnnouncement
-        : 0
+  const focusPasswordError = useErrorFocus(passwordRef)
+  const focusConfirmationError = useErrorFocus(confirmationRef)
   const dialogRef = useDialogFocus<HTMLDivElement>({
     onClose: () => {
       if (!deleting) onClose()
@@ -168,15 +160,8 @@ export function DeleteAccountDialog({
 
           {error && (
             <p
-              key={errorAnnouncement}
               id="delete-account-error"
-              role={
-                errorField
-                  ? errorAnnouncement > 0
-                    ? 'alert'
-                    : undefined
-                  : 'alert'
-              }
+              role={errorField ? undefined : 'alert'}
               className="text-sm text-red-700"
             >
               {error}

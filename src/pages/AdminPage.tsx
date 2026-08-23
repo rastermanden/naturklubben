@@ -39,7 +39,7 @@ function AdminPage() {
   const [inviteEmailInvalid, setInviteEmailInvalid] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const emailRef = useRef<HTMLInputElement>(null)
-  const [focusInviteError, inviteErrorAnnouncement] = useErrorFocus(emailRef)
+  const focusInviteError = useErrorFocus(emailRef)
 
   function showDeliveryFailure(
     delivery: NotificationDelivery,
@@ -246,15 +246,8 @@ function AdminPage() {
 
         {inviteError && (
           <p
-            key={inviteErrorAnnouncement}
             id="admin-invite-error"
-            role={
-              inviteEmailInvalid
-                ? inviteErrorAnnouncement > 0
-                  ? 'alert'
-                  : undefined
-                : 'alert'
-            }
+            role={inviteEmailInvalid ? undefined : 'alert'}
             className="text-sm text-red-700"
           >
             {inviteError}

@@ -33,16 +33,8 @@ function ResetPasswordPage() {
   const [submitting, setSubmitting] = useState(false)
   const passwordRef = useRef<HTMLInputElement>(null)
   const repeatedRef = useRef<HTMLInputElement>(null)
-  const [focusPasswordError, passwordErrorAnnouncement] =
-    useErrorFocus(passwordRef)
-  const [focusRepeatedError, repeatedErrorAnnouncement] =
-    useErrorFocus(repeatedRef)
-  const errorAnnouncement =
-    errorField === 'password'
-      ? passwordErrorAnnouncement
-      : errorField === 'repeated'
-        ? repeatedErrorAnnouncement
-        : 0
+  const focusPasswordError = useErrorFocus(passwordRef)
+  const focusRepeatedError = useErrorFocus(repeatedRef)
 
   useEffect(() => clearAuthCallbackParams(), [])
 
@@ -151,15 +143,8 @@ function ResetPasswordPage() {
 
         {error && (
           <p
-            key={errorAnnouncement}
             id="reset-password-error"
-            role={
-              errorField
-                ? errorAnnouncement > 0
-                  ? 'alert'
-                  : undefined
-                : 'alert'
-            }
+            role={errorField ? undefined : 'alert'}
             className="text-sm text-red-700"
           >
             {error}
