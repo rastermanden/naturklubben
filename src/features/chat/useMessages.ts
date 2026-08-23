@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabaseClient'
 
 export interface Message {
   id: string
-  user_id: string
+  user_id: string | null
   content: string
   created_at: string
 }
@@ -59,6 +59,18 @@ export function useMessages() {
         (payload) => {
           queryClient.setQueryData<Message[]>(queryKey, (current) =>
             addMessage(current, payload.new as Message),
+          )
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        (payload) => {
+          const updated = payload.new as Message
+          queryClient.setQueryData<Message[]>(queryKey, (current) =>
+            current?.map((message) =>
+              message.id === updated.id ? updated : message,
+            ),
           )
         },
       )

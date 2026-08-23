@@ -13,7 +13,11 @@
 // encodeJPEG er tilgængelig i den faktisk deploybare version.
 //
 // Bruger Secret key til at omgå RLS, så den kan skrive optimerede filer
-// og opdatere andres photos-rækker. Secret key er reserveret og
+// og opdatere photos-rækken. Kalderen valideres først mod rækkens ejer, og
+// profiles.deletion_reserved_at kontrolleres både før og efter det dyre
+// billedarbejde. Den dobbelte kontrol forhindrer, at en optimering, der allerede
+// kørte, efterlader nye filer efter delete-account har tømt brugerens præfiks.
+// Secret key er reserveret og
 // auto-injiceres af platformen i alle Edge Functions (kan ikke sættes
 // manuelt via `supabase secrets set`, se .github/workflows/deploy-functions.yml)
 // -- SUPABASE_SERVICE_ROLE_KEY er det historiske reserverede variabelnavn,

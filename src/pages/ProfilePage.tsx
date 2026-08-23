@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
+import { DeleteAccountSection } from '../features/account/DeleteAccountSection'
 import { useAuth } from '../features/auth/useAuth'
 import { ChatColorOption } from '../features/chat/ChatColorOption'
 import { profilesMapQueryKey } from '../features/chat/useProfilesMap'
@@ -26,6 +27,7 @@ const PRESET_COLORS = [
 function ProfilePage() {
   const { session } = useAuth()
   const userId = session!.user.id
+  const email = session!.user.email
   const queryClient = useQueryClient()
 
   const [fullName, setFullName] = useState('')
@@ -100,6 +102,8 @@ function ProfilePage() {
         .from('profiles')
         .update({ avatar_url: publicUrl })
         .eq('id', userId)
+        .select('id')
+        .single()
       if (saveError) throw saveError
 
       await queryClient.invalidateQueries({ queryKey: profilesMapQueryKey })
@@ -141,6 +145,8 @@ function ProfilePage() {
           avatar_url: avatarUrl,
         })
         .eq('id', userId)
+        .select('id')
+        .single()
       if (error) throw error
       await queryClient.invalidateQueries({ queryKey: profilesMapQueryKey })
       setSuccessMsg('Profilen er gemt.')
@@ -296,6 +302,8 @@ function ProfilePage() {
           {saving ? 'Gemmer…' : 'Gem profil'}
         </button>
       </form>
+
+      {email && <DeleteAccountSection email={email} />}
     </main>
   )
 }

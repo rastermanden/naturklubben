@@ -329,6 +329,10 @@ create policy "Authenticated can upload original photos"
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 
+-- En Preview Branch kan have fået samme policy fra en parallel, senere
+-- migration, før denne migration backfilles efter en rebase.
+drop policy if exists "Owners can update own original photos"
+  on storage.objects;
 create policy "Owners can update own original photos"
   on storage.objects for update
   to authenticated

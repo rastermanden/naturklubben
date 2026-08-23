@@ -90,3 +90,13 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      # delete-account (#86) kaldes fra klienten med brugerens eget access-token,
+      # ikke server-til-server -- standard
+      # gateway-JWT-verifikation forbliver derfor slået til (ingen
+      # --no-verify-jwt), i modsætning til probation-notifications ovenfor.
+      - name: Deploy delete-account
+        run: supabase functions deploy delete-account --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}

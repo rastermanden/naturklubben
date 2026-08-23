@@ -8,7 +8,7 @@ export interface CalendarEvent {
   location: string | null
   start_at: string
   end_at: string | null
-  created_by: string
+  created_by: string | null
 }
 
 export interface EventInput {
