@@ -6,12 +6,15 @@ async function fetchPhotos(): Promise<Photo[]> {
   const { data, error } = await supabase
     .from('photos')
     .select(
-      'id, storage_path, optimized_path, thumbnail_path, caption, event_id, uploaded_by, created_at',
+      'id, storage_path, optimized_path, thumbnail_path, caption, event_id, event:events(title), uploaded_by, created_at',
     )
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return data
+  // Uden genererede databasetyper ved klienten ikke, at event_id peger fra
+  // photos til events (til-én), og typer embeddet som et array. PostgREST
+  // returnerer det som et enkelt objekt (eller null) ved kørsel.
+  return data as unknown as Photo[]
 }
 
 export const photosQueryKey = ['photos']
