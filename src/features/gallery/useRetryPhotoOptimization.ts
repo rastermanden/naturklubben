@@ -1,20 +1,19 @@
 import { useMutation } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
 import { useInvalidatePhotos } from './usePhotos'
-import type { Photo } from './types'
 
-export async function requestPhotoDeletion(photoId: string) {
+export async function requestPhotoOptimization(photoId: string) {
   const { error } = await supabase.functions.invoke('optimize-image', {
-    body: { action: 'delete', photoId },
+    body: { photoId },
   })
   if (error) throw error
 }
 
-export function useDeletePhoto() {
+export function useRetryPhotoOptimization() {
   const invalidatePhotos = useInvalidatePhotos()
 
   return useMutation({
-    mutationFn: (photo: Photo) => requestPhotoDeletion(photo.id),
+    mutationFn: requestPhotoOptimization,
     onSettled: () => invalidatePhotos(),
   })
 }

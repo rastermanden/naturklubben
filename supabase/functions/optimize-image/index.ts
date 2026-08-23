@@ -1,9 +1,8 @@
 // Edge Function: optimize-image
 //
-// Kaldes fra klienten (src/features/gallery/useUploadPhotos.ts) lige efter et
-// billede er uploadet til den private `photos-original`-bucket. Genererer en
-// web-str­ørrelse og en thumbnail, lægger dem i den offentlige
-// `photos-optimized`-bucket, og opdaterer photos-rækken.
+// Kaldes fra klienten (src/features/gallery/useUploadPhotos.ts) med et photo-id,
+// når originalen og photos-rækken er gemt. Functionen validerer uploaderen,
+// claimer arbejdet atomisk og gemmer vedvarende status på photos-rækken.
 //
 // Bruger `imagescript` -- et rent Deno/WASM-billedbibliotek uden native
 // afhængigheder (kører derfor problemfrit i Edge Runtime, i modsætning til
@@ -85,7 +84,7 @@ function readExifOrientation(bytes: Uint8Array): number {
  * Anvender EXIF-orientation på et Image-objekt in-place.
  * Orientation 1 = ingen transform; 2–8 = spejl/rotation kombinationer.
  */
-function applyOrientation(img: Image, orientation: number): Image {
+function applyOrientation(img: Image, orientation: number) {
   switch (orientation) {
     case 2:
       return img.flip('horizontal')
@@ -110,11 +109,40 @@ const WEB_MAX_WIDTH = 1600
 const THUMBNAIL_MAX_WIDTH = 400
 const WEB_JPEG_QUALITY = 80
 const THUMBNAIL_JPEG_QUALITY = 75
+interface PhotoState {
+  optimized_path: string | null
+  thumbnail_path: string | null
+  optimization_status:
+    'pending' | 'processing' | 'ready' | 'failed' | 'deleting' | 'delete_failed'
+  optimization_attempts: number
+}
+
+interface ClaimedPhoto {
+  claimed_storage_path: string
+  claimed_attempt: number
+}
+
+interface ClaimedDeletion {
+  claimed_storage_path: string
+  claimed_optimized_path: string | null
+  claimed_thumbnail_path: string | null
+  claimed_attempt: number
+}
+
+class OptimizationError extends Error {
+  constructor(
+    message: string,
+    readonly publicMessage: string,
+  ) {
+    super(message)
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
 function jsonResponse(body: unknown, status = 200) {
@@ -124,37 +152,221 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
+function serviceClient() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    (Deno.env.get('SUPABASE_SECRET_KEY') ??
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!,
+    { auth: { persistSession: false } },
+  )
+}
+
+function bearerToken(req: Request) {
+  const header = req.headers.get('Authorization')
+  return header?.startsWith('Bearer ') ? header.slice(7) : null
+}
+
+function storageParts(storagePath: string) {
+  const slash = storagePath.lastIndexOf('/')
+  const folder = slash >= 0 ? storagePath.slice(0, slash) : ''
+  const filename = slash >= 0 ? storagePath.slice(slash + 1) : storagePath
+  return {
+    folder,
+    baseName: filename.replace(/\.[^/.]+$/, ''),
+  }
+}
+
+async function removePhotoFiles(
+  supabase: ReturnType<typeof serviceClient>,
+  deletion: ClaimedDeletion,
+) {
+  const { error: originalError } = await supabase.storage
+    .from('photos-original')
+    .remove([deletion.claimed_storage_path])
+  if (originalError) throw originalError
+
+  const { folder, baseName } = storageParts(deletion.claimed_storage_path)
+  const { data: listed, error: listError } = await supabase.storage
+    .from('photos-optimized')
+    .list(folder, { limit: 1000, search: baseName })
+  if (listError) throw listError
+
+  const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const ownedOutputPattern = new RegExp(
+    `^${escapedBase}(?:[.]jpg|-thumb[.]jpg|-optimized-[0-9]+[.]jpg|-thumb-[0-9]+[.]jpg)$`,
+  )
+  const listedPaths = (listed ?? [])
+    .filter((object) => ownedOutputPattern.test(object.name))
+    .map((object) => (folder ? `${folder}/${object.name}` : object.name))
+  const optimizedPaths = [
+    deletion.claimed_optimized_path,
+    deletion.claimed_thumbnail_path,
+    ...listedPaths,
+  ].filter((path): path is string => Boolean(path))
+
+  if (optimizedPaths.length > 0) {
+    const { error: optimizedError } = await supabase.storage
+      .from('photos-optimized')
+      .remove([...new Set(optimizedPaths)])
+    if (optimizedError) throw optimizedError
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
+  if (req.method !== 'POST') {
+    return jsonResponse({ error: 'Method not allowed' }, 405)
+  }
 
   let photoId: string | undefined
-  let storagePath: string | undefined
+  let action: 'optimize' | 'delete' = 'optimize'
+  let claimedAttempt: number | undefined
+  let claimedDeletionAttempt: number | undefined
+  let attemptedOutputPaths: string[] = []
+  const supabase = serviceClient()
 
   try {
-    ;({ photoId, storagePath } = await req.json())
-    if (!photoId || !storagePath) {
-      return jsonResponse({ error: 'photoId og storagePath er påkrævet' }, 400)
+    try {
+      const body = await req.json()
+      photoId = body.photoId
+      action = body.action ?? 'optimize'
+    } catch {
+      return jsonResponse({ error: 'Ugyldig JSON i request-body' }, 400)
+    }
+    if (typeof photoId !== 'string' || !photoId) {
+      return jsonResponse({ error: 'photoId er påkrævet' }, 400)
+    }
+    if (action !== 'optimize' && action !== 'delete') {
+      return jsonResponse({ error: 'Ukendt handling' }, 400)
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      (Deno.env.get('SUPABASE_SECRET_KEY') ??
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))!,
+    const token = bearerToken(req)
+    if (!token) return jsonResponse({ error: 'Ikke autoriseret' }, 401)
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(token)
+    if (authError || !user) {
+      return jsonResponse({ error: 'Ikke autoriseret' }, 401)
+    }
+
+    if (action === 'delete') {
+      const { data: deletionRows, error: claimDeletionError } =
+        await supabase.rpc('claim_photo_deletion', {
+          p_photo_id: photoId,
+          p_user_id: user.id,
+        })
+      if (claimDeletionError) throw claimDeletionError
+
+      const deletion = (deletionRows?.[0] ?? null) as ClaimedDeletion | null
+      if (!deletion) {
+        const { data: existing } = await supabase
+          .from('photos')
+          .select('optimization_status')
+          .eq('id', photoId)
+          .eq('uploaded_by', user.id)
+          .maybeSingle<{ optimization_status: string }>()
+        if (!existing) {
+          return jsonResponse(
+            { error: 'Billedet findes ikke eller tilhører ikke dig' },
+            403,
+          )
+        }
+        return jsonResponse(
+          { error: 'Billedet optimeres stadig. Prøv at slette igen om lidt.' },
+          409,
+        )
+      }
+      claimedDeletionAttempt = deletion.claimed_attempt
+
+      await removePhotoFiles(supabase, deletion)
+      const { data: deleted, error: deleteError } = await supabase.rpc(
+        'delete_claimed_photo',
+        {
+          p_photo_id: photoId,
+          p_expected_attempt: deletion.claimed_attempt,
+        },
+      )
+      if (deleteError) {
+        const { data: existing, error: reconcileError } = await supabase
+          .from('photos')
+          .select('id')
+          .eq('id', photoId)
+          .maybeSingle()
+        if (!reconcileError && !existing) {
+          return jsonResponse({ status: 'deleted' })
+        }
+        throw deleteError
+      }
+      if (!deleted) {
+        const { data: existing } = await supabase
+          .from('photos')
+          .select('id')
+          .eq('id', photoId)
+          .maybeSingle()
+        if (existing) throw new Error('Sletningsclaim blev overhalet')
+      }
+      return jsonResponse({ status: 'deleted' })
+    }
+
+    const { data: claimRows, error: claimError } = await supabase.rpc(
+      'claim_photo_optimization',
+      {
+        p_photo_id: photoId,
+        p_user_id: user.id,
+      },
     )
+    if (claimError) throw claimError
+
+    const claimed = (claimRows?.[0] ?? null) as ClaimedPhoto | null
+    if (!claimed) {
+      const { data: state } = await supabase
+        .from('photos')
+        .select(
+          'optimized_path, thumbnail_path, optimization_status, optimization_attempts',
+        )
+        .eq('id', photoId)
+        .eq('uploaded_by', user.id)
+        .maybeSingle<PhotoState>()
+      if (!state) {
+        return jsonResponse(
+          { error: 'Billedet findes ikke eller tilhører ikke dig' },
+          403,
+        )
+      }
+      if (
+        state.optimization_status === 'ready' &&
+        state.optimized_path &&
+        state.thumbnail_path
+      ) {
+        return jsonResponse({
+          status: 'ready',
+          optimizedPath: state.optimized_path,
+          thumbnailPath: state.thumbnail_path,
+        })
+      }
+      return jsonResponse({ status: 'processing' }, 202)
+    }
+    claimedAttempt = claimed.claimed_attempt
 
     const { data: original, error: downloadError } = await supabase.storage
       .from('photos-original')
-      .download(storagePath)
+      .download(claimed.claimed_storage_path)
     if (downloadError || !original) {
-      throw downloadError ?? new Error('Kunne ikke hente originalbilledet')
+      throw new OptimizationError(
+        downloadError?.message ?? 'Kunne ikke hente originalbilledet',
+        'Originalfilen mangler eller kunne ikke læses. Upload billedet igen.',
+      )
     }
     const bytes = new Uint8Array(await original.arrayBuffer())
 
-    const basePath = storagePath.replace(/\.[^/.]+$/, '')
-    const webPath = `${basePath}.jpg`
-    const thumbnailPath = `${basePath}-thumb.jpg`
+    const basePath = claimed.claimed_storage_path.replace(/\.[^/.]+$/, '')
+    const webPath = `${basePath}-optimized-${claimedAttempt}.jpg`
+    const thumbnailPath = `${basePath}-thumb-${claimedAttempt}.jpg`
+    attemptedOutputPaths = [webPath, thumbnailPath]
 
     const orientation = readExifOrientation(bytes)
 
@@ -183,21 +395,132 @@ Deno.serve(async (req) => {
       })
     if (thumbnailUploadError) throw thumbnailUploadError
 
-    const { error: updateError } = await supabase
-      .from('photos')
-      .update({ optimized_path: webPath, thumbnail_path: thumbnailPath })
-      .eq('id', photoId)
+    const { data: completed, error: updateError } = await supabase.rpc(
+      'complete_photo_optimization',
+      {
+        p_photo_id: photoId,
+        p_expected_attempt: claimedAttempt,
+        p_succeeded: true,
+        p_optimized_path: webPath,
+        p_thumbnail_path: thumbnailPath,
+        p_error: null,
+      },
+    )
     if (updateError) throw updateError
+    if (!completed) {
+      const { error: cleanupError } = await supabase.storage
+        .from('photos-optimized')
+        .remove(attemptedOutputPaths)
+      if (cleanupError) {
+        console.error('Kunne ikke rydde output fra overhalet optimering', {
+          photoId,
+          claimedAttempt,
+          cleanupError,
+        })
+      }
+      return jsonResponse({ status: 'superseded' }, 202)
+    }
 
-    return jsonResponse({ optimizedPath: webPath, thumbnailPath })
+    return jsonResponse({
+      status: 'ready',
+      optimizedPath: webPath,
+      thumbnailPath,
+    })
   } catch (error) {
-    // Fejler optimeringen, forbliver originalen synlig i galleriet via
-    // useDisplayUrl's signerede-URL-fallback -- vi blokerer ikke uploadet.
-    console.error('optimize-image fejlede', { photoId, storagePath, error })
+    if (
+      action === 'delete' &&
+      photoId &&
+      claimedDeletionAttempt !== undefined
+    ) {
+      const { error: releaseError } = await supabase.rpc(
+        'fail_photo_deletion',
+        {
+          p_photo_id: photoId,
+          p_expected_attempt: claimedDeletionAttempt,
+          p_error: 'Billedet kunne ikke slettes. Prøv igen.',
+        },
+      )
+      if (releaseError) {
+        console.error('Kunne ikke gemme fejlet sletningsstatus', {
+          photoId,
+          claimedDeletionAttempt,
+          releaseError,
+        })
+      }
+    }
+
+    if (photoId && claimedAttempt !== undefined) {
+      const publicMessage =
+        error instanceof OptimizationError
+          ? error.publicMessage
+          : 'Billedet kunne ikke optimeres. Prøv igen.'
+      const { error: statusError } = await supabase.rpc(
+        'complete_photo_optimization',
+        {
+          p_photo_id: photoId,
+          p_expected_attempt: claimedAttempt,
+          p_succeeded: false,
+          p_optimized_path: null,
+          p_thumbnail_path: null,
+          p_error: publicMessage,
+        },
+      )
+      if (statusError) {
+        console.error('Kunne ikke gemme fejlet optimeringsstatus', {
+          photoId,
+          claimedAttempt,
+          statusError,
+        })
+      }
+
+      const { data: persisted, error: persistedError } = await supabase
+        .from('photos')
+        .select(
+          'optimized_path, thumbnail_path, optimization_status, optimization_attempts',
+        )
+        .eq('id', photoId)
+        .maybeSingle<PhotoState>()
+      const successWasCommitted =
+        persisted?.optimization_status === 'ready' &&
+        persisted.optimization_attempts === claimedAttempt &&
+        attemptedOutputPaths.includes(persisted.optimized_path ?? '') &&
+        attemptedOutputPaths.includes(persisted.thumbnail_path ?? '')
+
+      if (successWasCommitted) {
+        return jsonResponse({
+          status: 'ready',
+          optimizedPath: persisted.optimized_path,
+          thumbnailPath: persisted.thumbnail_path,
+        })
+      }
+
+      if (!persistedError && attemptedOutputPaths.length > 0) {
+        const { error: cleanupError } = await supabase.storage
+          .from('photos-optimized')
+          .remove(attemptedOutputPaths)
+        if (cleanupError) {
+          console.error('Kunne ikke rydde output fra fejlet optimering', {
+            photoId,
+            claimedAttempt,
+            cleanupError,
+          })
+        }
+      }
+    }
+
+    // Originalen forbliver synlig via useDisplayUrl's signerede URL.
+    console.error(
+      action === 'delete'
+        ? 'Sikker billedsletning fejlede'
+        : 'optimize-image fejlede',
+      { photoId, claimedAttempt, error },
+    )
     return jsonResponse(
       {
-        error: 'Billedoptimering fejlede',
-        detail: error instanceof Error ? error.message : String(error),
+        error:
+          action === 'delete'
+            ? 'Billedet kunne ikke slettes'
+            : 'Billedoptimering fejlede',
       },
       500,
     )
