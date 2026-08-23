@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabaseClient'
 
 /**
@@ -145,8 +146,12 @@ export function usePushNotifications(userId: string) {
     setIsWorking(true)
     try {
       const permission = await Notification.requestPermission()
-      if (permission !== 'granted') {
+      if (permission === 'denied') {
         setStatus({ state: 'unavailable', reason: 'blocked' })
+        return
+      }
+      if (permission !== 'granted') {
+        // Brugeren lukkede dialogen uden at vælge -- behold nuværende tilstand.
         return
       }
 
@@ -200,7 +205,18 @@ export function usePushNotifications(userId: string) {
       setStatus({ state: 'on' })
     } catch (caught) {
       console.error('Kunne ikke slå notifikationer til', caught)
-      setError('Notifikationer kunne ikke slås til. Prøv igen.')
+      // 503 fra chat-push: VAPID-nøgler er ikke sat op som function-secrets
+      // endnu. "Prøv igen" hjælper ikke her -- giv en forklarende besked i stedet.
+      if (
+        caught instanceof FunctionsHttpError &&
+        caught.context?.status === 503
+      ) {
+        setError(
+          'Push-notifikationer er ikke konfigureret på serveren endnu. Kontakt administratoren.',
+        )
+      } else {
+        setError('Notifikationer kunne ikke slås til. Prøv igen.')
+      }
     } finally {
       setIsWorking(false)
     }
