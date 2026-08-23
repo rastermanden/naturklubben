@@ -62,3 +62,48 @@ jobs:
 
           run_query "Tabeller fra nyere migrationer" \
             "select table_name from information_schema.tables where table_schema = 'public' and table_name in ('message_reactions', 'event_attendance', 'activities') order by table_name"
+
+          # Skemaet er i orden, så fejlen må ligge i PostgREST's schema-cache.
+          # Supabase genindlæser den via en event trigger på DDL; findes den
+          # ikke, opdager API'et aldrig nye relationer.
+          run_query "Event triggers" \
+            "select evtname, evtenabled from pg_event_trigger order by evtname"
+
+      - name: Gentag klientens forespørgsel mod produktions-API'et
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::warning::VITE_SUPABASE_URL/VITE_SUPABASE_PUBLISHABLE_KEY mangler -- API-tjekket blev sprunget over."
+            exit 0
+          fi
+
+          # Uden login rammer vi RLS, ikke rækker -- men PGRST200 om en manglende
+          # relation afgøres *før* RLS, så svaret her viser præcis, om API'et
+          # kan se svar-relationen. Nøglen er den offentlige publishable key,
+          # som i forvejen ligger i den udgivne frontend.
+          rest_get() {
+            label="$1"
+            path="$2"
+            resp=$(mktemp)
+            status=$(curl -sS --max-time 30 -o "$resp" -w '%{http_code}' \
+              -G "${SUPABASE_URL%/}/rest/v1/$path" \
+              -H "apikey: $SUPABASE_KEY" \
+              -H "Authorization: Bearer $SUPABASE_KEY")
+            echo "=== $label (HTTP $status)"
+            head -c 1500 "$resp"
+            echo
+            echo
+          }
+
+          rest_get "Beskeder uden embed" \
+            "messages?select=id&limit=1"
+
+          rest_get "Beskeder med svar-embed (klientens forespørgsel)" \
+            "messages?select=id,reply_to:messages!messages_reply_to_message_id_fkey(id,user_id,content)&limit=1"
+
+          rest_get "Beskeder med de nye slette-kolonner" \
+            "messages?select=id,deleted_at,deleted_by&limit=1"
