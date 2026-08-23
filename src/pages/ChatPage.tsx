@@ -6,6 +6,7 @@ import { useMessages } from '../features/chat/useMessages'
 import { useOnlinePresence } from '../features/chat/useOnlinePresence'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
+import type { Message } from '../features/chat/useMessages'
 
 const MAX_MESSAGE_LENGTH = 2000
 const SCROLL_BOTTOM_THRESHOLD = 80
@@ -21,11 +22,19 @@ function ChatPage() {
   const [sendError, setSendError] = useState<string | null>(null)
   const [newMessageCount, setNewMessageCount] = useState(0)
   const [isNearBottom, setIsNearBottom] = useState(true)
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
 
   const listRef = useRef<HTMLUListElement>(null)
+  const draftRef = useRef<HTMLTextAreaElement>(null)
   const previousMessageCount = useRef(0)
   const lookedUpAuthorIds = useRef(new Set<string>())
   const messages = messagesQuery.data ?? []
+  const replyingToName =
+    replyingTo?.user_id === null
+      ? 'Tidligere medlem'
+      : replyingTo
+        ? (profiles?.[replyingTo.user_id]?.full_name ?? 'Medlem')
+        : null
 
   // Profilkortet caches i 5 minutter, så en besked fra et medlem, der er kommet
   // til siden hen, ville ellers stå uden navn. Hent kortet igen — én gang per
@@ -86,10 +95,30 @@ function ChatPage() {
 
     setSendError(null)
     setDraft('')
+    const replyToMessageId = replyingTo?.id ?? null
     sendMessage.mutate(
-      { userId, content },
-      { onError: () => setSendError('Beskeden kunne ikke sendes. Prøv igen.') },
+      { userId, content, replyToMessageId },
+      {
+        onSuccess: () =>
+          setReplyingTo((current) =>
+            current?.id === replyToMessageId ? null : current,
+          ),
+        onError: () => {
+          setDraft((current) => current || content)
+          setSendError('Beskeden kunne ikke sendes. Prøv igen.')
+        },
+      },
     )
+  }
+
+  function selectReply(message: Message) {
+    setReplyingTo(message)
+    draftRef.current?.focus()
+  }
+
+  function cancelReply() {
+    setReplyingTo(null)
+    draftRef.current?.focus()
   }
 
   function handleSubmit(event: React.FormEvent) {
@@ -164,7 +193,13 @@ function ChatPage() {
                 author={
                   message.user_id ? profiles?.[message.user_id] : undefined
                 }
+                replyAuthor={
+                  message.reply_to?.user_id
+                    ? profiles?.[message.reply_to.user_id]
+                    : undefined
+                }
                 isOwn={message.user_id === userId}
+                onReply={selectReply}
               />
             ))}
           </ul>
@@ -194,24 +229,49 @@ function ChatPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex items-end gap-2">
-        <textarea
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleKeyDown}
-          maxLength={MAX_MESSAGE_LENGTH}
-          rows={1}
-          placeholder="Skriv en besked…"
-          aria-label="Skriv en besked"
-          className="min-h-11 flex-1 resize-none rounded-lg border border-green-300 px-4 py-2 text-green-950"
-        />
-        <button
-          type="submit"
-          disabled={!draft.trim() || sendMessage.isPending}
-          className="min-h-11 shrink-0 rounded-lg bg-green-800 px-5 py-2 text-white disabled:opacity-50"
-        >
-          Send
-        </button>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+        {replyingTo && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-950">
+            <p role="status" aria-live="polite" className="min-w-0">
+              <span className="font-medium">Svarer {replyingToName}</span>
+              <span className="block truncate opacity-75">
+                {replyingTo.content}
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={cancelReply}
+              aria-label="Annuller svar"
+              className="min-h-11 shrink-0 rounded px-3 font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-green-800"
+            >
+              Annuller
+            </button>
+          </div>
+        )}
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={draftRef}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleKeyDown}
+            maxLength={MAX_MESSAGE_LENGTH}
+            rows={1}
+            placeholder="Skriv en besked…"
+            aria-label={
+              replyingTo
+                ? `Skriv et svar til ${replyingToName}`
+                : 'Skriv en besked'
+            }
+            className="min-h-11 flex-1 resize-none rounded-lg border border-green-300 px-4 py-2 text-green-950"
+          />
+          <button
+            type="submit"
+            disabled={!draft.trim() || sendMessage.isPending}
+            className="min-h-11 shrink-0 rounded-lg bg-green-800 px-5 py-2 text-white disabled:opacity-50"
+          >
+            Send
+          </button>
+        </div>
       </form>
 
       {sendError && (

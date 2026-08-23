@@ -7,25 +7,112 @@ export interface Message {
   user_id: string | null
   content: string
   created_at: string
+  reply_to_message_id: string | null
+  reply_to: ReplyPreview | null
+}
+
+export interface ReplyPreview {
+  id: string
+  user_id: string | null
+  content: string
+}
+
+interface MessageRow {
+  id: string
+  user_id: string | null
+  content: string
+  created_at: string
+  reply_to_message_id?: string | null
+  reply_to?: ReplyPreview | ReplyPreview[] | null
 }
 
 const MESSAGE_HISTORY_LIMIT = 100
 const queryKey = ['messages']
+const messageFields = `
+  id,
+  user_id,
+  content,
+  created_at,
+  reply_to_message_id,
+  reply_to:messages!messages_reply_to_message_id_fkey (
+    id,
+    user_id,
+    content
+  )
+`
+
+export function normalizeMessage(row: MessageRow): Message {
+  const replyTo = Array.isArray(row.reply_to)
+    ? (row.reply_to[0] ?? null)
+    : (row.reply_to ?? null)
+
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    content: row.content,
+    created_at: row.created_at,
+    reply_to_message_id: row.reply_to_message_id ?? null,
+    reply_to: replyTo,
+  }
+}
 
 async function fetchRecentMessages(): Promise<Message[]> {
   const { data, error } = await supabase
     .from('messages')
-    .select('id, user_id, content, created_at')
+    .select(messageFields)
     .order('created_at', { ascending: false })
     .limit(MESSAGE_HISTORY_LIMIT)
   if (error) throw error
-  return data.reverse()
+  return data.reverse().map(normalizeMessage)
 }
 
-function addMessage(current: Message[] | undefined, message: Message) {
+function previewOf(message: ReplyPreview): ReplyPreview {
+  return {
+    id: message.id,
+    user_id: message.user_id,
+    content: message.content,
+  }
+}
+
+export function addMessage(
+  current: Message[] | undefined,
+  incoming: Message,
+): Message[] {
+  const replyTo =
+    incoming.reply_to ??
+    current?.find((message) => message.id === incoming.reply_to_message_id)
+  const message = {
+    ...incoming,
+    reply_to: replyTo ? previewOf(replyTo) : null,
+  }
+
   if (!current) return [message]
   if (current.some((existing) => existing.id === message.id)) return current
   return [...current, message]
+}
+
+export function needsReplyRefetch(
+  current: Message[] | undefined,
+  incoming: Message,
+): boolean {
+  return Boolean(
+    incoming.reply_to_message_id &&
+    !incoming.reply_to &&
+    !current?.some((message) => message.id === incoming.reply_to_message_id),
+  )
+}
+
+export function removeMessage(
+  current: Message[] | undefined,
+  deletedId: string,
+): Message[] | undefined {
+  return current
+    ?.filter((message) => message.id !== deletedId)
+    .map((message) =>
+      message.reply_to_message_id === deletedId
+        ? { ...message, reply_to_message_id: null, reply_to: null }
+        : message,
+    )
 }
 
 /**
@@ -57,9 +144,14 @@ export function useMessages() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
+          const message = normalizeMessage(payload.new as MessageRow)
+          const current = queryClient.getQueryData<Message[]>(queryKey)
           queryClient.setQueryData<Message[]>(queryKey, (current) =>
-            addMessage(current, payload.new as Message),
+            addMessage(current, message),
           )
+          if (needsReplyRefetch(current, message)) {
+            void queryClient.invalidateQueries({ queryKey })
+          }
         },
       )
       .on(
@@ -80,7 +172,7 @@ export function useMessages() {
         (payload) => {
           const deletedId = (payload.old as { id: string }).id
           queryClient.setQueryData<Message[]>(queryKey, (current) =>
-            current?.filter((message) => message.id !== deletedId),
+            removeMessage(current, deletedId),
           )
         },
       )
@@ -95,17 +187,23 @@ export function useMessages() {
     mutationFn: async ({
       userId,
       content,
+      replyToMessageId,
     }: {
       userId: string
       content: string
+      replyToMessageId: string | null
     }) => {
       const { data, error } = await supabase
         .from('messages')
-        .insert({ user_id: userId, content })
-        .select('id, user_id, content, created_at')
+        .insert({
+          user_id: userId,
+          content,
+          reply_to_message_id: replyToMessageId,
+        })
+        .select(messageFields)
         .single()
       if (error) throw error
-      return data
+      return normalizeMessage(data)
     },
     onSuccess: (message) => {
       queryClient.setQueryData<Message[]>(queryKey, (current) =>
