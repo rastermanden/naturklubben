@@ -1,4 +1,5 @@
 import { useRef, useState, type DragEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { usePhotos } from '../features/gallery/usePhotos'
 import {
   useUploadPhotos,
@@ -8,7 +9,6 @@ import { useDeletePhoto } from '../features/gallery/useDeletePhoto'
 import { useEventsForSelect } from '../features/gallery/useEventsForSelect'
 import { PhotoThumbnail } from '../features/gallery/PhotoThumbnail'
 import { PhotoLightbox } from '../features/gallery/PhotoLightbox'
-import type { Photo } from '../features/gallery/types'
 
 function GalleryPage() {
   const { data: photos, isLoading } = usePhotos()
@@ -20,12 +20,29 @@ function GalleryPage() {
   const [eventId, setEventId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
-  const [activePhoto, setActivePhoto] = useState<Photo | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const sharedPhotoId = searchParams.get('photo')
+  const activePhoto =
+    sharedPhotoId && photos
+      ? photos.find((photo) => photo.id === sharedPhotoId) ?? null
+      : null
   // To separate inputs: det ene uden `capture`, så telefonen viser hele
   // vælgeren (kamerarulle, Filer, Drev …), det andet med `capture`, så
   // "Tag billede" går direkte i kameraet.
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+
+  function setPhotoSearchParam(photoId: string | null) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (photoId) {
+        next.set('photo', photoId)
+      } else {
+        next.delete('photo')
+      }
+      return next
+    })
+  }
 
   async function handleFilesSelected(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -172,7 +189,7 @@ function GalleryPage() {
             <PhotoThumbnail
               key={photo.id}
               photo={photo}
-              onClick={() => setActivePhoto(photo)}
+              onClick={() => setPhotoSearchParam(photo.id)}
             />
           ))}
         </div>
@@ -181,11 +198,11 @@ function GalleryPage() {
       {activePhoto && (
         <PhotoLightbox
           photo={activePhoto}
-          onClose={() => setActivePhoto(null)}
+          onClose={() => setPhotoSearchParam(null)}
           deleting={deletePhoto.isPending}
           onDelete={(photo) => {
             deletePhoto.mutate(photo)
-            setActivePhoto(null)
+            setPhotoSearchParam(null)
           }}
         />
       )}

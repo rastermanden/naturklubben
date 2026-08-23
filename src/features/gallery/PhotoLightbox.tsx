@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { useDisplayUrl } from './useDisplayUrl'
 import { useAuth } from '../auth/useAuth'
 import type { Photo } from './types'
@@ -19,6 +19,7 @@ export function PhotoLightbox({
   const { url } = useDisplayUrl(photo, 'full')
   const { session } = useAuth()
   const isOwner = session?.user.id === photo.uploaded_by
+  const [shareStatus, setShareStatus] = useState<string | null>(null)
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -27,6 +28,31 @@ export function PhotoLightbox({
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
+
+  async function handleShareClick(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
+    setShareStatus(null)
+
+    try {
+      const shareUrl = window.location.href
+      if (navigator.share) {
+        await navigator.share({
+          title: photo.caption ?? 'Billede fra Naturklubben',
+          url: shareUrl,
+        })
+        return
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+        setShareStatus('Link kopieret.')
+        return
+      }
+      throw new Error('sharing-not-supported')
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      setShareStatus('Kunne ikke dele link. Prøv igen.')
+    }
+  }
 
   return (
     <div
@@ -63,18 +89,35 @@ export function PhotoLightbox({
         </div>
       )}
 
-      {isOwner && (
+      <div className="flex flex-wrap items-center justify-center gap-2">
         <button
           type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            onDelete(photo)
-          }}
-          disabled={deleting}
-          className="min-h-11 rounded bg-red-700 px-4 py-2 text-white disabled:opacity-60"
+          onClick={handleShareClick}
+          className="min-h-11 rounded border border-white px-4 py-2 text-white"
         >
-          {deleting ? 'Sletter…' : 'Slet billede'}
+          Del link
         </button>
+        {isOwner && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onDelete(photo)
+            }}
+            disabled={deleting}
+            className="min-h-11 rounded bg-red-700 px-4 py-2 text-white disabled:opacity-60"
+          >
+            {deleting ? 'Sletter…' : 'Slet billede'}
+          </button>
+        )}
+      </div>
+      {shareStatus && (
+        <p
+          onClick={(event) => event.stopPropagation()}
+          className="text-sm text-white/80"
+        >
+          {shareStatus}
+        </p>
       )}
     </div>
   )
