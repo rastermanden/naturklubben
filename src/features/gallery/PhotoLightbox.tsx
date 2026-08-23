@@ -41,7 +41,6 @@ export function PhotoLightbox({
 
     try {
       const shareUrl = new URL(window.location.href)
-      shareUrl.search = ''
       shareUrl.hash = ''
       shareUrl.searchParams.set('photo', photo.id)
       const shareLink = shareUrl.toString()
@@ -122,16 +121,14 @@ export function PhotoLightbox({
           </button>
         )}
       </div>
-      {shareStatus && (
-        <p
-          role="status"
-          aria-live="polite"
-          onClick={(event) => event.stopPropagation()}
-          className="text-sm text-white/80"
-        >
-          {shareStatus}
-        </p>
-      )}
+      <p
+        role="status"
+        aria-live="polite"
+        onClick={(event) => event.stopPropagation()}
+        className="min-h-[1.25rem] text-sm text-white/80"
+      >
+        {shareStatus ?? ''}
+      </p>
     </div>
   )
 }
