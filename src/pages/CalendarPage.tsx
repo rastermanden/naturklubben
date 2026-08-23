@@ -255,7 +255,9 @@ function CalendarPage() {
           {eventsQuery.data && eventsQuery.data.length > 0 && (
             <button
               type="button"
-              onClick={() => downloadIcal(eventsQuery.data, 'naturklubben-kalender.ics')}
+              onClick={() =>
+                downloadIcal(eventsQuery.data, 'naturklubben-kalender.ics')
+              }
               className="min-h-11 rounded border border-green-700 px-5 py-2 text-green-800 hover:bg-green-50"
             >
               Eksportér kalender
@@ -418,7 +420,12 @@ function CalendarPage() {
           onClose={() => setSelectedEvent(null)}
           onEdit={() => openForm(selectedEvent)}
           onDelete={removeSelectedEvent}
-          onIcal={() => downloadIcal([selectedEvent], `${selectedEvent.title.replace(/[/\\:*?"<>|]/g, '-')}.ics`)}
+          onIcal={() =>
+            downloadIcal(
+              [selectedEvent],
+              `${selectedEvent.title.replace(/[/\\:*?"<>|]/g, '-')}.ics`,
+            )
+          }
         />
       )}
 

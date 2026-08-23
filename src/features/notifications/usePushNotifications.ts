@@ -205,14 +205,16 @@ export function usePushNotifications(userId: string) {
       setStatus({ state: 'on' })
     } catch (caught) {
       console.error('Kunne ikke slå notifikationer til', caught)
-      // 503 fra chat-push: VAPID-nøgler er ikke sat op som function-secrets
-      // endnu. "Prøv igen" hjælper ikke her -- giv en forklarende besked i stedet.
+      // 503 fra chat-push: functionen kunne hverken hente eller oprette et
+      // VAPID-nøglepar -- typisk fordi databasen ikke svarede, eller fordi
+      // push_vapid_keys-migrationen ikke er deployet endnu. Det retter sig selv,
+      // så "prøv igen om lidt" er det rigtige råd -- ikke "kontakt admin".
       if (
         caught instanceof FunctionsHttpError &&
         caught.context?.status === 503
       ) {
         setError(
-          'Push-notifikationer er ikke konfigureret på serveren endnu. Kontakt administratoren.',
+          'Serveren kunne ikke sætte notifikationer op lige nu. Prøv igen om lidt.',
         )
       } else {
         setError('Notifikationer kunne ikke slås til. Prøv igen.')

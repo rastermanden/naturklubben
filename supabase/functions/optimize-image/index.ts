@@ -164,10 +164,7 @@ Deno.serve(async (req) => {
     }
     const webBytes = await web.encodeJPEG(WEB_JPEG_QUALITY)
 
-    const thumbnail = applyOrientation(
-      await Image.decode(bytes),
-      orientation,
-    )
+    const thumbnail = applyOrientation(await Image.decode(bytes), orientation)
     if (thumbnail.width > THUMBNAIL_MAX_WIDTH) {
       thumbnail.resize(THUMBNAIL_MAX_WIDTH, Image.RESIZE_AUTO)
     }

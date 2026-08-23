@@ -16,6 +16,7 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 | `push_subscriptions`     | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                 |
 | `allowed_emails`         | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                               |
 | `probation_applications` | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                      | Alle kan indsende; kun admins kan læse og behandle ansøgningerne.                                                                           |
+| `push_vapid_keys`        | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                        | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                          |
 
 ## Storage buckets
 
@@ -45,7 +46,9 @@ Oprettet manuelt i #2:
   rækker, hvor push-tjenesten svarer 404/410 (appen afinstalleret, abonnementet roteret).
   Et `GET` mod samme function returnerer `{ publicKey }` -- den VAPID-nøgle, klienten skal
   abonnere med. Den hentes derfra i stedet for at bygges ind i frontenden, så nøglerne kun
-  findes ét sted og kan roteres uden et nyt frontend-build.
+  findes ét sted og kan roteres uden et nyt frontend-build. Findes nøgleparret ikke endnu,
+  genererer functionen det selv og gemmer det i `push_vapid_keys` (se `vapid.ts`) -- der er
+  ingen manuel opsætning.
   Selve protokollen (RFC 8291-kryptering + RFC 8292/VAPID-signering) er implementeret
   direkte oven på WebCrypto i `webpush.ts` -- `web-push` fra npm er bygget til Node
   (`node:crypto`/`node:https`) og er ikke et sikkert kort i Edge Runtime.
@@ -174,8 +177,23 @@ stadig live ind via Realtime.
 
 ### VAPID-nøgler
 
-`chat-push` skal have et VAPID-nøglepar for at kunne sende. Det sættes som function-secrets
-af `deploy-functions.yml` ud fra repo-secrets -- aldrig fra nogens terminal:
+`chat-push` skal have et VAPID-nøglepar for at kunne sende (RFC 8292). Der er ingen
+opsætning at lave -- **functionen genererer selv nøgleparret første gang, den får brug for
+det**, og gemmer det i `push_vapid_keys`. Det sker allerede ved det `GET`-kald, klienten
+laver, når nogen slår notifikationer til, så det første medlem, der trykker på knappen,
+konfigurerer i praksis serveren.
+
+Det er bevidst: at oprette et repo-secret er et manuelt dashboard-trin, og projektets
+kerneprincip er, at alt ud over engangsopsætningen i #2/#3 skal kunne ske ved at skrive
+kode og pushe (se `CLAUDE.md`). Tidligere svarede functionen 503, og appen sagde "Push-
+notifikationer er ikke konfigureret på serveren endnu" -- uden nogen vej frem, der ikke gik
+gennem et dashboard.
+
+Den private nøgle ligger i en tabel med RLS slået til, ingen policies og ingen grants til
+`anon`/`authenticated`: kun Edge Functionens Secret key kan læse den.
+
+Vil man alligevel styre nøglerne udefra, vinder function-secrets over tabellen. Sættes de
+som repo-secrets, skubber `deploy-functions.yml` dem videre -- aldrig fra nogens terminal:
 
 | Repo-secret / variable | Hvad                                                                                      |
 | ---------------------- | ----------------------------------------------------------------------------------------- |
@@ -183,10 +201,12 @@ af `deploy-functions.yml` ud fra repo-secrets -- aldrig fra nogens terminal:
 | `VAPID_PRIVATE_KEY`    | Privat nøgle, base64url (32 bytes). Forlader aldrig Edge Function-miljøet.                |
 | `VAPID_SUBJECT` (var)  | Kontakt-URL, fx `mailto:...`. RFC 8292 kræver et kontaktpunkt. Har en default.            |
 
-Mangler nøglerne, springer workflowet secret-steppet over med en advarsel, og `chat-push`
-svarer 503 -- chatten virker uændret, der kommer bare ingen notifikationer.
+En 503 fra `chat-push` betyder nu, at databasen ikke kunne svare (fx før migrationen er
+deployet) -- ikke at nogen har glemt at konfigurere noget. Chatten virker uændret imens,
+der kommer bare ingen notifikationer.
 
-Roteres nøgleparret, skal alle medlemmer slå notifikationer til igen: browseren nægter at
+Roteres nøgleparret -- ved at slette rækken i `push_vapid_keys` eller sætte
+function-secrets -- skal alle medlemmer slå notifikationer til igen: browseren nægter at
 genabonnere med en ny nøgle, så klienten smider det gamle abonnement væk først.
 
 ### Hvad der ikke virker hvor

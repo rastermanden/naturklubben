@@ -82,12 +82,15 @@ lokale terminal. Derfor gælder:
   Aldrig Secret key i klientkode.
 - **Server-side** (kun Edge Functions): Supabase **Secret key** (`SUPABASE_SECRET_KEY`) —
   aldrig i klienten eller i build-workflowet til frontend.
-- **Push-notifikationer** (kun Edge Functions): `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
-  og valgfrit `VAPID_SUBJECT`. Sættes som repo-secrets og skubbes videre som
-  function-secrets af `deploy-functions.yml` — aldrig fra en terminal. Den offentlige
-  nøgle bygges bevidst **ikke** ind i frontenden; klienten henter den fra
-  `chat-push`-functionen, så nøglerne kan roteres uden et nyt frontend-build. Se
-  `supabase/README.md`.
+- **Push-notifikationer** (kun Edge Functions): VAPID-nøgleparret kræver **ingen
+  opsætning** — `chat-push` genererer det selv første gang og gemmer det i tabellen
+  `push_vapid_keys`, som kun Secret key kan læse. Sæt derfor ikke repo-secrets for det;
+  det ville være et manuelt dashboard-trin, som princippet ovenfor netop udelukker.
+  `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` findes stadig som valgfri
+  overstyring: er de sat som repo-secrets, skubber `deploy-functions.yml` dem videre som
+  function-secrets, og de vinder over tabellen. Den offentlige nøgle bygges bevidst
+  **ikke** ind i frontenden; klienten henter den fra `chat-push`, så nøglerne kan roteres
+  uden et nyt frontend-build. Se `supabase/README.md`.
 - **CI-only** (kun brugt af GitHub Actions, aldrig af en udvikler lokalt):
   `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` — bruges til at deploye Edge Functions
   ikke-interaktivt og til at slå PR'ens Preview Branch op, så preview-buildet rammer den

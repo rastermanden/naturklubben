@@ -6,8 +6,8 @@
 // To endpoints i én function:
 //   GET   -> { publicKey } : VAPID-nøglen, klienten skal abonnere med. Den
 //            hentes herfra i stedet for at bygges ind i frontenden, så
-//            nøglerne kun findes ét sted (function-secrets) og kan roteres
-//            uden et nyt frontend-build.
+//            nøglerne kun findes ét sted på serveren og kan roteres uden et
+//            nyt frontend-build.
 //   POST  -> { messageId } : kaldes af afsenderens klient lige efter beskeden
 //            er indsat (samme mønster som optimize-image kaldes efter en
 //            upload). Functionen slår selv beskeden op og nægter at sende for
@@ -16,10 +16,12 @@
 //
 // Secret key er reserveret og auto-injiceres af platformen (kan ikke sættes
 // med `supabase secrets set`) -- SUPABASE_SERVICE_ROLE_KEY er det historiske
-// navn, så vi falder tilbage til det. VAPID-nøglerne sættes derimod som
-// almindelige function-secrets af .github/workflows/deploy-functions.yml.
+// navn, så vi falder tilbage til det. VAPID-nøglerne kommer fra
+// function-secrets, hvis de er sat -- ellers genererer og gemmer functionen
+// selv et nøglepar første gang (se vapid.ts).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { getVapidDetails } from './vapid.ts'
 import { sendPushNotification, type VapidDetails } from './webpush.ts'
 
 // Notifikationsteksten er et smugkig, ikke hele beskeden -- resten læses i
@@ -45,19 +47,6 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
-function readVapidDetails(): VapidDetails | null {
-  const publicKey = Deno.env.get('VAPID_PUBLIC_KEY')
-  const privateKey = Deno.env.get('VAPID_PRIVATE_KEY')
-  if (!publicKey || !privateKey) return null
-  return {
-    publicKey,
-    privateKey,
-    // RFC 8292 kræver et kontaktpunkt, så push-tjenesten kan række ud, hvis vi
-    // opfører os skidt. mailto: er det eneste, alle tjenester accepterer.
-    subject: Deno.env.get('VAPID_SUBJECT') ?? 'mailto:naturklubben@example.com',
-  }
-}
-
 function serviceClient() {
   return createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -79,10 +68,23 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  const vapid = readVapidDetails()
-  if (!vapid) {
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return jsonResponse({ error: 'Method not allowed' }, 405)
+  }
+
+  const supabase = serviceClient()
+
+  // Findes nøgleparret ikke endnu, oprettes det her -- det er derfor et
+  // GET-kald fra en almindelig klient er nok til at konfigurere serveren.
+  // 503 er nu forbeholdt det tilfælde, at databasen ikke kan svare (fx før
+  // migrationen er deployet), ikke manglende opsætning.
+  let vapid: VapidDetails
+  try {
+    vapid = await getVapidDetails(supabase)
+  } catch (caught) {
+    console.error('Kunne ikke hente eller oprette VAPID-nøglerne', caught)
     return jsonResponse(
-      { error: 'VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY er ikke sat på functionen' },
+      { error: 'VAPID-nøglerne kunne ikke hentes eller oprettes' },
       503,
     )
   }
@@ -90,12 +92,6 @@ Deno.serve(async (req) => {
   if (req.method === 'GET') {
     return jsonResponse({ publicKey: vapid.publicKey })
   }
-
-  if (req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405)
-  }
-
-  const supabase = serviceClient()
 
   const accessToken = req.headers.get('Authorization')?.replace(/^Bearer /i, '')
   if (!accessToken) return jsonResponse({ error: 'Ikke autentificeret' }, 401)
