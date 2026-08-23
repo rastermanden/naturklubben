@@ -5,11 +5,19 @@ import type { Photo } from '../features/gallery/types'
 
 const mocks = vi.hoisted(() => ({
   photosQuery: {
-    data: undefined as Photo[] | undefined,
+    data: undefined as { photos: Photo[] } | undefined,
     isLoading: false,
     isError: false,
     isSuccess: false,
     refetch: vi.fn(),
+    hasNextPage: false,
+    fetchNextPage: vi.fn(),
+    isFetchingNextPage: false,
+    isFetchNextPageError: false,
+  },
+  photoQuery: {
+    data: undefined as Photo | null | undefined,
+    isSuccess: false,
   },
   upload: {
     items: [] as never[],
@@ -32,6 +40,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../features/gallery/usePhotos', () => ({
   usePhotos: () => mocks.photosQuery,
+  usePhoto: () => mocks.photoQuery,
 }))
 vi.mock('../features/gallery/useUploadPhotos', () => ({
   useUploadPhotos: () => mocks.upload,
@@ -109,6 +118,12 @@ beforeEach(() => {
   mocks.photosQuery.isError = false
   mocks.photosQuery.isSuccess = false
   mocks.photosQuery.refetch.mockReset()
+  mocks.photosQuery.fetchNextPage.mockReset()
+  mocks.photosQuery.hasNextPage = false
+  mocks.photosQuery.isFetchingNextPage = false
+  mocks.photosQuery.isFetchNextPageError = false
+  mocks.photoQuery.data = undefined
+  mocks.photoQuery.isSuccess = false
   mocks.deletePhoto.mutate.mockReset()
   mocks.retryOptimization.mutate.mockReset()
   mocks.validateFiles.mockReset()
@@ -133,16 +148,18 @@ describe('GalleryPage', () => {
   })
 
   it('distinguishes an empty gallery from an empty event filter', () => {
-    mocks.photosQuery.data = []
+    mocks.photosQuery.data = { photos: [] }
     mocks.photosQuery.isSuccess = true
     const view = renderGallery()
     expect(screen.getByText(/Ingen billeder endnu/)).toBeTruthy()
 
     view.unmount()
-    mocks.photosQuery.data = [
-      photo('photo-1', 'Bål', 'event-1'),
-      photo('photo-2', 'Sø', null),
-    ]
+    mocks.photosQuery.data = {
+      photos: [
+        photo('photo-1', 'Bål', 'event-1'),
+        photo('photo-2', 'Sø', null),
+      ],
+    }
     renderGallery('/billeder?event=event-2')
     expect(
       screen.getByText('Der er ingen billeder for det valgte filter.'),
@@ -153,10 +170,12 @@ describe('GalleryPage', () => {
   })
 
   it('filters by event through the URL-backed select', () => {
-    mocks.photosQuery.data = [
-      photo('photo-1', 'Bål', 'event-1'),
-      photo('photo-2', 'Sø', 'event-2'),
-    ]
+    mocks.photosQuery.data = {
+      photos: [
+        photo('photo-1', 'Bål', 'event-1'),
+        photo('photo-2', 'Sø', 'event-2'),
+      ],
+    }
     mocks.photosQuery.isSuccess = true
     renderGallery('/billeder?event=event-1')
 
@@ -171,10 +190,12 @@ describe('GalleryPage', () => {
   })
 
   it('opens a legacy photo deep-link even when the event filter excludes it', () => {
-    mocks.photosQuery.data = [
-      photo('photo-1', 'Bål', 'event-1'),
-      photo('photo-2', 'Sø', 'event-2'),
-    ]
+    mocks.photosQuery.data = {
+      photos: [
+        photo('photo-1', 'Bål', 'event-1'),
+        photo('photo-2', 'Sø', 'event-2'),
+      ],
+    }
     mocks.photosQuery.isSuccess = true
     renderGallery('/billeder?event=event-1&photo=photo-2')
 
@@ -182,11 +203,29 @@ describe('GalleryPage', () => {
     expect(screen.queryByRole('button', { name: 'Sø' })).toBeNull()
   })
 
+  it('fetches a shared photo that is outside the loaded pages', () => {
+    const linked = photo('photo-older', 'Gammelt billede', 'event-1')
+    mocks.photosQuery.data = {
+      photos: [photo('photo-new', 'Nyt billede', 'event-1')],
+    }
+    mocks.photosQuery.isSuccess = true
+    mocks.photosQuery.hasNextPage = true
+    mocks.photoQuery.data = linked
+    mocks.photoQuery.isSuccess = true
+
+    renderGallery('/billeder?photo=photo-older')
+
+    expect(
+      screen.getByRole('dialog', { name: 'Åbent photo-older' }),
+    ).toBeTruthy()
+    expect(screen.queryByText('Billedlinket findes ikke længere.')).toBeNull()
+  })
+
   it('starts persistent optimization retry from the active photo', () => {
     const failed = photo('photo-1', 'Bål', 'event-1')
     failed.optimization_status = 'failed'
     failed.optimization_error = 'Kunne ikke behandles'
-    mocks.photosQuery.data = [failed]
+    mocks.photosQuery.data = { photos: [failed] }
     mocks.photosQuery.isSuccess = true
     renderGallery('/billeder?photo=photo-1')
 
@@ -218,6 +257,21 @@ describe('GalleryPage', () => {
     expect(chooser.getAttribute('aria-describedby')).toBe(error.id)
     expect(screen.queryByRole('alert')).toBeNull()
     expect(document.activeElement).toBe(chooser)
+  })
+
+  it('loads another bounded page and does not declare a filtered gallery empty early', () => {
+    mocks.photosQuery.data = {
+      photos: [photo('photo-1', 'Bål', 'event-1')],
+    }
+    mocks.photosQuery.isSuccess = true
+    mocks.photosQuery.hasNextPage = true
+    renderGallery('/billeder?event=event-2')
+
+    expect(
+      screen.queryByText('Der er ingen billeder for det valgte filter.'),
+    ).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Hent flere billeder' }))
+    expect(mocks.photosQuery.fetchNextPage).toHaveBeenCalledOnce()
   })
 
   it('links camera validation only to the camera control', async () => {

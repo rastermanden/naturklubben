@@ -1,42 +1,71 @@
 import { useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '../../lib/supabaseClient'
 import { useAuth } from '../auth/useAuth'
-import { pendingPhotosToOptimize } from './optimizationStatus'
-import { useInvalidatePhotos } from './usePhotos'
+import { PENDING_OPTIMIZATION_POLL_MS } from './optimizationStatus'
+import { useRefreshPhoto } from './usePhotos'
 import { requestPhotoOptimization } from './useRetryPhotoOptimization'
-import type { Photo } from './types'
 
-/**
- * Hvor mange billeder der sættes i gang pr. gennemløb. Hvert kald starter en
- * Edge Function-kørsel, så en bruger med mange gamle billeder skal ikke fyre
- * dem alle af på én gang. Når gennemløbet er færdigt, hentes listen igen, og
- * de næste tages i næste gennemløb.
- */
 export const AUTO_OPTIMIZE_BATCH = 3
+const AUTO_OPTIMIZE_SCAN_LIMIT = 30
 
 /**
- * Starter optimeringen af egne billeder, der er blevet hængende i 'pending'
- * — typisk fordi de blev uploadet, før optimeringsstatus fandtes (#100), eller
- * fordi browseren blev lukket, inden uploadkøen nåede at kalde functionen.
- *
- * Hvert billede forsøges højst én gang pr. session: lykkes claimet, går
- * rækken videre til 'processing' og dermed ud af udvælgelsen; fejler kaldet,
- * holder id'et den alligevel ude, så et vedvarende problem ikke bliver til en
- * løkke af kald.
+ * Finder et begrænset udsnit af brugerens gamle pending-rækker uafhængigt af,
+ * hvor mange gallerisider der er indlæst. Dermed bevares selvreparationen for
+ * ældre uploads uden igen at hente hele galleriet.
  */
-export function useAutoOptimizePendingPhotos(photos: Photo[]) {
+export function useAutoOptimizePendingPhotos() {
   const { session } = useAuth()
   const userId = session?.user.id
-  const invalidatePhotos = useInvalidatePhotos()
+  const refreshPhoto = useRefreshPhoto()
   const requestedRef = useRef(new Set<string>())
   const runningRef = useRef(false)
+  const pendingQuery = useQuery({
+    queryKey: ['pending-photos-to-optimize', userId],
+    enabled: Boolean(userId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('photos')
+        .select('id, created_at')
+        .eq('uploaded_by', userId as string)
+        .eq('optimization_status', 'pending')
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(AUTO_OPTIMIZE_SCAN_LIMIT)
+      if (error) throw error
+      return data as { id: string; created_at: string }[]
+    },
+    staleTime: 30_000,
+  })
+
+  useEffect(() => {
+    const now = Date.now()
+    const nextEligibleAt = (pendingQuery.data ?? [])
+      .filter((photo) => !requestedRef.current.has(photo.id))
+      .map(
+        (photo) =>
+          new Date(photo.created_at).getTime() + PENDING_OPTIMIZATION_POLL_MS,
+      )
+      .filter((eligibleAt) => eligibleAt > now)
+      .sort((left, right) => left - right)[0]
+    if (!nextEligibleAt) return
+
+    const timeout = window.setTimeout(() => {
+      void pendingQuery.refetch()
+    }, nextEligibleAt - now)
+    return () => window.clearTimeout(timeout)
+  }, [pendingQuery])
 
   useEffect(() => {
     if (runningRef.current) return
-    const queue = pendingPhotosToOptimize(
-      photos,
-      userId,
-      requestedRef.current,
-    ).slice(0, AUTO_OPTIMIZE_BATCH)
+    const oldestAllowed = Date.now() - PENDING_OPTIMIZATION_POLL_MS
+    const queue = (pendingQuery.data ?? [])
+      .filter(
+        (photo) =>
+          new Date(photo.created_at).getTime() <= oldestAllowed &&
+          !requestedRef.current.has(photo.id),
+      )
+      .slice(0, AUTO_OPTIMIZE_BATCH)
     if (queue.length === 0) return
 
     runningRef.current = true
@@ -55,8 +84,18 @@ export function useAutoOptimizePendingPhotos(photos: Photo[]) {
         }
       } finally {
         runningRef.current = false
-        await invalidatePhotos()
+        await Promise.all(
+          queue.map((photo) =>
+            refreshPhoto(photo.id).catch((error) =>
+              console.warn(
+                'Billedets optimeringsstatus kunne ikke genhentes',
+                error,
+              ),
+            ),
+          ),
+        )
+        await pendingQuery.refetch()
       }
     })()
-  }, [invalidatePhotos, photos, userId])
+  }, [pendingQuery, refreshPhoto])
 }

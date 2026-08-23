@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { useAuth } from '../auth/useAuth'
-import { useInvalidatePhotos } from './usePhotos'
+import { useRefreshPhoto } from './usePhotos'
 import { requestPhotoOptimization } from './useRetryPhotoOptimization'
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024 // matcher bucket-grænsen sat i #2
@@ -89,7 +89,7 @@ export async function uploadQueuedPhoto(item: UploadQueueItem, userId: string) {
 
 export function useUploadPhotos() {
   const { session } = useAuth()
-  const invalidatePhotos = useInvalidatePhotos()
+  const refreshPhoto = useRefreshPhoto()
   const [items, setItems] = useState<UploadQueueItem[]>([])
 
   const updateItem = useCallback(
@@ -112,7 +112,9 @@ export function useUploadPhotos() {
       try {
         await uploadQueuedPhoto({ ...item, storagePath }, session.user.id)
         updateItem(item.id, { status: 'saved', storagePath })
-        await invalidatePhotos()
+        await refreshPhoto(item.photoId).catch((error) =>
+          console.warn('Det uploadede billede kunne ikke genhentes', error),
+        )
 
         void requestPhotoOptimization(item.photoId)
           .catch((error) =>
@@ -121,7 +123,14 @@ export function useUploadPhotos() {
               error,
             ),
           )
-          .finally(() => invalidatePhotos())
+          .finally(() => {
+            void refreshPhoto(item.photoId).catch((error) =>
+              console.warn(
+                'Billedets optimeringsstatus kunne ikke genhentes',
+                error,
+              ),
+            )
+          })
       } catch (caught) {
         console.error('Billedupload fejlede', caught)
         updateItem(item.id, {
@@ -130,7 +139,7 @@ export function useUploadPhotos() {
         })
       }
     },
-    [invalidatePhotos, session, updateItem],
+    [refreshPhoto, session, updateItem],
   )
 
   const enqueue = useCallback(

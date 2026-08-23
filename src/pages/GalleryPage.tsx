@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { usePhotos } from '../features/gallery/usePhotos'
+import { usePhoto, usePhotos } from '../features/gallery/usePhotos'
 import {
   useUploadPhotos,
   validateFiles,
@@ -53,29 +53,34 @@ function GalleryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const sharedPhotoId = searchParams.get('photo')
   const eventFilter = searchParams.get('event')
-  const photos = photosQuery.data ?? EMPTY_PHOTOS
-  useAutoOptimizePendingPhotos(photos)
+  const photos = photosQuery.data?.photos ?? EMPTY_PHOTOS
+  useAutoOptimizePendingPhotos()
   const filteredPhotos = useMemo(
     () => filterPhotosByEvent(photos, eventFilter),
     [eventFilter, photos],
   )
   const eventOptions = useMemo(() => {
     const options = new Map<string, string>()
+    for (const event of eventsQuery.data ?? []) {
+      options.set(event.id, event.title)
+    }
     for (const photo of photos) {
       if (photo.event) options.set(photo.event.id, photo.event.title)
     }
     return [...options.entries()].sort(([, first], [, second]) =>
       first.localeCompare(second, 'da'),
     )
-  }, [photos])
+  }, [eventsQuery.data, photos])
   const selectedFilterIsUnknown =
     eventFilter !== null &&
     eventFilter !== WITHOUT_EVENT_FILTER &&
     !eventOptions.some(([id]) => id === eventFilter)
-  const activePhoto =
+  const cachedActivePhoto =
     sharedPhotoId !== null
-      ? (photos.find((photo) => photo.id === sharedPhotoId) ?? null)
-      : null
+      ? photos.find((photo) => photo.id === sharedPhotoId)
+      : undefined
+  const sharedPhotoQuery = usePhoto(sharedPhotoId, cachedActivePhoto)
+  const activePhoto = cachedActivePhoto ?? sharedPhotoQuery.data ?? null
 
   // To separate inputs: det ene uden `capture`, så telefonen viser hele
   // vælgeren; det andet med `capture`, så kameraet åbner direkte.
@@ -387,6 +392,7 @@ function GalleryPage() {
       )}
 
       {photosQuery.isSuccess &&
+        !photosQuery.hasNextPage &&
         photos.length > 0 &&
         filteredPhotos.length === 0 && (
           <div className="rounded bg-green-50 p-5 text-green-800">
@@ -416,21 +422,45 @@ function GalleryPage() {
         </div>
       )}
 
-      {photosQuery.isSuccess && sharedPhotoId && !activePhoto && (
-        <div
-          role="alert"
-          className="fixed right-4 bottom-4 z-30 rounded bg-red-50 p-4 text-red-800 shadow"
-        >
-          Billedlinket findes ikke længere.
+      {photosQuery.hasNextPage && (
+        <div className="mt-5 text-center">
           <button
             type="button"
-            onClick={() => setGalleryParam('photo', null)}
-            className="ml-2 min-h-11 underline"
+            onClick={() => void photosQuery.fetchNextPage()}
+            disabled={photosQuery.isFetchingNextPage}
+            className="min-h-11 rounded-lg border border-green-800 px-5 py-2 text-green-900 disabled:cursor-wait disabled:opacity-60"
           >
-            Luk
+            {photosQuery.isFetchingNextPage
+              ? 'Henter flere billeder…'
+              : 'Hent flere billeder'}
           </button>
         </div>
       )}
+
+      {photosQuery.isFetchNextPageError && (
+        <p role="alert" className="mt-3 text-center text-red-700">
+          Flere billeder kunne ikke hentes. Prøv igen.
+        </p>
+      )}
+
+      {photosQuery.isSuccess &&
+        sharedPhotoId &&
+        !activePhoto &&
+        sharedPhotoQuery.isSuccess && (
+          <div
+            role="alert"
+            className="fixed right-4 bottom-4 z-30 rounded bg-red-50 p-4 text-red-800 shadow"
+          >
+            Billedlinket findes ikke længere.
+            <button
+              type="button"
+              onClick={() => setGalleryParam('photo', null)}
+              className="ml-2 min-h-11 underline"
+            >
+              Luk
+            </button>
+          </div>
+        )}
 
       {activePhoto && (
         <PhotoLightbox
