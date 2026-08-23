@@ -97,7 +97,24 @@ siges det højt i job-opsummeringen.
 
 ## Fund
 
-Sorteret efter hvor meget det gør ondt, ikke efter hvor svært det er at rette.
+Sorteret efter hvor meget det gør ondt, ikke efter hvor svært det er at rette. Hvert
+fund er oprettet som et issue med et severity-label.
+
+| #   | Fund                                   | Label      | Issue |
+| --- | -------------------------------------- | ---------- | ----- |
+| 1   | Kalenderabonnementet virker ikke       | `blocker`  | #118  |
+| 2   | Billeder fastlåst i `processing`       | `blocker`  | #115  |
+| 3   | Ingen migration køres i CI             | `risiko`   | #119  |
+| 4   | Fem af seks functions typechecker ikke | `risiko`   | #120  |
+| 5   | Admin kan ikke fjerne andres billeder  | `risiko`   | #121  |
+| 6   | Ingen error boundary                   | `risiko`   | #122  |
+| 7   | Ét bundle på 613 kB                    | `friktion` | #123  |
+| 8   | Galleriet henter alt, hver gang        | `friktion` | #124  |
+| 9   | Manglende indeks                       | `friktion` | #125  |
+| 10  | iCal-generatoren findes to gange       | `friktion` | #126  |
+| 11  | Query-klienten er tom                  | `finish`   | #127  |
+| 12  | Ingen vedligeholdsmekanik              | `finish`   | #128  |
+| 13  | Delekort og dataudlevering mangler     | `finish`   | #129  |
 
 ### Blocker
 
@@ -337,30 +354,30 @@ Størrelserne er grove — en "time" er én fokuseret PR.
 
 ### Nu — det, der er i stykker
 
-| Opgave                                    | Hvorfor                                                                          | Størrelse |
-| ----------------------------------------- | -------------------------------------------------------------------------------- | --------- |
-| Hel de fastlåste billedoptimeringer       | Lukker #115 rigtigt frem for kosmetisk                                           | ~2 timer  |
-| Afgør kalenderfeedets skæbne              | Enten offentlig anon-view + `--no-verify-jwt`, eller feed-token pr. medlem       | ~4 timer  |
-| `deno check` på alle functions            | Én linje i `ci.yml`; fjerner et helt sæt fejl, der i dag først findes ved deploy | ~15 min   |
-| De fem manglende indeks                   | Én migration; billig nu, irriterende senere                                      | ~30 min   |
-| Error boundary + rutebaseret lazy loading | Fjerner den hvide side og halverer nogenlunde første load                        | ~3 timer  |
+| Opgave                                     | Hvorfor                                                                          | Størrelse |
+| ------------------------------------------ | -------------------------------------------------------------------------------- | --------- |
+| Hel de fastlåste billedoptimeringer (#115) | Lukker #115 rigtigt frem for kosmetisk                                           | ~2 timer  |
+| Afgør kalenderfeedets skæbne (#118)        | Enten offentlig anon-view + `--no-verify-jwt`, eller feed-token pr. medlem       | ~4 timer  |
+| `deno check` på alle functions (#120)      | Én linje i `ci.yml`; fjerner et helt sæt fejl, der i dag først findes ved deploy | ~15 min   |
+| De fem manglende indeks (#125)             | Én migration; billig nu, irriterende senere                                      | ~30 min   |
+| Error boundary + lazy loading (#122, #123) | Fjerner den hvide side og halverer nogenlunde første load                        | ~3 timer  |
 
 ### Næste — det, der gør resten lettere
 
-| Opgave                                     | Hvorfor                                                                 | Størrelse |
-| ------------------------------------------ | ----------------------------------------------------------------------- | --------- |
-| Kør migrationerne i CI mod rigtig Postgres | Erstatter regex-testene med noget, der kan fejle af de rigtige grunde   | ~1–2 dage |
-| Adminmoderation af billeder                | Bringer galleriet på niveau med chat og kalender; lukker en GDPR-vinkel | ~4 timer  |
-| Paginér galleriet                          | Genbrug keyset-mønsteret fra `useMessages`                              | ~1 dag    |
-| Pin Edge Function-importerne               | Produktionen bør ikke kunne ændre sig uden en commit                    | ~1 time   |
-| Query-defaults og fejlrapportering         | Ens fejlopførsel på tværs af sider                                      | ~3 timer  |
-| Dependabot, PR-skabelon, delebillede       | Vedligeholdsmekanik og en forside, der ser rigtig ud, når linket deles  | ~2 timer  |
+| Opgave                                            | Hvorfor                                                                 | Størrelse |
+| ------------------------------------------------- | ----------------------------------------------------------------------- | --------- |
+| Kør migrationerne i CI mod rigtig Postgres (#119) | Erstatter regex-testene med noget, der kan fejle af de rigtige grunde   | ~1–2 dage |
+| Adminmoderation af billeder (#121)                | Bringer galleriet på niveau med chat og kalender; lukker en GDPR-vinkel | ~4 timer  |
+| Paginér galleriet (#124)                          | Genbrug keyset-mønsteret fra `useMessages`                              | ~1 dag    |
+| Pin Edge Function-importerne (#120)               | Produktionen bør ikke kunne ændre sig uden en commit                    | ~1 time   |
+| Query-defaults og fejlrapportering (#127)         | Ens fejlopførsel på tværs af sider                                      | ~3 timer  |
+| Dependabot, PR-skabelon, delebillede (#128, #129) | Vedligeholdsmekanik og en forside, der ser rigtig ud, når linket deles  | ~2 timer  |
 
 ### Senere — produkt, ikke vedligehold
 
 | Opgave                           | Hvorfor                                                              | Størrelse |
 | -------------------------------- | -------------------------------------------------------------------- | --------- |
-| Dataudlevering                   | Den manglende halvdel af GDPR-arbejdet                               | ~1 dag    |
+| Dataudlevering (#129)            | Den manglende halvdel af GDPR-arbejdet                               | ~1 dag    |
 | Notifikationer ud over chatten   | Push-infrastrukturen står klar og bruges kun til chat                | ~1 dag    |
 | Album og kommentarer i galleriet | `event_id` findes allerede på hvert billede                          | ~2 dage   |
 | Offline-kø til chatten           | En besked skrevet uden dækning i skoven burde sendes senere          | ~2 dage   |
