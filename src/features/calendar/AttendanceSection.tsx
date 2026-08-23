@@ -1,4 +1,5 @@
 import { useProfilesMap } from '../chat/useProfilesMap'
+import { readableTextColor } from '../../lib/colorContrast'
 import { useEventAttendance } from './useEventAttendance'
 
 function ParticipantAvatar({
@@ -31,8 +32,8 @@ function ParticipantAvatar({
   return (
     <span
       aria-hidden="true"
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-      style={{ backgroundColor: color }}
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium"
+      style={{ backgroundColor: color, color: readableTextColor(color) }}
     >
       {initials || '?'}
     </span>

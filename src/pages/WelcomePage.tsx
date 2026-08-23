@@ -34,7 +34,10 @@ function WelcomePage() {
           {toFriendlyLinkError(errorCode, errorDescription)} Opret dig igen med
           samme e-mail, så sender vi en ny bekræftelsesmail.
         </p>
-        <Link to="/opret" className="rounded bg-green-800 px-4 py-2 text-white">
+        <Link
+          to="/opret"
+          className="inline-flex min-h-11 items-center justify-center rounded bg-green-800 px-4 py-2 text-white"
+        >
           Prøv igen
         </Link>
         <Link to="/login" className="text-sm text-green-800 underline">
@@ -65,7 +68,10 @@ function WelcomePage() {
             ? 'Din e-mail er bekræftet, men vi kunne ikke logge dig ind automatisk. Log ind med din adgangskode nedenfor.'
             : 'Åbn linket i den mail, vi har sendt dig — eller log ind, hvis du allerede har bekræftet din e-mail.'}
         </p>
-        <Link to="/login" className="rounded bg-green-800 px-4 py-2 text-white">
+        <Link
+          to="/login"
+          className="inline-flex min-h-11 items-center justify-center rounded bg-green-800 px-4 py-2 text-white"
+        >
           Log ind
         </Link>
       </main>
@@ -87,7 +93,7 @@ function WelcomePage() {
       </p>
       <Link
         to="/kalender"
-        className="rounded bg-green-800 px-4 py-2 text-white"
+        className="inline-flex min-h-11 items-center justify-center rounded bg-green-800 px-4 py-2 text-white"
       >
         Se kalenderen
       </Link>

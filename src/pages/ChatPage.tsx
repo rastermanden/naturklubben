@@ -117,7 +117,9 @@ function ChatPage() {
       />
 
       {messagesQuery.isPending && (
-        <p className="py-12 text-center text-green-700">Henter beskeder…</p>
+        <p role="status" className="py-12 text-center text-green-700">
+          Henter beskeder…
+        </p>
       )}
 
       {messagesQuery.isError && (
@@ -141,6 +143,10 @@ function ChatPage() {
           <ul
             ref={listRef}
             onScroll={handleScroll}
+            role="log"
+            aria-label="Beskeder"
+            aria-live={isNearBottom ? 'polite' : 'off'}
+            aria-relevant="additions"
             className="flex h-[60svh] flex-col gap-3 overflow-y-auto rounded-lg border border-green-100 bg-white p-4"
           >
             {messages.length === 0 && (
@@ -159,19 +165,26 @@ function ChatPage() {
           </ul>
 
           {newMessageCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                scrollToBottom('smooth')
-                setNewMessageCount(0)
-              }}
-              className="absolute bottom-4 left-1/2 min-h-11 -translate-x-1/2 rounded-full bg-green-800 px-4 py-2 text-sm text-white shadow-lg"
-            >
-              {newMessageCount === 1
-                ? '1 ny besked'
-                : `${newMessageCount} nye beskeder`}{' '}
-              ↓
-            </button>
+            <>
+              <p role="status" className="sr-only">
+                {newMessageCount === 1
+                  ? '1 ny besked'
+                  : `${newMessageCount} nye beskeder`}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  scrollToBottom('smooth')
+                  setNewMessageCount(0)
+                }}
+                className="absolute bottom-4 left-1/2 min-h-11 -translate-x-1/2 rounded-full bg-green-800 px-4 py-2 text-sm text-white shadow-lg"
+              >
+                {newMessageCount === 1
+                  ? '1 ny besked'
+                  : `${newMessageCount} nye beskeder`}{' '}
+                ↓
+              </button>
+            </>
           )}
         </div>
       )}
