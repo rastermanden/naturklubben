@@ -1,7 +1,8 @@
-import { useMutation } from '@tanstack/react-query'
+import { useCallback, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { useAuth } from '../auth/useAuth'
 import { useInvalidatePhotos } from './usePhotos'
+import { requestPhotoOptimization } from './useRetryPhotoOptimization'
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024 // matcher bucket-grænsen sat i #2
 
@@ -9,6 +10,19 @@ export interface UploadPhotoInput {
   files: File[]
   caption: string
   eventId: string | null
+}
+
+export type UploadQueueStatus = 'queued' | 'uploading' | 'saved' | 'failed'
+
+export interface UploadQueueItem {
+  id: string
+  photoId: string
+  storagePath: string
+  file: File
+  caption: string
+  eventId: string | null
+  status: UploadQueueStatus
+  error: string | null
 }
 
 export function validateFiles(files: File[]): string | null {
@@ -23,46 +37,134 @@ export function validateFiles(files: File[]): string | null {
   return null
 }
 
+function extensionFor(file: File) {
+  const extension = file.name.split('.').pop()
+  return extension && /^[a-z0-9]{1,10}$/i.test(extension)
+    ? extension.toLowerCase()
+    : 'jpg'
+}
+
+export function createUploadQueueItems({
+  files,
+  caption,
+  eventId,
+}: UploadPhotoInput): UploadQueueItem[] {
+  return files.map((file) => {
+    const photoId = crypto.randomUUID()
+    return {
+      id: photoId,
+      photoId,
+      storagePath: '',
+      file,
+      caption,
+      eventId,
+      status: 'queued',
+      error: null,
+    }
+  })
+}
+
+export async function uploadQueuedPhoto(item: UploadQueueItem, userId: string) {
+  const storagePath =
+    item.storagePath || `${userId}/${item.photoId}.${extensionFor(item.file)}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('photos-original')
+    .upload(storagePath, item.file, {
+      contentType: item.file.type,
+      upsert: true,
+    })
+  if (uploadError) throw uploadError
+
+  const { error: rowError } = await supabase.rpc('upsert_photo_upload', {
+    p_photo_id: item.photoId,
+    p_storage_path: storagePath,
+    p_caption: item.caption,
+    p_event_id: item.eventId,
+  })
+  if (rowError) throw rowError
+
+  return storagePath
+}
+
 export function useUploadPhotos() {
   const { session } = useAuth()
   const invalidatePhotos = useInvalidatePhotos()
+  const [items, setItems] = useState<UploadQueueItem[]>([])
 
-  return useMutation({
-    mutationFn: async ({ files, caption, eventId }: UploadPhotoInput) => {
+  const updateItem = useCallback(
+    (id: string, update: Partial<UploadQueueItem>) => {
+      setItems((current) =>
+        current.map((item) => (item.id === id ? { ...item, ...update } : item)),
+      )
+    },
+    [],
+  )
+
+  const processItem = useCallback(
+    async (item: UploadQueueItem) => {
       if (!session) throw new Error('Ikke logget ind')
+      const storagePath =
+        item.storagePath ||
+        `${session.user.id}/${item.photoId}.${extensionFor(item.file)}`
+      updateItem(item.id, { status: 'uploading', error: null, storagePath })
 
-      for (const file of files) {
-        const ext = file.name.split('.').pop() ?? 'jpg'
-        const storagePath = `${session.user.id}/${crypto.randomUUID()}.${ext}`
+      try {
+        await uploadQueuedPhoto({ ...item, storagePath }, session.user.id)
+        updateItem(item.id, { status: 'saved', storagePath })
+        await invalidatePhotos()
 
-        const { error: uploadError } = await supabase.storage
-          .from('photos-original')
-          .upload(storagePath, file)
-        if (uploadError) throw uploadError
-
-        const { data: photoRow, error: insertError } = await supabase
-          .from('photos')
-          .insert({
-            storage_path: storagePath,
-            caption: caption || null,
-            event_id: eventId,
-            uploaded_by: session.user.id,
-          })
-          .select('id')
-          .single()
-        if (insertError) throw insertError
-
-        // Beder optimize-image-functionen (#13) om at generere en web- og
-        // thumbnail-version. Functionen findes ikke nødvendigvis endnu --
-        // fejler den, forbliver billedet synligt via originalen (se
-        // useDisplayUrl), så uploadet blokeres ikke af det.
-        supabase.functions
-          .invoke('optimize-image', {
-            body: { photoId: photoRow.id, storagePath },
-          })
-          .catch(() => {})
+        void requestPhotoOptimization(item.photoId)
+          .catch((error) =>
+            console.warn(
+              'Billedet er gemt, men optimeringen kunne ikke startes',
+              error,
+            ),
+          )
+          .finally(() => invalidatePhotos())
+      } catch (caught) {
+        console.error('Billedupload fejlede', caught)
+        updateItem(item.id, {
+          status: 'failed',
+          error: 'Upload fejlede. Prøv igen.',
+        })
       }
     },
-    onSuccess: () => invalidatePhotos(),
-  })
+    [invalidatePhotos, session, updateItem],
+  )
+
+  const enqueue = useCallback(
+    (input: UploadPhotoInput) => {
+      const newItems = createUploadQueueItems(input)
+      setItems((current) => [...newItems, ...current])
+      void (async () => {
+        for (const item of newItems) {
+          await processItem(item)
+        }
+      })()
+    },
+    [processItem],
+  )
+
+  const retry = useCallback(
+    (item: UploadQueueItem) => {
+      if (item.status !== 'failed') return
+      void processItem(item)
+    },
+    [processItem],
+  )
+
+  const clearSaved = useCallback(() => {
+    setItems((current) => current.filter((item) => item.status !== 'saved'))
+  }, [])
+
+  const isUploading = useMemo(
+    () =>
+      items.some(
+        (item) => item.status === 'queued' || item.status === 'uploading',
+      ),
+    [items],
+  )
+
+  return { items, enqueue, retry, clearSaved, isUploading }
 }
