@@ -36,12 +36,16 @@ jobs:
       # skal sættes eksplicit. Det sker her -- ikke fra nogens terminal --
       # og kun når nøglerne findes som repo-secrets, så en tom værdi ikke
       # overskriver en fungerende opsætning.
+      # Repo-secrets er *valgfrie*: findes de ikke, genererer chat-push selv et
+      # nøglepar første gang og gemmer det i push_vapid_keys (se vapid.ts).
+      # Det er den normale vej -- at oprette et repo-secret er et manuelt
+      # dashboard-trin, og det er præcis det, projektet undgår.
       # Tjekket ligger i shellen, ikke i en `if:` -- secrets-konteksten er
       # ikke tilgængelig i et steps `if:`-udtryk.
       - name: Sæt VAPID-secrets
         run: |
           if [ -z "$VAPID_PUBLIC_KEY" ] || [ -z "$VAPID_PRIVATE_KEY" ]; then
-            echo "::warning::VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY mangler som repo-secrets -- chat-push kan ikke sende notifikationer."
+            echo "::notice::VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY er ikke sat som repo-secrets. Det er fint -- chat-push genererer selv et nøglepar og gemmer det i push_vapid_keys."
             exit 0
           fi
           supabase secrets set \

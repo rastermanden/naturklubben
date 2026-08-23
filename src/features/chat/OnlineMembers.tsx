@@ -57,7 +57,10 @@ export function OnlineMembers({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="flex h-2 w-2 shrink-0 rounded-full bg-green-500" aria-hidden="true" />
+      <span
+        className="flex h-2 w-2 shrink-0 rounded-full bg-green-500"
+        aria-hidden="true"
+      />
       <span className="text-sm text-green-700">
         {`${onlineUserIds.length} online`}
       </span>
