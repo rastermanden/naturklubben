@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Avatar } from '../../components/Avatar'
+import { MessageReactions, ReactionPicker } from './MessageReactions'
 import { readableTextColor } from '../../lib/colorContrast'
 import { formatRelativeTime } from './formatRelativeTime'
+import type { ReactionSummary } from './reactions'
 import type { Message } from './useMessages'
 import type { ProfileSummary } from './useProfilesMap'
 
@@ -11,14 +13,19 @@ export function MessageBubble({
   replyAuthor,
   isOwn,
   onReply,
+  reactions,
+  onToggleReaction,
 }: {
   message: Message
   author: ProfileSummary | undefined
   replyAuthor: ProfileSummary | undefined
   isOwn: boolean
   onReply: (message: Message) => void
+  reactions: ReactionSummary[]
+  onToggleReaction: (message: Message, emoji: string) => void
 }) {
   const [, forceUpdate] = useState(0)
+  const [pickerOpen, setPickerOpen] = useState(false)
   useEffect(() => {
     const id = setInterval(() => forceUpdate((tick) => tick + 1), 30_000)
     return () => clearInterval(id)
@@ -76,14 +83,41 @@ export function MessageBubble({
         <p className="mt-1 text-right text-xs" title={fullTimestamp}>
           {formatRelativeTime(message.created_at)}
         </p>
-        <button
-          type="button"
-          onClick={() => onReply(message)}
-          aria-label={`Svar på besked fra ${name}`}
-          className="mt-1 min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
-        >
-          Svar
-        </button>
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onReply(message)}
+            aria-label={`Svar på besked fra ${name}`}
+            className="mt-1 min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+          >
+            Svar
+          </button>
+          <button
+            type="button"
+            onClick={() => setPickerOpen((open) => !open)}
+            aria-expanded={pickerOpen}
+            aria-label={`Reagér på besked fra ${name}`}
+            className="mt-1 min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+          >
+            Reagér
+          </button>
+        </div>
+
+        {pickerOpen && (
+          <ReactionPicker
+            summaries={reactions}
+            onToggle={(emoji) => {
+              onToggleReaction(message, emoji)
+              setPickerOpen(false)
+            }}
+          />
+        )}
+
+        <MessageReactions
+          summaries={reactions}
+          isOwn={isOwn}
+          onToggle={(emoji) => onToggleReaction(message, emoji)}
+        />
       </div>
     </li>
   )

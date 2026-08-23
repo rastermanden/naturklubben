@@ -5,6 +5,8 @@ import ChatPage from './ChatPage'
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
+  toggleReaction: vi.fn(),
+  reactions: [] as { message_id: string; user_id: string; emoji: string }[],
   messages: [
     {
       id: 'message-1',
@@ -36,6 +38,13 @@ vi.mock('../features/chat/useMessages', () => ({
   }),
 }))
 
+vi.mock('../features/chat/useReactions', () => ({
+  useReactions: () => ({
+    reactions: mocks.reactions,
+    toggleReaction: { mutate: mocks.toggleReaction },
+  }),
+}))
+
 vi.mock('../features/chat/useProfilesMap', () => ({
   useProfilesMap: () => ({
     data: {
@@ -63,6 +72,8 @@ vi.mock('../features/notifications/NotificationToggle', () => ({
 
 beforeEach(() => {
   mocks.mutate.mockReset()
+  mocks.toggleReaction.mockReset()
+  mocks.reactions = []
   mocks.messages = [
     {
       id: 'message-1',
@@ -124,6 +135,41 @@ describe('ChatPage replies', () => {
         onError: expect.any(Function),
       }),
     )
+  })
+})
+
+describe('ChatPage reactions', () => {
+  it('adds a reaction the member has not given yet', () => {
+    render(<ChatPage />)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reagér på besked fra Ada' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Reagér med 👍' }))
+
+    expect(mocks.toggleReaction).toHaveBeenCalledWith({
+      messageId: 'message-1',
+      emoji: '👍',
+      reactedByMe: false,
+    })
+  })
+
+  it('removes the member’s own reaction and names who else reacted', () => {
+    mocks.reactions = [
+      { message_id: 'message-1', user_id: 'current-member', emoji: '👍' },
+      { message_id: 'message-1', user_id: 'other-member', emoji: '👍' },
+    ]
+    render(<ChatPage />)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Fjern din 👍-reaktion. Dig, Ada' }),
+    )
+
+    expect(mocks.toggleReaction).toHaveBeenCalledWith({
+      messageId: 'message-1',
+      emoji: '👍',
+      reactedByMe: true,
+    })
   })
 })
 
