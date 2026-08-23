@@ -56,7 +56,7 @@ export function pendingPhotosToOptimize(
 }
 
 export function optimizationStatusLabel(photo: Photo) {
-  if (isStaleOptimization(photo)) return 'Optimering stoppet'
+  if (isStaleOptimization(photo)) return null
 
   switch (photo.optimization_status) {
     case 'pending':

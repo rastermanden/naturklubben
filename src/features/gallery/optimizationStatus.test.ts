@@ -82,13 +82,20 @@ describe('gallery optimization status', () => {
     expect(isPendingOptimizationActive(old, now)).toBe(false)
   })
 
-  it('uses an explicit stopped label for stale processing work', () => {
+  it('hides stale processing status while keeping active work visible', () => {
     expect(
       optimizationStatusLabel(
         photo({
           optimization_started_at: '2020-01-01T00:00:00.000Z',
         }),
       ),
-    ).toBe('Optimering stoppet')
+    ).toBeNull()
+    expect(
+      optimizationStatusLabel(
+        photo({
+          optimization_started_at: new Date().toISOString(),
+        }),
+      ),
+    ).toBe('Optimerer…')
   })
 })
