@@ -10,6 +10,8 @@ export interface Member {
   created_at: string
 }
 
+export const membersQueryKey = ['profiles', 'members'] as const
+
 async function fetchMembers(): Promise<Member[]> {
   const { data, error } = await supabase
     .from('profiles')
@@ -24,7 +26,7 @@ async function fetchMembers(): Promise<Member[]> {
 
 export function useMembers() {
   return useQuery({
-    queryKey: ['profiles', 'members'],
+    queryKey: membersQueryKey,
     queryFn: fetchMembers,
   })
 }

@@ -73,7 +73,7 @@ function ResetPasswordPage() {
         </p>
         <Link
           to="/glemt-adgangskode"
-          className="rounded bg-green-800 px-4 py-2 text-white"
+          className="inline-flex min-h-11 items-center justify-center rounded bg-green-800 px-4 py-2 text-white"
         >
           Send et nyt link
         </Link>
@@ -123,7 +123,7 @@ function ResetPasswordPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="rounded bg-green-800 px-4 py-2 text-white disabled:opacity-60"
+          className="min-h-11 rounded bg-green-800 px-4 py-2 text-white disabled:opacity-60"
         >
           {submitting ? 'Gemmer…' : 'Gem adgangskode'}
         </button>

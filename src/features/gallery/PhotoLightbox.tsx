@@ -1,4 +1,5 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { useDisplayUrl } from './useDisplayUrl'
 import { useAuth } from '../auth/useAuth'
 import {
@@ -32,14 +33,11 @@ export function PhotoLightbox({
   const canRetry = canRetryOptimization(photo, session?.user.id)
   const statusLabel = optimizationStatusLabel(photo)
   const [shareStatus, setShareStatus] = useState<string | null>(null)
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useDialogFocus<HTMLDivElement>({
+    onClose,
+    initialFocusRef: closeButtonRef,
+  })
 
   useEffect(() => {
     if (!shareStatus) return
@@ -78,10 +76,14 @@ export function PhotoLightbox({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={photo.caption ?? 'Billede'}
-      onClick={onClose}
+      tabIndex={-1}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/90 p-4"
     >
       <button
@@ -93,6 +95,7 @@ export function PhotoLightbox({
       </button>
 
       <button
+        ref={closeButtonRef}
         type="button"
         onClick={onClose}
         aria-label="Luk"

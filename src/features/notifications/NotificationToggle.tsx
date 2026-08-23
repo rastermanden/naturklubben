@@ -39,7 +39,11 @@ export function NotificationToggle({ userId }: { userId: string }) {
       >
         {isOn ? '🔔 Notifikationer til' : '🔕 Slå notifikationer til'}
       </button>
-      {isWorking && <span className="text-sm text-green-700">Arbejder…</span>}
+      {isWorking && (
+        <span role="status" className="text-sm text-green-700">
+          Arbejder…
+        </span>
+      )}
       {error && (
         <span role="alert" className="text-sm text-red-700">
           {error}

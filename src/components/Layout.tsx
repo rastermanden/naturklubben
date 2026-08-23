@@ -21,6 +21,12 @@ export function Layout() {
 
   return (
     <div className="flex min-h-svh flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded focus:bg-white focus:px-4 focus:py-3 focus:font-medium focus:text-green-950"
+      >
+        Spring til indhold
+      </a>
       <header
         className="sticky top-0 z-30 flex items-center justify-between border-b border-green-100 bg-white px-4 py-3"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
@@ -94,7 +100,7 @@ export function Layout() {
         triggerRef={burgerButtonRef}
       />
 
-      <div className="flex-1">
+      <div id="main-content" tabIndex={-1} className="flex-1">
         <Outlet />
       </div>
 
