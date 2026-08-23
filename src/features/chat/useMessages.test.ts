@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   addMessage,
+  messageFields,
   needsReplyRefetch,
   normalizeMessage,
   removeMessage,
@@ -148,5 +149,18 @@ describe('message reply data', () => {
       deleted_at: '2026-08-23T12:02:00.000Z',
       deleted_by: 'admin-1',
     })
+  })
+})
+
+describe('messageFields', () => {
+  // Regressionsværn for den fejl, der væltede chatten i produktion: embeddet
+  // af svarets ophav skal bruge kolonnenavnet som hint. Constraint-navnet
+  // (`messages!messages_reply_to_message_id_fkey`) giver PGRST200 fra
+  // PostgREST, og fordi embeddet indgår i hver beskedhentning, fejler så hele
+  // chatten. Ingen enhedstest kan fange det -- Supabase er mocket -- så
+  // strengen pinnes her i stedet.
+  it('embeds the reply parent through the column, not the constraint', () => {
+    expect(messageFields).toContain('messages!reply_to_message_id')
+    expect(messageFields).not.toContain('_fkey')
   })
 })
