@@ -6,38 +6,54 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 
 ## Skema
 
-| Tabel                                      | Formål                                                                                                                           | RLS                                                                                                                                         |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`                                 | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.                         | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                          |
-| `activities`                               | Offentligt indhold om klubbens aktiviteter (#10).                                                                                | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                        |
-| `events`                                   | Kalenderbegivenheder (#11).                                                                                                      | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                    |
-| `photos`                                   | Metadata for uploadede billeder -- selve filerne ligger i Storage (#12).                                                         | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne. `optimized_path`/`thumbnail_path` sættes af edge-functionen i #13. |
-| `messages`                                 | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                                                       | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                          |
-| `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                 |
-| `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                               |
-| `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                      | Alle kan indsende; kun admins kan læse og behandle ansøgningerne.                                                                           |
-| `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                       | Ingen policies og ingen grants -- kun `probation-notifications` med Secret key kan læse rækken.                                             |
-| `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                        | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                          |
+| Tabel                                      | Formål                                                                                                                           | RLS                                                                                                                                                                                                  |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profiles`                                 | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag.                         | Alle autentificerede kan læse; kun ejeren kan opdatere egen række.                                                                                                                                   |
+| `activities`                               | Offentligt indhold om klubbens aktiviteter (#10).                                                                                | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                                                                                 |
+| `events`                                   | Kalenderbegivenheder (#11).                                                                                                      | Kun autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne.                                                                                                                             |
+| `photos`                                   | Metadata og vedvarende optimeringsstatus for uploadede billeder -- selve filerne ligger i Storage (#12/#89).                     | Autentificerede kan læse og ejeren kan slette. Oprettelse/genforsøg går gennem `upsert_photo_upload`; direkte INSERT/UPDATE er revoked, så klienten ikke kan skrive serverejede status/outputfelter. |
+| `messages`                                 | Gruppechat, ét fælles rum (#14). Del af `supabase_realtime`-publikationen.                                                       | Kun autentificerede kan læse/skrive; kun afsender kan slette egne.                                                                                                                                   |
+| `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                                                                          |
+| `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                                                                                        |
+| `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                      | Alle kan indsende; kun admins kan læse og behandle ansøgningerne.                                                                                                                                    |
+| `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                       | Ingen policies og ingen grants -- kun `probation-notifications` med Secret key kan læse rækken.                                                                                                      |
+| `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                        | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                                                                                   |
 
 ## Storage buckets
 
 Oprettet manuelt i #2:
 
 - `photos-original` (privat) -- kun autentificerede medlemmer kan læse/skrive egne uploads.
+  INSERT/UPDATE er både ejer- og mappeafgrænset til `<auth.uid()>/...`; UPDATE findes kun,
+  fordi et sikkert genforsøg med samme tilfældige sti kræver Storage `upsert`.
 - `photos-optimized` (public) -- alle kan læse. Kun `optimize-image`-edge-functionen
   (Secret key, omgår RLS) kan skrive -- der er bevidst ingen insert-policy for andre.
 
 ## Edge Functions
 
 - `optimize-image` (#13): kaldes fra klienten (`useUploadPhotos`) lige efter en upload.
-  Henter originalen fra `photos-original`, laver en web-str­ørrelse (maks. 1600px bredde)
+  Klienten sender kun photo-id; functionen validerer bearer-token og afviser alle andre
+  end uploaderen. Den claimer `pending`/`failed` arbejde (eller `processing`, der har
+  været fastlåst i ti minutter) med én atomisk `UPDATE ... RETURNING`, henter originalen
+  fra `photos-original`, laver en web-str­ørrelse (maks. 1600px bredde)
   og en thumbnail (maks. 400px bredde) som JPEG via `imagescript`, uploader begge til
-  `photos-optimized`, og opdaterer `photos`-rækkens `optimized_path`/`thumbnail_path`.
+  attempt-specifikke, deterministiske stier i `photos-optimized`, og opdaterer
+  `photos`-rækken til `ready`.
+  Hvert claim øger et forsøgsnummer; både `ready` og `failed` completion kræver samme
+  nummer, så en gammel worker aldrig kan overskrive et nyere resultat. Delvise output kan
+  genforsøges idempotent med upsert, og en worker rydder kun sine egne attempt-output ved
+  fejl eller tabt completion-race. Mangler originalen, bliver rækken terminalt `failed`
+  med en tydelig fejl i stedet for at stå som aktiv.
+  Sletning går gennem samme function: et atomisk `deleting`-claim fencer aktive/stale
+  workers, functionen fjerner originalen og alle attempt-output med Secret key, og først
+  derefter slettes rækken. Klienten har derfor hverken direkte DELETE-grant på `photos`
+  eller sletterettighed i den offentlige bucket.
   (JPEG i stedet for WebP: imagescript distribueres til Deno via deno.land/x, hvis
   registry for dette modul stoppede med at indeksere nye tags efter `1.3.0` -- den
   version har ingen `encodeWEBP`, kun `encodeJPEG`.)
-  Fejler den (fx før den er deployet endnu, eller på et ugyldigt billede), forbliver
-  originalen synlig i galleriet via en signeret URL -- uploadet blokeres ikke.
+  Fejler den, forbliver originalen synlig i galleriet via en signeret URL, og uploaderen
+  kan genforsøge fra galleriet. `photos` er med i Realtime; klienten poller desuden kun,
+  mens et ikke-fastlåst arbejde er aktivt, og stopper igen ved terminal status/unmount.
 - `chat-push` (#14): sender Web Push-notifikationer, når nogen skriver i chatten.
   Kaldes af afsenderens egen klient lige efter beskeden er indsat (samme mønster som
   `optimize-image` efter en upload). Klienten sender kun besked-id'et med -- functionen
@@ -69,6 +85,28 @@ Oprettet manuelt i #2:
   function-secret -- variabelnavne der starter med `SUPABASE_` er reserverede og
   auto-injiceres af platformen i alle Edge Functions (`supabase secrets set` afviser
   dem eksplicit).
+
+### Preview-validering af galleri-status
+
+Databasekonkurrence og grants kræver den rigtige Postgres-motor og dækkes derfor på
+PR'ens Supabase Preview Branch, ikke med en lokal mockdatabase:
+
+1. Opret to preview-brugere, upload ét billede som bruger A, og notér photo-id'et.
+2. Kald `PATCH /rest/v1/photos?id=eq.<id>` med bruger A's token og fx
+   `{"optimization_status":"ready","optimization_attempts":99}`. Kaldet skal afvises,
+   fordi `authenticated` ikke har direkte UPDATE-grant.
+3. Kald `optimize-image` for samme id med bruger B's token. Svaret skal være 403, og
+   status/forsøgsnummer må være uændret.
+4. Sæt rækken til `failed` i Preview Branch SQL editoren, start to samtidige
+   `optimize-image`-kald som bruger A, og kontrollér, at attempts kun stiger én gang.
+   Det andet kald skal svare `processing`/202 eller observere det færdige resultat.
+5. Simulér attempt-fencing i SQL editoren: sæt rækken til `processing` med attempt 10,
+   og kald `complete_photo_optimization` med attempt 9. Funktionen skal returnere
+   `false`, og rækken skal være uændret. Gentag både med success og failure; kun attempt
+   10 må ændre rækken.
+6. Slet originalobjektet, sæt rækken `failed`, og genforsøg som bruger A. Rækken skal
+   ende `failed` med beskeden om, at originalfilen mangler; den må ikke blive stående
+   `processing`.
 
 ## Migrations
 
