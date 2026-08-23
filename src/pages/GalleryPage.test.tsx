@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
     variables: undefined as string | undefined,
     mutate: vi.fn(),
   },
+  validateFiles: vi.fn((): string | null => null),
 }))
 
 vi.mock('../features/gallery/usePhotos', () => ({
@@ -34,7 +35,7 @@ vi.mock('../features/gallery/usePhotos', () => ({
 }))
 vi.mock('../features/gallery/useUploadPhotos', () => ({
   useUploadPhotos: () => mocks.upload,
-  validateFiles: () => null,
+  validateFiles: mocks.validateFiles,
 }))
 vi.mock('../features/gallery/useDeletePhoto', () => ({
   useDeletePhoto: () => mocks.deletePhoto,
@@ -110,6 +111,8 @@ beforeEach(() => {
   mocks.photosQuery.refetch.mockReset()
   mocks.deletePhoto.mutate.mockReset()
   mocks.retryOptimization.mutate.mockReset()
+  mocks.validateFiles.mockReset()
+  mocks.validateFiles.mockReturnValue(null)
 })
 
 afterEach(cleanup)
@@ -194,5 +197,49 @@ describe('GalleryPage', () => {
       'photo-1',
       expect.objectContaining({ onError: expect.any(Function) }),
     )
+  })
+
+  it('links invalid files to the upload controls and focuses the visible chooser', async () => {
+    mocks.validateFiles.mockReturnValue('Filen er for stor.')
+    renderGallery()
+
+    const fileInput = screen.getByLabelText('Vælg billeder fra enheden')
+    const chooser = screen.getByRole('button', { name: 'Vælg billeder' })
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(['billede'], 'foto.jpg', { type: 'image/jpeg' })],
+      },
+    })
+
+    const error = await screen.findByText('Filen er for stor.')
+    expect(fileInput.getAttribute('aria-invalid')).toBe('true')
+    expect(fileInput.getAttribute('aria-describedby')).toBe(error.id)
+    expect(chooser.getAttribute('aria-describedby')).toBe(error.id)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(document.activeElement).toBe(chooser)
+  })
+
+  it('links camera validation only to the camera control', async () => {
+    mocks.validateFiles.mockReturnValue('Filen er for stor.')
+    renderGallery()
+
+    const cameraInput = screen.getByLabelText('Tag et billede med kameraet')
+    const cameraButton = screen.getByRole('button', { name: 'Tag billede' })
+    fireEvent.change(cameraInput, {
+      target: {
+        files: [new File(['billede'], 'foto.jpg', { type: 'image/jpeg' })],
+      },
+    })
+
+    const error = await screen.findByText('Filen er for stor.')
+    expect(cameraInput.getAttribute('aria-invalid')).toBe('true')
+    expect(cameraInput.getAttribute('aria-describedby')).toBe(error.id)
+    expect(cameraButton.getAttribute('aria-describedby')).toBe(error.id)
+    expect(
+      screen
+        .getByLabelText('Vælg billeder fra enheden')
+        .getAttribute('aria-invalid'),
+    ).toBeNull()
+    expect(document.activeElement).toBe(cameraButton)
   })
 })

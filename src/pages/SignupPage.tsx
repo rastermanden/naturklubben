@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { appUrl } from '../features/auth/authRedirect'
 import { toFriendlyAuthError } from '../features/auth/authErrors'
+import { useErrorFocus } from '../hooks/useErrorFocus'
 
 function SignupPage() {
   const [fullName, setFullName] = useState('')
@@ -11,10 +12,18 @@ function SignupPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const emailRef = useRef<HTMLInputElement>(null)
+  const passwordRef = useRef<HTMLInputElement>(null)
+  const [errorField, setErrorField] = useState<'email' | 'password' | null>(
+    null,
+  )
+  const focusEmailError = useErrorFocus(emailRef)
+  const focusPasswordError = useErrorFocus(passwordRef)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    setErrorField(null)
     setSubmitting(true)
 
     const { error: signUpError } = await supabase.auth.signUp({
@@ -32,6 +41,16 @@ function SignupPage() {
     setSubmitting(false)
     if (signUpError) {
       setError(toFriendlyAuthError(signUpError.message))
+      if (signUpError.message === 'Password should be at least 6 characters') {
+        setErrorField('password')
+        focusPasswordError()
+      } else if (
+        signUpError.message === 'User already registered' ||
+        signUpError.message === 'Email not allowed'
+      ) {
+        setErrorField('email')
+        focusEmailError()
+      }
       return
     }
     setSubmitted(true)
@@ -66,6 +85,7 @@ function SignupPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           Navn
           <input
+            id="signup-full-name"
             type="text"
             required
             autoComplete="name"
@@ -78,11 +98,17 @@ function SignupPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           E-mail
           <input
+            id="signup-email"
+            ref={emailRef}
             type="email"
             required
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            aria-invalid={errorField === 'email' ? true : undefined}
+            aria-describedby={
+              errorField === 'email' ? 'signup-error' : undefined
+            }
             className="rounded border border-green-300 px-3 py-2 text-base"
           />
         </label>
@@ -90,18 +116,28 @@ function SignupPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           Adgangskode
           <input
+            id="signup-password"
+            ref={passwordRef}
             type="password"
             required
             minLength={6}
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            aria-invalid={errorField === 'password' ? true : undefined}
+            aria-describedby={
+              errorField === 'password' ? 'signup-error' : undefined
+            }
             className="rounded border border-green-300 px-3 py-2 text-base"
           />
         </label>
 
         {error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p
+            id="signup-error"
+            role={errorField ? undefined : 'alert'}
+            className="text-sm text-red-700"
+          >
             {error}
           </p>
         )}

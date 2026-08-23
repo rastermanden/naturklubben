@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import {
   toFriendlyProbationApplicationError,
@@ -8,6 +8,7 @@ import {
   prepareBrowserPushSubscription,
   PushSetupError,
 } from '../features/notifications/usePushNotifications'
+import { useErrorFocus } from '../hooks/useErrorFocus'
 
 const PUSH_ERROR_TEXT = {
   unsupported:
@@ -18,17 +19,29 @@ const PUSH_ERROR_TEXT = {
     'Notifikationer er blokeret for siden. Slå dem til i browserens indstillinger og prøv igen.',
 } as const
 
+function isApplicationFieldError(error: unknown) {
+  if (error instanceof PushSetupError) return false
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return false
+  }
+  return ['invalid_request', '22001', '22023'].includes(String(error.code))
+}
+
 function ProbationApplicationPage() {
   const submitApplication = useSubmitProbationApplication()
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [motivation, setMotivation] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [fieldsInvalid, setFieldsInvalid] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const fullNameRef = useRef<HTMLInputElement>(null)
+  const focusFieldError = useErrorFocus(fullNameRef)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    setFieldsInvalid(false)
 
     try {
       const subscription = await prepareBrowserPushSubscription(
@@ -45,11 +58,14 @@ function ProbationApplicationPage() {
       setEmail('')
       setMotivation('')
     } catch (submitError) {
+      const fieldError = isApplicationFieldError(submitError)
       setError(
         submitError instanceof PushSetupError
           ? PUSH_ERROR_TEXT[submitError.reason]
           : toFriendlyProbationApplicationError(submitError),
       )
+      setFieldsInvalid(fieldError)
+      if (fieldError) focusFieldError()
     }
   }
 
@@ -87,12 +103,18 @@ function ProbationApplicationPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           Navn
           <input
+            id="probation-full-name"
+            ref={fullNameRef}
             type="text"
             required
             maxLength={200}
             autoComplete="name"
             value={fullName}
             onChange={(event) => setFullName(event.target.value)}
+            aria-invalid={fieldsInvalid ? true : undefined}
+            aria-describedby={
+              fieldsInvalid ? 'probation-application-error' : undefined
+            }
             className="rounded border border-green-300 px-3 py-2 text-base"
           />
         </label>
@@ -100,12 +122,17 @@ function ProbationApplicationPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           E-mail
           <input
+            id="probation-email"
             type="email"
             required
             maxLength={320}
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            aria-invalid={fieldsInvalid ? true : undefined}
+            aria-describedby={
+              fieldsInvalid ? 'probation-application-error' : undefined
+            }
             className="rounded border border-green-300 px-3 py-2 text-base"
           />
         </label>
@@ -113,17 +140,26 @@ function ProbationApplicationPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           Hvorfor vil du være med?
           <textarea
+            id="probation-motivation"
             required
             maxLength={5000}
             rows={5}
             value={motivation}
             onChange={(event) => setMotivation(event.target.value)}
+            aria-invalid={fieldsInvalid ? true : undefined}
+            aria-describedby={
+              fieldsInvalid ? 'probation-application-error' : undefined
+            }
             className="rounded border border-green-300 px-3 py-2 text-base"
           />
         </label>
 
         {error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p
+            id="probation-application-error"
+            role={fieldsInvalid ? undefined : 'alert'}
+            className="text-sm text-red-700"
+          >
             {error}
           </p>
         )}

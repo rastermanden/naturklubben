@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import {
@@ -10,6 +10,7 @@ import {
   toFriendlyLinkError,
 } from '../features/auth/authErrors'
 import { useAuth } from '../features/auth/useAuth'
+import { useErrorFocus } from '../hooks/useErrorFocus'
 
 /**
  * Landingssiden for linket i nulstillingsmailen (`/ny-adgangskode`).
@@ -26,7 +27,14 @@ function ResetPasswordPage() {
   const [password, setPassword] = useState('')
   const [repeated, setRepeated] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [errorField, setErrorField] = useState<'password' | 'repeated' | null>(
+    null,
+  )
   const [submitting, setSubmitting] = useState(false)
+  const passwordRef = useRef<HTMLInputElement>(null)
+  const repeatedRef = useRef<HTMLInputElement>(null)
+  const focusPasswordError = useErrorFocus(passwordRef)
+  const focusRepeatedError = useErrorFocus(repeatedRef)
 
   useEffect(() => clearAuthCallbackParams(), [])
 
@@ -34,9 +42,12 @@ function ResetPasswordPage() {
     event.preventDefault()
     if (password !== repeated) {
       setError('De to adgangskoder er ikke ens.')
+      setErrorField('repeated')
+      focusRepeatedError()
       return
     }
     setError(null)
+    setErrorField(null)
     setSubmitting(true)
 
     const { error: updateError } = await supabase.auth.updateUser({ password })
@@ -44,6 +55,10 @@ function ResetPasswordPage() {
     setSubmitting(false)
     if (updateError) {
       setError(toFriendlyAuthError(updateError.message))
+      if (updateError.message === 'Password should be at least 6 characters') {
+        setErrorField('password')
+        focusPasswordError()
+      }
       return
     }
     // Sessionen fra mail-linket er en helt almindelig session, så brugeren er
@@ -91,12 +106,18 @@ function ResetPasswordPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           Ny adgangskode
           <input
+            id="reset-password"
+            ref={passwordRef}
             type="password"
             required
             minLength={6}
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            aria-invalid={errorField === 'password' ? true : undefined}
+            aria-describedby={
+              errorField === 'password' ? 'reset-password-error' : undefined
+            }
             className="rounded border border-green-300 px-3 py-2 text-base"
           />
         </label>
@@ -104,18 +125,28 @@ function ResetPasswordPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           Gentag adgangskoden
           <input
+            id="reset-password-repeated"
+            ref={repeatedRef}
             type="password"
             required
             minLength={6}
             autoComplete="new-password"
             value={repeated}
             onChange={(event) => setRepeated(event.target.value)}
+            aria-invalid={errorField === 'repeated' ? true : undefined}
+            aria-describedby={
+              errorField === 'repeated' ? 'reset-password-error' : undefined
+            }
             className="rounded border border-green-300 px-3 py-2 text-base"
           />
         </label>
 
         {error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p
+            id="reset-password-error"
+            role={errorField ? undefined : 'alert'}
+            className="text-sm text-red-700"
+          >
             {error}
           </p>
         )}

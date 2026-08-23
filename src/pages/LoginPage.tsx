@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { toFriendlyAuthError } from '../features/auth/authErrors'
+import { useErrorFocus } from '../hooks/useErrorFocus'
 
 function LoginPage() {
   const navigate = useNavigate()
@@ -9,13 +10,19 @@ function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [errorField, setErrorField] = useState<'email' | 'credentials' | null>(
+    null,
+  )
   const [submitting, setSubmitting] = useState(false)
+  const emailRef = useRef<HTMLInputElement>(null)
+  const focusEmailError = useErrorFocus(emailRef)
 
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    setErrorField(null)
     setSubmitting(true)
 
     const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -26,6 +33,13 @@ function LoginPage() {
     setSubmitting(false)
     if (signInError) {
       setError(toFriendlyAuthError(signInError.message))
+      if (signInError.message === 'Invalid login credentials') {
+        setErrorField('credentials')
+        focusEmailError()
+      } else if (signInError.message === 'Email not confirmed') {
+        setErrorField('email')
+        focusEmailError()
+      }
       return
     }
     navigate(from, { replace: true })
@@ -39,11 +53,15 @@ function LoginPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           E-mail
           <input
+            id="login-email"
+            ref={emailRef}
             type="email"
             required
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            aria-invalid={errorField ? true : undefined}
+            aria-describedby={errorField ? 'login-error' : undefined}
             className="rounded border border-green-300 px-3 py-2 text-base"
           />
         </label>
@@ -51,17 +69,26 @@ function LoginPage() {
         <label className="flex flex-col gap-1 text-sm text-green-900">
           Adgangskode
           <input
+            id="login-password"
             type="password"
             required
             autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            aria-invalid={errorField === 'credentials' ? true : undefined}
+            aria-describedby={
+              errorField === 'credentials' ? 'login-error' : undefined
+            }
             className="rounded border border-green-300 px-3 py-2 text-base"
           />
         </label>
 
         {error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p
+            id="login-error"
+            role={errorField ? undefined : 'alert'}
+            className="text-sm text-red-700"
+          >
             {error}
           </p>
         )}
