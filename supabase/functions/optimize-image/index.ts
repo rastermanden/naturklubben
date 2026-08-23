@@ -13,7 +13,7 @@
 // encodeJPEG er tilgængelig i den faktisk deploybare version.
 //
 // Bruger Secret key til at omgå RLS, så den kan skrive optimerede filer
-// og opdatere photos-rækken. Kalderen valideres først mod rækkens ejer, og
+// og opdatere photos-rækken. Kalderen valideres først som ejer eller admin, og
 // profiles.deletion_reserved_at kontrolleres både før og efter det dyre
 // billedarbejde. Den dobbelte kontrol forhindrer, at en optimering, der allerede
 // kørte, efterlader nye filer efter delete-account har tømt brugerens præfiks.
@@ -266,15 +266,27 @@ Deno.serve(async (req) => {
 
       const deletion = (deletionRows?.[0] ?? null) as ClaimedDeletion | null
       if (!deletion) {
-        const { data: existing } = await supabase
-          .from('photos')
-          .select('optimization_status')
-          .eq('id', photoId)
-          .eq('uploaded_by', user.id)
-          .maybeSingle<{ optimization_status: string }>()
-        if (!existing) {
+        const [{ data: existing }, { data: actor }] = await Promise.all([
+          supabase
+            .from('photos')
+            .select('uploaded_by, optimization_status')
+            .eq('id', photoId)
+            .maybeSingle<{
+              uploaded_by: string
+              optimization_status: string
+            }>(),
+          supabase
+            .from('profiles')
+            .select('is_admin')
+            .eq('id', user.id)
+            .maybeSingle<{ is_admin: boolean }>(),
+        ])
+        if (
+          !existing ||
+          (existing.uploaded_by !== user.id && actor?.is_admin !== true)
+        ) {
           return jsonResponse(
-            { error: 'Billedet findes ikke eller tilhører ikke dig' },
+            { error: 'Billedet findes ikke, eller du må ikke slette det' },
             403,
           )
         }
