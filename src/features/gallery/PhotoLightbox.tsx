@@ -74,6 +74,14 @@ export function PhotoLightbox({
     >
       <button
         type="button"
+        onClick={handleShareClick}
+        className="absolute top-4 left-4 min-h-11 rounded border border-white px-4 py-2 text-white"
+      >
+        Del link
+      </button>
+
+      <button
+        type="button"
         onClick={onClose}
         aria-label="Luk"
         className="absolute top-4 right-4 flex h-11 w-11 items-center justify-center rounded text-2xl text-white"
@@ -100,13 +108,6 @@ export function PhotoLightbox({
       )}
 
       <div className="flex flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          onClick={handleShareClick}
-          className="min-h-11 rounded border border-white px-4 py-2 text-white"
-        >
-          Del link
-        </button>
         {isOwner && (
           <button
             type="button"
