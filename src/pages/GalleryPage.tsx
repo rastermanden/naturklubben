@@ -16,6 +16,7 @@ import {
   WITHOUT_EVENT_FILTER,
 } from '../features/gallery/gallerySearchParams'
 import { useRetryPhotoOptimization } from '../features/gallery/useRetryPhotoOptimization'
+import { useAutoOptimizePendingPhotos } from '../features/gallery/useAutoOptimizePendingPhotos'
 import type { Photo } from '../features/gallery/types'
 
 const EMPTY_PHOTOS: Photo[] = []
@@ -49,6 +50,7 @@ function GalleryPage() {
   const sharedPhotoId = searchParams.get('photo')
   const eventFilter = searchParams.get('event')
   const photos = photosQuery.data ?? EMPTY_PHOTOS
+  useAutoOptimizePendingPhotos(photos)
   const filteredPhotos = useMemo(
     () => filterPhotosByEvent(photos, eventFilter),
     [eventFilter, photos],
