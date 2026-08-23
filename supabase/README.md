@@ -93,6 +93,15 @@ Oprettet manuelt i #2:
   kalde den interne RPC direkte.
 - Fælles VAPID- og Web Push-kode ligger i `supabase/functions/_shared/`, så chat og
   prøvemedlemskaber bruger præcis samme afsendernøgle og krypteringskode.
+- Fælles CORS-håndtering ligger i `supabase/functions/_shared/cors.ts`. Den tillader
+  appens GitHub Pages-origin (`https://rastermanden.github.io`), som både produktion
+  og alle `/naturklubben/pr-preview/pr-<nr>/`-previews deler, samt localhost/loopback
+  på vilkårlige porte til lokal udvikling. Requests uden `Origin` forbliver tilladt
+  til kalenderklienter, database-hooks og tests; browserrequests fra andre origins
+  afvises med 403, også før den egentlige function-handler kører. Eventuelle senere
+  eksakte app-origins kan tilføjes kommasepareret uden sti eller afsluttende skråstreg i
+  function-miljøvariablen `CORS_ALLOWED_ORIGINS`; preview-stier skal ikke tilføjes, da
+  CORS kun ser origin.
 - `delete-account` (#86): kræver standard gateway-JWT, validerer tokenet igen med
   `auth.getUser`, kræver den eksakte bekræftelsestekst og afviser sessioner, hvis
   `last_sign_in_at` er mere end fem minutter gammel. Klienten genautentificerer med
