@@ -1,4 +1,5 @@
 -- Pålidelige Web Push-notifikationer for prøvemedlemskaber (#82).
+-- Versionsnummeret er valgt efter kontrol af samtidige åbne PR-migrations.
 --
 -- Ansøgningen og dens leveringsstatus gemmes i samme transaktion. Selve push-
 -- kaldet sker bagefter i probation-notifications-edge-functionen, fordi et
