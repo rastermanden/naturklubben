@@ -10,7 +10,7 @@
 //
 // GET /functions/v1/calendar-feed  -> text/calendar
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
 import { handleCors } from '../_shared/cors.ts'
 import { generateIcal } from '../_shared/ical.ts'
 

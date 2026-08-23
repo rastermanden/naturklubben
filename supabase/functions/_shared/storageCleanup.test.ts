@@ -9,7 +9,7 @@
 // bruger, ikke hele SDK'ets type.
 
 import { strict as assert } from 'node:assert'
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.112.3'
 import { removeAllUnderPrefix } from './storageCleanup.ts'
 
 interface FakeEntry {

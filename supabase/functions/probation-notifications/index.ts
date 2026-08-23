@@ -4,7 +4,7 @@
 // pending/sending/sent/failed-status; functionen ejer kun HTTP-kaldene til
 // browsernes push-tjenester og bruger den auto-injicerede Secret key.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
 import { handleCors } from '../_shared/cors.ts'
 import { getVapidDetails } from '../_shared/vapid.ts'
 import { sendPushNotification } from '../_shared/webpush.ts'

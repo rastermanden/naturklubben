@@ -38,8 +38,8 @@ jobs:
       - name: Test Edge Function-hjælpere
         run: deno test supabase/functions/_shared/*.test.ts
 
-      - name: Typecheck kontohandlinger
-        run: deno check supabase/functions/delete-account/index.ts supabase/functions/export-account/index.ts
+      - name: Typecheck Edge Functions
+        run: deno check supabase/functions/*/index.ts
 
       - name: Test
         run: npm test

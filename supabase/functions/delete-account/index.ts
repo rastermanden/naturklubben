@@ -39,7 +39,7 @@
 // event_attendance, allowed_emails, probation_applications) rydder sig selv
 // via ON DELETE CASCADE/triggeren, når (5) lykkes -- se samme migration.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
 import { handleCors } from '../_shared/cors.ts'
 import { removeAllUnderPrefix } from '../_shared/storageCleanup.ts'
 import { isRecentLogin } from '../_shared/recentLogin.ts'

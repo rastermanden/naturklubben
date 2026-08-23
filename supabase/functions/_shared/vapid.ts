@@ -18,7 +18,7 @@
 // ikke en hemmelighed per bruger. Den private del bliver i Edge Function-miljøet
 // og i en tabel, hvor kun service-role kan læse (RLS uden policies + revoke).
 
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.112.3'
 import { bytesToBase64Url, type VapidDetails } from './webpush.ts'
 
 // RFC 8292 kræver et kontaktpunkt, så push-tjenesten kan række ud, hvis vi
