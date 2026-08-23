@@ -10,11 +10,15 @@ const message: Message = {
   user_id: 'member-2',
   content: 'God idé!',
   created_at: '2026-08-23T12:01:00.000Z',
+  deleted_at: null,
+  deleted_by: null,
   reply_to_message_id: 'message-1',
   reply_to: {
     id: 'message-1',
     user_id: 'member-1',
     content: 'Vi mødes ved søen.',
+    deleted_at: null,
+    deleted_by: null,
   },
 }
 
@@ -181,5 +185,58 @@ describe('MessageBubble', () => {
 
     expect(screen.getByText('Tidligere medlem')).toBeTruthy()
     expect(screen.getByText('Fælles historik')).toBeTruthy()
+  })
+
+  it('shows an admin tombstone without reply or delete actions', () => {
+    render(
+      <MessageBubble
+        message={{
+          ...message,
+          content: '',
+          deleted_at: '2026-08-23T12:02:00.000Z',
+          deleted_by: 'admin-1',
+          reply_to_message_id: null,
+          reply_to: null,
+        }}
+        author={author}
+        replyAuthor={undefined}
+        isOwn={false}
+        canDelete
+        onReply={vi.fn()}
+        onDelete={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Beskeden er slettet.')).toBeTruthy()
+    expect(screen.getByText('Slettet af en administrator.')).toBeTruthy()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByText('God idé!')).toBeNull()
+  })
+
+  it('replaces a deleted reply preview instead of exposing its old content', () => {
+    render(
+      <MessageBubble
+        message={{
+          ...message,
+          reply_to: {
+            ...message.reply_to!,
+            content: '',
+            deleted_at: '2026-08-23T12:02:00.000Z',
+            deleted_by: 'member-1',
+          },
+        }}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Beskeden er slettet.')).toBeTruthy()
+    expect(screen.queryByText('Vi mødes ved søen.')).toBeNull()
   })
 })

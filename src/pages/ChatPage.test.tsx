@@ -7,12 +7,16 @@ const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
   toggleReaction: vi.fn(),
   reactions: [] as { message_id: string; user_id: string; emoji: string }[],
+  deleteMutate: vi.fn(),
+  isAdmin: false,
   messages: [
     {
       id: 'message-1',
       user_id: 'other-member',
       content: 'Skal vi mødes ved søen?',
       created_at: '2026-08-23T12:00:00.000Z',
+      deleted_at: null,
+      deleted_by: null,
       reply_to_message_id: null,
       reply_to: null,
     },
@@ -35,6 +39,11 @@ vi.mock('../features/chat/useMessages', () => ({
       mutate: mocks.mutate,
       isPending: false,
     },
+    deleteMessage: {
+      mutate: mocks.deleteMutate,
+      isPending: false,
+      variables: undefined,
+    },
   }),
 }))
 
@@ -43,6 +52,10 @@ vi.mock('../features/chat/useReactions', () => ({
     reactions: mocks.reactions,
     toggleReaction: { mutate: mocks.toggleReaction },
   }),
+}))
+
+vi.mock('../features/admin/useIsAdmin', () => ({
+  useIsAdmin: () => ({ isAdmin: mocks.isAdmin, loading: false }),
 }))
 
 vi.mock('../features/chat/useProfilesMap', () => ({
@@ -74,12 +87,16 @@ beforeEach(() => {
   mocks.mutate.mockReset()
   mocks.toggleReaction.mockReset()
   mocks.reactions = []
+  mocks.deleteMutate.mockReset()
+  mocks.isAdmin = false
   mocks.messages = [
     {
       id: 'message-1',
       user_id: 'other-member',
       content: 'Skal vi mødes ved søen?',
       created_at: '2026-08-23T12:00:00.000Z',
+      deleted_at: null,
+      deleted_by: null,
       reply_to_message_id: null,
       reply_to: null,
     },
@@ -87,7 +104,10 @@ beforeEach(() => {
   HTMLElement.prototype.scrollTo = vi.fn()
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 describe('ChatPage replies', () => {
   it('selects and cancels a reply while keeping focus in the composer', () => {
@@ -195,6 +215,8 @@ describe('ChatPage live updates', () => {
         user_id: 'other-member',
         content: 'Ny besked',
         created_at: '2026-08-23T12:01:00.000Z',
+        deleted_at: null,
+        deleted_by: null,
         reply_to_message_id: null,
         reply_to: null,
       },
@@ -202,5 +224,49 @@ describe('ChatPage live updates', () => {
     rerender(<ChatPage />)
 
     expect(screen.getByRole('status').textContent).toBe('1 ny besked')
+  })
+})
+
+describe('ChatPage deletion authorization', () => {
+  it('lets a member delete only their own message after confirmation', () => {
+    mocks.messages = [
+      ...mocks.messages,
+      {
+        ...mocks.messages[0],
+        id: 'own-message',
+        user_id: 'current-member',
+        content: 'Min besked',
+      },
+    ]
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<ChatPage />)
+
+    expect(
+      screen.queryByRole('button', { name: 'Slet besked fra Ada' }),
+    ).toBeNull()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Slet besked fra Medlem' }),
+    )
+
+    expect(confirm.mock.calls[0]?.[0]).toContain('kan ikke gendannes')
+    expect(mocks.deleteMutate).toHaveBeenCalledWith(
+      'own-message',
+      expect.objectContaining({ onError: expect.any(Function) }),
+    )
+  })
+
+  it('lets an administrator moderate another member message', () => {
+    mocks.isAdmin = true
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<ChatPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Slet besked fra Ada' }))
+
+    expect(confirm.mock.calls[0]?.[0]).toContain('som administrator')
+    expect(mocks.deleteMutate).toHaveBeenCalledWith(
+      'message-1',
+      expect.objectContaining({ onError: expect.any(Function) }),
+    )
   })
 })

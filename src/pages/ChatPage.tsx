@@ -11,6 +11,7 @@ import {
 import { useOnlinePresence } from '../features/chat/useOnlinePresence'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
+import { useIsAdmin } from '../features/admin/useIsAdmin'
 import type { Message } from '../features/chat/useMessages'
 
 const MAX_MESSAGE_LENGTH = 2000
@@ -19,7 +20,8 @@ const SCROLL_BOTTOM_THRESHOLD = 80
 function ChatPage() {
   const { session } = useAuth()
   const userId = session!.user.id
-  const { messagesQuery, sendMessage } = useMessages()
+  const { messagesQuery, sendMessage, deleteMessage } = useMessages()
+  const { isAdmin } = useIsAdmin()
   const { data: profiles, refetch: refetchProfiles } = useProfilesMap()
   const onlineUserIds = useOnlinePresence(userId)
   const messages = messagesQuery.data ?? []
@@ -31,9 +33,10 @@ function ChatPage() {
 
   const [draft, setDraft] = useState('')
   const [sendError, setSendError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [newMessageCount, setNewMessageCount] = useState(0)
   const [isNearBottom, setIsNearBottom] = useState(true)
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const [replyingToId, setReplyingToId] = useState<string | null>(null)
 
   function nameOf(id: string) {
     return profiles?.[id]?.full_name ?? 'Medlem'
@@ -43,6 +46,8 @@ function ChatPage() {
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const previousMessageCount = useRef(0)
   const lookedUpAuthorIds = useRef(new Set<string>())
+  const replyingTo =
+    messages.find((message) => message.id === replyingToId) ?? null
   const replyingToName =
     replyingTo?.user_id === null
       ? 'Tidligere medlem'
@@ -65,6 +70,10 @@ function ChatPage() {
     unknownAuthorIds.forEach((id) => lookedUpAuthorIds.current.add(id))
     void refetchProfiles()
   }, [messagesQuery.data, profiles, refetchProfiles])
+
+  useEffect(() => {
+    if (replyingTo?.deleted_at) setReplyingToId(null)
+  }, [replyingTo])
 
   function scrollToBottom(behavior: ScrollBehavior) {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior })
@@ -114,8 +123,8 @@ function ChatPage() {
       { userId, content, replyToMessageId },
       {
         onSuccess: () =>
-          setReplyingTo((current) =>
-            current?.id === replyToMessageId ? null : current,
+          setReplyingToId((current) =>
+            current === replyToMessageId ? null : current,
           ),
         onError: () => {
           setDraft((current) => current || content)
@@ -139,13 +148,27 @@ function ChatPage() {
   }
 
   function selectReply(message: Message) {
-    setReplyingTo(message)
+    if (message.deleted_at) return
+    setReplyingToId(message.id)
     draftRef.current?.focus()
   }
 
   function cancelReply() {
-    setReplyingTo(null)
+    setReplyingToId(null)
     draftRef.current?.focus()
+  }
+
+  function deleteSelectedMessage(message: Message) {
+    const moderation = message.user_id !== userId
+    const confirmation = moderation
+      ? 'Vil du fjerne denne besked som administrator? Det oprindelige indhold slettes permanent og kan ikke gendannes.'
+      : 'Vil du slette din besked? Det oprindelige indhold slettes permanent og kan ikke gendannes.'
+    if (!window.confirm(confirmation)) return
+
+    setDeleteError(null)
+    deleteMessage.mutate(message.id, {
+      onError: () => setDeleteError('Beskeden kunne ikke slettes. Prøv igen.'),
+    })
   }
 
   function handleSubmit(event: React.FormEvent) {
@@ -226,6 +249,11 @@ function ChatPage() {
                     : undefined
                 }
                 isOwn={message.user_id === userId}
+                canDelete={message.user_id === userId || isAdmin}
+                isDeleting={
+                  deleteMessage.isPending &&
+                  deleteMessage.variables === message.id
+                }
                 onReply={selectReply}
                 reactions={summarizeReactions(
                   reactionsByMessage.get(message.id),
@@ -233,6 +261,7 @@ function ChatPage() {
                   nameOf,
                 )}
                 onToggleReaction={reactTo}
+                onDelete={deleteSelectedMessage}
               />
             ))}
           </ul>
@@ -310,6 +339,11 @@ function ChatPage() {
       {sendError && (
         <p role="alert" className="text-sm text-red-700">
           {sendError}
+        </p>
+      )}
+      {deleteError && (
+        <p role="alert" className="text-sm text-red-700">
+          {deleteError}
         </p>
       )}
     </main>

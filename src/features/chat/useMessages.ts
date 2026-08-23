@@ -7,6 +7,8 @@ export interface Message {
   user_id: string | null
   content: string
   created_at: string
+  deleted_at: string | null
+  deleted_by: string | null
   reply_to_message_id: string | null
   reply_to: ReplyPreview | null
 }
@@ -15,6 +17,8 @@ export interface ReplyPreview {
   id: string
   user_id: string | null
   content: string
+  deleted_at: string | null
+  deleted_by: string | null
 }
 
 interface MessageRow {
@@ -22,6 +26,8 @@ interface MessageRow {
   user_id: string | null
   content: string
   created_at: string
+  deleted_at?: string | null
+  deleted_by?: string | null
   reply_to_message_id?: string | null
   reply_to?: ReplyPreview | ReplyPreview[] | null
 }
@@ -33,11 +39,15 @@ const messageFields = `
   user_id,
   content,
   created_at,
+  deleted_at,
+  deleted_by,
   reply_to_message_id,
   reply_to:messages!messages_reply_to_message_id_fkey (
     id,
     user_id,
-    content
+    content,
+    deleted_at,
+    deleted_by
   )
 `
 
@@ -51,6 +61,8 @@ export function normalizeMessage(row: MessageRow): Message {
     user_id: row.user_id,
     content: row.content,
     created_at: row.created_at,
+    deleted_at: row.deleted_at ?? null,
+    deleted_by: row.deleted_by ?? null,
     reply_to_message_id: row.reply_to_message_id ?? null,
     reply_to: replyTo,
   }
@@ -71,6 +83,8 @@ function previewOf(message: ReplyPreview): ReplyPreview {
     id: message.id,
     user_id: message.user_id,
     content: message.content,
+    deleted_at: message.deleted_at,
+    deleted_by: message.deleted_by,
   }
 }
 
@@ -113,6 +127,27 @@ export function removeMessage(
         ? { ...message, reply_to_message_id: null, reply_to: null }
         : message,
     )
+}
+
+export function updateMessage(
+  current: Message[] | undefined,
+  incoming: MessageRow,
+): Message[] | undefined {
+  if (!current) return current
+
+  const existing = current.find((message) => message.id === incoming.id)
+  const updated = normalizeMessage({
+    ...incoming,
+    reply_to: incoming.reply_to ?? existing?.reply_to,
+  })
+
+  return current.map((message) => {
+    if (message.id === updated.id) return updated
+    if (message.reply_to_message_id === updated.id) {
+      return { ...message, reply_to: previewOf(updated) }
+    }
+    return message
+  })
 }
 
 /**
@@ -158,11 +193,8 @@ export function useMessages() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages' },
         (payload) => {
-          const updated = payload.new as Message
           queryClient.setQueryData<Message[]>(queryKey, (current) =>
-            current?.map((message) =>
-              message.id === updated.id ? updated : message,
-            ),
+            updateMessage(current, payload.new as MessageRow),
           )
         },
       )
@@ -213,5 +245,15 @@ export function useMessages() {
     },
   })
 
-  return { messagesQuery, sendMessage }
+  const deleteMessage = useMutation({
+    mutationFn: async (messageId: string) => {
+      const { error } = await supabase.rpc('soft_delete_message', {
+        p_message_id: messageId,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+  })
+
+  return { messagesQuery, sendMessage, deleteMessage }
 }

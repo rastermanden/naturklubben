@@ -4,6 +4,7 @@ import {
   needsReplyRefetch,
   normalizeMessage,
   removeMessage,
+  updateMessage,
   type Message,
 } from './useMessages'
 
@@ -14,6 +15,8 @@ const parent: Message = {
   user_id: 'member-1',
   content: 'Vi mødes ved søen.',
   created_at: '2026-08-23T12:00:00.000Z',
+  deleted_at: null,
+  deleted_by: null,
   reply_to_message_id: null,
   reply_to: null,
 }
@@ -31,6 +34,8 @@ describe('message reply data', () => {
           id: parent.id,
           user_id: parent.user_id,
           content: parent.content,
+          deleted_at: null,
+          deleted_by: null,
         },
       ],
     })
@@ -39,6 +44,8 @@ describe('message reply data', () => {
       id: parent.id,
       user_id: parent.user_id,
       content: parent.content,
+      deleted_at: null,
+      deleted_by: null,
     })
   })
 
@@ -48,6 +55,8 @@ describe('message reply data', () => {
       user_id: 'member-2',
       content: 'God idé!',
       created_at: '2026-08-23T12:01:00.000Z',
+      deleted_at: null,
+      deleted_by: null,
       reply_to_message_id: parent.id,
     })
 
@@ -59,6 +68,8 @@ describe('message reply data', () => {
           id: parent.id,
           user_id: parent.user_id,
           content: parent.content,
+          deleted_at: null,
+          deleted_by: null,
         },
       },
     ])
@@ -87,16 +98,55 @@ describe('message reply data', () => {
       user_id: 'member-2',
       content: 'God idé!',
       created_at: '2026-08-23T12:01:00.000Z',
+      deleted_at: null,
+      deleted_by: null,
       reply_to_message_id: parent.id,
       reply_to: {
         id: parent.id,
         user_id: parent.user_id,
         content: parent.content,
+        deleted_at: null,
+        deleted_by: null,
       },
     }
 
     expect(removeMessage([parent, reply], parent.id)).toEqual([
       { ...reply, reply_to_message_id: null, reply_to: null },
     ])
+  })
+
+  it('clears every cached reply preview when its parent is soft-deleted', () => {
+    const reply: Message = {
+      id: 'message-2',
+      user_id: 'member-2',
+      content: 'God idé!',
+      created_at: '2026-08-23T12:01:00.000Z',
+      deleted_at: null,
+      deleted_by: null,
+      reply_to_message_id: parent.id,
+      reply_to: {
+        id: parent.id,
+        user_id: parent.user_id,
+        content: parent.content,
+        deleted_at: null,
+        deleted_by: null,
+      },
+    }
+
+    const result = updateMessage([parent, reply], {
+      ...parent,
+      content: '',
+      deleted_at: '2026-08-23T12:02:00.000Z',
+      deleted_by: 'admin-1',
+    })
+
+    expect(result?.[0].content).toBe('')
+    expect(result?.[1].reply_to).toEqual({
+      id: parent.id,
+      user_id: parent.user_id,
+      content: '',
+      deleted_at: '2026-08-23T12:02:00.000Z',
+      deleted_by: 'admin-1',
+    })
   })
 })
