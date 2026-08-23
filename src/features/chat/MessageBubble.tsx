@@ -12,17 +12,23 @@ export function MessageBubble({
   author,
   replyAuthor,
   isOwn,
+  canDelete,
+  isDeleting = false,
   onReply,
   reactions,
   onToggleReaction,
+  onDelete,
 }: {
   message: Message
   author: ProfileSummary | undefined
   replyAuthor: ProfileSummary | undefined
   isOwn: boolean
+  canDelete?: boolean
+  isDeleting?: boolean
   onReply: (message: Message) => void
   reactions: ReactionSummary[]
   onToggleReaction: (message: Message, emoji: string) => void
+  onDelete?: (message: Message) => void
 }) {
   const [, forceUpdate] = useState(0)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -43,6 +49,12 @@ export function MessageBubble({
       : (replyAuthor?.full_name ?? 'Medlem')
   const replyExcerpt = message.reply_to?.content.trim().replace(/\s+/g, ' ')
   const textColor = isOwn ? readableTextColor(color) : '#052e16'
+  const isDeleted = message.deleted_at !== null
+  const wasDeletedByAdmin =
+    isDeleted &&
+    message.deleted_by !== null &&
+    message.deleted_by !== message.user_id
+  const replyWasDeleted = Boolean(message.reply_to?.deleted_at)
 
   return (
     <li className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
@@ -70,7 +82,9 @@ export function MessageBubble({
           >
             <p className="text-xs font-semibold">{replyName}</p>
             <p className="line-clamp-2 opacity-80">
-              {replyExcerpt || 'Den oprindelige besked er ikke tilgængelig.'}
+              {replyWasDeleted
+                ? 'Beskeden er slettet.'
+                : replyExcerpt || 'Den oprindelige besked er ikke tilgængelig.'}
             </p>
           </blockquote>
         )}
@@ -79,45 +93,67 @@ export function MessageBubble({
         >
           {name}
         </p>
-        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        {isDeleted ? (
+          <div className="py-1 text-sm italic opacity-75">
+            <p>Beskeden er slettet.</p>
+            {wasDeletedByAdmin && <p>Slettet af en administrator.</p>}
+          </div>
+        ) : (
+          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        )}
         <p className="mt-1 text-right text-xs" title={fullTimestamp}>
           {formatRelativeTime(message.created_at)}
         </p>
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onReply(message)}
-            aria-label={`Svar på besked fra ${name}`}
-            className="mt-1 min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
-          >
-            Svar
-          </button>
-          <button
-            type="button"
-            onClick={() => setPickerOpen((open) => !open)}
-            aria-expanded={pickerOpen}
-            aria-label={`Reagér på besked fra ${name}`}
-            className="mt-1 min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
-          >
-            Reagér
-          </button>
-        </div>
+        {!isDeleted && (
+          <>
+            <div className="mt-1 flex flex-wrap items-center justify-end gap-1">
+              <button
+                type="button"
+                onClick={() => onReply(message)}
+                aria-label={`Svar på besked fra ${name}`}
+                className="min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current disabled:opacity-50"
+              >
+                Svar
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerOpen((open) => !open)}
+                aria-expanded={pickerOpen}
+                aria-label={`Reagér på besked fra ${name}`}
+                className="min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+              >
+                Reagér
+              </button>
+              {canDelete && onDelete && (
+                <button
+                  type="button"
+                  onClick={() => onDelete(message)}
+                  disabled={isDeleting}
+                  aria-label={`Slet besked fra ${name}`}
+                  className="min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current disabled:opacity-50"
+                >
+                  {isDeleting ? 'Sletter…' : 'Slet'}
+                </button>
+              )}
+            </div>
 
-        {pickerOpen && (
-          <ReactionPicker
-            summaries={reactions}
-            onToggle={(emoji) => {
-              onToggleReaction(message, emoji)
-              setPickerOpen(false)
-            }}
-          />
+            {pickerOpen && (
+              <ReactionPicker
+                summaries={reactions}
+                onToggle={(emoji) => {
+                  onToggleReaction(message, emoji)
+                  setPickerOpen(false)
+                }}
+              />
+            )}
+
+            <MessageReactions
+              summaries={reactions}
+              isOwn={isOwn}
+              onToggle={(emoji) => onToggleReaction(message, emoji)}
+            />
+          </>
         )}
-
-        <MessageReactions
-          summaries={reactions}
-          isOwn={isOwn}
-          onToggle={(emoji) => onToggleReaction(message, emoji)}
-        />
       </div>
     </li>
   )
