@@ -96,6 +96,22 @@ lokale terminal. Derfor gælder:
   `VITE_SUPABASE_PUBLISHABLE_KEY` er tomme, og `vite.config.ts` afviser at udgive en
   app-løs bundle.
 
+## Branch-oprydning
+
+- `cleanup-branches.yml` sletter branches, hvis arbejde allerede er i `main`: PR'ens egen
+  branch ryger, så snart PR'en merges (også ved squash-merge), og en ugentlig kørsel fejer
+  resten op. Beskyttede branches, `main`, `gh-pages` og branches med en åben PR røres ikke.
+- Den ugentlige kørsel rører kun branches, hvis seneste commit er mindst 7 dage gammel.
+  Aldersgrænsen findes, fordi en nyoprettet branch uden egne commits peger på `main` og
+  derfor teknisk set tæller som merged — uden grænsen ville den blive slettet under
+  fødderne på den session, der lige har oprettet den.
+- Skal der ryddes op med det samme, køres workflowet manuelt (Actions → Ryd op i merged
+  branches → Run workflow) med `min_age_days` sat ned og evt. `dry_run` slået til først.
+- **Slet aldrig branches ved at køre `git push origin --delete` manuelt.** Det er ikke en
+  smagssag: sessionens git-proxy afviser ref-sletninger med HTTP 403, og skriveadgang til
+  `git/refs` i GitHub's API er blokeret samme sted. Oprydning sker via workflowet, som
+  kører i GitHub's egne runners.
+
 ## Secrets/nøgler
 
 - **Klient** (bygges ind i frontend): `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY`.

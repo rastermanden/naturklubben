@@ -1,0 +1,170 @@
+name: Ryd op i merged branches
+
+# Sletter branches, hvis arbejde allerede er i main. To veje ind:
+#
+#   1. Når en PR merges, slettes dens branch med det samme. Det dækker også
+#      squash- og rebase-merges, hvor branchens commits ikke er ancestors af
+#      main og derfor aldrig ville blive fanget af oprydningen nedenfor.
+#   2. En ugentlig oprydning (og manuel kørsel) fejer resten op: branches, der
+#      er fuldt merged ind i main, men blev efterladt -- fx fordi PR'en blev
+#      merget, før dette workflow fandtes.
+#
+# Sletningen sker her, i GitHub's egne runners, netop fordi det ellers ville
+# kræve, at nogen kørte `git push origin --delete` fra en terminal.
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    # Mandag kl. 04:17 UTC. Skævt minut, så den ikke rammer spidsbelastningen
+    # på hele timen, hvor GitHub udskyder cron-kørsler.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Vis kun hvad der ville blive slettet'
+        type: boolean
+        default: false
+      min_age_days:
+        description: 'Rør ikke branches, hvis seneste commit er nyere end så mange dage'
+        type: string
+        default: '7'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: cleanup-branches
+  cancel-in-progress: false
+
+jobs:
+  # PR'ens egen branch ryger, så snart den er merget.
+  slet-efter-merge:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      # Branch-navnet kommer fra en PR og kan indeholde hvad som helst, så det
+      # sendes ind som env-variabel og aldrig som ${{ }} direkte i shellen.
+      - name: Slet PR'ens branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "$BRANCH" = "$DEFAULT_BRANCH" ] || [ "$BRANCH" = "gh-pages" ]; then
+            echo "::notice::Springer $BRANCH over -- det er ikke en feature-branch."
+            exit 0
+          fi
+          if gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$BRANCH"; then
+            echo "Slettede $BRANCH"
+            echo "Slettede \`$BRANCH\` efter merge." >> "$GITHUB_STEP_SUMMARY"
+          else
+            # Fx hvis GitHub's egen "automatically delete head branches" allerede
+            # nåede det, eller branchen er beskyttet. Ingen af delene er en fejl.
+            echo "::notice::Kunne ikke slette $BRANCH -- den er formentlig slettet i forvejen."
+          fi
+
+  # Den ugentlige (eller manuelle) oprydning af alt det, der ligger tilbage.
+  ryd-op:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 -- hele historikken skal med, ellers kan git ikke afgøre,
+      # om en branch er merged ind i main.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find og slet merged branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          MIN_AGE_DAYS: ${{ inputs.min_age_days }}
+        run: |
+          set -euo pipefail
+
+          default_branch="${DEFAULT_BRANCH:-main}"
+          min_age_days="${MIN_AGE_DAYS:-7}"
+          min_age=$(( min_age_days * 86400 ))
+          now=$(date +%s)
+
+          # Eksplicit refspec: checkout@v4 sætter kun remote.origin.fetch bredt,
+          # når den henter hele historikken, og vi vil ikke være afhængige af det.
+          git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
+
+          # Branches vi aldrig rører: default-branchen, gh-pages (den er
+          # GitHub Pages' udgivelsesbranch og bliver aldrig merget ind i main),
+          # og alt hvad GitHub selv har markeret som beskyttet.
+          keep=$'\n'"$default_branch"$'\n'"gh-pages"$'\n'
+          keep+=$(gh api "repos/$GITHUB_REPOSITORY/branches" --paginate \
+                    --jq '.[] | select(.protected) | .name')$'\n'
+
+          # En branch med en åben PR er i brug, uanset at dens commits allerede
+          # måtte findes i main (fx en PR åbnet fra et punkt på main).
+          open_prs=$'\n'$(gh pr list --state open --limit 200 \
+                            --json headRefName --jq '.[].headRefName')$'\n'
+
+          slettet=0
+          sprunget=0
+          {
+            echo "## Oprydning i merged branches"
+            echo
+            echo "Grænse: seneste commit skal være mindst $min_age_days dag(e) gammel."
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # `--merged` betyder "branchens tip er en ancestor af main", altså at
+          # alle dens commits allerede findes i main. Squash-merges fanges ikke
+          # her -- de klares af slet-efter-merge-jobbet ovenfor.
+          for branch in $(git branch -r --merged "origin/$default_branch" \
+                            | grep -v ' -> ' \
+                            | sed 's#^[[:space:]]*origin/##'); do
+            if printf '%s' "$keep" | grep -qxF "$branch"; then
+              continue
+            fi
+            if printf '%s' "$open_prs" | grep -qxF "$branch"; then
+              echo "- \`$branch\` -- sprunget over (åben PR)" >> "$GITHUB_STEP_SUMMARY"
+              sprunget=$(( sprunget + 1 ))
+              continue
+            fi
+
+            # Aldersgrænsen beskytter en nyoprettet branch, der endnu ikke har
+            # sine egne commits: den peger på main og ville ellers tælle som
+            # "merged" og blive slettet under fødderne på den, der lige har
+            # oprettet den.
+            tip=$(git log -1 --format=%ct "origin/$branch")
+            if [ $(( now - tip )) -lt "$min_age" ]; then
+              echo "- \`$branch\` -- sprunget over (nyere end $min_age_days dag(e))" >> "$GITHUB_STEP_SUMMARY"
+              sprunget=$(( sprunget + 1 ))
+              continue
+            fi
+
+            if [ "${DRY_RUN:-false}" = "true" ]; then
+              echo "- \`$branch\` -- ville blive slettet" >> "$GITHUB_STEP_SUMMARY"
+              slettet=$(( slettet + 1 ))
+              continue
+            fi
+
+            if gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch"; then
+              echo "- \`$branch\` -- slettet" >> "$GITHUB_STEP_SUMMARY"
+              slettet=$(( slettet + 1 ))
+            else
+              echo "- \`$branch\` -- kunne **ikke** slettes" >> "$GITHUB_STEP_SUMMARY"
+              sprunget=$(( sprunget + 1 ))
+            fi
+          done
+
+          {
+            echo
+            if [ "${DRY_RUN:-false}" = "true" ]; then
+              echo "**$slettet** ville blive slettet, **$sprunget** sprunget over. (Tørkørsel -- intet er rørt.)"
+            else
+              echo "**$slettet** slettet, **$sprunget** sprunget over."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
