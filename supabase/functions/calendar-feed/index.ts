@@ -11,6 +11,7 @@
 // GET /functions/v1/calendar-feed  -> text/calendar
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { handleCors } from '../_shared/cors.ts'
 import { generateIcal } from '../_shared/ical.ts'
 
 const CALENDAR_REFRESH_INTERVAL = 'PT1H'
@@ -18,19 +19,15 @@ const CALENDAR_REFRESH_INTERVAL = 'PT1H'
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey',
-      },
-    })
-  }
+  const cors = handleCors(req, { methods: ['GET'] })
+  if (cors.response) return cors.response
+  const corsHeaders = cors.headers
 
   if (req.method !== 'GET') {
-    return new Response('Method Not Allowed', { status: 405 })
+    return new Response('Method Not Allowed', {
+      status: 405,
+      headers: corsHeaders,
+    })
   }
 
   try {
@@ -38,7 +35,10 @@ Deno.serve(async (req: Request) => {
     const publishableKeysJson = Deno.env.get('SUPABASE_PUBLISHABLE_KEYS')
     if (!supabaseUrl || !publishableKeysJson) {
       console.error('calendar-feed: missing Supabase environment variables')
-      return new Response('Internal Server Error', { status: 500 })
+      return new Response('Internal Server Error', {
+        status: 500,
+        headers: corsHeaders,
+      })
     }
 
     const publishableKeys = JSON.parse(publishableKeysJson) as Record<
@@ -48,7 +48,10 @@ Deno.serve(async (req: Request) => {
     const publishableKey = publishableKeys.default
     if (typeof publishableKey !== 'string' || !publishableKey) {
       console.error('calendar-feed: missing default Supabase publishable key')
-      return new Response('Internal Server Error', { status: 500 })
+      return new Response('Internal Server Error', {
+        status: 500,
+        headers: corsHeaders,
+      })
     }
 
     // The publishable key assumes the anon role. That role can only read the
@@ -66,7 +69,10 @@ Deno.serve(async (req: Request) => {
 
     if (error) {
       console.error('calendar-feed: db error', error)
-      return new Response('Internal Server Error', { status: 500 })
+      return new Response('Internal Server Error', {
+        status: 500,
+        headers: corsHeaders,
+      })
     }
 
     const ics = generateIcal(data ?? [], 'Naturklubben', {
@@ -75,16 +81,19 @@ Deno.serve(async (req: Request) => {
 
     return new Response(ics, {
       status: 200,
-      headers: {
+      headers: new Headers({
+        ...Object.fromEntries(corsHeaders),
         'Content-Type': 'text/calendar; charset=utf-8',
         'Content-Disposition': 'inline; filename="naturklubben.ics"',
         // Brug samme TTL som REFRESH-INTERVAL ovenfor
         'Cache-Control': 'public, max-age=3600',
-        'Access-Control-Allow-Origin': '*',
-      },
+      }),
     })
   } catch (err) {
     console.error('calendar-feed: unexpected error', err)
-    return new Response('Internal Server Error', { status: 500 })
+    return new Response('Internal Server Error', {
+      status: 500,
+      headers: corsHeaders,
+    })
   }
 })

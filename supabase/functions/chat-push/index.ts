@@ -21,6 +21,7 @@
 // selv et nøglepar første gang (se vapid.ts).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { handleCors } from '../_shared/cors.ts'
 import { getVapidDetails } from '../_shared/vapid.ts'
 import { sendPushNotification, type VapidDetails } from '../_shared/webpush.ts'
 
@@ -33,17 +34,12 @@ const PREVIEW_MAX_LENGTH = 140
 // spamme klubben med notifikationer om den samme besked.
 const MAX_MESSAGE_AGE_MS = 5 * 60 * 1000
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-}
-
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(body: unknown, corsHeaders: Headers, status = 200) {
+  const headers = new Headers(corsHeaders)
+  headers.set('Content-Type', 'application/json')
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers,
   })
 }
 
@@ -64,12 +60,12 @@ function previewOf(content: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const cors = handleCors(req, { methods: ['GET', 'POST'] })
+  if (cors.response) return cors.response
+  const corsHeaders = cors.headers
 
   if (req.method !== 'GET' && req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405)
+    return jsonResponse({ error: 'Method not allowed' }, corsHeaders, 405)
   }
 
   const supabase = serviceClient()
@@ -85,32 +81,41 @@ Deno.serve(async (req) => {
     console.error('Kunne ikke hente eller oprette VAPID-nøglerne', caught)
     return jsonResponse(
       { error: 'VAPID-nøglerne kunne ikke hentes eller oprettes' },
+      corsHeaders,
       503,
     )
   }
 
   if (req.method === 'GET') {
-    return jsonResponse({ publicKey: vapid.publicKey })
+    return jsonResponse({ publicKey: vapid.publicKey }, corsHeaders)
   }
 
   const accessToken = req.headers.get('Authorization')?.replace(/^Bearer /i, '')
-  if (!accessToken) return jsonResponse({ error: 'Ikke autentificeret' }, 401)
+  if (!accessToken) {
+    return jsonResponse({ error: 'Ikke autentificeret' }, corsHeaders, 401)
+  }
 
   const {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser(accessToken)
   if (userError || !user) {
-    return jsonResponse({ error: 'Ikke autentificeret' }, 401)
+    return jsonResponse({ error: 'Ikke autentificeret' }, corsHeaders, 401)
   }
 
   let messageId: string | undefined
   try {
     ;({ messageId } = await req.json())
   } catch {
-    return jsonResponse({ error: 'Ugyldig JSON i request-body' }, 400)
+    return jsonResponse(
+      { error: 'Ugyldig JSON i request-body' },
+      corsHeaders,
+      400,
+    )
   }
-  if (!messageId) return jsonResponse({ error: 'messageId er påkrævet' }, 400)
+  if (!messageId) {
+    return jsonResponse({ error: 'messageId er påkrævet' }, corsHeaders, 400)
+  }
 
   const { data: message, error: messageError } = await supabase
     .from('messages')
@@ -118,16 +123,19 @@ Deno.serve(async (req) => {
     .eq('id', messageId)
     .single()
   if (messageError || !message) {
-    return jsonResponse({ error: 'Beskeden findes ikke' }, 404)
+    return jsonResponse({ error: 'Beskeden findes ikke' }, corsHeaders, 404)
   }
   if (message.user_id !== user.id) {
-    return jsonResponse({ error: 'Beskeden er ikke din' }, 403)
+    return jsonResponse({ error: 'Beskeden er ikke din' }, corsHeaders, 403)
   }
   if (
     Date.now() - new Date(message.created_at).getTime() >
     MAX_MESSAGE_AGE_MS
   ) {
-    return jsonResponse({ skipped: 'Beskeden er for gammel', sent: 0 })
+    return jsonResponse(
+      { skipped: 'Beskeden er for gammel', sent: 0 },
+      corsHeaders,
+    )
   }
 
   const { data: senderProfile } = await supabase
@@ -143,10 +151,10 @@ Deno.serve(async (req) => {
     .select('id, endpoint, p256dh, auth')
     .neq('user_id', user.id)
   if (subscriptionsError) {
-    return jsonResponse({ error: subscriptionsError.message }, 500)
+    return jsonResponse({ error: subscriptionsError.message }, corsHeaders, 500)
   }
   if (!subscriptions || subscriptions.length === 0) {
-    return jsonResponse({ sent: 0, failed: 0, removed: 0 })
+    return jsonResponse({ sent: 0, failed: 0, removed: 0 }, corsHeaders)
   }
 
   const payload = JSON.stringify({
@@ -191,5 +199,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return jsonResponse({ sent, failed, removed })
+  return jsonResponse({ sent, failed, removed }, corsHeaders)
 })

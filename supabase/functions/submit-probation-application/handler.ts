@@ -1,3 +1,5 @@
+import { handleCors } from '../_shared/cors.ts'
+
 export interface SubmissionRpcArguments {
   applicant_full_name: string
   applicant_email: string
@@ -44,28 +46,23 @@ const MIN_ACCEPTED_RESPONSE_MS = 400
 const ACCEPTED_RESPONSE_JITTER_MS = 100
 const encoder = new TextEncoder()
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Expose-Headers': 'Retry-After, X-Request-Id',
-}
-
 function jsonResponse(
   body: unknown,
   status: number,
   requestId: string,
+  corsHeaders: Headers,
   extraHeaders: Record<string, string> = {},
 ) {
+  const headers = new Headers(corsHeaders)
+  for (const [name, value] of Object.entries(extraHeaders)) {
+    headers.set(name, value)
+  }
+  headers.set('Content-Type', 'application/json')
+  headers.set('X-Request-Id', requestId)
+
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      ...corsHeaders,
-      ...extraHeaders,
-      'Content-Type': 'application/json',
-      'X-Request-Id': requestId,
-    },
+    headers,
   })
 }
 
@@ -293,22 +290,35 @@ export function createSubmissionHandler({
 }: SubmissionDependencies) {
   return async (request: Request) => {
     const requestId = crypto.randomUUID()
+    const cors = handleCors(request, {
+      methods: ['POST'],
+      exposeHeaders: ['Retry-After', 'X-Request-Id'],
+    })
 
-    if (request.method === 'OPTIONS') {
-      return new Response('ok', {
-        headers: { ...corsHeaders, 'X-Request-Id': requestId },
-      })
-    }
+    if (cors.response) return cors.response
+    const corsHeaders = cors.headers
+
     if (request.method !== 'POST') {
-      return jsonResponse({ code: 'method_not_allowed' }, 405, requestId, {
-        Allow: 'POST, OPTIONS',
-      })
+      return jsonResponse(
+        { code: 'method_not_allowed' },
+        405,
+        requestId,
+        corsHeaders,
+        {
+          Allow: 'POST, OPTIONS',
+        },
+      )
     }
 
     const address = extractTrustedClientAddress(request.headers)
     if (!address) {
       reportError(requestId, 'trusted_network_signal_unavailable')
-      return jsonResponse({ code: 'temporarily_unavailable' }, 503, requestId)
+      return jsonResponse(
+        { code: 'temporarily_unavailable' },
+        503,
+        requestId,
+        corsHeaders,
+      )
     }
 
     let submission: ValidatedSubmission | null
@@ -318,7 +328,12 @@ export function createSubmissionHandler({
       submission = null
     }
     if (!submission) {
-      return jsonResponse({ code: 'invalid_request' }, 400, requestId)
+      return jsonResponse(
+        { code: 'invalid_request' },
+        400,
+        requestId,
+        corsHeaders,
+      )
     }
 
     const startedAt = performance.now()
@@ -349,6 +364,7 @@ export function createSubmissionHandler({
           { code: 'rate_limited', retryAfterSeconds: retryAfter },
           429,
           requestId,
+          corsHeaders,
           { 'Retry-After': String(retryAfter) },
         )
       }
@@ -365,10 +381,15 @@ export function createSubmissionHandler({
       const remaining = targetDuration - (performance.now() - startedAt)
       if (remaining > 0) await sleep(remaining)
 
-      return jsonResponse({ accepted: true }, 202, requestId)
+      return jsonResponse({ accepted: true }, 202, requestId, corsHeaders)
     } catch {
       reportError(requestId, 'submission_backend_failure')
-      return jsonResponse({ code: 'temporarily_unavailable' }, 503, requestId)
+      return jsonResponse(
+        { code: 'temporarily_unavailable' },
+        503,
+        requestId,
+        corsHeaders,
+      )
     }
   }
 }

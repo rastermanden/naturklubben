@@ -40,6 +40,7 @@
 // via ON DELETE CASCADE/triggeren, når (5) lykkes -- se samme migration.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { handleCors } from '../_shared/cors.ts'
 import { removeAllUnderPrefix } from '../_shared/storageCleanup.ts'
 import { isRecentLogin } from '../_shared/recentLogin.ts'
 
@@ -54,13 +55,6 @@ const LAST_ADMIN_SQLSTATE = '23514'
 // Alle tre buckets bruger samme mappestruktur: `${userId}/${uuid}.${ext}`.
 const STORAGE_BUCKETS = ['avatars', 'photos-original', 'photos-optimized']
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
-
 type ErrorCode =
   | 'unauthorized'
   | 'invalid_confirmation'
@@ -69,17 +63,26 @@ type ErrorCode =
   | 'storage_cleanup_failed'
   | 'account_delete_failed'
 
-function jsonError(code: ErrorCode, status: number, message: string) {
+function jsonError(
+  code: ErrorCode,
+  status: number,
+  message: string,
+  corsHeaders: Headers,
+) {
+  const headers = new Headers(corsHeaders)
+  headers.set('Content-Type', 'application/json')
   return new Response(JSON.stringify({ code, error: message }), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers,
   })
 }
 
-function jsonOk(body: unknown) {
+function jsonOk(body: unknown, corsHeaders: Headers) {
+  const headers = new Headers(corsHeaders)
+  headers.set('Content-Type', 'application/json')
   return new Response(JSON.stringify(body), {
     status: 200,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers,
   })
 }
 
@@ -98,9 +101,10 @@ function serviceClient() {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const cors = handleCors(req, { methods: ['POST'] })
+  if (cors.response) return cors.response
+  const corsHeaders = cors.headers
+
   if (req.method !== 'POST') {
     return new Response('Method not allowed', {
       status: 405,
@@ -109,7 +113,9 @@ Deno.serve(async (req) => {
   }
 
   const token = bearerToken(req)
-  if (!token) return jsonError('unauthorized', 401, 'Ikke autentificeret')
+  if (!token) {
+    return jsonError('unauthorized', 401, 'Ikke autentificeret', corsHeaders)
+  }
 
   const supabase = serviceClient()
 
@@ -118,20 +124,26 @@ Deno.serve(async (req) => {
     error: userError,
   } = await supabase.auth.getUser(token)
   if (userError || !user) {
-    return jsonError('unauthorized', 401, 'Ikke autentificeret')
+    return jsonError('unauthorized', 401, 'Ikke autentificeret', corsHeaders)
   }
 
   let confirmation: unknown
   try {
     ;({ confirmation } = await req.json())
   } catch {
-    return jsonError('invalid_confirmation', 400, 'Ugyldig JSON i request-body')
+    return jsonError(
+      'invalid_confirmation',
+      400,
+      'Ugyldig JSON i request-body',
+      corsHeaders,
+    )
   }
   if (confirmation !== CONFIRMATION_PHRASE) {
     return jsonError(
       'invalid_confirmation',
       400,
       `Bekræftelsen skal være "${CONFIRMATION_PHRASE}"`,
+      corsHeaders,
     )
   }
 
@@ -146,6 +158,7 @@ Deno.serve(async (req) => {
       'recent_login_required',
       401,
       'Login skal bekræftes igen for at slette kontoen',
+      corsHeaders,
     )
   }
 
@@ -163,7 +176,12 @@ Deno.serve(async (req) => {
   )
   if (reservationError) {
     if (reservationError.code === LAST_ADMIN_SQLSTATE) {
-      return jsonError('last_admin', 409, 'Du er klubbens sidste administrator')
+      return jsonError(
+        'last_admin',
+        409,
+        'Du er klubbens sidste administrator',
+        corsHeaders,
+      )
     }
     console.error('reserve_account_deletion fejlede', {
       userId: user.id,
@@ -173,6 +191,7 @@ Deno.serve(async (req) => {
       'account_delete_failed',
       500,
       'Kunne ikke tjekke administratorstatus',
+      corsHeaders,
     )
   }
 
@@ -189,6 +208,7 @@ Deno.serve(async (req) => {
       'storage_cleanup_failed',
       500,
       'Filer kunne ikke slettes sikkert -- kontoen er bevaret',
+      corsHeaders,
     )
   }
 
@@ -205,8 +225,13 @@ Deno.serve(async (req) => {
       userId: user.id,
       error: deleteUserError.message,
     })
-    return jsonError('account_delete_failed', 500, 'Kontoen kunne ikke slettes')
+    return jsonError(
+      'account_delete_failed',
+      500,
+      'Kontoen kunne ikke slettes',
+      corsHeaders,
+    )
   }
 
-  return jsonOk({ deleted: true })
+  return jsonOk({ deleted: true }, corsHeaders)
 })

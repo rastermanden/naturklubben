@@ -24,6 +24,7 @@
 // så vi falder tilbage til det hvis SUPABASE_SECRET_KEY ikke er sat.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { handleCors } from '../_shared/cors.ts'
 import { Image } from 'https://deno.land/x/imagescript@1.3.0/mod.ts'
 
 /**
@@ -142,17 +143,12 @@ class OptimizationError extends Error {
   }
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
-
-function jsonResponse(body: unknown, status = 200) {
+function createJsonResponse(body: unknown, corsHeaders: Headers, status = 200) {
+  const headers = new Headers(corsHeaders)
+  headers.set('Content-Type', 'application/json')
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers,
   })
 }
 
@@ -217,9 +213,12 @@ async function removePhotoFiles(
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const cors = handleCors(req, { methods: ['POST'] })
+  if (cors.response) return cors.response
+  const corsHeaders = cors.headers
+  const jsonResponse = (body: unknown, status = 200) =>
+    createJsonResponse(body, corsHeaders, status)
+
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
