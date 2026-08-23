@@ -37,6 +37,12 @@ lokale terminal. Derfor gælder:
      database.
   5. Ved merge til `main` deployer samme integration migrationen automatisk til
      produktionsdatabasen. Intet manuelt CLI-kald.
+- **Slet aldrig en migrationsfil, der er kørt i produktion**, og omdøb den ikke
+  bagefter. Supabase gemmer de kørte versionsnumre i databasen, og en fil, der
+  forsvinder under et af dem, brækker senere migrationskørsler. Er en migration
+  forkert, skrives en ny, der retter den. Rækkefølgen mellem versionsnumre er
+  derimod ikke et problem i sig selv: en migration med et lavere nummer end det
+  senest kørte bliver stadig anvendt ved merge.
 
 ## Edge Functions
 
