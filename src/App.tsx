@@ -1,4 +1,6 @@
 import ProfilePage from './pages/ProfilePage'
+import AccountDeletedPage from './pages/AccountDeletedPage'
+import DataPolicyPage from './pages/DataPolicyPage'
 import { Route, Routes } from 'react-router-dom'
 import ActivitiesPage from './pages/ActivitiesPage'
 import AdminPage from './pages/AdminPage'
@@ -23,6 +25,8 @@ function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<HeroPage />} />
         <Route path="/aktiviteter" element={<ActivitiesPage />} />
+        <Route path="/datapolitik" element={<DataPolicyPage />} />
+        <Route path="/konto-slettet" element={<AccountDeletedPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/proevemedlemskab"

@@ -24,6 +24,16 @@ jobs:
             exit 1
           fi
 
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.5
+
+      - name: Test Edge Function-hjælpere
+        run: deno test supabase/functions/_shared/*.test.ts
+
+      - name: Typecheck kontosletning
+        run: deno check supabase/functions/delete-account/index.ts
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22

@@ -34,7 +34,10 @@ function ChatPage() {
     if (!profiles || !messagesQuery.data) return
     const unknownAuthorIds = messagesQuery.data
       .map((message) => message.user_id)
-      .filter((id) => !profiles[id] && !lookedUpAuthorIds.current.has(id))
+      .filter(
+        (id): id is string =>
+          id !== null && !profiles[id] && !lookedUpAuthorIds.current.has(id),
+      )
     if (unknownAuthorIds.length === 0) return
     unknownAuthorIds.forEach((id) => lookedUpAuthorIds.current.add(id))
     void refetchProfiles()
@@ -158,7 +161,9 @@ function ChatPage() {
               <MessageBubble
                 key={message.id}
                 message={message}
-                author={profiles?.[message.user_id]}
+                author={
+                  message.user_id ? profiles?.[message.user_id] : undefined
+                }
                 isOwn={message.user_id === userId}
               />
             ))}

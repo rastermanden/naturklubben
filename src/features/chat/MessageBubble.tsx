@@ -20,8 +20,11 @@ export function MessageBubble({
     return () => clearInterval(id)
   }, [])
 
-  const name = author?.full_name ?? 'Medlem'
-  const color = author?.chat_color ?? '#16a34a'
+  const isFormerMember = message.user_id === null
+  const name = isFormerMember
+    ? 'Tidligere medlem'
+    : (author?.full_name ?? 'Medlem')
+  const color = isFormerMember ? '#64748b' : (author?.chat_color ?? '#16a34a')
   const fullTimestamp = new Date(message.created_at).toLocaleString('da-DK')
   const textColor = isOwn ? readableTextColor(color) : '#052e16'
 
