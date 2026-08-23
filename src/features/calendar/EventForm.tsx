@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import type { CalendarEvent, EventInput } from './useEvents'
 
 interface EventFormProps {
@@ -29,6 +30,11 @@ export function EventForm({
   const [startAt, setStartAt] = useState(toLocalDateTime(event?.start_at))
   const [endAt, setEndAt] = useState(toLocalDateTime(event?.end_at))
   const [validationError, setValidationError] = useState<string | null>(null)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useDialogFocus<HTMLDivElement>({
+    onClose: onCancel,
+    initialFocusRef: titleInputRef,
+  })
 
   function handleSubmit(formEvent: FormEvent) {
     formEvent.preventDefault()
@@ -53,10 +59,12 @@ export function EventForm({
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="event-form-title"
+      tabIndex={-1}
     >
       <div className="max-h-[95svh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
         <h2
@@ -70,6 +78,7 @@ export function EventForm({
           <label className="flex flex-col gap-1 text-sm text-green-900">
             Titel
             <input
+              ref={titleInputRef}
               required
               maxLength={120}
               value={title}

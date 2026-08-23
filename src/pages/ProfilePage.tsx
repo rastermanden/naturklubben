@@ -1,7 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../features/auth/useAuth'
+import { ChatColorOption } from '../features/chat/ChatColorOption'
 import { profilesMapQueryKey } from '../features/chat/useProfilesMap'
+import { readableTextColor } from '../lib/colorContrast'
 import { supabase } from '../lib/supabaseClient'
 
 // Skal matche file_size_limit på avatars-bucketten (se migrationen
@@ -9,16 +11,16 @@ import { supabase } from '../lib/supabaseClient'
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024
 
 const PRESET_COLORS = [
-  '#16a34a', // grøn
-  '#2563eb', // blå
-  '#dc2626', // rød
-  '#d97706', // orange
-  '#7c3aed', // lilla
-  '#db2777', // pink
-  '#0891b2', // cyan
-  '#65a30d', // lime
-  '#92400e', // brun
-  '#475569', // grå
+  { value: '#16a34a', label: 'grøn' },
+  { value: '#2563eb', label: 'blå' },
+  { value: '#dc2626', label: 'rød' },
+  { value: '#d97706', label: 'orange' },
+  { value: '#7c3aed', label: 'lilla' },
+  { value: '#db2777', label: 'pink' },
+  { value: '#0891b2', label: 'cyan' },
+  { value: '#65a30d', label: 'lime' },
+  { value: '#92400e', label: 'brun' },
+  { value: '#475569', label: 'grå' },
 ]
 
 function ProfilePage() {
@@ -187,13 +189,16 @@ function ProfilePage() {
               />
             ) : (
               <span
-                className="flex h-24 w-24 items-center justify-center rounded-full text-3xl font-bold text-white"
-                style={{ backgroundColor: chatColor }}
+                className="flex h-24 w-24 items-center justify-center rounded-full text-3xl font-bold"
+                style={{
+                  backgroundColor: chatColor,
+                  color: readableTextColor(chatColor),
+                }}
               >
                 {initials(fullName) || '?'}
               </span>
             )}
-            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-sm text-white opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity">
+            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/70 text-sm text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
               {uploading ? 'Uploader…' : 'Skift'}
             </span>
           </button>
@@ -231,21 +236,13 @@ function ProfilePage() {
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-green-900">Chat-farve</p>
           <div className="flex flex-wrap gap-3">
-            {PRESET_COLORS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => setChatColor(color)}
-                aria-label={`Vælg farven ${color}`}
-                className="h-9 w-9 rounded-full transition-transform hover:scale-110 focus:scale-110"
-                style={{
-                  backgroundColor: color,
-                  outline:
-                    chatColor === color
-                      ? `3px solid ${color}`
-                      : '3px solid transparent',
-                  outlineOffset: '2px',
-                }}
+            {PRESET_COLORS.map(({ value, label }) => (
+              <ChatColorOption
+                key={value}
+                value={value}
+                label={label}
+                selected={chatColor.toLowerCase() === value}
+                onSelect={setChatColor}
               />
             ))}
             <input
@@ -253,21 +250,27 @@ function ProfilePage() {
               value={chatColor}
               onChange={(e) => setChatColor(e.target.value)}
               aria-label="Vælg en brugerdefineret farve"
-              className="h-9 w-9 cursor-pointer rounded-full border-0 p-0"
+              className="h-11 w-11 cursor-pointer rounded-full border-0 p-0"
               title="Brugerdefineret farve"
             />
           </div>
           {/* Preview */}
           <div className="mt-1 flex items-end gap-2">
             <span
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-              style={{ backgroundColor: chatColor }}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium"
+              style={{
+                backgroundColor: chatColor,
+                color: readableTextColor(chatColor),
+              }}
             >
               {initials(fullName) || '?'}
             </span>
             <div
-              className="rounded-2xl px-4 py-2 text-white text-sm"
-              style={{ backgroundColor: chatColor }}
+              className="rounded-2xl px-4 py-2 text-sm"
+              style={{
+                backgroundColor: chatColor,
+                color: readableTextColor(chatColor),
+              }}
             >
               Hej, det er mig!
             </div>
