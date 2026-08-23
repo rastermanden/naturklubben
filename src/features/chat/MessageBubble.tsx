@@ -1,46 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Avatar } from '../../components/Avatar'
 import { formatRelativeTime } from './formatRelativeTime'
 import type { Message } from './useMessages'
 import type { ProfileSummary } from './useProfilesMap'
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]!.toUpperCase())
-    .join('')
-}
-
-function Avatar({
-  name,
-  avatarUrl,
-  color,
-}: {
-  name: string
-  avatarUrl: string | null
-  color: string
-}) {
-  if (avatarUrl) {
-    return (
-      <img
-        src={avatarUrl}
-        alt=""
-        className="h-8 w-8 shrink-0 rounded-full object-cover"
-        style={{ outlineColor: color, outline: `2px solid ${color}` }}
-      />
-    )
-  }
-  return (
-    <span
-      aria-hidden="true"
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-      style={{ backgroundColor: color }}
-    >
-      {initials(name) || '?'}
-    </span>
-  )
-}
 
 export function MessageBubble({
   message,
@@ -68,6 +30,8 @@ export function MessageBubble({
           name={name}
           avatarUrl={author?.avatar_url ?? null}
           color={color}
+          size="md"
+          decorative
         />
       )}
       <div

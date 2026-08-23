@@ -8,6 +8,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import GalleryPage from './pages/GalleryPage'
 import HeroPage from './pages/HeroPage'
 import LoginPage from './pages/LoginPage'
+import MembersPage from './pages/MembersPage'
 import ProbationApplicationPage from './pages/ProbationApplicationPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import SignupPage from './pages/SignupPage'
@@ -53,6 +54,14 @@ function App() {
           element={
             <ProtectedRoute>
               <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/medlemmer"
+          element={
+            <ProtectedRoute>
+              <MembersPage />
             </ProtectedRoute>
           }
         />
