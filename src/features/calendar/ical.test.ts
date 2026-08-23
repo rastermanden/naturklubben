@@ -24,6 +24,8 @@ describe('generateIcal', () => {
     const calendar = generateIcal([event], 'Natur, venner')
 
     expect(calendar).toContain('X-WR-CALNAME:Natur\\, venner')
+    expect(calendar).not.toContain('REFRESH-INTERVAL')
+    expect(calendar).not.toContain('X-PUBLISHED-TTL')
     expect(calendar).toContain('UID:event-1@naturklubben')
     expect(calendar).toContain('DTSTAMP:20260823T100000Z')
     expect(calendar).toContain('DTSTART:20260905T163000Z')

@@ -44,7 +44,7 @@ export function EventForm({
     setValidationError(null)
 
     if (endAt && new Date(endAt) < new Date(startAt)) {
-      setValidationError('Sluttidspunktet skal være efter starttidspunktet.')
+      setValidationError('Sluttidspunktet må ikke være før starttidspunktet.')
       focusEndError()
       return
     }
