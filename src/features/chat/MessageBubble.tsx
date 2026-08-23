@@ -18,6 +18,7 @@ export function MessageBubble({
   reactions,
   onToggleReaction,
   onDelete,
+  isHighlighted = false,
 }: {
   message: Message
   author: ProfileSummary | undefined
@@ -29,6 +30,7 @@ export function MessageBubble({
   reactions: ReactionSummary[]
   onToggleReaction: (message: Message, emoji: string) => void
   onDelete?: (message: Message) => void
+  isHighlighted?: boolean
 }) {
   const [, forceUpdate] = useState(0)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -57,7 +59,12 @@ export function MessageBubble({
   const replyWasDeleted = Boolean(message.reply_to?.deleted_at)
 
   return (
-    <li className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
+    <li
+      data-message-id={message.id}
+      className={`flex items-end gap-2 rounded-lg ${
+        isOwn ? 'flex-row-reverse' : ''
+      } ${isHighlighted ? 'outline-4 outline-amber-300' : ''}`}
+    >
       <Avatar
         name={name}
         avatarUrl={author?.avatar_url ?? null}

@@ -1,5 +1,10 @@
-import { useEffect } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
 
 export interface Message {
@@ -21,7 +26,7 @@ export interface ReplyPreview {
   deleted_by: string | null
 }
 
-interface MessageRow {
+export interface MessageRow {
   id: string
   user_id: string | null
   content: string
@@ -32,8 +37,10 @@ interface MessageRow {
   reply_to?: ReplyPreview | ReplyPreview[] | null
 }
 
-const MESSAGE_HISTORY_LIMIT = 100
+export const MESSAGE_HISTORY_LIMIT = 100
+const SEARCH_RESULT_LIMIT = 20
 const queryKey = ['messages']
+const searchQueryKey = ['message-search']
 const messageFields = `
   id,
   user_id,
@@ -68,14 +75,54 @@ export function normalizeMessage(row: MessageRow): Message {
   }
 }
 
-async function fetchRecentMessages(): Promise<Message[]> {
-  const { data, error } = await supabase
+export interface MessagePage {
+  messages: Message[]
+  hasMore: boolean
+}
+
+export interface MessageCursor {
+  createdAt: string
+  id: string
+}
+
+export function mergeMessagePages(pages: MessagePage[]): Message[] {
+  const seen = new Set<string>()
+  return pages
+    .flatMap((page) => page.messages)
+    .sort(
+      (left, right) =>
+        left.created_at.localeCompare(right.created_at) ||
+        left.id.localeCompare(right.id),
+    )
+    .filter((message) => {
+      if (seen.has(message.id)) return false
+      seen.add(message.id)
+      return true
+    })
+}
+
+async function fetchMessagePage(
+  cursor: MessageCursor | undefined,
+): Promise<MessagePage> {
+  let query = supabase
     .from('messages')
     .select(messageFields)
     .order('created_at', { ascending: false })
-    .limit(MESSAGE_HISTORY_LIMIT)
+    .order('id', { ascending: false })
+    .limit(MESSAGE_HISTORY_LIMIT + 1)
+
+  if (cursor) {
+    query = query.or(
+      `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`,
+    )
+  }
+
+  const { data, error } = await query
   if (error) throw error
-  return data.reverse().map(normalizeMessage)
+  return {
+    messages: data.slice(0, MESSAGE_HISTORY_LIMIT).map(normalizeMessage),
+    hasMore: data.length > MESSAGE_HISTORY_LIMIT,
+  }
 }
 
 function previewOf(message: ReplyPreview): ReplyPreview {
@@ -150,6 +197,74 @@ export function updateMessage(
   })
 }
 
+export function addMessageToHistory(
+  history: InfiniteData<MessagePage> | undefined,
+  incoming: Message,
+): InfiniteData<MessagePage> | undefined {
+  if (!history) return history
+  const current = mergeMessagePages(history.pages)
+  const updated = addMessage(current, incoming)
+  if (updated === current) return history
+  const added = updated.find(
+    (message) => !current.some((existing) => existing.id === message.id),
+  )
+  if (!added) return history
+  return {
+    pageParams: history.pageParams,
+    pages: history.pages.map((page, index) =>
+      index === 0 ? { ...page, messages: [added, ...page.messages] } : page,
+    ),
+  }
+}
+
+function updateMessageInHistory(
+  history: InfiniteData<MessagePage> | undefined,
+  incoming: MessageRow,
+): InfiniteData<MessagePage> | undefined {
+  if (!history) return history
+  let changed = false
+  const pages = history.pages.map((page) => {
+    if (
+      !page.messages.some(
+        (message) =>
+          message.id === incoming.id ||
+          message.reply_to_message_id === incoming.id,
+      )
+    ) {
+      return page
+    }
+    changed = true
+    return {
+      ...page,
+      messages: updateMessage(page.messages, incoming) ?? page.messages,
+    }
+  })
+  return changed ? { ...history, pages } : history
+}
+
+function removeMessageFromHistory(
+  history: InfiniteData<MessagePage> | undefined,
+  deletedId: string,
+): InfiniteData<MessagePage> | undefined {
+  if (!history) return history
+  let changed = false
+  const pages = history.pages.map((page) => {
+    const messages = page.messages
+      .filter((message) => {
+        if (message.id !== deletedId) return true
+        changed = true
+        return false
+      })
+      .map((message) => {
+        if (message.reply_to_message_id !== deletedId) return message
+        changed = true
+        return { ...message, reply_to_message_id: null, reply_to: null }
+      })
+    return changed ? { ...page, messages } : page
+  })
+  return changed ? { ...history, pages } : history
+}
+
 /**
  * Beder chat-push-edge-functionen sende en notifikation til de andre
  * medlemmers telefoner. Samme mønster som optimize-image efter en upload:
@@ -169,8 +284,56 @@ async function notifyOthers(messageId: string) {
 
 export function useMessages() {
   const queryClient = useQueryClient()
+  const liveMessages = useRef(new Map<string, Message>())
+  const deletedMessageIds = useRef(new Set<string>())
+  const wasFetching = useRef(false)
 
-  const messagesQuery = useQuery({ queryKey, queryFn: fetchRecentMessages })
+  const messagesQuery = useInfiniteQuery({
+    queryKey,
+    initialPageParam: undefined as MessageCursor | undefined,
+    queryFn: ({ pageParam }) => fetchMessagePage(pageParam),
+    getNextPageParam: (lastPage) => {
+      const oldest = lastPage.messages.at(-1)
+      return lastPage.hasMore && oldest
+        ? { createdAt: oldest.created_at, id: oldest.id }
+        : undefined
+    },
+    select: (history) => ({
+      ...history,
+      messages: mergeMessagePages(history.pages),
+    }),
+  })
+
+  // A server fetch is assembled from a snapshot of the old pages. Reapply
+  // concurrent Realtime events once when that fetch completes so its snapshot
+  // cannot make a newly arrived message disappear.
+  useEffect(() => {
+    if (messagesQuery.isFetching) {
+      wasFetching.current = true
+      return
+    }
+    if (!wasFetching.current) return
+    wasFetching.current = false
+    if (
+      liveMessages.current.size === 0 &&
+      deletedMessageIds.current.size === 0
+    ) {
+      return
+    }
+    queryClient.setQueryData<InfiniteData<MessagePage>>(queryKey, (history) => {
+      let updated = history
+      for (const deletedId of deletedMessageIds.current) {
+        updated = removeMessageFromHistory(updated, deletedId)
+      }
+      for (const message of liveMessages.current.values()) {
+        if (!deletedMessageIds.current.has(message.id)) {
+          updated = addMessageToHistory(updated, message)
+          updated = updateMessageInHistory(updated, message)
+        }
+      }
+      return updated
+    })
+  }, [messagesQuery.isFetching, queryClient])
 
   useEffect(() => {
     const channel = supabase
@@ -180,9 +343,18 @@ export function useMessages() {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const message = normalizeMessage(payload.new as MessageRow)
-          const current = queryClient.getQueryData<Message[]>(queryKey)
-          queryClient.setQueryData<Message[]>(queryKey, (current) =>
-            addMessage(current, message),
+          deletedMessageIds.current.delete(message.id)
+          const history =
+            queryClient.getQueryData<InfiniteData<MessagePage>>(queryKey)
+          const current = history ? mergeMessagePages(history.pages) : undefined
+          const enriched =
+            addMessage(current, message).find(
+              (candidate) => candidate.id === message.id,
+            ) ?? message
+          liveMessages.current.set(enriched.id, enriched)
+          queryClient.setQueryData<InfiniteData<MessagePage>>(
+            queryKey,
+            (history) => addMessageToHistory(history, enriched),
           )
           if (needsReplyRefetch(current, message)) {
             void queryClient.invalidateQueries({ queryKey })
@@ -193,8 +365,22 @@ export function useMessages() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages' },
         (payload) => {
-          queryClient.setQueryData<Message[]>(queryKey, (current) =>
-            updateMessage(current, payload.new as MessageRow),
+          const normalized = normalizeMessage(payload.new as MessageRow)
+          const history =
+            queryClient.getQueryData<InfiniteData<MessagePage>>(queryKey)
+          const existing = history
+            ? mergeMessagePages(history.pages).find(
+                (message) => message.id === normalized.id,
+              )
+            : undefined
+          const enriched = {
+            ...normalized,
+            reply_to: normalized.reply_to ?? existing?.reply_to ?? null,
+          }
+          liveMessages.current.set(enriched.id, enriched)
+          queryClient.setQueryData<InfiniteData<MessagePage>>(
+            queryKey,
+            (history) => updateMessageInHistory(history, enriched),
           )
         },
       )
@@ -203,8 +389,11 @@ export function useMessages() {
         { event: 'DELETE', schema: 'public', table: 'messages' },
         (payload) => {
           const deletedId = (payload.old as { id: string }).id
-          queryClient.setQueryData<Message[]>(queryKey, (current) =>
-            removeMessage(current, deletedId),
+          liveMessages.current.delete(deletedId)
+          deletedMessageIds.current.add(deletedId)
+          queryClient.setQueryData<InfiniteData<MessagePage>>(
+            queryKey,
+            (history) => removeMessageFromHistory(history, deletedId),
           )
         },
       )
@@ -238,8 +427,9 @@ export function useMessages() {
       return normalizeMessage(data)
     },
     onSuccess: (message) => {
-      queryClient.setQueryData<Message[]>(queryKey, (current) =>
-        addMessage(current, message),
+      liveMessages.current.set(message.id, message)
+      queryClient.setQueryData<InfiniteData<MessagePage>>(queryKey, (history) =>
+        addMessageToHistory(history, message),
       )
       void notifyOthers(message.id)
     },
@@ -255,5 +445,57 @@ export function useMessages() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   })
 
-  return { messagesQuery, sendMessage, deleteMessage }
+  const openMessage = useMutation({
+    mutationFn: async (messageId: string) => {
+      const { data, error } = await supabase.rpc('get_chat_message_context', {
+        target_message_id: messageId,
+      })
+      if (error) throw error
+      const rows = data as (MessageRow & { has_more_older: boolean })[]
+      if (!rows.some((row) => row.id === messageId)) {
+        throw new Error('Beskeden findes ikke længere.')
+      }
+      return {
+        messages: rows.map(normalizeMessage).reverse(),
+        hasMore: rows[0]?.has_more_older ?? false,
+      } satisfies MessagePage
+    },
+    onSuccess: (page) => {
+      queryClient.setQueryData<InfiniteData<MessagePage>>(queryKey, {
+        pages: [page],
+        pageParams: [undefined],
+      })
+    },
+  })
+
+  return { messagesQuery, sendMessage, deleteMessage, openMessage }
+}
+
+export function useMessageSearch(searchTerm: string) {
+  const normalizedTerm = searchTerm.trim()
+  return useInfiniteQuery({
+    queryKey: [...searchQueryKey, normalizedTerm],
+    enabled: normalizedTerm.length > 0,
+    initialPageParam: undefined as MessageCursor | undefined,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await supabase.rpc('search_chat_messages', {
+        search_query: normalizedTerm,
+        before_created_at: pageParam?.createdAt ?? null,
+        before_id: pageParam?.id ?? null,
+        page_size: SEARCH_RESULT_LIMIT + 1,
+      })
+      if (error) throw error
+      const rows = data as MessageRow[]
+      return {
+        messages: rows.slice(0, SEARCH_RESULT_LIMIT).map(normalizeMessage),
+        hasMore: rows.length > SEARCH_RESULT_LIMIT,
+      }
+    },
+    getNextPageParam: (lastPage) => {
+      const oldest = lastPage.messages.at(-1)
+      return lastPage.hasMore && oldest
+        ? { createdAt: oldest.created_at, id: oldest.id }
+        : undefined
+    },
+  })
 }

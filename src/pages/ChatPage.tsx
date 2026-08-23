@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../features/auth/useAuth'
 import { MessageBubble } from '../features/chat/MessageBubble'
 import { OnlineMembers } from '../features/chat/OnlineMembers'
-import { useMessages } from '../features/chat/useMessages'
+import { useMessages, useMessageSearch } from '../features/chat/useMessages'
 import { useReactions } from '../features/chat/useReactions'
 import {
   groupReactionsByMessage,
@@ -20,11 +20,15 @@ const SCROLL_BOTTOM_THRESHOLD = 80
 function ChatPage() {
   const { session } = useAuth()
   const userId = session!.user.id
-  const { messagesQuery, sendMessage, deleteMessage } = useMessages()
+  const { messagesQuery, sendMessage, deleteMessage, openMessage } =
+    useMessages()
   const { isAdmin } = useIsAdmin()
   const { data: profiles, refetch: refetchProfiles } = useProfilesMap()
   const onlineUserIds = useOnlinePresence(userId)
-  const messages = messagesQuery.data ?? []
+  const messages = useMemo(
+    () => messagesQuery.data?.messages ?? [],
+    [messagesQuery.data?.messages],
+  )
   const { reactions, toggleReaction } = useReactions(messages, userId)
   const reactionsByMessage = useMemo(
     () => groupReactionsByMessage(reactions),
@@ -37,6 +41,11 @@ function ChatPage() {
   const [newMessageCount, setNewMessageCount] = useState(0)
   const [isNearBottom, setIsNearBottom] = useState(true)
   const [replyingToId, setReplyingToId] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [highlightedMessageId, setHighlightedMessageId] = useState<
+    string | null
+  >(null)
+  const searchQuery = useMessageSearch(searchTerm)
 
   function nameOf(id: string) {
     return profiles?.[id]?.full_name ?? 'Medlem'
@@ -45,9 +54,16 @@ function ChatPage() {
   const listRef = useRef<HTMLUListElement>(null)
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const previousMessageCount = useRef(0)
+  const previousOldestMessageId = useRef<string | undefined>(undefined)
+  const [prependScrollSnapshot, setPrependScrollSnapshot] = useState<{
+    scrollHeight: number
+    scrollTop: number
+  } | null>(null)
   const lookedUpAuthorIds = useRef(new Set<string>())
   const replyingTo =
     messages.find((message) => message.id === replyingToId) ?? null
+  const searchResults =
+    searchQuery.data?.pages.flatMap((resultPage) => resultPage.messages) ?? []
   const replyingToName =
     replyingTo?.user_id === null
       ? 'Tidligere medlem'
@@ -60,7 +76,7 @@ function ChatPage() {
   // ukendt afsender, så en manglende profil ikke udløser en uendelig løkke.
   useEffect(() => {
     if (!profiles || !messagesQuery.data) return
-    const unknownAuthorIds = messagesQuery.data
+    const unknownAuthorIds = messagesQuery.data.messages
       .map((message) => message.user_id)
       .filter(
         (id): id is string =>
@@ -75,6 +91,15 @@ function ChatPage() {
     if (replyingTo?.deleted_at) setReplyingToId(null)
   }, [replyingTo])
 
+  useLayoutEffect(() => {
+    const snapshot = prependScrollSnapshot
+    const list = listRef.current
+    if (!snapshot || !list) return
+    list.scrollTop =
+      snapshot.scrollTop + (list.scrollHeight - snapshot.scrollHeight)
+    setPrependScrollSnapshot(null)
+  }, [prependScrollSnapshot])
+
   function scrollToBottom(behavior: ScrollBehavior) {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior })
   }
@@ -82,7 +107,11 @@ function ChatPage() {
   useEffect(() => {
     const previousCount = previousMessageCount.current
     const delta = messages.length - previousCount
-    if (delta > 0) {
+    const oldestMessageId = messages[0]?.id
+    const addedOlderMessages =
+      previousOldestMessageId.current !== undefined &&
+      oldestMessageId !== previousOldestMessageId.current
+    if (delta > 0 && !addedOlderMessages) {
       const isInitialLoad = previousCount === 0
       const latest = messages[messages.length - 1]
       if (isInitialLoad || isNearBottom || latest.user_id === userId) {
@@ -93,8 +122,43 @@ function ChatPage() {
       }
     }
     previousMessageCount.current = messages.length
+    previousOldestMessageId.current = oldestMessageId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages])
+
+  useEffect(() => {
+    if (!highlightedMessageId) return
+    const element = listRef.current?.querySelector(
+      `[data-message-id="${highlightedMessageId}"]`,
+    )
+    element?.scrollIntoView({ block: 'center' })
+    const timeout = window.setTimeout(() => setHighlightedMessageId(null), 3000)
+    return () => window.clearTimeout(timeout)
+  }, [highlightedMessageId, messages])
+
+  async function loadOlderMessages() {
+    const list = listRef.current
+    const snapshot = list
+      ? { scrollHeight: list.scrollHeight, scrollTop: list.scrollTop }
+      : null
+    try {
+      const result = await messagesQuery.fetchNextPage()
+      if (result?.isError) return
+      setPrependScrollSnapshot(snapshot)
+    } catch {
+      setPrependScrollSnapshot(null)
+    }
+  }
+
+  async function openSearchResult(messageId: string) {
+    try {
+      await openMessage.mutateAsync(messageId)
+      setSearchTerm('')
+      setHighlightedMessageId(messageId)
+    } catch {
+      // Mutation state renders the actionable error next to the search results.
+    }
+  }
 
   function handleScroll() {
     const list = listRef.current
@@ -198,6 +262,85 @@ function ChatPage() {
         currentUserId={userId}
       />
 
+      <div className="relative">
+        <label
+          htmlFor="chat-search"
+          className="mb-1 block text-sm font-medium text-green-900"
+        >
+          Søg i beskeder
+        </label>
+        <input
+          id="chat-search"
+          type="search"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          placeholder="Søg i hele historikken…"
+          className="min-h-11 w-full rounded-lg border border-green-300 px-4 py-2 text-green-950"
+        />
+        {searchTerm.trim() && (
+          <div className="absolute z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-green-200 bg-white p-2 shadow-lg">
+            {searchQuery.isPending && (
+              <p role="status" className="p-3 text-green-700">
+                Søger…
+              </p>
+            )}
+            {searchQuery.isError && (
+              <p role="alert" className="p-3 text-red-700">
+                Søgningen kunne ikke gennemføres.
+              </p>
+            )}
+            {openMessage.isError && (
+              <p role="alert" className="p-3 text-red-700">
+                Beskeden kunne ikke åbnes. Den kan være slettet.
+              </p>
+            )}
+            {searchQuery.isSuccess && searchResults.length === 0 && (
+              <p className="p-3 text-green-700">Ingen beskeder fundet.</p>
+            )}
+            {searchResults.length > 0 && (
+              <ul aria-label="Søgeresultater">
+                {searchResults.map((message) => {
+                  const authorName =
+                    message.user_id === null
+                      ? 'Tidligere medlem'
+                      : (profiles?.[message.user_id]?.full_name ?? 'Medlem')
+                  return (
+                    <li key={message.id}>
+                      <button
+                        type="button"
+                        onClick={() => void openSearchResult(message.id)}
+                        disabled={openMessage.isPending}
+                        className="min-h-11 w-full rounded px-3 py-2 text-left hover:bg-green-50 disabled:opacity-50"
+                      >
+                        <span className="block text-xs font-medium text-green-800">
+                          {authorName} ·{' '}
+                          {new Date(message.created_at).toLocaleString('da-DK')}
+                        </span>
+                        <span className="line-clamp-2 text-sm text-green-950">
+                          {message.content}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            {searchQuery.hasNextPage && (
+              <button
+                type="button"
+                onClick={() => void searchQuery.fetchNextPage()}
+                disabled={searchQuery.isFetchingNextPage}
+                className="min-h-11 w-full rounded px-3 text-sm font-medium text-green-800 hover:bg-green-50 disabled:opacity-50"
+              >
+                {searchQuery.isFetchingNextPage
+                  ? 'Henter flere…'
+                  : 'Vis flere resultater'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
       {messagesQuery.isPending && (
         <p role="status" className="py-12 text-center text-green-700">
           Henter beskeder…
@@ -231,6 +374,20 @@ function ChatPage() {
             aria-relevant="additions"
             className="flex h-[60svh] flex-col gap-3 overflow-y-auto rounded-lg border border-green-100 bg-white p-4"
           >
+            {messagesQuery.hasNextPage && (
+              <li className="text-center">
+                <button
+                  type="button"
+                  onClick={() => void loadOlderMessages()}
+                  disabled={messagesQuery.isFetchingNextPage}
+                  className="min-h-11 rounded px-4 text-sm font-medium text-green-800 underline-offset-2 hover:underline disabled:opacity-50"
+                >
+                  {messagesQuery.isFetchingNextPage
+                    ? 'Henter ældre…'
+                    : 'Hent ældre beskeder'}
+                </button>
+              </li>
+            )}
             {messages.length === 0 && (
               <li className="py-12 text-center text-green-700">
                 Ingen beskeder endnu. Vær den første til at sige hej!
@@ -262,6 +419,7 @@ function ChatPage() {
                 )}
                 onToggleReaction={reactTo}
                 onDelete={deleteSelectedMessage}
+                isHighlighted={message.id === highlightedMessageId}
               />
             ))}
           </ul>
