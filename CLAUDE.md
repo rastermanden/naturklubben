@@ -37,6 +37,23 @@ lokale terminal. Derfor gælder:
      database.
   5. Ved merge til `main` deployer samme integration migrationen automatisk til
      produktionsdatabasen. Intet manuelt CLI-kald.
+- **Vælg timestamp ud fra, hvad der allerede er merget til `main` — ikke ud fra,
+  hvornår PR'en blev åbnet.** Produktionsdatabasen opdateres trinvist, og en
+  migration med et versionsnummer _lavere_ end det senest kørte bliver ikke
+  anvendt. Det fanges ikke af PR'ens Preview Branch: den er tom og afspiller alle
+  migrationer forfra i filnavnsorden, så der findes ingen "senest kørte" at ligge
+  under. En sådan migration ser derfor helt grøn ud i PR'en og mangler bagefter i
+  produktion.
+  Det er sket: `20260823162000_message_replies.sql` (#94) blev merget efter #99,
+  som havde lagt `20260823170000` og `20260823170100` på produktionen. Svar-FK'en
+  nåede aldrig databasen, og hele chatten fejlede med PGRST200, fordi
+  `useMessages` embedder svarets ophav med constraint-navnet som hint. Repareret
+  med `20260823200000_repair_message_replies.sql`.
+  Har en PR ligget åben, mens andre migrationer er merget: omdøb filen til et
+  højere versionsnummer, **inden** den merges. Er den allerede merget og sprunget
+  over, så lad den ligge og tilføj i stedet en ny, betinget migration med et
+  højere nummer — en omdøbning bagefter efterlader databaser, der _har_ kørt den,
+  med en historik, der peger på en fil, som ikke findes mere.
 
 ## Edge Functions
 
