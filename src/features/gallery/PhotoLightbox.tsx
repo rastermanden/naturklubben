@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { useDisplayUrl } from './useDisplayUrl'
 import { useAuth } from '../auth/useAuth'
+import { useIsAdmin } from '../admin/useIsAdmin'
 import {
   canRetryOptimization,
   optimizationStatusLabel,
@@ -29,6 +30,7 @@ export function PhotoLightbox({
 }: PhotoLightboxProps) {
   const { url, isLoading, error, refetch } = useDisplayUrl(photo, 'full')
   const { session } = useAuth()
+  const { isAdmin } = useIsAdmin()
   const isOwner = session?.user.id === photo.uploaded_by
   const canRetry = canRetryOptimization(photo, session?.user.id)
   const statusLabel = optimizationStatusLabel(photo)
@@ -169,7 +171,7 @@ export function PhotoLightbox({
             {retrying ? 'Starter igen…' : 'Prøv optimering igen'}
           </button>
         )}
-        {isOwner && (
+        {(isOwner || isAdmin) && (
           <button
             type="button"
             onClick={(event) => {
