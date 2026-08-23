@@ -41,7 +41,15 @@ export const MESSAGE_HISTORY_LIMIT = 100
 const SEARCH_RESULT_LIMIT = 20
 const queryKey = ['messages']
 const searchQueryKey = ['message-search']
-const messageFields = `
+// Svarets ophav indlejres med *kolonnenavnet* som hint, ikke med
+// foreign key'ens navn. PostgREST slår ikke en selvrefererende relation op på
+// constraint-navnet: `messages!messages_reply_to_message_id_fkey` svarer
+// PGRST200 "Could not find a relationship between 'messages' and 'messages'",
+// selv om constraint'en findes i databasen. Og fordi embeddet indgår i *hver*
+// beskedhentning, væltede det hele chatten -- ikke bare svar-visningen.
+// Verificeret mod produktions-API'et: kolonnenavnet svarer 200, constraint-
+// navnet 400. Skift det ikke tilbage.
+export const messageFields = `
   id,
   user_id,
   content,
@@ -49,7 +57,7 @@ const messageFields = `
   deleted_at,
   deleted_by,
   reply_to_message_id,
-  reply_to:messages!messages_reply_to_message_id_fkey (
+  reply_to:messages!reply_to_message_id (
     id,
     user_id,
     content,
