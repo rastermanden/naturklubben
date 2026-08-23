@@ -1,33 +1,43 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { useDisplayUrl } from './useDisplayUrl'
 import { useAuth } from '../auth/useAuth'
+import {
+  canRetryOptimization,
+  optimizationStatusLabel,
+} from './optimizationStatus'
 import type { Photo } from './types'
 
 interface PhotoLightboxProps {
   photo: Photo
   onClose: () => void
   onDelete: (photo: Photo) => void
+  onRetryOptimization: (photo: Photo) => void
   deleting: boolean
+  retrying: boolean
+  actionError: string | null
 }
 
 export function PhotoLightbox({
   photo,
   onClose,
   onDelete,
+  onRetryOptimization,
   deleting,
+  retrying,
+  actionError,
 }: PhotoLightboxProps) {
-  const { url } = useDisplayUrl(photo, 'full')
+  const { url, isLoading, error, refetch } = useDisplayUrl(photo, 'full')
   const { session } = useAuth()
   const isOwner = session?.user.id === photo.uploaded_by
+  const canRetry = canRetryOptimization(photo, session?.user.id)
+  const statusLabel = optimizationStatusLabel(photo)
   const [shareStatus, setShareStatus] = useState<string | null>(null)
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useDialogFocus<HTMLDivElement>({
+    onClose,
+    initialFocusRef: closeButtonRef,
+  })
 
   useEffect(() => {
     if (!shareStatus) return
@@ -66,10 +76,14 @@ export function PhotoLightbox({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={photo.caption ?? 'Billede'}
-      onClick={onClose}
+      tabIndex={-1}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/90 p-4"
     >
       <button
@@ -81,6 +95,7 @@ export function PhotoLightbox({
       </button>
 
       <button
+        ref={closeButtonRef}
         type="button"
         onClick={onClose}
         aria-label="Luk"
@@ -89,7 +104,23 @@ export function PhotoLightbox({
         ×
       </button>
 
-      {url && (
+      {isLoading && <p className="text-white">Henter billede…</p>}
+      {error && (
+        <div role="alert" className="text-center text-white">
+          <p>Billedet kunne ikke hentes.</p>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              void refetch()
+            }}
+            className="mt-2 min-h-11 underline"
+          >
+            Prøv igen
+          </button>
+        </div>
+      )}
+      {url && !error && (
         <img
           src={url}
           alt={photo.caption ?? ''}
@@ -107,7 +138,37 @@ export function PhotoLightbox({
         </div>
       )}
 
+      {statusLabel && (
+        <p role="status" aria-live="polite" className="text-sm text-white/80">
+          {statusLabel}
+          {photo.optimization_status === 'failed' &&
+            photo.optimization_error &&
+            ` — ${photo.optimization_error}`}
+          {photo.optimization_status === 'delete_failed' &&
+            photo.optimization_error &&
+            ` — ${photo.optimization_error}`}
+        </p>
+      )}
+      {actionError && (
+        <p role="alert" className="text-sm text-red-200">
+          {actionError}
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center justify-center gap-2">
+        {canRetry && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onRetryOptimization(photo)
+            }}
+            disabled={retrying}
+            className="min-h-11 rounded bg-white px-4 py-2 text-green-900 disabled:opacity-60"
+          >
+            {retrying ? 'Starter igen…' : 'Prøv optimering igen'}
+          </button>
+        )}
         {isOwner && (
           <button
             type="button"
@@ -118,7 +179,12 @@ export function PhotoLightbox({
             disabled={deleting}
             className="min-h-11 rounded bg-red-700 px-4 py-2 text-white disabled:opacity-60"
           >
-            {deleting ? 'Sletter…' : 'Slet billede'}
+            {deleting
+              ? 'Sletter…'
+              : photo.optimization_status === 'deleting' ||
+                  photo.optimization_status === 'delete_failed'
+                ? 'Prøv sletning igen'
+                : 'Slet billede'}
           </button>
         )}
       </div>

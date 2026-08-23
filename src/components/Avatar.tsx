@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { readableTextColor } from '../lib/colorContrast'
 
 const sizeClasses = {
   sm: 'h-7 w-7 text-xs',
@@ -51,8 +52,8 @@ export function Avatar({
       aria-label={decorative ? undefined : name}
       role={decorative ? undefined : 'img'}
       title={decorative ? undefined : name}
-      className={`flex ${sizeClass} shrink-0 items-center justify-center rounded-full font-medium text-white`}
-      style={{ backgroundColor: color }}
+      className={`flex ${sizeClass} shrink-0 items-center justify-center rounded-full font-medium`}
+      style={{ backgroundColor: color, color: readableTextColor(color) }}
     >
       {initials || '?'}
     </span>

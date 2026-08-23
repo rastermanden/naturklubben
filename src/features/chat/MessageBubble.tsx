@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Avatar } from '../../components/Avatar'
+import { readableTextColor } from '../../lib/colorContrast'
 import { formatRelativeTime } from './formatRelativeTime'
 import type { Message } from './useMessages'
 import type { ProfileSummary } from './useProfilesMap'
@@ -28,6 +29,7 @@ export function MessageBubble({
   const fullTimestamp = new Date(message.created_at).toLocaleString('da-DK')
   const replyName = replyAuthor?.full_name ?? 'Medlem'
   const replyExcerpt = message.reply_to?.content.trim().replace(/\s+/g, ' ')
+  const textColor = isOwn ? readableTextColor(color) : '#052e16'
 
   return (
     <li className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}>
@@ -41,10 +43,11 @@ export function MessageBubble({
         />
       )}
       <div
-        className={`max-w-[75%] rounded-2xl px-4 py-2 ${isOwn ? 'text-white' : 'text-green-950'}`}
-        style={
-          isOwn ? { backgroundColor: color } : { backgroundColor: color + '22' }
-        }
+        className="max-w-[75%] rounded-2xl px-4 py-2"
+        style={{
+          backgroundColor: isOwn ? color : color + '22',
+          color: textColor,
+        }}
       >
         {message.reply_to_message_id && (
           <blockquote
@@ -61,24 +64,19 @@ export function MessageBubble({
           </blockquote>
         )}
         <p
-          className={`mb-0.5 text-xs font-medium ${isOwn ? 'text-right text-white/80' : ''}`}
-          style={isOwn ? undefined : { color }}
+          className={`mb-0.5 text-xs font-medium ${isOwn ? 'text-right' : ''}`}
         >
           {name}
         </p>
         <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        <p className="mt-1 text-right text-xs opacity-70" title={fullTimestamp}>
+        <p className="mt-1 text-right text-xs" title={fullTimestamp}>
           {formatRelativeTime(message.created_at)}
         </p>
         <button
           type="button"
           onClick={() => onReply(message)}
           aria-label={`Svar på besked fra ${name}`}
-          className={`mt-1 min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 ${
-            isOwn
-              ? 'text-white/90 focus-visible:outline-white'
-              : 'focus-visible:outline-green-800'
-          }`}
+          className="mt-1 min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
         >
           Svar
         </button>

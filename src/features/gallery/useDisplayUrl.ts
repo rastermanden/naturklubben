@@ -17,7 +17,7 @@ export function useDisplayUrl(
       ? (photo.thumbnail_path ?? photo.optimized_path)
       : photo.optimized_path
 
-  const { data: signedUrl } = useQuery({
+  const signedUrlQuery = useQuery({
     queryKey: ['photo-signed-url', photo.storage_path],
     queryFn: async () => {
       const { data, error } = await supabase.storage
@@ -34,9 +34,16 @@ export function useDisplayUrl(
     return {
       url: supabase.storage.from('photos-optimized').getPublicUrl(optimizedPath)
         .data.publicUrl,
-      optimizing: false,
+      isLoading: false,
+      error: null,
+      refetch: signedUrlQuery.refetch,
     }
   }
 
-  return { url: signedUrl, optimizing: true }
+  return {
+    url: signedUrlQuery.data,
+    isLoading: signedUrlQuery.isLoading,
+    error: signedUrlQuery.error,
+    refetch: signedUrlQuery.refetch,
+  }
 }

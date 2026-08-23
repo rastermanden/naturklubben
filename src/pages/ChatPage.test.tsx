@@ -5,6 +5,16 @@ import ChatPage from './ChatPage'
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
+  messages: [
+    {
+      id: 'message-1',
+      user_id: 'other-member',
+      content: 'Skal vi mødes ved søen?',
+      created_at: '2026-08-23T12:00:00.000Z',
+      reply_to_message_id: null,
+      reply_to: null,
+    },
+  ] satisfies Message[],
 }))
 
 vi.mock('../features/auth/useAuth', () => ({
@@ -14,16 +24,7 @@ vi.mock('../features/auth/useAuth', () => ({
 vi.mock('../features/chat/useMessages', () => ({
   useMessages: () => ({
     messagesQuery: {
-      data: [
-        {
-          id: 'message-1',
-          user_id: 'other-member',
-          content: 'Skal vi mødes ved søen?',
-          created_at: '2026-08-23T12:00:00.000Z',
-          reply_to_message_id: null,
-          reply_to: null,
-        },
-      ] satisfies Message[],
+      data: mocks.messages,
       isPending: false,
       isError: false,
       refetch: vi.fn(),
@@ -62,6 +63,16 @@ vi.mock('../features/notifications/NotificationToggle', () => ({
 
 beforeEach(() => {
   mocks.mutate.mockReset()
+  mocks.messages = [
+    {
+      id: 'message-1',
+      user_id: 'other-member',
+      content: 'Skal vi mødes ved søen?',
+      created_at: '2026-08-23T12:00:00.000Z',
+      reply_to_message_id: null,
+      reply_to: null,
+    },
+  ]
   HTMLElement.prototype.scrollTo = vi.fn()
 })
 
@@ -113,5 +124,37 @@ describe('ChatPage replies', () => {
         onError: expect.any(Function),
       }),
     )
+  })
+})
+
+describe('ChatPage live updates', () => {
+  it('uses a live log at the bottom and a separate status when scrolled away', () => {
+    const { rerender } = render(<ChatPage />)
+    const log = screen.getByRole('log', { name: 'Beskeder' })
+    expect(log.getAttribute('aria-live')).toBe('polite')
+    expect(log.getAttribute('aria-relevant')).toBe('additions')
+
+    Object.defineProperties(log, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, value: 0, writable: true },
+    })
+    fireEvent.scroll(log)
+    expect(log.getAttribute('aria-live')).toBe('off')
+
+    mocks.messages = [
+      ...mocks.messages,
+      {
+        id: 'message-2',
+        user_id: 'other-member',
+        content: 'Ny besked',
+        created_at: '2026-08-23T12:01:00.000Z',
+        reply_to_message_id: null,
+        reply_to: null,
+      },
+    ]
+    rerender(<ChatPage />)
+
+    expect(screen.getByRole('status').textContent).toBe('1 ny besked')
   })
 })
