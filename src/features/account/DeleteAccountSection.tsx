@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import {
   ACCOUNT_DELETION_CONFIRMATION,
   AccountDeletionError,
@@ -14,6 +15,7 @@ interface DeleteAccountDialogProps {
   onClose: () => void
   onDeleted: () => void
   deleteRequest?: (email: string, password: string) => Promise<void>
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 export function DeleteAccountDialog({
@@ -21,6 +23,7 @@ export function DeleteAccountDialog({
   onClose,
   onDeleted,
   deleteRequest = deleteAccount,
+  returnFocusRef,
 }: DeleteAccountDialogProps) {
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
@@ -31,25 +34,27 @@ export function DeleteAccountDialog({
   >(null)
   const passwordRef = useRef<HTMLInputElement>(null)
   const confirmationRef = useRef<HTMLInputElement>(null)
-  const focusPasswordError = useErrorFocus(passwordRef)
-  const focusConfirmationError = useErrorFocus(confirmationRef)
+  const [focusPasswordError, passwordErrorAnnouncement] =
+    useErrorFocus(passwordRef)
+  const [focusConfirmationError, confirmationErrorAnnouncement] =
+    useErrorFocus(confirmationRef)
+  const errorAnnouncement =
+    errorField === 'password'
+      ? passwordErrorAnnouncement
+      : errorField === 'confirmation'
+        ? confirmationErrorAnnouncement
+        : 0
+  const dialogRef = useDialogFocus<HTMLDivElement>({
+    onClose: () => {
+      if (!deleting) onClose()
+    },
+    initialFocusRef: passwordRef,
+    returnFocusRef,
+  })
   const canDelete =
     password.length > 0 &&
     confirmation === ACCOUNT_DELETION_CONFIRMATION &&
     !deleting
-
-  useEffect(() => {
-    passwordRef.current?.focus()
-  }, [])
-
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !deleting) onClose()
-    }
-
-    document.addEventListener('keydown', closeOnEscape)
-    return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [deleting, onClose])
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -83,9 +88,11 @@ export function DeleteAccountDialog({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-account-title"
+      tabIndex={-1}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-6"
     >
       <article className="max-h-[95svh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
@@ -161,8 +168,15 @@ export function DeleteAccountDialog({
 
           {error && (
             <p
+              key={errorAnnouncement}
               id="delete-account-error"
-              role={errorField ? undefined : 'alert'}
+              role={
+                errorField
+                  ? errorAnnouncement > 0
+                    ? 'alert'
+                    : undefined
+                  : 'alert'
+              }
               className="text-sm text-red-700"
             >
               {error}
@@ -195,6 +209,7 @@ export function DeleteAccountDialog({
 export function DeleteAccountSection({ email }: { email: string }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const navigate = useNavigate()
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   return (
     <section className="rounded-lg border border-red-200 p-5">
@@ -204,6 +219,7 @@ export function DeleteAccountSection({ email }: { email: string }) {
         chat- og kalenderhistorik anonymiseres.
       </p>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setDialogOpen(true)}
         className="mt-4 min-h-11 rounded border border-red-700 px-4 py-2 text-red-700"
@@ -215,6 +231,7 @@ export function DeleteAccountSection({ email }: { email: string }) {
         <DeleteAccountDialog
           email={email}
           onClose={() => setDialogOpen(false)}
+          returnFocusRef={triggerRef}
           onDeleted={() => {
             navigate('/konto-slettet', { replace: true, flushSync: true })
             void clearDeletedAccountSession()

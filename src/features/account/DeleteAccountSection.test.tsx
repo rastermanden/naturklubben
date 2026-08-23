@@ -6,8 +6,12 @@ import {
   waitFor,
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { AccountDeletionError } from './deleteAccount'
-import { DeleteAccountDialog } from './DeleteAccountSection'
+import {
+  DeleteAccountDialog,
+  DeleteAccountSection,
+} from './DeleteAccountSection'
 
 vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
 
@@ -23,6 +27,80 @@ function fillConfirmation() {
 }
 
 describe('DeleteAccountDialog', () => {
+  it('traps Tab in the dialog', () => {
+    render(
+      <DeleteAccountDialog
+        email="medlem@example.com"
+        onClose={() => undefined}
+        onDeleted={() => undefined}
+      />,
+    )
+
+    const password = screen.getByLabelText('Nuværende adgangskode')
+    const cancel = screen.getByRole('button', { name: 'Annullér' })
+    expect(document.activeElement).toBe(password)
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(cancel)
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(document.activeElement).toBe(password)
+  })
+
+  it('closes on Escape and returns focus to the trigger', () => {
+    render(
+      <MemoryRouter>
+        <DeleteAccountSection email="medlem@example.com" />
+      </MemoryRouter>,
+    )
+    const trigger = screen.getByRole('button', { name: 'Start kontosletning' })
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('returns focus to the trigger after cancelling', () => {
+    render(
+      <MemoryRouter>
+        <DeleteAccountSection email="medlem@example.com" />
+      </MemoryRouter>,
+    )
+    const trigger = screen.getByRole('button', { name: 'Start kontosletning' })
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Annullér' }))
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('does not close on Escape while deletion is pending', () => {
+    const onClose = vi.fn()
+    render(
+      <DeleteAccountDialog
+        email="medlem@example.com"
+        onClose={onClose}
+        onDeleted={() => undefined}
+        deleteRequest={() => new Promise(() => undefined)}
+      />,
+    )
+    fillConfirmation()
+    const deleteButton = screen.getByRole('button', {
+      name: 'Slet min konto permanent',
+    })
+    deleteButton.focus()
+    fireEvent.click(deleteButton)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
   it('shows the permanent and anonymized consequences before confirmation', () => {
     render(
       <DeleteAccountDialog
@@ -123,9 +201,11 @@ describe('DeleteAccountDialog', () => {
       />,
     )
     fillConfirmation()
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Slet min konto permanent' }),
-    )
+    const deleteButton = screen.getByRole('button', {
+      name: 'Slet min konto permanent',
+    })
+    deleteButton.focus()
+    fireEvent.click(deleteButton)
 
     expect((await screen.findByRole('alert')).textContent).toContain(
       'sidste administrator',
@@ -145,9 +225,11 @@ describe('DeleteAccountDialog', () => {
       />,
     )
     fillConfirmation()
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Slet min konto permanent' }),
-    )
+    const deleteButton = screen.getByRole('button', {
+      name: 'Slet min konto permanent',
+    })
+    deleteButton.focus()
+    fireEvent.click(deleteButton)
 
     const error = await screen.findByText('Adgangskoden er forkert. Prøv igen.')
     const password = screen.getByLabelText('Nuværende adgangskode')

@@ -33,7 +33,7 @@ export function EventForm({
   const [validationError, setValidationError] = useState<string | null>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const endInputRef = useRef<HTMLInputElement>(null)
-  const focusEndError = useErrorFocus(endInputRef)
+  const [focusEndError, endErrorAnnouncement] = useErrorFocus(endInputRef)
   const dialogRef = useDialogFocus<HTMLDivElement>({
     onClose: onCancel,
     initialFocusRef: titleInputRef,
@@ -148,8 +148,15 @@ export function EventForm({
 
           {(validationError || error) && (
             <p
+              key={endErrorAnnouncement}
               id="event-form-error"
-              role={validationError ? undefined : 'alert'}
+              role={
+                validationError
+                  ? endErrorAnnouncement > 0
+                    ? 'alert'
+                    : undefined
+                  : 'alert'
+              }
               className="text-sm text-red-700"
             >
               {validationError ?? error}
