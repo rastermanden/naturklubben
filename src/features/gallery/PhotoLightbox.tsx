@@ -54,8 +54,13 @@ export function PhotoLightbox({
         />
       )}
 
-      {photo.caption && (
-        <p className="max-w-prose text-center text-white">{photo.caption}</p>
+      {(photo.caption || photo.event) && (
+        <div className="max-w-prose text-center text-white">
+          {photo.caption && <p>{photo.caption}</p>}
+          {photo.event && (
+            <p className="text-sm text-white/70">{photo.event.title}</p>
+          )}
+        </div>
       )}
 
       {isOwner && (
