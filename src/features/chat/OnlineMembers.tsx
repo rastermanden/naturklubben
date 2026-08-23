@@ -1,41 +1,5 @@
+import { Avatar } from '../../components/Avatar'
 import type { ProfileSummary } from './useProfilesMap'
-
-function Avatar({
-  name,
-  avatarUrl,
-  color,
-}: {
-  name: string
-  avatarUrl: string | null
-  color: string
-}) {
-  if (avatarUrl) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={name}
-        title={name}
-        className="h-7 w-7 rounded-full object-cover"
-        style={{ outline: `2px solid ${color}` }}
-      />
-    )
-  }
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]!.toUpperCase())
-    .join('')
-  return (
-    <span
-      title={name}
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-      style={{ backgroundColor: color }}
-    >
-      {initials || '?'}
-    </span>
-  )
-}
 
 export function OnlineMembers({
   onlineUserIds,
