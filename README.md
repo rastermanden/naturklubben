@@ -28,10 +28,22 @@ den matcher produktionens GitHub Pages-sti).
 ```bash
 npm run build         # typecheck + produktionsbuild til dist/
 npm run preview        # server dist/ lokalt
+npm test               # deterministiske komponent- og logiktests
 npm run lint            # oxlint
 npm run format          # prettier --write
 npm run format:check    # prettier --check
 ```
+
+## Tests
+
+`npm test` kører Vitest én gang i jsdom uden browser, netværk, lokal Supabase eller
+produktionsdata. Testfiler ligger ved den kode, de dækker, som `*.test.ts` eller
+`*.test.tsx`.
+
+Foretræk ren logik som kalenderens iCal-generator. Når en komponent afhænger af en ekstern
+grænse, gives kontrollerede testdata gennem den nærmeste provider eller et mock af selve
+grænsen; `ProtectedRoute.test.tsx` viser provider-mønsteret for auth. Kald aldrig den
+rigtige Supabase-klient fra en test. CI kører samme `npm test` på pull requests og `main`.
 
 ## Links fra mails og dybe links
 
