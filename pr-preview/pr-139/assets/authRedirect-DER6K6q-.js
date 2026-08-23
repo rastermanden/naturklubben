@@ -1,0 +1,1 @@
+function e(e){return new URL(e,`${window.location.origin}/naturklubben/pr-preview/pr-139/`).href}export{e as t};
