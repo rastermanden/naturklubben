@@ -1,7 +1,7 @@
 export interface IcalEvent {
   id: string
   title: string
-  description: string | null
+  description?: string | null
   location: string | null
   start_at: string
   end_at: string | null
