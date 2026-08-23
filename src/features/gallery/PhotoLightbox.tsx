@@ -75,7 +75,7 @@ export function PhotoLightbox({
       <button
         type="button"
         onClick={handleShareClick}
-        className="absolute top-4 left-4 min-h-11 rounded border border-white px-4 py-2 text-white"
+        className="absolute top-4 left-4 z-10 min-h-11 rounded border border-white px-4 py-2 text-white"
       >
         Del link
       </button>
@@ -84,7 +84,7 @@ export function PhotoLightbox({
         type="button"
         onClick={onClose}
         aria-label="Luk"
-        className="absolute top-4 right-4 flex h-11 w-11 items-center justify-center rounded text-2xl text-white"
+        className="absolute top-4 right-4 z-10 flex h-11 w-11 items-center justify-center rounded text-2xl text-white"
       >
         ×
       </button>
