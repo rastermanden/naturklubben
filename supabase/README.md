@@ -174,12 +174,13 @@ Retention for prøvemedlemskab håndhæves dagligt af det idempotent planlagte
 - uafgjorte ansøgninger slettes 12 måneder efter `created_at`;
 - den tilknyttede push-række slettes via `ON DELETE CASCADE`.
 
-Jobbet er adskilt fra #87's rate-limit-oprydning
-`cleanup-probation-submission-attempts`. Inaktive medlemskonti slettes ikke
-automatisk; de gennemgås manuelt efter 24 måneder, fordi der endnu ikke findes et
-sikkert varslingsflow. Den offentlige formulering findes på `/datapolitik`.
-Rate-limit-tabellen fra #87 indeholder kun HMAC-hashes af e-mail/IP/netværk og
-ryddes separat efter 25 timer; den rå e-mail og netværksadresse gemmes ikke dér.
+Jobbet er adskilt fra #87's kommende rate-limit-oprydning
+`cleanup-probation-submission-attempts`. Når #87 merges, indeholder dens
+rate-limit-tabel kun HMAC-hashes af e-mail/IP/netværk og ryddes separat efter 25
+timer; den rå e-mail og netværksadresse gemmes ikke dér. Inaktive medlemskonti
+slettes ikke automatisk; de gennemgås manuelt efter 24 måneder, fordi der endnu
+ikke findes et sikkert varslingsflow. Den offentlige formulering findes på
+`/datapolitik`.
 
 **Timestampet skal være unikt på tværs af alle migrations.** Supabase sporer anvendte
 migrations på versionsnummeret alene (primærnøgle i

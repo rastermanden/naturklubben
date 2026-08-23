@@ -73,9 +73,7 @@ function DataPolicyPage() {
             ansøgninger og deres pushdata slettes automatisk 90 dage efter
             afgørelsen. Uafgjorte ansøgninger slettes efter 12 måneder.
             Godkendte medlemmers e-mail bliver på medlemslisten, indtil
-            medlemsadgangen fjernes eller kontoen slettes. Spam-beskyttelsen
-            gemmer kun HMAC-hashes af e-mail- og netværkssignaler, aldrig de rå
-            værdier, og sletter dem efter 25 timer.
+            medlemsadgangen fjernes eller kontoen slettes.
           </p>
         </section>
 
