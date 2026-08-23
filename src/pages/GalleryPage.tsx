@@ -24,7 +24,7 @@ function GalleryPage() {
   const sharedPhotoId = searchParams.get('photo')
   const activePhoto =
     sharedPhotoId && photos
-      ? photos.find((photo) => photo.id === sharedPhotoId) ?? null
+      ? (photos.find((photo) => photo.id === sharedPhotoId) ?? null)
       : null
   // To separate inputs: det ene uden `capture`, så telefonen viser hele
   // vælgeren (kamerarulle, Filer, Drev …), det andet med `capture`, så
