@@ -9,6 +9,11 @@ const mocks = vi.hoisted(() => ({
   reactions: [] as { message_id: string; user_id: string; emoji: string }[],
   deleteMutate: vi.fn(),
   isAdmin: false,
+  mutateAsync: vi.fn(),
+  fetchNextPage: vi.fn(),
+  searchFetchNextPage: vi.fn(),
+  searchPages: undefined as
+    { messages: Message[]; hasMore: boolean }[] | undefined,
   messages: [
     {
       id: 'message-1',
@@ -30,10 +35,13 @@ vi.mock('../features/auth/useAuth', () => ({
 vi.mock('../features/chat/useMessages', () => ({
   useMessages: () => ({
     messagesQuery: {
-      data: mocks.messages,
+      data: { messages: mocks.messages, pages: [] },
       isPending: false,
       isError: false,
       refetch: vi.fn(),
+      hasNextPage: true,
+      isFetchingNextPage: false,
+      fetchNextPage: mocks.fetchNextPage,
     },
     sendMessage: {
       mutate: mocks.mutate,
@@ -44,6 +52,20 @@ vi.mock('../features/chat/useMessages', () => ({
       isPending: false,
       variables: undefined,
     },
+    openMessage: {
+      mutateAsync: mocks.mutateAsync,
+      isPending: false,
+      isError: false,
+    },
+  }),
+  useMessageSearch: () => ({
+    data: mocks.searchPages ? { pages: mocks.searchPages } : undefined,
+    isPending: false,
+    isError: false,
+    isSuccess: true,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: mocks.searchFetchNextPage,
   }),
 }))
 
@@ -89,6 +111,9 @@ beforeEach(() => {
   mocks.reactions = []
   mocks.deleteMutate.mockReset()
   mocks.isAdmin = false
+  mocks.mutateAsync.mockReset()
+  mocks.fetchNextPage.mockReset()
+  mocks.searchPages = undefined
   mocks.messages = [
     {
       id: 'message-1',
@@ -224,6 +249,51 @@ describe('ChatPage live updates', () => {
     rerender(<ChatPage />)
 
     expect(screen.getByRole('status').textContent).toBe('1 ny besked')
+  })
+
+  it('loads older messages without counting them as new', async () => {
+    mocks.fetchNextPage.mockImplementation(async () => {
+      mocks.messages = [
+        {
+          id: 'message-0',
+          user_id: 'other-member',
+          content: 'Ældre besked',
+          created_at: '2026-08-23T11:59:00.000Z',
+          deleted_at: null,
+          deleted_by: null,
+          reply_to_message_id: null,
+          reply_to: null,
+        },
+        ...mocks.messages,
+      ]
+    })
+    const { rerender } = render(<ChatPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hent ældre beskeder' }))
+    await mocks.fetchNextPage.mock.results[0]?.value
+    rerender(<ChatPage />)
+
+    expect(screen.queryByText('1 ny besked')).toBeNull()
+  })
+})
+
+describe('ChatPage history search', () => {
+  it('opens a server-side result in its message context', async () => {
+    mocks.searchPages = [{ messages: mocks.messages, hasMore: false }]
+    mocks.mutateAsync.mockResolvedValue(undefined)
+    render(<ChatPage />)
+
+    fireEvent.change(
+      screen.getByRole('searchbox', { name: 'Søg i beskeder' }),
+      {
+        target: { value: 'søen' },
+      },
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: /Ada.*Skal vi mødes ved søen/ }),
+    )
+
+    expect(mocks.mutateAsync).toHaveBeenCalledWith('message-1')
   })
 })
 
