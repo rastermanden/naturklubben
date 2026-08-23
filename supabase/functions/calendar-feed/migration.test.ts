@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 
 const migrationUrl = new URL(
-  '../../migrations/20260823212500_events_end_after_start.sql',
+  '../../migrations/20260823213500_events_end_after_start.sql',
   import.meta.url,
 )
 
@@ -13,6 +13,7 @@ describe('event time range migration contract', () => {
     const sql = await readFile(migrationUrl, 'utf8')
 
     expect(sql).toContain('add constraint events_end_after_start')
+    expect(sql).toContain("conrelid = 'public.events'::regclass")
     expect(sql).toMatch(/check\s*[(]end_at is null or end_at >= start_at[)]/)
   })
 })
