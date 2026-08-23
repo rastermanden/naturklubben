@@ -188,6 +188,7 @@ jobs:
            status=$(curl -sS --max-time 30 -o /tmp/probation-header-check.json -w '%{http_code}' \
              -X POST "$endpoint" \
              -H 'Content-Type: application/json' \
+             -H "apikey: $VITE_SUPABASE_PUBLISHABLE_KEY" \
              -H 'CF-Connecting-IP: caller-controlled-invalid-value' \
              -H 'X-Forwarded-For: 203.0.113.9' \
              --data '{}') || status="000"
