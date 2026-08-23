@@ -21,8 +21,8 @@
 // selv et nøglepar første gang (se vapid.ts).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { getVapidDetails } from './vapid.ts'
-import { sendPushNotification, type VapidDetails } from './webpush.ts'
+import { getVapidDetails } from '../_shared/vapid.ts'
+import { sendPushNotification, type VapidDetails } from '../_shared/webpush.ts'
 
 // Notifikationsteksten er et smugkig, ikke hele beskeden -- resten læses i
 // appen. Holder også payloaden langt under push-tjenesternes 4 KB-grænse.

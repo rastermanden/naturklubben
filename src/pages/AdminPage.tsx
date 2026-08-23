@@ -6,8 +6,10 @@ import {
 } from '../features/admin/useAllowedEmails'
 import {
   toFriendlyProbationApplicationError,
+  type NotificationDelivery,
   useProbationApplications,
 } from '../features/probation/useProbationApplications'
+import { NotificationToggle } from '../features/notifications/NotificationToggle'
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('da-DK', {
@@ -21,13 +23,30 @@ function AdminPage() {
   const { session } = useAuth()
   const userId = session!.user.id
   const { allowedEmailsQuery, addEmail, removeEmail } = useAllowedEmails(userId)
-  const { applicationsQuery, approveApplication, rejectApplication } =
-    useProbationApplications()
+  const {
+    applicationsQuery,
+    approveApplication,
+    rejectApplication,
+    retryNotification,
+  } = useProbationApplications()
 
   const [email, setEmail] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
+  function showDeliveryFailure(
+    delivery: NotificationDelivery,
+    savedMessage: string,
+  ) {
+    setSuccessMsg(savedMessage)
+    if (delivery.status === 'failed') {
+      setError(
+        delivery.error ??
+          'Beslutningen er gemt, men notifikationen kunne ikke leveres. Prøv igen fra kortet.',
+      )
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -71,8 +90,9 @@ function AdminPage() {
     setSuccessMsg(null)
 
     try {
-      await approveApplication.mutateAsync(applicationId)
-      setSuccessMsg(
+      const delivery = await approveApplication.mutateAsync(applicationId)
+      showDeliveryFailure(
+        delivery,
         `${applicantEmail} er godkendt og kan nu oprette en bruger.`,
       )
     } catch (mutationError) {
@@ -93,8 +113,34 @@ function AdminPage() {
     setSuccessMsg(null)
 
     try {
-      await rejectApplication.mutateAsync(applicationId)
-      setSuccessMsg(`Ansøgningen fra ${applicantEmail} er afvist.`)
+      const delivery = await rejectApplication.mutateAsync(applicationId)
+      showDeliveryFailure(
+        delivery,
+        `Ansøgningen fra ${applicantEmail} er afvist.`,
+      )
+    } catch (mutationError) {
+      setError(toFriendlyProbationApplicationError(mutationError))
+    }
+  }
+
+  async function handleRetryNotification(
+    applicationId: number,
+    kind: 'admin' | 'decision',
+  ) {
+    setError(null)
+    setSuccessMsg(null)
+    try {
+      const delivery = await retryNotification.mutateAsync({
+        applicationId,
+        kind,
+      })
+      if (delivery.status === 'sent') {
+        setSuccessMsg('Notifikationen blev leveret.')
+      } else {
+        setError(
+          delivery.error ?? 'Notifikationen kunne ikke leveres. Prøv igen.',
+        )
+      }
     } catch (mutationError) {
       setError(toFriendlyProbationApplicationError(mutationError))
     }
@@ -104,6 +150,7 @@ function AdminPage() {
   const applications = applicationsQuery.data ?? []
   const handlingApplication =
     approveApplication.isPending || rejectApplication.isPending
+  const retryingNotification = retryNotification.isPending
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 sm:p-6">
@@ -125,6 +172,15 @@ function AdminPage() {
           {error}
         </p>
       )}
+
+      <section className="space-y-2 rounded-lg border border-green-200 bg-green-50 p-4">
+        <h2 className="font-medium text-green-900">Admin-notifikationer</h2>
+        <p className="text-sm text-green-700">
+          Slå dem til på mindst én administrators enhed for at få besked om nye
+          ansøgninger.
+        </p>
+        <NotificationToggle userId={userId} />
+      </section>
 
       <form
         onSubmit={handleSubmit}
@@ -203,29 +259,106 @@ function AdminPage() {
                 <p className="whitespace-pre-wrap text-sm text-green-900">
                   {application.motivation}
                 </p>
+                {application.status !== 'pending' && (
+                  <p className="text-sm font-medium text-green-800">
+                    {application.status === 'approved'
+                      ? 'Ansøgningen er godkendt.'
+                      : 'Ansøgningen er afvist.'}
+                  </p>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    void handleApprove(application.id, application.email)
-                  }
-                  disabled={handlingApplication}
-                  className="min-h-11 rounded-lg bg-green-800 px-4 py-2 text-white disabled:opacity-50"
-                >
-                  Godkend
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void handleReject(application.id, application.email)
-                  }
-                  disabled={handlingApplication}
-                  className="min-h-11 rounded-lg border border-red-300 px-4 py-2 text-red-700 disabled:opacity-50"
-                >
-                  Afvis
-                </button>
-              </div>
+              {application.status === 'pending' && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleApprove(application.id, application.email)
+                    }
+                    disabled={handlingApplication}
+                    className="min-h-11 rounded-lg bg-green-800 px-4 py-2 text-white disabled:opacity-50"
+                  >
+                    Godkend
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleReject(application.id, application.email)
+                    }
+                    disabled={handlingApplication}
+                    className="min-h-11 rounded-lg border border-red-300 px-4 py-2 text-red-700 disabled:opacity-50"
+                  >
+                    Afvis
+                  </button>
+                </div>
+              )}
+
+              {application.status === 'pending' &&
+                application.admin_notification_status === 'failed' && (
+                  <div className="space-y-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                    <p>
+                      Admin-notifikationen er ikke leveret
+                      {application.admin_notification_error
+                        ? `: ${application.admin_notification_error}`
+                        : '.'}
+                    </p>
+                    {application.notification_function_url && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void handleRetryNotification(application.id, 'admin')
+                        }
+                        disabled={retryingNotification}
+                        className="rounded border border-amber-500 px-3 py-2 disabled:opacity-50"
+                      >
+                        Prøv admin-notifikationen igen
+                      </button>
+                    )}
+                  </div>
+                )}
+
+              {application.status === 'pending' &&
+                (application.admin_notification_status === 'pending' ||
+                  application.admin_notification_status === 'sending') && (
+                  <p className="text-sm text-amber-800">
+                    Admin-notifikationen venter på levering…
+                  </p>
+                )}
+
+              {application.status !== 'pending' &&
+                application.decision_notification_status === 'failed' && (
+                  <div className="space-y-2 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                    <p>
+                      Beslutningen er gemt, men ansøgerens notifikation er ikke
+                      leveret
+                      {application.decision_notification_error
+                        ? `: ${application.decision_notification_error}`
+                        : '.'}
+                    </p>
+                    {application.notification_function_url && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void handleRetryNotification(
+                            application.id,
+                            'decision',
+                          )
+                        }
+                        disabled={retryingNotification}
+                        className="rounded border border-red-400 px-3 py-2 disabled:opacity-50"
+                      >
+                        Prøv ansøgernotifikationen igen
+                      </button>
+                    )}
+                  </div>
+                )}
+
+              {application.status !== 'pending' &&
+                (application.decision_notification_status === 'pending' ||
+                  application.decision_notification_status === 'sending') && (
+                  <p className="text-sm text-green-700">
+                    Ansøgerens notifikation venter på levering…
+                  </p>
+                )}
             </li>
           ))}
         </ul>

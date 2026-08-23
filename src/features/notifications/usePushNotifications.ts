@@ -12,6 +12,12 @@ import { supabase } from '../../lib/supabaseClient'
  */
 export type PushUnavailableReason = 'unsupported' | 'needs-install' | 'blocked'
 
+export interface BrowserPushSubscription {
+  endpoint: string
+  p256dh: string
+  auth: string
+}
+
 export type PushStatus =
   | { state: 'loading' }
   | { state: 'unavailable'; reason: PushUnavailableReason }
@@ -19,6 +25,16 @@ export type PushStatus =
   | { state: 'on' }
 
 const VAPID_FUNCTION = 'chat-push'
+
+export class PushSetupError extends Error {
+  readonly reason: PushUnavailableReason
+
+  constructor(reason: PushUnavailableReason) {
+    super(reason)
+    this.name = 'PushSetupError'
+    this.reason = reason
+  }
+}
 
 function isIosSafari() {
   const ua = navigator.userAgent
@@ -88,13 +104,65 @@ function usesKey(subscription: PushSubscription, key: Uint8Array) {
   )
 }
 
-async function fetchVapidPublicKey(): Promise<string> {
+async function fetchVapidPublicKey(
+  functionName = VAPID_FUNCTION,
+): Promise<string> {
   const { data, error } = await supabase.functions.invoke<{
     publicKey: string
-  }>(VAPID_FUNCTION, { method: 'GET' })
+  }>(functionName, { method: 'GET' })
   if (error) throw error
   if (!data?.publicKey) throw new Error('Ingen VAPID-nøgle fra serveren')
   return data.publicKey
+}
+
+export async function prepareBrowserPushSubscription(
+  functionName = VAPID_FUNCTION,
+): Promise<BrowserPushSubscription> {
+  if (!pushApiAvailable()) {
+    throw new PushSetupError(
+      isIosSafari() && !isStandalone() ? 'needs-install' : 'unsupported',
+    )
+  }
+  if (Notification.permission === 'denied') {
+    throw new PushSetupError('blocked')
+  }
+
+  const permission =
+    Notification.permission === 'granted'
+      ? 'granted'
+      : await Notification.requestPermission()
+  if (permission !== 'granted') {
+    throw new PushSetupError(
+      permission === 'denied' ? 'blocked' : 'unsupported',
+    )
+  }
+
+  const registration = await waitForRegistration()
+  if (!registration) throw new PushSetupError('unsupported')
+
+  const publicKey = await fetchVapidPublicKey(functionName)
+  const applicationServerKey = base64UrlToUint8Array(publicKey)
+  const existing = await registration.pushManager.getSubscription()
+  if (existing && !usesKey(existing, applicationServerKey)) {
+    await supabase
+      .from('push_subscriptions')
+      .delete()
+      .eq('endpoint', existing.endpoint)
+    await existing.unsubscribe()
+  }
+
+  const subscription =
+    (await registration.pushManager.getSubscription()) ??
+    (await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey,
+    }))
+
+  return {
+    endpoint: subscription.endpoint,
+    p256dh: encodeKey(subscription, 'p256dh'),
+    auth: encodeKey(subscription, 'auth'),
+  }
 }
 
 export function usePushNotifications(userId: string) {
@@ -132,57 +200,31 @@ export function usePushNotifications(userId: string) {
 
       const subscription = await registration.pushManager.getSubscription()
       if (cancelled) return
-      setStatus({ state: subscription ? 'on' : 'off' })
+      if (!subscription) {
+        setStatus({ state: 'off' })
+        return
+      }
+
+      const { data } = await supabase
+        .from('push_subscriptions')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('endpoint', subscription.endpoint)
+        .maybeSingle()
+      if (!cancelled) setStatus({ state: data ? 'on' : 'off' })
     }
 
     void detect()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [userId])
 
   const enable = useCallback(async () => {
     setError(null)
     setIsWorking(true)
     try {
-      const permission = await Notification.requestPermission()
-      if (permission === 'denied') {
-        setStatus({ state: 'unavailable', reason: 'blocked' })
-        return
-      }
-      if (permission !== 'granted') {
-        // Brugeren lukkede dialogen uden at vælge -- behold nuværende tilstand.
-        return
-      }
-
-      const registration = await waitForRegistration()
-      if (!registration) {
-        throw new Error('Appens baggrundstjeneste er ikke klar endnu.')
-      }
-
-      const publicKey = await fetchVapidPublicKey()
-      const applicationServerKey = base64UrlToUint8Array(publicKey)
-
-      // Et gammelt abonnement kan være oprettet med en tidligere VAPID-nøgle
-      // (fx efter en rotation, eller fordi en anden i husstanden var logget
-      // ind her før). Browseren nægter at genabonnere med en ny nøgle, så det
-      // skal væk først -- inklusive rækken i databasen, som ellers ville stå
-      // tilbage og pege på et dødt endpoint.
-      const existing = await registration.pushManager.getSubscription()
-      if (existing && !usesKey(existing, applicationServerKey)) {
-        await supabase
-          .from('push_subscriptions')
-          .delete()
-          .eq('endpoint', existing.endpoint)
-        await existing.unsubscribe()
-      }
-
-      const subscription =
-        (await registration.pushManager.getSubscription()) ??
-        (await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey,
-        }))
+      const subscription = await prepareBrowserPushSubscription()
 
       const { error: upsertError } = await supabase
         .from('push_subscriptions')
@@ -190,15 +232,16 @@ export function usePushNotifications(userId: string) {
           {
             user_id: userId,
             endpoint: subscription.endpoint,
-            p256dh: encodeKey(subscription, 'p256dh'),
-            auth: encodeKey(subscription, 'auth'),
+            p256dh: subscription.p256dh,
+            auth: subscription.auth,
           },
           { onConflict: 'endpoint' },
         )
       if (upsertError) {
         // Rul browserabonnementet tilbage, så UI'et ikke påstår "til", mens
         // serveren ikke aner, hvor den skal sende hen.
-        await subscription.unsubscribe()
+        const registration = await waitForRegistration()
+        await (await registration?.pushManager.getSubscription())?.unsubscribe()
         throw upsertError
       }
 
@@ -209,7 +252,9 @@ export function usePushNotifications(userId: string) {
       // VAPID-nøglepar -- typisk fordi databasen ikke svarede, eller fordi
       // push_vapid_keys-migrationen ikke er deployet endnu. Det retter sig selv,
       // så "prøv igen om lidt" er det rigtige råd -- ikke "kontakt admin".
-      if (
+      if (caught instanceof PushSetupError) {
+        setStatus({ state: 'unavailable', reason: caught.reason })
+      } else if (
         caught instanceof FunctionsHttpError &&
         caught.context?.status === 503
       ) {
