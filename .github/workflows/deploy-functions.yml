@@ -67,7 +67,9 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
 
       - name: Deploy calendar-feed
-        run: supabase functions deploy calendar-feed --project-ref "$SUPABASE_PROJECT_REF"
+        # Kalender-apps kan ikke sende en Authorization-header. Feedet er derfor
+        # offentligt ved gatewayen og læser kun den anon-begrænsede database-view.
+        run: supabase functions deploy calendar-feed --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
