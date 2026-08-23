@@ -1,5 +1,7 @@
 -- Pålidelige Web Push-notifikationer for prøvemedlemskaber (#82).
 -- Versionsnummeret er valgt efter kontrol af samtidige åbne PR-migrations.
+-- Migrationen er idempotent, fordi Supabase Preview kan have set et tidligere
+-- timestamp fra samme PR, før en samtidig migrationskonflikt blev opdaget.
 --
 -- Ansøgningen og dens leveringsstatus gemmes i samme transaktion. Selve push-
 -- kaldet sker bagefter i probation-notifications-edge-functionen, fordi et
@@ -13,25 +15,25 @@ create extension if not exists pg_net with schema extensions;
 create extension if not exists pg_cron with schema pg_catalog;
 
 alter table public.probation_applications
-  add column notification_token uuid not null default gen_random_uuid(),
-  add column notification_function_url text,
-  add column admin_notification_status text not null default 'pending'
+  add column if not exists notification_token uuid not null default gen_random_uuid(),
+  add column if not exists notification_function_url text,
+  add column if not exists admin_notification_status text not null default 'pending'
     check (admin_notification_status in ('pending', 'sending', 'sent', 'failed')),
-  add column admin_notification_attempts integer not null default 0
+  add column if not exists admin_notification_attempts integer not null default 0
     check (admin_notification_attempts >= 0),
-  add column admin_notification_started_at timestamptz,
-  add column admin_notification_sent_at timestamptz,
-  add column admin_notification_error text,
-  add column decision_notification_status text
+  add column if not exists admin_notification_started_at timestamptz,
+  add column if not exists admin_notification_sent_at timestamptz,
+  add column if not exists admin_notification_error text,
+  add column if not exists decision_notification_status text
     check (
       decision_notification_status is null
       or decision_notification_status in ('pending', 'sending', 'sent', 'failed')
     ),
-  add column decision_notification_attempts integer not null default 0
+  add column if not exists decision_notification_attempts integer not null default 0
     check (decision_notification_attempts >= 0),
-  add column decision_notification_started_at timestamptz,
-  add column decision_notification_sent_at timestamptz,
-  add column decision_notification_error text;
+  add column if not exists decision_notification_started_at timestamptz,
+  add column if not exists decision_notification_sent_at timestamptz,
+  add column if not exists decision_notification_error text;
 
 -- Ældre ansøgninger har intet browserabonnement. Markér det som en eksplicit
 -- fejl frem for at lade dem stå som "pending" uden en mulig leveringsvej.
@@ -44,7 +46,7 @@ where notification_function_url is null;
 -- Ét push-abonnement følger ansøgningen frem til afgørelsen. Tabellen kan kun
 -- læses af Edge Functionens Secret key; hverken ansøgerens endpoint eller
 -- krypteringsnøgler må kunne hentes gennem den offentlige API.
-create table public.probation_application_push_subscriptions (
+create table if not exists public.probation_application_push_subscriptions (
   application_id bigint primary key
     references public.probation_applications (id) on delete cascade,
   endpoint text not null,
@@ -559,6 +561,10 @@ end;
 $$;
 
 revoke all on function public.retry_probation_notifications() from public;
+
+select cron.unschedule(jobid)
+from cron.job
+where jobname = 'retry-probation-notifications';
 
 select cron.schedule(
   'retry-probation-notifications',
