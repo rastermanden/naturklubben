@@ -2,12 +2,18 @@ import { useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { useAuth } from '../features/auth/useAuth'
+import type { RouteMetadata } from '../routeMetadata'
 import { navLinks } from './navLinks'
 import { BurgerMenu } from './BurgerMenu'
 import { Footer } from './Footer'
 import { InstallAppButton } from './InstallAppButton'
+import { RouteNavigation } from './RouteNavigation'
 
-export function Layout() {
+interface LayoutProps {
+  routes: readonly RouteMetadata[]
+}
+
+export function Layout({ routes }: LayoutProps) {
   const { session, signOut } = useAuth()
   const { isAdmin } = useIsAdmin()
   const navigate = useNavigate()
@@ -27,6 +33,7 @@ export function Layout() {
       >
         Spring til indhold
       </a>
+      <RouteNavigation routes={routes} />
       <header
         className="sticky top-0 z-30 flex items-center justify-between border-b border-green-100 bg-white px-4 py-3"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}

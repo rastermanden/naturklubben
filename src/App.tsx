@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import ProfilePage from './pages/ProfilePage'
 import AccountDeletedPage from './pages/AccountDeletedPage'
 import DataPolicyPage from './pages/DataPolicyPage'
@@ -18,75 +19,60 @@ import WelcomePage from './pages/WelcomePage'
 import { AdminRoute } from './features/admin/AdminRoute'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
 import { Layout } from './components/Layout'
+import { routeMetadata, type AppRoutePath } from './routeMetadata'
+
+const routeElements: Record<AppRoutePath, ReactNode> = {
+  '/': <HeroPage />,
+  '/aktiviteter': <ActivitiesPage />,
+  '/datapolitik': <DataPolicyPage />,
+  '/konto-slettet': <AccountDeletedPage />,
+  '/login': <LoginPage />,
+  '/proevemedlemskab': <ProbationApplicationPage />,
+  '/opret': <SignupPage />,
+  '/glemt-adgangskode': <ForgotPasswordPage />,
+  '/velkommen': <WelcomePage />,
+  '/ny-adgangskode': <ResetPasswordPage />,
+  '/kalender': (
+    <ProtectedRoute>
+      <CalendarPage />
+    </ProtectedRoute>
+  ),
+  '/billeder': (
+    <ProtectedRoute>
+      <GalleryPage />
+    </ProtectedRoute>
+  ),
+  '/chat': (
+    <ProtectedRoute>
+      <ChatPage />
+    </ProtectedRoute>
+  ),
+  '/medlemmer': (
+    <ProtectedRoute>
+      <MembersPage />
+    </ProtectedRoute>
+  ),
+  '/admin': (
+    <ProtectedRoute>
+      <AdminRoute>
+        <AdminPage />
+      </AdminRoute>
+    </ProtectedRoute>
+  ),
+  '/profil': (
+    <ProtectedRoute>
+      <ProfilePage />
+    </ProtectedRoute>
+  ),
+}
 
 function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
-        <Route path="/" element={<HeroPage />} />
-        <Route path="/aktiviteter" element={<ActivitiesPage />} />
-        <Route path="/datapolitik" element={<DataPolicyPage />} />
-        <Route path="/konto-slettet" element={<AccountDeletedPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/proevemedlemskab"
-          element={<ProbationApplicationPage />}
-        />
-        <Route path="/opret" element={<SignupPage />} />
-        <Route path="/glemt-adgangskode" element={<ForgotPasswordPage />} />
-        {/* Landingssider for links i mails fra Supabase. */}
-        <Route path="/velkommen" element={<WelcomePage />} />
-        <Route path="/ny-adgangskode" element={<ResetPasswordPage />} />
-        <Route
-          path="/kalender"
-          element={
-            <ProtectedRoute>
-              <CalendarPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/billeder"
-          element={
-            <ProtectedRoute>
-              <GalleryPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/chat"
-          element={
-            <ProtectedRoute>
-              <ChatPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/medlemmer"
-          element={
-            <ProtectedRoute>
-              <MembersPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              <AdminRoute>
-                <AdminPage />
-              </AdminRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profil"
-          element={
-            <ProtectedRoute>
-              <ProfilePage />
-            </ProtectedRoute>
-          }
-        />
+      <Route element={<Layout routes={routeMetadata} />}>
+        {routeMetadata.map(({ path }) => (
+          <Route key={path} path={path} element={routeElements[path]} />
+        ))}
       </Route>
     </Routes>
   )
