@@ -75,6 +75,26 @@ lokale terminal. Derfor gælder:
 - Preview-databasen er tom bortset fra det, migrationerne opretter: ingen brugere, billeder
   eller beskeder. Skal en PR med migrationer testes som logget ind, skal man oprette en
   bruger på selve preview'et.
+- **PR'er fra Copilot coding agent får ikke automatisk et preview-link — deres workflows
+  skal godkendes manuelt.** Copilot åbner PR'en som sin egen GitHub App
+  (`copilot-swe-agent`), ikke som en bruger med write-adgang, og GitHub behandler den
+  derfor som en ekstern bidragyder: `ci.yml` og `pr-preview.yml` bliver oprettet, men
+  starter aldrig — de står med status `action_required`, indtil et menneske trykker
+  **"Approve and run workflows"** i PR'ens merge-boks. Uden den godkendelse er der intet
+  build, intet `dist/` og dermed intet preview-link; den eneste check på PR'en er
+  `Supabase Preview`, som Supabase-integrationen selv poster. Godkendelsen skal gives igen
+  ved hvert nyt push fra Copilot. Det er ikke en fejl i workflowet — PR'er fra Claude Code
+  pushes med brugerens eget token og kører derfor med det samme.
+  Selve godkendelseskravet kan slås fra én gang for alle under Settings → Code & automation
+  → Copilot → cloud agent → "Actions workflow approval" → slå **Require approval for
+  workflow runs** fra. Det er et manuelt dashboard-trin, og det giver ureviewet
+  Copilot-kode adgang til repoets Actions-secrets — her bl.a. `SUPABASE_ACCESS_TOKEN`, som
+  kan læse produktionsprojektets nøgler. Afvej det bevidst; standarden er godkendelse.
+- **PR'er fra forks får heller ikke et brugbart preview.** De kræver godkendelse af samme
+  grund (Settings → Actions → General → fork pull request workflows), og selv godkendt
+  fejler buildet med vilje: fork-PR'er får ingen secrets, så `VITE_SUPABASE_URL` og
+  `VITE_SUPABASE_PUBLISHABLE_KEY` er tomme, og `vite.config.ts` afviser at udgive en
+  app-løs bundle.
 
 ## Secrets/nøgler
 
