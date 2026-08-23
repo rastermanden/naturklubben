@@ -2,8 +2,8 @@
 -- og hvis de først opretter deres konti efter migrationen.
 insert into public.allowed_emails (email, note, is_admin)
 values
-  ('troelsranum@gmail.com', 'Administrator'),
-  ('kaspermoller@gmail.com', 'Administrator')
+  ('troelsranum@gmail.com', 'Administrator', true),
+  ('kaspermoller@gmail.com', 'Administrator', true)
 on conflict (email) do update
 set is_admin = true;
 
