@@ -81,3 +81,12 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      - name: Deploy submit-probation-application
+        # Offentlig formular uden en bruger-JWT. Functionen håndhæver selv
+        # server-side rate limits og kan kun kalde den interne RPC med den
+        # auto-injicerede Secret key.
+        run: supabase functions deploy submit-probation-application --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}

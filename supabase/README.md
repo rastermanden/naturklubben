@@ -16,9 +16,10 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 | `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder. | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                                                                                       |
 | `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                  | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                                                                                                     |
 | `admin_role_changes`                       | Uforanderligt revisionsspor med aktør, medlem, gammel/ny rolle og tidspunkt.                                                     | Kun admins kan læse; ingen klientrolle kan indsætte, ændre eller slette.                                                                                                                                          |
-| `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                      | Alle kan indsende; kun admins kan læse og behandle ansøgningerne.                                                                                                                                                 |
+| `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                      | Ingen offentlig insert-policy; kun den service-role-beskyttede submit-RPC kan oprette, og kun admins kan læse/behandle.                                                                                           |
 | `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                       | Ingen policies og ingen grants -- kun `probation-notifications` med Secret key kan læse rækken.                                                                                                                   |
 | `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                        | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                                                                                                |
+| `private.probation_submission_attempts`    | Kortlivede HMAC-hashes til server-side rate limiting; indeholder aldrig rå IP, subnet eller e-mail.                              | `private` eksponeres ikke gennem Data API'et; ingen grants til `anon`/`authenticated`.                                                                                                                            |
 
 ## Storage buckets
 
@@ -77,6 +78,12 @@ Oprettet manuelt i #2:
   Secret key. Postgres køer kaldet efter commit med `pg_net`, og `pg_cron` genforsøger
   midlertidige fejl. Funktionen deployes derfor med `--no-verify-jwt`, men hvert POST
   laver sin egen token/admin-kontrol, før en leveringsstatus kan tages til behandling.
+- `submit-probation-application` (#87): eneste offentlige indgang til nye
+  prøvemedlemskabsansøgninger. Functionen validerer input, bruger Cloudflares
+  platform-satte `CF-Connecting-IP`, HMAC-hasher misbrugssignaler og kalder en
+  service-role-only RPC, som rate-limiter og opretter ansøgning/push/outbox atomisk.
+  Den er offentlig uden gateway-JWT, men klienten kan hverken vælge signalerne eller
+  kalde den interne RPC direkte.
 - Fælles VAPID- og Web Push-kode ligger i `supabase/functions/_shared/`, så chat og
   prøvemedlemskaber bruger præcis samme afsendernøgle og krypteringskode.
 - Deployes **ikke** manuelt -- `.github/workflows/deploy-functions.yml` kører
@@ -159,8 +166,52 @@ det og kan fortsat logge ind.
 
 Offentlige besøgende kan sende en ansøgning fra `/proevemedlemskab`. Indsendelsen
 beder først om Web Push-tilladelse, så svaret kan nå ansøgeren uden en ekstern
-mailudbyder. Ansøgning, push-abonnement og notification-token gemmes atomisk via
-`submit_probation_application()`; kun admins kan læse ansøgningen i `/admin`.
+mailudbyder. Klienten kalder Edge Functionen `submit-probation-application` -- aldrig
+databasens submit-RPC direkte. Kun admins kan læse en oprettet ansøgning i `/admin`.
+
+Functionen bruger kun `CF-Connecting-IP`, som Cloudflare sætter på trafik fra sin
+edge til Supabase-origin. `X-Forwarded-For` ignoreres bevidst: en allerede
+eksisterende kæde kan indeholde caller-kontrollerede adresser. Mangler den trusted
+header, indeholder den flere værdier, eller kan adressen ikke parses, fejler
+indsendelsen lukket med 503 i stedet for at køre uden rate limit. IPv4 normaliseres
+til eksakt adresse og `/24`, IPv6 til eksakt adresse og `/64`; IPv4-mappet IPv6
+normaliseres som IPv4.
+
+IP, subnet og trimmet/lowercase e-mail HMAC-hashes i tre domæneadskilte inputs med
+den auto-injicerede Supabase Secret key. Hashene har fast SHA-256-format. Rå IP og
+subnet sendes aldrig til Postgres eller function-logs; body, e-mail, push-token,
+endpoint og hashes logges heller ikke. Rotation af Secret key gør gamle hashes
+usammenlignelige og nulstiller derfor højst de kortlivede limiter-vinduer.
+
+Den interne `submit_probation_application_limited()` kan kun køres som
+`service_role`. Under deterministisk ordnede transaktionslåse registrerer den
+forsøget, kontrollerer alle overlappende glidende vinduer og opretter derefter
+ansøgning, push-abonnement og notification-outbox i samme transaktion:
+
+| Signal                  | Grænse                   |
+| ----------------------- | ------------------------ |
+| Eksakt IP               | 3 forsøg på 15 minutter  |
+| Eksakt IP               | 10 forsøg på 24 timer    |
+| Normaliseret e-mail     | 3 forsøg på 24 timer     |
+| IPv4 `/24` / IPv6 `/64` | 25 forsøg på 24 timer    |
+| Global nødgrænse        | 1.000 forsøg på 24 timer |
+
+Den globale grænse er kun en nødbremse mod et distribueret angreb, ikke den normale
+limiter. En lav grænse ville være let at udnytte til availability-DoS; 1.000 lader
+de mere præcise IP/net/e-mail-grænser gøre det daglige arbejde, men sætter stadig et
+loft over database- og adminbelastning. Et stort distribueret botnet kan fortsat
+ramme loftet. CAPTCHA/Turnstile tilføjes først, hvis det problem ses i praksis:
+ellers ville det indføre ekstern tracking, konto/secrets og manuelle dashboardtrin.
+Honeypots, `Origin`, user-agent og klienttimere bruges ikke som sikkerhed, fordi de
+er trivielt manipulerbare.
+
+Allerede tilladte e-mails og e-mails med en pending ansøgning er server-side no-ops.
+De får samme HTTP 202, response-body og 400--500 ms responstidsklasse som en reel
+ny ansøgning, så formularen ikke kan bruges til at enumerere medlems-/ansøgerstatus.
+Kun den reelle nye ansøgning opretter adminrække og outbox. Rate limit returnerer
+429 med `Retry-After`; UI'et viser ventetiden på dansk. De kortlivede limiter-rækker
+indeholder kun HMAC-hashes og slettes automatisk efter 25 timer. Ansøgningernes
+generelle dataretention ejes separat af #86 og ændres ikke af spam-beskyttelsen.
 
 Når en admin godkender en ansøgning, kalder klienten SQL-funktionen
 `approve_probation_application()`, som atomisk:
@@ -211,8 +262,14 @@ VAPID-nøgle eller andre server-secrets i frontenden.
 
 Konsekvensen er, at browseren skal understøtte Web Push og have tilladelse, før
 ansøgningen kan sendes. På iPhone/iPad kræver Safari, at appen først er lagt på
-hjemmeskærmen. PR-previews har ingen service worker og kan derfor validere
-migration/RLS/UI, men ikke selve push-leveringen; den prøves på den udgivne PWA.
+hjemmeskærmen. `supabase/config.toml` gør, at GitHub-integrationen deployer
+submit-functionen til PR'ens Supabase Preview Branch. `pr-preview.yml` sender
+automatisk en request med en caller-sat, ugyldig `CF-Connecting-IP` og kræver, at
+Cloudflare enten afviser den ved edge eller overskriver den. Derefter sendes en
+spoofet, multipel `X-Forwarded-For`; den skal ignoreres, mens platformens
+`CF-Connecting-IP` får requestet frem til body-valideringen (HTTP 400).
+PR-previews har ingen service worker og kan derfor ikke afprøve selve
+push-leveringen -- kun submit/migration/RLS/UI.
 
 ## Auth-URL'er: hvor links i mails lander
 
