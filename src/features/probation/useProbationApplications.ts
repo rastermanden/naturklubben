@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
 import type { BrowserPushSubscription } from '../notifications/usePushNotifications'
+import { toProbationSubmissionError } from './probationErrors'
+
+export { toFriendlyProbationApplicationError } from './probationErrors'
 
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected'
 export type NotificationStatus = 'pending' | 'sending' | 'sent' | 'failed'
@@ -35,19 +38,9 @@ export interface NotificationDelivery {
   error?: string
 }
 
-export interface SubmittedApplication {
-  applicationId: number
-  notificationToken: string
-  notification: NotificationDelivery
-}
-
-interface SubmittedApplicationRow {
-  application_id: number
-  notification_token: string
-}
-
 const queryKey = ['probation_applications', 'pending']
 const notificationFunction = 'probation-notifications'
+const submissionFunction = 'submit-probation-application'
 
 async function fetchPendingProbationApplications(): Promise<
   ProbationApplication[]
@@ -94,53 +87,6 @@ function failedDelivery(): NotificationDelivery {
   }
 }
 
-function isSubmittedApplicationRow(
-  value: unknown,
-): value is SubmittedApplicationRow {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'application_id' in value &&
-    typeof value.application_id === 'number' &&
-    'notification_token' in value &&
-    typeof value.notification_token === 'string'
-  )
-}
-
-export function toFriendlyProbationApplicationError(error: unknown): string {
-  const code =
-    typeof error === 'object' && error !== null && 'code' in error
-      ? String((error as { code: unknown }).code)
-      : ''
-  const message =
-    typeof error === 'object' && error !== null && 'message' in error
-      ? String((error as { message: unknown }).message)
-      : ''
-
-  if (code === '23505' && message === 'Email already allowed')
-    return 'Den e-mail kan allerede oprette en bruger.'
-  if (code === '23505')
-    return 'Der ligger allerede en åben ansøgning på den e-mail.'
-  if (code === '42501')
-    return 'Du har ikke rettigheder til at behandle ansøgningen.'
-  if (code === 'P0002')
-    return 'Ansøgningen blev ikke fundet. Opdater siden og prøv igen.'
-  if (code === '22023')
-    return 'Alle felter og tilladelse til notifikationer er påkrævet.'
-  if (code === '22001')
-    return 'Et eller flere felter er for lange. Forkort teksten og prøv igen.'
-  // PGRST205 (nyere PostgREST) og 42P01 (Postgres) betyder begge, at tabellen
-  // ikke findes -- i praksis at migrationen ikke er deployet endnu.
-  if (code === 'PGRST205' || code === '42P01')
-    return 'Ansøgninger er ikke slået til i databasen endnu. Kontakt den, der passer appen.'
-  // supabase-js kaster PostgrestError: et almindeligt objekt, ikke en Error.
-  // Uden det her faldt enhver ukendt fejl igennem til den intetsigende tekst
-  // nedenfor, så en reel fejlbesked aldrig nåede skærmen.
-  if (message) return message
-  if (error instanceof Error) return error.message
-  return 'Der skete en fejl. Prøv igen om lidt.'
-}
-
 export function useSubmitProbationApplication() {
   return useMutation({
     mutationFn: async ({
@@ -149,42 +95,16 @@ export function useSubmitProbationApplication() {
       motivation,
       subscription,
     }: ProbationApplicationInput) => {
-      const { data, error } = await supabase
-        .rpc('submit_probation_application', {
-          applicant_full_name: fullName.trim(),
-          applicant_email: email.trim().toLowerCase(),
-          applicant_motivation: motivation.trim(),
-          push_endpoint: subscription.endpoint,
-          push_p256dh: subscription.p256dh,
-          push_auth: subscription.auth,
-        })
-        .single()
+      const { data, error } = await supabase.functions.invoke<{
+        accepted?: boolean
+      }>(submissionFunction, {
+        body: { fullName, email, motivation, subscription },
+      })
 
-      if (error) throw error
-      if (!isSubmittedApplicationRow(data)) {
-        throw new Error('Serveren svarede uden ansøgnings-id.')
+      if (error) throw await toProbationSubmissionError(error)
+      if (data?.accepted !== true) {
+        throw new Error('Serveren svarede uden en kvittering.')
       }
-
-      let notification: NotificationDelivery
-      try {
-        notification = await deliverNotification(
-          data.application_id,
-          'admin',
-          data.notification_token,
-        )
-      } catch (notificationError) {
-        console.error(
-          'Ansøgningen blev gemt, men admin-notifikationen fejlede',
-          notificationError,
-        )
-        notification = failedDelivery()
-      }
-
-      return {
-        applicationId: data.application_id,
-        notificationToken: data.notification_token,
-        notification,
-      } satisfies SubmittedApplication
     },
   })
 }
@@ -211,14 +131,6 @@ async function decideApplication(
     )
     return failedDelivery()
   }
-}
-
-export function retryProbationNotification(
-  applicationId: number,
-  kind: 'admin' | 'decision',
-  notificationToken?: string,
-) {
-  return deliverNotification(applicationId, kind, notificationToken)
 }
 
 export function useProbationApplications() {

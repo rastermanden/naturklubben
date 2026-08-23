@@ -1,9 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  retryProbationNotification,
   toFriendlyProbationApplicationError,
-  type SubmittedApplication,
   useSubmitProbationApplication,
 } from '../features/probation/useProbationApplications'
 import {
@@ -26,8 +24,7 @@ function ProbationApplicationPage() {
   const [email, setEmail] = useState('')
   const [motivation, setMotivation] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [submitted, setSubmitted] = useState<SubmittedApplication | null>(null)
-  const [isRetrying, setIsRetrying] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -37,13 +34,13 @@ function ProbationApplicationPage() {
       const subscription = await prepareBrowserPushSubscription(
         'probation-notifications',
       )
-      const result = await submitApplication.mutateAsync({
+      await submitApplication.mutateAsync({
         fullName,
         email,
         motivation,
         subscription,
       })
-      setSubmitted(result)
+      setSubmitted(true)
       setFullName('')
       setEmail('')
       setMotivation('')
@@ -56,32 +53,7 @@ function ProbationApplicationPage() {
     }
   }
 
-  async function retryAdminNotification() {
-    if (!submitted) return
-    setIsRetrying(true)
-    try {
-      const notification = await retryProbationNotification(
-        submitted.applicationId,
-        'admin',
-        submitted.notificationToken,
-      )
-      setSubmitted({ ...submitted, notification })
-    } catch (retryError) {
-      console.error('Admin-notifikationen kunne ikke prøves igen', retryError)
-      setSubmitted({
-        ...submitted,
-        notification: {
-          status: 'failed',
-          error: 'Notifikationen kunne ikke leveres. Prøv igen.',
-        },
-      })
-    } finally {
-      setIsRetrying(false)
-    }
-  }
-
   if (submitted) {
-    const notificationFailed = submitted.notification.status === 'failed'
     return (
       <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold text-green-900">
@@ -91,25 +63,6 @@ function ProbationApplicationPage() {
           Tak for din interesse i Naturklubben. Vi gennemgår ansøgningen manuelt
           og sender svaret som en notifikation på denne enhed.
         </p>
-        {notificationFailed && (
-          <div
-            role="alert"
-            className="space-y-3 rounded border border-amber-300 bg-amber-50 p-4 text-amber-900"
-          >
-            <p>
-              Ansøgningen er gemt, men administratorerne kunne ikke få
-              notifikationen: {submitted.notification.error ?? 'Ukendt fejl'}
-            </p>
-            <button
-              type="button"
-              onClick={() => void retryAdminNotification()}
-              disabled={isRetrying}
-              className="rounded border border-amber-500 px-4 py-2 disabled:opacity-50"
-            >
-              {isRetrying ? 'Prøver igen…' : 'Prøv notifikationen igen'}
-            </button>
-          </div>
-        )}
         <Link to="/" className="underline">
           Tilbage til forsiden
         </Link>
