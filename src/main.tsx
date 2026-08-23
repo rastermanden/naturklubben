@@ -7,19 +7,24 @@ import App from './App.tsx'
 import { queryClient } from './lib/queryClient'
 import { restoreSpaRedirect } from './lib/spaRedirect'
 import { AuthProvider } from './features/auth/AuthProvider'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { installGlobalErrorReporting } from './lib/errorReporting'
 
 // Skal ske før React Router læser adressen -- ellers ser den rod-ruten i
 // stedet for den sti, brugeren faktisk bad om (se lib/spaRedirect.ts).
+installGlobalErrorReporting()
 restoreSpaRedirect()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter basename={import.meta.env.BASE_URL}>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ErrorBoundary variant="app" reportSource="react-global">
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter basename={import.meta.env.BASE_URL}>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )
