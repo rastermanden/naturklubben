@@ -20,7 +20,7 @@
 // function-secrets, hvis de er sat -- ellers genererer og gemmer functionen
 // selv et nøglepar første gang (se vapid.ts).
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
 import { handleCors } from '../_shared/cors.ts'
 import { getVapidDetails } from '../_shared/vapid.ts'
 import { sendPushNotification, type VapidDetails } from '../_shared/webpush.ts'

@@ -9,7 +9,7 @@
 // sletter i bidder -- storage.remove() tager en liste af paths, og et enkelt
 // list-kald returnerer højst `limit` objekter ad gangen.
 
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.112.3'
 
 const LIST_PAGE_SIZE = 100
 const REMOVE_BATCH_SIZE = 100
