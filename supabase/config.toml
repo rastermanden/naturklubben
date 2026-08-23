@@ -8,6 +8,10 @@ verify_jwt = false
 enabled = true
 verify_jwt = false
 
+[functions.report-client-error]
+enabled = true
+verify_jwt = false
+
 [functions.export-account]
 enabled = true
 verify_jwt = true
