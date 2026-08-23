@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../features/auth/useAuth'
 import { MessageBubble } from '../features/chat/MessageBubble'
 import { OnlineMembers } from '../features/chat/OnlineMembers'
 import { useMessages } from '../features/chat/useMessages'
+import { useReactions } from '../features/chat/useReactions'
+import {
+  groupReactionsByMessage,
+  summarizeReactions,
+} from '../features/chat/reactions'
 import { useOnlinePresence } from '../features/chat/useOnlinePresence'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
@@ -17,6 +22,12 @@ function ChatPage() {
   const { messagesQuery, sendMessage } = useMessages()
   const { data: profiles, refetch: refetchProfiles } = useProfilesMap()
   const onlineUserIds = useOnlinePresence(userId)
+  const messages = messagesQuery.data ?? []
+  const { reactions, toggleReaction } = useReactions(messages, userId)
+  const reactionsByMessage = useMemo(
+    () => groupReactionsByMessage(reactions),
+    [reactions],
+  )
 
   const [draft, setDraft] = useState('')
   const [sendError, setSendError] = useState<string | null>(null)
@@ -24,11 +35,14 @@ function ChatPage() {
   const [isNearBottom, setIsNearBottom] = useState(true)
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
 
+  function nameOf(id: string) {
+    return profiles?.[id]?.full_name ?? 'Medlem'
+  }
+
   const listRef = useRef<HTMLUListElement>(null)
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const previousMessageCount = useRef(0)
   const lookedUpAuthorIds = useRef(new Set<string>())
-  const messages = messagesQuery.data ?? []
   const replyingToName =
     replyingTo?.user_id === null
       ? 'Tidligere medlem'
@@ -109,6 +123,19 @@ function ChatPage() {
         },
       },
     )
+  }
+
+  function reactTo(message: Message, emoji: string) {
+    const summary = summarizeReactions(
+      reactionsByMessage.get(message.id),
+      userId,
+      nameOf,
+    ).find((entry) => entry.emoji === emoji)
+    toggleReaction.mutate({
+      messageId: message.id,
+      emoji,
+      reactedByMe: summary?.reactedByMe ?? false,
+    })
   }
 
   function selectReply(message: Message) {
@@ -200,6 +227,12 @@ function ChatPage() {
                 }
                 isOwn={message.user_id === userId}
                 onReply={selectReply}
+                reactions={summarizeReactions(
+                  reactionsByMessage.get(message.id),
+                  userId,
+                  nameOf,
+                )}
+                onToggleReaction={reactTo}
               />
             ))}
           </ul>

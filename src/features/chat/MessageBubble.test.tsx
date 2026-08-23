@@ -39,6 +39,8 @@ describe('MessageBubble', () => {
         replyAuthor={replyAuthor}
         isOwn={false}
         onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
       />,
     )
 
@@ -57,6 +59,8 @@ describe('MessageBubble', () => {
         replyAuthor={replyAuthor}
         isOwn={false}
         onReply={onReply}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
       />,
     )
 
@@ -75,6 +79,8 @@ describe('MessageBubble', () => {
         replyAuthor={undefined}
         isOwn={false}
         onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
       />,
     )
 
@@ -92,11 +98,66 @@ describe('MessageBubble', () => {
         replyAuthor={replyAuthor}
         isOwn
         onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
       />,
     )
 
     const avatar = container.querySelector('img')
     expect(avatar?.getAttribute('src')).toBe('https://example.test/bo.jpg')
+  })
+
+  it('opens the reaction picker from the action row and reports the choice', () => {
+    const onToggleReaction = vi.fn()
+    render(
+      <MessageBubble
+        message={message}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={onToggleReaction}
+      />,
+    )
+
+    // Vælgeren fylder ikke, før den åbnes.
+    expect(screen.queryByRole('button', { name: 'Reagér med 👍' })).toBeNull()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reagér på besked fra Bo' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Reagér med 👍' }))
+
+    expect(onToggleReaction).toHaveBeenCalledWith(message, '👍')
+    // Vælgeren lukker igen, så boblen ikke bliver stående åben.
+    expect(screen.queryByRole('button', { name: 'Reagér med 👍' })).toBeNull()
+  })
+
+  it('marks a reaction the member has already given as pressed', () => {
+    const onToggleReaction = vi.fn()
+    render(
+      <MessageBubble
+        message={message}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[
+          { emoji: '👍', count: 2, reactedByMe: true, names: ['Dig', 'Ada'] },
+        ]}
+        onToggleReaction={onToggleReaction}
+      />,
+    )
+
+    const chip = screen.getByRole('button', {
+      name: 'Fjern din 👍-reaktion. Dig, Ada',
+    })
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
+    expect(chip.textContent).toContain('2')
+
+    fireEvent.click(chip)
+    expect(onToggleReaction).toHaveBeenCalledWith(message, '👍')
   })
 
   it('shows no stable identity for an anonymized message', () => {
@@ -113,6 +174,8 @@ describe('MessageBubble', () => {
         replyAuthor={undefined}
         isOwn={false}
         onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
       />,
     )
 
