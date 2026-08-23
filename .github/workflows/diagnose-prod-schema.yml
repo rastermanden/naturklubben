@@ -69,6 +69,9 @@ jobs:
           run_query "Event triggers" \
             "select evtname, evtenabled from pg_event_trigger order by evtname"
 
+          run_query "Foreign keys på messages" \
+            "select conname, convalidated, pg_get_constraintdef(oid) as def from pg_constraint where conrelid = 'public.messages'::regclass and contype = 'f' order by conname"
+
       - name: Gentag klientens forespørgsel mod produktions-API'et
         env:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
@@ -107,3 +110,12 @@ jobs:
 
           rest_get "Beskeder med de nye slette-kolonner" \
             "messages?select=id,deleted_at,deleted_by&limit=1"
+
+          # PostgREST kender de kolonner, 18:10-migrationen tilføjede, så
+          # cachen *er* genindlæst siden da. Det udelukker en simpelt forældet
+          # cache og efterlader to muligheder: enten accepteres
+          # constraint-navnet ikke som hint for en selvrefererende relation,
+          # eller også nåede foreign key'en først databasen efter den seneste
+          # genindlæsning. Kolonnenavnet som hint skiller de to ad.
+          rest_get "Svar-embed med kolonnenavn som hint" \
+            "messages?select=id,reply_to:messages!reply_to_message_id(id,user_id,content)&limit=1"
