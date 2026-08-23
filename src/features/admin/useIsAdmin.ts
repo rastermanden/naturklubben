@@ -2,13 +2,17 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
 import { useAuth } from '../auth/useAuth'
 
+export function isAdminQueryKey(userId: string) {
+  return ['profiles', userId, 'is_admin'] as const
+}
+
 /** Slår op om den aktuelle bruger har profiles.is_admin sat. */
 export function useIsAdmin() {
   const { session } = useAuth()
   const userId = session?.user.id
 
   const query = useQuery({
-    queryKey: ['profiles', userId, 'is_admin'],
+    queryKey: isAdminQueryKey(userId ?? ''),
     enabled: Boolean(userId),
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {

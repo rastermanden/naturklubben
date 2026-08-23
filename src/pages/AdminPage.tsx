@@ -10,6 +10,7 @@ import {
   useProbationApplications,
 } from '../features/probation/useProbationApplications'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
+import { AdminRolesSection } from '../features/admin/AdminRolesSection'
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('da-DK', {
@@ -157,8 +158,8 @@ function AdminPage() {
       <div>
         <h1 className="text-2xl font-semibold text-green-900">Admin</h1>
         <p className="text-green-700">
-          Her bestemmer du, hvem der må oprette en bruger i Naturklubben. Kun
-          e-mailadresser på listen kan gennemføre en tilmelding.
+          Her administrerer du medlemmer, adminroller, ansøgninger og hvem der
+          må oprette en bruger i Naturklubben.
         </p>
       </div>
 
@@ -181,6 +182,8 @@ function AdminPage() {
         </p>
         <NotificationToggle userId={userId} />
       </section>
+
+      <AdminRolesSection currentUserId={userId} />
 
       <form
         onSubmit={handleSubmit}
