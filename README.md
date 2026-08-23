@@ -53,6 +53,14 @@ Bekræftelses- og nulstillingsmails fra Supabase lander på `/velkommen` og
 fragment i behold. Hvilke URL'er Supabase overhovedet må sende folk hen til, styres af
 `.github/workflows/sync-auth-config.yml` -- se `supabase/README.md`.
 
+## Dokumentation
+
+- [`docs/kodegennemgang-2026-08-23.md`](docs/kodegennemgang-2026-08-23.md) — gennemgang af
+  hele appen: arkitektur, styrker, fund og roadmap. Fundene er oprettet som issues med
+  labels `blocker`, `risiko`, `friktion` og `finish`.
+- `CLAUDE.md` — projektets udviklingskonventioner.
+- `supabase/README.md` — backend-opsætning, nøgler og auth-URL'er.
+
 ## Mappestruktur
 
 ```
