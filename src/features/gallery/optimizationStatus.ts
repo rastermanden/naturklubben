@@ -34,6 +34,27 @@ export function canRetryOptimization(photo: Photo, userId: string | undefined) {
   )
 }
 
+/**
+ * Egne billeder, der venter på deres første optimering uden at nogen har
+ * bestilt den. Nyligt uploadede springes over: dér har uploadkøen selv lige
+ * kaldt optimeringen, og en gentagelse ville kun ramme et optaget claim.
+ */
+export function pendingPhotosToOptimize(
+  photos: Photo[],
+  userId: string | undefined,
+  alreadyRequested: ReadonlySet<string>,
+  now = Date.now(),
+) {
+  if (!userId) return []
+  return photos.filter(
+    (photo) =>
+      photo.uploaded_by === userId &&
+      photo.optimization_status === 'pending' &&
+      !isPendingOptimizationActive(photo, now) &&
+      !alreadyRequested.has(photo.id),
+  )
+}
+
 export function optimizationStatusLabel(photo: Photo) {
   if (isStaleOptimization(photo)) return 'Optimering stoppet'
 

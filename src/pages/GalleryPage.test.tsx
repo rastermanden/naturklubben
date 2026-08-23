@@ -42,6 +42,9 @@ vi.mock('../features/gallery/useDeletePhoto', () => ({
 vi.mock('../features/gallery/useRetryPhotoOptimization', () => ({
   useRetryPhotoOptimization: () => mocks.retryOptimization,
 }))
+vi.mock('../features/gallery/useAutoOptimizePendingPhotos', () => ({
+  useAutoOptimizePendingPhotos: () => {},
+}))
 vi.mock('../features/gallery/useEventsForSelect', () => ({
   useEventsForSelect: () => ({
     data: [],
