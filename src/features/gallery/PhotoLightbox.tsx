@@ -29,25 +29,36 @@ export function PhotoLightbox({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
+  useEffect(() => {
+    if (!shareStatus) return
+    const timeout = window.setTimeout(() => setShareStatus(null), 2500)
+    return () => window.clearTimeout(timeout)
+  }, [shareStatus])
+
   async function handleShareClick(event: MouseEvent<HTMLButtonElement>) {
     event.stopPropagation()
     setShareStatus(null)
 
     try {
-      const shareUrl = window.location.href
+      const shareUrl = new URL(window.location.href)
+      shareUrl.search = ''
+      shareUrl.hash = ''
+      shareUrl.searchParams.set('photo', photo.id)
+      const shareLink = shareUrl.toString()
       if (navigator.share) {
         await navigator.share({
           title: photo.caption ?? 'Billede fra Naturklubben',
-          url: shareUrl,
+          url: shareLink,
         })
         return
       }
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl)
+        await navigator.clipboard.writeText(shareLink)
         setShareStatus('Link kopieret.')
         return
       }
-      throw new Error('sharing-not-supported')
+      setShareStatus(`Kopiér link manuelt: ${shareLink}`)
+      return
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       setShareStatus('Kunne ikke dele link. Prøv igen.')
@@ -113,6 +124,8 @@ export function PhotoLightbox({
       </div>
       {shareStatus && (
         <p
+          role="status"
+          aria-live="polite"
           onClick={(event) => event.stopPropagation()}
           className="text-sm text-white/80"
         >

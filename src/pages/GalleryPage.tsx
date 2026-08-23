@@ -197,6 +197,7 @@ function GalleryPage() {
 
       {activePhoto && (
         <PhotoLightbox
+          key={activePhoto.id}
           photo={activePhoto}
           onClose={() => setPhotoSearchParam(null)}
           deleting={deletePhoto.isPending}
