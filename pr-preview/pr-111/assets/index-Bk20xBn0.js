@@ -31,7 +31,7 @@ Du mister straks adgang til admin-panelet og kan ikke selv få rollen tilbage. H
   deleted_at,
   deleted_by,
   reply_to_message_id,
-  reply_to:messages!messages_reply_to_message_id_fkey (
+  reply_to:messages!reply_to_message_id (
     id,
     user_id,
     content,
