@@ -223,10 +223,12 @@ Konsekvensen er, at browseren skal understøtte Web Push og have tilladelse, fø
 ansøgningen kan sendes. På iPhone/iPad kræver Safari, at appen først er lagt på
 hjemmeskærmen. `supabase/config.toml` gør, at GitHub-integrationen deployer
 submit-functionen til PR'ens Supabase Preview Branch. `pr-preview.yml` sender
-automatisk en request med en caller-sat, ugyldig `CF-Connecting-IP` og forventer,
-at platformen overskriver den, så functionen når body-valideringen (HTTP 400);
-HTTP 503 fejler checket. PR-previews har ingen service worker og kan derfor ikke
-afprøve selve push-leveringen -- kun submit/migration/RLS/UI.
+automatisk en request med en caller-sat, ugyldig `CF-Connecting-IP` og kræver, at
+Cloudflare enten afviser den ved edge eller overskriver den. Derefter sendes en
+spoofet, multipel `X-Forwarded-For`; den skal ignoreres, mens platformens
+`CF-Connecting-IP` får requestet frem til body-valideringen (HTTP 400).
+PR-previews har ingen service worker og kan derfor ikke afprøve selve
+push-leveringen -- kun submit/migration/RLS/UI.
 
 ## Auth-URL'er: hvor links i mails lander
 
