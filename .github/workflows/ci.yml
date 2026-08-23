@@ -28,18 +28,18 @@ jobs:
         with:
           deno-version: 2.9.5
 
-      - name: Test Edge Function-hjælpere
-        run: deno test supabase/functions/_shared/*.test.ts
-
-      - name: Typecheck kontosletning
-        run: deno check supabase/functions/delete-account/index.ts
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
       - run: npm ci
+
+      - name: Test Edge Function-hjælpere
+        run: deno test supabase/functions/_shared/*.test.ts
+
+      - name: Typecheck kontosletning
+        run: deno check supabase/functions/delete-account/index.ts
 
       - name: Test
         run: npm test
