@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
-import { useInvalidatePhotos } from './usePhotos'
+import { useRefreshPhoto } from './usePhotos'
 import type { Photo } from './types'
 
 export async function requestPhotoDeletion(photoId: string) {
@@ -11,10 +11,14 @@ export async function requestPhotoDeletion(photoId: string) {
 }
 
 export function useDeletePhoto() {
-  const invalidatePhotos = useInvalidatePhotos()
+  const refreshPhoto = useRefreshPhoto()
 
   return useMutation({
     mutationFn: (photo: Photo) => requestPhotoDeletion(photo.id),
-    onSettled: () => invalidatePhotos(),
+    onSettled: (_data, _error, photo) => {
+      void refreshPhoto(photo.id).catch((error) =>
+        console.warn('Billedets slettestatus kunne ikke genhentes', error),
+      )
+    },
   })
 }

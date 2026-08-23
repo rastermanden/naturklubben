@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
-import { useInvalidatePhotos } from './usePhotos'
+import { useRefreshPhoto } from './usePhotos'
 
 export async function requestPhotoOptimization(photoId: string) {
   const { error } = await supabase.functions.invoke('optimize-image', {
@@ -10,10 +10,14 @@ export async function requestPhotoOptimization(photoId: string) {
 }
 
 export function useRetryPhotoOptimization() {
-  const invalidatePhotos = useInvalidatePhotos()
+  const refreshPhoto = useRefreshPhoto()
 
   return useMutation({
     mutationFn: requestPhotoOptimization,
-    onSettled: () => invalidatePhotos(),
+    onSettled: (_data, _error, photoId) => {
+      void refreshPhoto(photoId).catch((error) =>
+        console.warn('Billedets optimeringsstatus kunne ikke genhentes', error),
+      )
+    },
   })
 }
