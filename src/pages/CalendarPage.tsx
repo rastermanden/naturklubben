@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { AttendanceSection } from '../features/calendar/AttendanceSection'
 import { EventForm } from '../features/calendar/EventForm'
 import { downloadIcal } from '../features/calendar/ical'
 import {
@@ -52,6 +53,7 @@ function monthCells(month: Date) {
 
 function EventDetails({
   event,
+  userId,
   isOwner,
   deleting,
   error,
@@ -61,6 +63,7 @@ function EventDetails({
   onIcal,
 }: {
   event: CalendarEvent
+  userId: string
   isOwner: boolean
   deleting: boolean
   error: string | null
@@ -79,7 +82,7 @@ function EventDetails({
       aria-modal="true"
       aria-labelledby="event-title"
     >
-      <article className="w-full rounded-t-xl bg-white p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
+      <article className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
         <div className="flex items-start justify-between gap-4">
           <h2 id="event-title" className="text-xl font-semibold text-green-900">
             {event.title}
@@ -118,6 +121,8 @@ function EventDetails({
             </div>
           )}
         </dl>
+
+        <AttendanceSection eventId={event.id} userId={userId} />
 
         {error && (
           <p role="alert" className="mt-4 text-sm text-red-700">
@@ -414,6 +419,7 @@ function CalendarPage() {
       {selectedEvent && (
         <EventDetails
           event={selectedEvent}
+          userId={userId}
           isOwner={selectedEvent.created_by === userId}
           deleting={deleteEvent.isPending}
           error={mutationError}
