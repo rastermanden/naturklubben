@@ -132,6 +132,18 @@ function ActivitiesPage() {
                   <p className="mt-3 leading-7 text-green-800">
                     {activity.description}
                   </p>
+                  {activity.link_url && activity.link_label && (
+                    <a
+                      href={activity.link_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-4 inline-flex min-h-11 items-center gap-1 font-medium text-green-800 underline underline-offset-4"
+                    >
+                      {activity.link_label}
+                      <span aria-hidden="true">&#8599;</span>
+                      <span className="sr-only">(&aring;bner i ny fane)</span>
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
