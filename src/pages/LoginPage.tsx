@@ -15,7 +15,7 @@ function LoginPage() {
   )
   const [submitting, setSubmitting] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
-  const [focusEmailError, emailErrorAnnouncement] = useErrorFocus(emailRef)
+  const focusEmailError = useErrorFocus(emailRef)
 
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
@@ -85,15 +85,8 @@ function LoginPage() {
 
         {error && (
           <p
-            key={emailErrorAnnouncement}
             id="login-error"
-            role={
-              errorField
-                ? emailErrorAnnouncement > 0
-                  ? 'alert'
-                  : undefined
-                : 'alert'
-            }
+            role={errorField ? undefined : 'alert'}
             className="text-sm text-red-700"
           >
             {error}

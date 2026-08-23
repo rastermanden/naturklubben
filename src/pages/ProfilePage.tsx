@@ -43,8 +43,7 @@ function ProfilePage() {
   )
   const fileInputRef = useRef<HTMLInputElement>(null)
   const avatarButtonRef = useRef<HTMLButtonElement>(null)
-  const [focusAvatarError, avatarErrorAnnouncement] =
-    useErrorFocus(avatarButtonRef)
+  const focusAvatarError = useErrorFocus(avatarButtonRef)
 
   useEffect(() => {
     async function load() {
@@ -317,15 +316,8 @@ function ProfilePage() {
         )}
         {errorMsg && (
           <p
-            key={avatarErrorAnnouncement}
             id="profile-form-error"
-            role={
-              errorSource === 'avatar'
-                ? avatarErrorAnnouncement > 0
-                  ? 'alert'
-                  : undefined
-                : 'alert'
-            }
+            role={errorSource === 'avatar' ? undefined : 'alert'}
             className="text-sm text-red-700"
           >
             {errorMsg}

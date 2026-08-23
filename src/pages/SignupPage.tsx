@@ -17,15 +17,8 @@ function SignupPage() {
   const [errorField, setErrorField] = useState<'email' | 'password' | null>(
     null,
   )
-  const [focusEmailError, emailErrorAnnouncement] = useErrorFocus(emailRef)
-  const [focusPasswordError, passwordErrorAnnouncement] =
-    useErrorFocus(passwordRef)
-  const errorAnnouncement =
-    errorField === 'email'
-      ? emailErrorAnnouncement
-      : errorField === 'password'
-        ? passwordErrorAnnouncement
-        : 0
+  const focusEmailError = useErrorFocus(emailRef)
+  const focusPasswordError = useErrorFocus(passwordRef)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -141,15 +134,8 @@ function SignupPage() {
 
         {error && (
           <p
-            key={errorAnnouncement}
             id="signup-error"
-            role={
-              errorField
-                ? errorAnnouncement > 0
-                  ? 'alert'
-                  : undefined
-                : 'alert'
-            }
+            role={errorField ? undefined : 'alert'}
             className="text-sm text-red-700"
           >
             {error}
