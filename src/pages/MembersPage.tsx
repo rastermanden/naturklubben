@@ -13,9 +13,7 @@ function MembersPage() {
 
   return (
     <main className="mx-auto max-w-4xl p-6">
-      <h1 className="mb-4 text-2xl font-semibold text-green-900">
-        Medlemmer
-      </h1>
+      <h1 className="mb-4 text-2xl font-semibold text-green-900">Medlemmer</h1>
 
       {isLoading && <p className="text-green-800">Henter medlemmer…</p>}
 
