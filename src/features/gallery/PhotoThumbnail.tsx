@@ -11,10 +11,19 @@ export function PhotoThumbnail({
 }) {
   const { url, isLoading, error, refetch } = useDisplayUrl(photo, 'thumbnail')
   const statusLabel = optimizationStatusLabel(photo)
+  const caption = photo.caption?.trim()
+  const accessibleName = error
+    ? caption
+      ? `Prøv at hente billedet "${caption}" igen`
+      : 'Prøv at hente billede uden billedtekst igen'
+    : caption
+      ? `Åbn billede: ${caption}`
+      : 'Åbn billede uden billedtekst'
 
   return (
     <button
       type="button"
+      aria-label={accessibleName}
       onClick={() => {
         if (error) {
           void refetch()
@@ -30,7 +39,7 @@ export function PhotoThumbnail({
       {url && !error && (
         <img
           src={url}
-          alt={photo.caption ?? ''}
+          alt={caption ?? ''}
           loading="lazy"
           className="h-full w-full object-cover"
         />

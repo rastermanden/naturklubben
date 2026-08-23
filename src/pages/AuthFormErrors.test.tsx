@@ -64,6 +64,26 @@ describe('auth form errors', () => {
     expect(document.activeElement).toBe(email)
   })
 
+  it('announces a field error when its target already has focus', async () => {
+    auth.signInWithPassword.mockResolvedValue({
+      error: { message: 'Invalid login credentials' },
+    })
+    renderPage(<LoginPage />)
+
+    const email = screen.getByLabelText('E-mail')
+    fireEvent.change(email, { target: { value: 'medlem@example.com' } })
+    fireEvent.change(screen.getByLabelText('Adgangskode'), {
+      target: { value: 'hemmelig' },
+    })
+    email.focus()
+    fireEvent.submit(email.closest('form')!)
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Forkert e-mail eller adgangskode.',
+    )
+    expect(document.activeElement).toBe(email)
+  })
+
   it('keeps unknown login failures as form-level alerts', async () => {
     auth.signInWithPassword.mockResolvedValue({
       error: { message: 'network unavailable' },
@@ -108,6 +128,39 @@ describe('auth form errors', () => {
       screen.getByLabelText('Adgangskode').getAttribute('aria-invalid'),
     ).toBeNull()
     expect(document.activeElement).toBe(email)
+  })
+
+  it('does not carry an announcement to a normally focused different field', async () => {
+    auth.signUp
+      .mockResolvedValueOnce({
+        error: { message: 'User already registered' },
+      })
+      .mockResolvedValueOnce({
+        error: { message: 'Password should be at least 6 characters' },
+      })
+    renderPage(<SignupPage />)
+
+    fireEvent.change(screen.getByLabelText('Navn'), {
+      target: { value: 'Maja Medlem' },
+    })
+    const email = screen.getByLabelText('E-mail')
+    const password = screen.getByLabelText('Adgangskode')
+    const submit = screen.getByRole('button', { name: 'Opret bruger' })
+    fireEvent.change(email, { target: { value: 'maja@example.com' } })
+    fireEvent.change(password, { target: { value: 'hemmelig' } })
+    email.focus()
+    fireEvent.submit(email.closest('form')!)
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'allerede en bruger',
+    )
+
+    fireEvent.change(password, { target: { value: 'kort' } })
+    submit.focus()
+    fireEvent.submit(email.closest('form')!)
+
+    await screen.findByText('Adgangskoden skal være på mindst 6 tegn.')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(document.activeElement).toBe(password)
   })
 
   it('keeps password-reset request errors as form-level alerts', async () => {
