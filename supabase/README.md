@@ -153,6 +153,35 @@ Filnavngivning: `<timestamp>_<beskrivelse>.sql` i `supabase/migrations/`. Se `CL
 for hele arbejdsgangen (skriv → commit → PR → Preview Branch-validering → merge →
 automatisk produktionsdeploy).
 
+## Databasetests
+
+`ci.yml`'s `database`-job afspiller hele migrationskæden mod en tom
+`supabase/postgres`-service-container og kører pgTAP-tests ovenpå. Det hele styres af
+`supabase/tests/run.sh`, som kun bruger de sædvanlige `PG*`-miljøvariable og derfor
+aldrig kan ramme produktion.
+
+| Fil                     | Rolle                                                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tests/00_platform.sql` | Det minimale Supabase-platformsskema, migrationerne forudsætter: API-rollerne, `auth.users`, `auth.uid()`, Storage-tabellerne, billed-bucketsene og `supabase_realtime`. |
+| `tests/01_helpers.sql`  | pgTAP (i sit eget `tests`-skema) plus `tests.create_member()`, `tests.login()`, `tests.login_service()`, `tests.logout()` og `tests.reset_session()`.                    |
+| `tests/rls/*.sql`       | Selve testene. Hver fil er én transaktion, der rulles tilbage, så fixtures aldrig lækker mellem filerne.                                                                 |
+
+`00_platform.sql` opretter kun det, der mangler. Imaget leverer selv en del af
+objekterne og ejer dem med andre roller, så en ubetinget `create or replace` ville
+fejle på manglende ejerskab.
+
+Testene skifter identitet, som PostgREST gør det: `tests.login()` sætter både
+databaserollen (`set local role authenticated`) og `request.jwt.claims`, som
+`auth.uid()` læser. Derfor håndhæves RLS reelt — en test måler den samme vej, som
+klienten går. `service_role` har `bypassrls` ligesom i produktion, så Edge
+Function-testene ser præcis det, Secret key ser.
+
+En ny politik, RPC eller grant hører hjemme i en af filerne i `tests/rls/`. Der er
+også et sæt skemainvarianter i `tests/rls/05_schema.sql`: alle tabeller i `public`
+har RLS slået til, hver `security definer`-funktion har en låst `search_path`, ingen
+politik giver anonyme skriveadgang, og `supabase_realtime` indeholder præcis de
+tabeller, klienten abonnerer på.
+
 ## Kontosletning og dataopbevaring
 
 Produktbeslutningen i #86 er en hybrid mellem sletning og anonymisering:

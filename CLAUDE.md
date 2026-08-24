@@ -26,6 +26,10 @@ lokale terminal. Derfor gælder:
   produktionsdatabasen.**
 - **Antag ALDRIG en lokal `supabase start`-Docker-stak til at validere migrations.** Det
   kræver lokalt værktøj, som ikke er en forudsætning for at kunne bidrage til projektet.
+  Bemærk forskellen på det og `ci.yml`'s `database`-job: dét kører en
+  `supabase/postgres`-service-container i GitHub's egen runner, afspiller hele
+  migrationskæden og kører pgTAP-tests ovenpå. Princippet handler om, hvad en
+  _bidragyder_ skal have installeret — en service container kræver intet af nogen.
 - Sådan laves en migration:
   1. Opret en ny SQL-fil i `supabase/migrations/` med navnekonventionen
      `<timestamp>_<beskrivelse>.sql`.
@@ -37,6 +41,16 @@ lokale terminal. Derfor gælder:
      database.
   5. Ved merge til `main` deployer samme integration migrationen automatisk til
      produktionsdatabasen. Intet manuelt CLI-kald.
+- **CI afspiller hele migrationskæden på hver PR** — også dem uden ændringer i
+  `supabase/`. `database`-jobbet i `ci.yml` starter en tom Postgres, lægger det
+  minimale Supabase-platformsskema op (`supabase/tests/00_platform.sql`), kører alle
+  filer i `supabase/migrations/` i navnerækkefølge og kører derefter pgTAP-testene i
+  `supabase/tests/rls/`. En syntaksfejl, en manglende `grant` eller en policy, der
+  åbner mere end tilsigtet, fanges dér — før Preview Branchen og længe før produktion.
+- **Rører en ændring autorisationsmodellen, skal den have en pgTAP-test.** Politikker,
+  `security definer`-RPC'er og grants testes ved at skifte rolle og JWT-claims i
+  databasen og måle, hvad der faktisk sker — ikke ved at lede efter tekst i SQL-filen.
+  Se `supabase/README.md` for hvordan testene er bygget op.
 - **Slet aldrig en migrationsfil, der er kørt i produktion**, og omdøb den ikke
   bagefter. Supabase gemmer de kørte versionsnumre i databasen, og en fil, der
   forsvinder under et af dem, brækker senere migrationskørsler. Er en migration
@@ -160,6 +174,7 @@ src/
 supabase/
   migrations/    # SQL-migrations, deployes automatisk ved merge til main (se ovenfor)
   functions/     # Edge Functions, deployes via GitHub Actions (se #13)
+  tests/         # platform-bootstrap + pgTAP-tests, køres af ci.yml (run.sh)
 ```
 
 ## Relevante issues

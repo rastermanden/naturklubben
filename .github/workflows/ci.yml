@@ -52,3 +52,36 @@ jobs:
 
       - name: Format check
         run: npm run format:check
+
+  database:
+    runs-on: ubuntu-latest
+    services:
+      # Supabase's egen Postgres-build, så de extensions migrationerne bruger
+      # (pgcrypto, citext, pg_net, pg_cron, pgTAP) findes med samme versioner
+      # som i produktion. Taggen bør følge projektets Postgres-version.
+      #
+      # Bemærk: dette bryder ikke no-Docker-princippet i CLAUDE.md. Princippet
+      # handler om, hvad en *bidragyder* skal have installeret; en service
+      # container kører i GitHub's runner og kræver intet af nogen.
+      postgres:
+        image: supabase/postgres:17.6.1.165
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Afspil migrationer og kør pgTAP-tests
+        run: supabase/tests/run.sh
