@@ -76,7 +76,7 @@ jobs:
     steps:
       # fetch-depth: 0 -- hele historikken skal med, ellers kan git ikke afgøre,
       # om en branch er merged ind i main.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
