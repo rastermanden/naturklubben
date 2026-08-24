@@ -77,9 +77,19 @@ jobs:
     env:
       PGHOST: localhost
       PGPORT: 5432
-      PGUSER: postgres
+      # supabase_admin, ikke postgres: imaget ejer auth- og storage-skemaerne med
+      # den rolle, og postgres-rollen har hverken lov til at oprette
+      # storage.objects eller at lægge allowlist-triggeren på auth.users. I et
+      # rigtigt Supabase-projekt findes de objekter allerede, når migrationerne
+      # kører; her skal de først op. Imaget sætter samme adgangskode på
+      # supabase_admin som på postgres.
+      PGUSER: supabase_admin
       PGPASSWORD: postgres
       PGDATABASE: postgres
+      # supabase_admin har som standard auth i sin search_path. Kør med samme
+      # search_path som produktionens postgres-rolle, så et ukvalificeret navn
+      # aldrig kan opføre sig anderledes i CI end i produktion.
+      PGOPTIONS: -c search_path=public,extensions
     steps:
       - uses: actions/checkout@v4
 

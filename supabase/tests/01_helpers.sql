@@ -36,6 +36,37 @@ begin
 end
 $$;
 
+-- Sæt claims i begge de former, auth.uid()/auth.role() kan læse: den flade
+-- request.jwt.claim.<navn> og den samlede JSON i request.jwt.claims. Hvilken af
+-- dem der bruges, afhænger af hvor gammel platformens auth-funktioner er --
+-- supabase/postgres-imaget leverer den flade variant, hosted Supabase den
+-- samlede. Testene skal måle politikken, ikke den detalje.
+create or replace function tests.set_claims(claims jsonb)
+returns void
+language plpgsql
+as $$
+declare
+  claim text;
+  value text;
+begin
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claim.role', '', true);
+  perform set_config('request.jwt.claim.email', '', true);
+
+  if claims is null then
+    perform set_config('request.jwt.claims', '', true);
+    return;
+  end if;
+
+  perform set_config('request.jwt.claims', claims::text, true);
+
+  for claim, value in select * from jsonb_each_text(claims)
+  loop
+    perform set_config('request.jwt.claim.' || claim, value, true);
+  end loop;
+end
+$$;
+
 -- Skift til en autentificeret session for det givne medlem: både rollen (så RLS
 -- rent faktisk håndhæves) og de JWT-claims, auth.uid() læser.
 create or replace function tests.login(member_id uuid)
@@ -43,10 +74,8 @@ returns void
 language plpgsql
 as $$
 begin
-  perform set_config(
-    'request.jwt.claims',
-    jsonb_build_object('sub', member_id::text, 'role', 'authenticated')::text,
-    true
+  perform tests.set_claims(
+    jsonb_build_object('sub', member_id::text, 'role', 'authenticated')
   );
   set local role authenticated;
 end
@@ -59,11 +88,7 @@ returns void
 language plpgsql
 as $$
 begin
-  perform set_config(
-    'request.jwt.claims',
-    jsonb_build_object('role', 'service_role')::text,
-    true
-  );
+  perform tests.set_claims(jsonb_build_object('role', 'service_role'));
   set local role service_role;
 end
 $$;
@@ -74,7 +99,7 @@ returns void
 language plpgsql
 as $$
 begin
-  perform set_config('request.jwt.claims', '', true);
+  perform tests.set_claims(null);
   set local role anon;
 end
 $$;
@@ -85,11 +110,12 @@ returns void
 language plpgsql
 as $$
 begin
-  perform set_config('request.jwt.claims', '', true);
+  perform tests.set_claims(null);
   reset role;
 end
 $$;
 
+grant execute on function tests.set_claims(jsonb) to public;
 grant execute on function tests.create_member(text, boolean, uuid) to public;
 grant execute on function tests.login(uuid) to public;
 grant execute on function tests.login_service() to public;

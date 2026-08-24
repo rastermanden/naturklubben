@@ -63,24 +63,16 @@ alter default privileges in schema public
 alter default privileges in schema public
   grant all on sequences to anon, authenticated, service_role;
 
-do $$
-begin
-  if not exists (select 1 from pg_namespace where nspname = 'auth') then
-    create schema auth;
-    grant usage on schema auth to anon, authenticated, service_role;
-  end if;
+-- Skemaerne findes måske allerede. Grants sættes altid: imaget opretter
+-- storage-skemaet uden at give API-rollerne adgang (det gør storage-api ellers),
+-- så en betinget grant ville springe netop den over.
+create schema if not exists auth;
+create schema if not exists storage;
+create schema if not exists extensions;
 
-  if not exists (select 1 from pg_namespace where nspname = 'storage') then
-    create schema storage;
-    grant usage on schema storage to anon, authenticated, service_role;
-  end if;
-
-  if not exists (select 1 from pg_namespace where nspname = 'extensions') then
-    create schema extensions;
-    grant usage on schema extensions to anon, authenticated, service_role;
-  end if;
-end
-$$;
+grant usage on schema auth to anon, authenticated, service_role;
+grant usage on schema storage to anon, authenticated, service_role;
+grant usage on schema extensions to anon, authenticated, service_role;
 
 -- auth.users: kun de kolonner, migrationerne og deres triggere rører.
 create table if not exists auth.users (
