@@ -191,3 +191,107 @@ describe('PhotoLightbox browsing', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 })
+
+describe('PhotoLightbox share button', () => {
+  const originalShare = Object.getOwnPropertyDescriptor(navigator, 'share')
+  const originalClipboard = Object.getOwnPropertyDescriptor(
+    navigator,
+    'clipboard',
+  )
+
+  function stub(property: 'share' | 'clipboard', value: unknown) {
+    Object.defineProperty(navigator, property, {
+      configurable: true,
+      writable: true,
+      value,
+    })
+  }
+
+  function restore(
+    property: 'share' | 'clipboard',
+    descriptor: PropertyDescriptor | undefined,
+  ) {
+    if (descriptor) {
+      Object.defineProperty(navigator, property, descriptor)
+      return
+    }
+    delete (navigator as unknown as Record<string, unknown>)[property]
+  }
+
+  afterEach(() => {
+    restore('share', originalShare)
+    restore('clipboard', originalClipboard)
+  })
+
+  it('shares the photo link through the icon button', async () => {
+    const share = vi.fn().mockResolvedValue(undefined)
+    stub('share', share)
+    renderLightbox()
+
+    const button = screen.getByRole('button', { name: 'Del link' })
+    // Ikonet må ikke stjæle knappens tilgængelige navn.
+    expect(button.textContent).toBe('')
+    fireEvent.click(button)
+    await vi.waitFor(() => expect(share).toHaveBeenCalledOnce())
+
+    const shared = share.mock.calls[0][0] as { title: string; url: string }
+    expect(shared.title).toBe('Skovtur')
+    expect(new URL(shared.url).searchParams.get('photo')).toBe('photo-1')
+  })
+
+  it('falls back to the clipboard when sharing is unavailable', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    stub('share', undefined)
+    stub('clipboard', { writeText })
+    renderLightbox()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Del link' }))
+
+    await screen.findByText('Link kopieret.')
+    expect(new URL(writeText.mock.calls[0][0]).searchParams.get('photo')).toBe(
+      'photo-1',
+    )
+  })
+
+  it('stays quiet when the user cancels the share sheet', async () => {
+    stub(
+      'share',
+      vi.fn().mockRejectedValue(new DOMException('cancelled', 'AbortError')),
+    )
+    stub('clipboard', undefined)
+    renderLightbox()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Del link' }))
+
+    await vi.waitFor(() =>
+      expect(screen.queryByText('Kunne ikke dele link. Prøv igen.')).toBeNull(),
+    )
+    expect(screen.queryByText('Link kopieret.')).toBeNull()
+  })
+
+  it('reports a share that actually failed', async () => {
+    stub('share', vi.fn().mockRejectedValue(new Error('boom')))
+    stub('clipboard', undefined)
+    renderLightbox()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Del link' }))
+
+    await screen.findByText('Kunne ikke dele link. Prøv igen.')
+  })
+
+  it('keeps the share and close buttons together in one group', () => {
+    renderLightbox()
+
+    const share = screen.getByRole('button', { name: 'Del link' })
+    const close = screen.getByRole('button', { name: 'Luk' })
+    const group = share.parentElement
+
+    expect(close.parentElement).toBe(group)
+    expect(group?.className).toContain('right-4')
+    expect(group?.className).not.toContain('left-4')
+    // Del skal stå før luk, så tab-rækkefølgen følger den visuelle.
+    expect(
+      share.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+})
