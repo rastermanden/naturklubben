@@ -160,27 +160,121 @@ automatisk produktionsdeploy).
 `supabase/tests/run.sh`, som kun bruger de sædvanlige `PG*`-miljøvariable og derfor
 aldrig kan ramme produktion.
 
-| Fil                     | Rolle                                                                                                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tests/00_platform.sql` | Det minimale Supabase-platformsskema, migrationerne forudsætter: API-rollerne, `auth.users`, `auth.uid()`, Storage-tabellerne, billed-bucketsene og `supabase_realtime`. |
-| `tests/01_helpers.sql`  | pgTAP (i sit eget `tests`-skema) plus `tests.create_member()`, `tests.login()`, `tests.login_service()`, `tests.logout()` og `tests.reset_session()`.                    |
-| `tests/rls/*.sql`       | Selve testene. Hver fil er én transaktion, der rulles tilbage, så fixtures aldrig lækker mellem filerne.                                                                 |
+| Fil                     | Rolle                                                                                                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests/00_platform.sql` | Det minimale Supabase-platformsskema, migrationerne forudsætter: API-rollerne, `auth.users`, `auth.uid()`, Storage-tabellerne, billed-bucketsene og `supabase_realtime`.    |
+| `tests/01_helpers.sql`  | pgTAP (i sit eget `tests`-skema) plus `tests.create_member()`, `tests.set_claims()`, `tests.login()`, `tests.login_service()`, `tests.logout()` og `tests.reset_session()`. |
+| `tests/rls/*.sql`       | Selve testene. Hver fil er én transaktion, der rulles tilbage, så fixtures aldrig lækker mellem filerne.                                                                    |
 
 `00_platform.sql` opretter kun det, der mangler. Imaget leverer selv en del af
 objekterne og ejer dem med andre roller, så en ubetinget `create or replace` ville
 fejle på manglende ejerskab.
 
 Testene skifter identitet, som PostgREST gør det: `tests.login()` sætter både
-databaserollen (`set local role authenticated`) og `request.jwt.claims`, som
-`auth.uid()` læser. Derfor håndhæves RLS reelt — en test måler den samme vej, som
-klienten går. `service_role` har `bypassrls` ligesom i produktion, så Edge
-Function-testene ser præcis det, Secret key ser.
+databaserollen (`set local role authenticated`) og de JWT-claims, `auth.uid()` læser.
+Derfor håndhæves RLS reelt -- en test måler den samme vej, som klienten går.
+`service_role` har `bypassrls` ligesom i produktion, så Edge Function-testene ser
+præcis det, Secret key ser.
 
-En ny politik, RPC eller grant hører hjemme i en af filerne i `tests/rls/`. Der er
-også et sæt skemainvarianter i `tests/rls/05_schema.sql`: alle tabeller i `public`
-har RLS slået til, hver `security definer`-funktion har en låst `search_path`, ingen
-politik giver anonyme skriveadgang, og `supabase_realtime` indeholder præcis de
-tabeller, klienten abonnerer på.
+### Sådan skriver du en test
+
+En ny politik, RPC eller grant hører hjemme i en af filerne i `tests/rls/`. Skelettet
+ser sådan ud -- de fire markerede linjer er ikke til at gætte sig til, så kopiér dem:
+
+```sql
+begin;
+
+-- 1) pgTAP kalder sine egne hjælpefunktioner ukvalificeret. Uden tests i
+--    search_path fejler det med "function plan(integer) does not exist" -- og
+--    kvalificerer du i stedet kaldet som tests.plan(), flytter fejlen bare indad
+--    til "function _set(unknown, integer) does not exist". Sæt search_path i
+--    stedet, med public først, så appens egne navne aldrig skygges.
+set local search_path = public, tests;
+
+-- 2) Antallet skal stemme med antallet af assertions nedenfor.
+select plan(2);
+
+-- 3) Fixtures og sessionsskift ligger i do-blokke, så outputtet bliver ren TAP.
+do $$
+begin
+  perform tests.create_member(
+    'alice@example.com', false, '00000000-0000-0000-0000-00000000000a'
+  );
+  perform tests.login('00000000-0000-0000-0000-00000000000a');
+end
+$$;
+
+select is(
+  (select count(*)::int from public.messages),
+  0,
+  'et nyt medlem ser en tom chat'
+);
+
+select throws_ok(
+  $$delete from public.messages$$,
+  '42501',
+  null,
+  'et medlem kan ikke slette beskeder direkte'
+);
+
+-- 4) finish(true) rejser en exception, hvis bare én assertion fejlede. Det er dét,
+--    der får psql til at afbryde med exit 3 og jobbet til at fejle.
+select * from finish(true);
+
+rollback;
+```
+
+Faldgruber, der har kostet tid før:
+
+- **`throws_ok` med tre argumenter er `(sql, errcode, errmsg)`** -- ikke
+  `(sql, errcode, beskrivelse)`. Vil du kun matche på SQLSTATE og skrive en
+  beskrivelse, skal du bruge fire argumenter med `null` i midten, som ovenfor.
+  Matcher du på beskeden, skal det være funktionens egen tekst, fx
+  `'message_delete_not_authorized'`.
+- **Skift altid tilbage med `tests.reset_session()`**, før du lægger flere fixtures
+  op. Ellers rammer dine `insert`s selv RLS.
+- **Vælg faste UUID'er** til medlemmer og rækker (`00000000-...-00000000000a`). Så kan
+  en fejlende assertion læses uden at slå id'er op.
+- **Testen skal måle adfærd, ikke tekst.** Skift rolle, prøv handlingen, og se hvad
+  der faktisk sker. Regex over SQL-filen var netop det, #119 afskaffede.
+
+Fixturhjælperne opretter et medlem ad den rigtige vej: `tests.create_member()` skriver
+til `allowed_emails` og `auth.users`, og profilen dannes af `handle_new_user`-triggeren
+-- præcis som ved en signup.
+
+Ud over politiktestene ligger der et sæt skemainvarianter i `tests/rls/05_schema.sql`:
+alle tabeller i `public` har RLS slået til, hver `security definer`-funktion har en låst
+`search_path`, ingen politik giver anonyme skriveadgang, og `supabase_realtime`
+indeholder præcis de tabeller, klienten abonnerer på. En ny tabel eller funktion, der
+glemmer en af delene, fejler dér.
+
+### Sådan kører du testene
+
+**Normalt gør du ingenting.** Du pusher, og `database`-jobbet kører hele kæden på
+PR'en -- bootstrap, alle migrationer i navnerækkefølge, pgTAP. Det tager under et
+minut. Der er bevidst **ingen lokal opsætning**: kerneprincippet i `CLAUDE.md` er, at
+en bidragyder hverken skal have Docker eller en database installeret.
+
+Har du brug for at gentage kørslen mod en konkret database -- fx PR'ens egen Supabase
+Preview Branch -- peger `run.sh` på hvad som helst gennem de sædvanlige
+`PG*`-miljøvariable:
+
+```sh
+PGHOST=... PGPORT=5432 PGUSER=... PGPASSWORD=... PGDATABASE=postgres \
+  supabase/tests/run.sh
+```
+
+Bemærk at scriptet **afspiller alle migrationer forfra** og lægger testskemaet op. Peg
+det kun på en database, der må skrives til fra bunden -- aldrig på produktion.
+
+Enkeltfiler kan køres for sig, når bootstrap og migrationer allerede er kørt:
+
+```sh
+psql -X -q -t -A -v ON_ERROR_STOP=1 -f supabase/tests/rls/10_messages.sql
+```
+
+Fejler en assertion, skriver pgTAP `not ok N` med både det forventede og det faktiske
+resultat, og `finish(true)` afslutter med exit 3.
 
 ## Kontosletning og dataopbevaring
 
