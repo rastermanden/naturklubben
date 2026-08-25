@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Avatar } from '../components/Avatar'
-import { useMembers } from '../features/members/useMembers'
+import { MemberAvatarLightbox } from '../features/members/MemberAvatarLightbox'
+import { useMembers, type Member } from '../features/members/useMembers'
 
 const memberSinceFormatter = new Intl.DateTimeFormat('da-DK', {
   year: 'numeric',
@@ -33,6 +35,7 @@ function MembersLoadingState() {
 
 function MembersPage() {
   const membersQuery = useMembers()
+  const [activeMember, setActiveMember] = useState<Member | null>(null)
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 sm:p-6">
@@ -75,13 +78,20 @@ function MembersPage() {
                 key={member.id}
                 className="flex min-w-0 items-center gap-4 rounded-xl border border-green-100 bg-white p-4 shadow-sm"
               >
-                <Avatar
-                  name={name}
-                  avatarUrl={member.avatar_url}
-                  color={member.chat_color ?? '#16a34a'}
-                  size="lg"
-                  decorative
-                />
+                <button
+                  type="button"
+                  onClick={() => setActiveMember(member)}
+                  aria-label={`Se stort billede af ${name}`}
+                  className="shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700"
+                >
+                  <Avatar
+                    name={name}
+                    avatarUrl={member.avatar_url}
+                    color={member.chat_color ?? '#16a34a'}
+                    size="lg"
+                    decorative
+                  />
+                </button>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="min-w-0 truncate font-medium text-green-950">
@@ -102,6 +112,13 @@ function MembersPage() {
             )
           })}
         </ul>
+      )}
+
+      {activeMember && (
+        <MemberAvatarLightbox
+          member={activeMember}
+          onClose={() => setActiveMember(null)}
+        />
       )}
     </main>
   )
