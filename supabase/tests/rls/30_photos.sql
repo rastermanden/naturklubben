@@ -4,7 +4,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(11);
+select plan(14);
 
 do $$
 begin
@@ -152,6 +152,58 @@ select throws_ok(
   '42501',
   null,
   'heller ikke en admin kan skrive i moderationssporet fra klienten'
+);
+
+do $$ begin perform tests.reset_session(); end $$;
+
+-- Galleriets begivenhedsfilter (#149): kun begivenheder med billeder, med antal.
+do $$
+begin
+  perform tests.login('00000000-0000-0000-0000-00000000000a');
+  insert into public.events (id, title, start_at, created_by)
+  values (
+    '00000000-0000-0000-0000-0000000000e1',
+    'Begivenhed med billede',
+    now(),
+    '00000000-0000-0000-0000-00000000000a'
+  );
+  insert into public.events (id, title, start_at, created_by)
+  values (
+    '00000000-0000-0000-0000-0000000000e2',
+    'Begivenhed uden billede',
+    now(),
+    '00000000-0000-0000-0000-00000000000a'
+  );
+end
+$$;
+
+select lives_ok(
+  $$select public.upsert_photo_upload(
+      '00000000-0000-0000-0000-0000000000f2',
+      '00000000-0000-0000-0000-00000000000a/00000000-0000-0000-0000-0000000000f2.jpg',
+      null,
+      '00000000-0000-0000-0000-0000000000e1'
+    )$$,
+  'Alice kan knytte et billede til sin egen begivenhed'
+);
+
+select results_eq(
+  $$select event_id, title, photo_count
+    from public.gallery_event_photo_counts
+    order by title$$,
+  $$values (
+      '00000000-0000-0000-0000-0000000000e1'::uuid,
+      'Begivenhed med billede',
+      1::bigint
+    )$$,
+  'kun begivenheder med billeder optræder i viewet, med korrekt antal'
+);
+
+do $$ begin perform tests.logout(); end $$;
+
+select is_empty(
+  $$select * from public.gallery_event_photo_counts$$,
+  'anonyme kan ikke læse begivenhedernes billedantal'
 );
 
 do $$ begin perform tests.reset_session(); end $$;

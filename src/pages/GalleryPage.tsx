@@ -8,6 +8,10 @@ import {
 } from '../features/gallery/useUploadPhotos'
 import { useDeletePhoto } from '../features/gallery/useDeletePhoto'
 import { useEventsForSelect } from '../features/gallery/useEventsForSelect'
+import {
+  useEventPhotoCounts,
+  type EventPhotoCount,
+} from '../features/gallery/useEventPhotoCounts'
 import { PhotoThumbnail } from '../features/gallery/PhotoThumbnail'
 import { PhotoLightbox } from '../features/gallery/PhotoLightbox'
 import {
@@ -21,6 +25,7 @@ import type { Photo } from '../features/gallery/types'
 import { useErrorFocus } from '../hooks/useErrorFocus'
 
 const EMPTY_PHOTOS: Photo[] = []
+const EMPTY_EVENT_OPTIONS: EventPhotoCount[] = []
 
 // Hent næste side, inden man bladrer helt ud til kanten af det indlæste
 // galleri, så bladringen ikke står stille og venter på et netværkskald.
@@ -42,6 +47,7 @@ function queueStatus(item: UploadQueueItem) {
 function GalleryPage() {
   const photosQuery = usePhotos()
   const eventsQuery = useEventsForSelect()
+  const eventPhotoCountsQuery = useEventPhotoCounts()
   const upload = useUploadPhotos()
   const deletePhoto = useDeletePhoto()
   const retryOptimization = useRetryPhotoOptimization()
@@ -63,22 +69,11 @@ function GalleryPage() {
     () => filterPhotosByEvent(photos, eventFilter),
     [eventFilter, photos],
   )
-  const eventOptions = useMemo(() => {
-    const options = new Map<string, string>()
-    for (const event of eventsQuery.data ?? []) {
-      options.set(event.id, event.title)
-    }
-    for (const photo of photos) {
-      if (photo.event) options.set(photo.event.id, photo.event.title)
-    }
-    return [...options.entries()].sort(([, first], [, second]) =>
-      first.localeCompare(second, 'da'),
-    )
-  }, [eventsQuery.data, photos])
+  const eventOptions = eventPhotoCountsQuery.data ?? EMPTY_EVENT_OPTIONS
   const selectedFilterIsUnknown =
     eventFilter !== null &&
     eventFilter !== WITHOUT_EVENT_FILTER &&
-    !eventOptions.some(([id]) => id === eventFilter)
+    !eventOptions.some((event) => event.event_id === eventFilter)
   const cachedActivePhoto =
     sharedPhotoId !== null
       ? photos.find((photo) => photo.id === sharedPhotoId)
@@ -222,9 +217,9 @@ function GalleryPage() {
             {selectedFilterIsUnknown && eventFilter && (
               <option value={eventFilter}>Ukendt begivenhed</option>
             )}
-            {eventOptions.map(([id, title]) => (
-              <option key={id} value={id}>
-                {title}
+            {eventOptions.map((event) => (
+              <option key={event.event_id} value={event.event_id}>
+                {event.title} ({event.photo_count})
               </option>
             ))}
           </select>
