@@ -5,6 +5,7 @@ const sizeClasses = {
   sm: 'h-7 w-7 text-xs',
   md: 'h-8 w-8 text-xs',
   lg: 'h-16 w-16 text-xl',
+  xl: 'h-48 w-48 text-5xl sm:h-56 sm:w-56',
 } as const
 
 interface AvatarProps {
