@@ -70,14 +70,31 @@ vi.mock('../features/gallery/PhotoLightbox', () => ({
   PhotoLightbox: ({
     photo,
     onRetryOptimization,
+    onPrevious,
+    onNext,
+    positionLabel,
   }: {
     photo: Photo
     onRetryOptimization: (photo: Photo) => void
+    onPrevious?: (() => void) | null
+    onNext?: (() => void) | null
+    positionLabel?: string | null
   }) => (
     <div role="dialog" aria-label={`Åbent ${photo.id}`}>
       {photo.id}
+      {positionLabel && <p>{positionLabel}</p>}
       <button type="button" onClick={() => onRetryOptimization(photo)}>
         Genforsøg optimering
+      </button>
+      <button
+        type="button"
+        disabled={!onPrevious}
+        onClick={onPrevious ?? undefined}
+      >
+        Forrige billede
+      </button>
+      <button type="button" disabled={!onNext} onClick={onNext ?? undefined}>
+        Næste billede
       </button>
     </div>
   ),
@@ -272,6 +289,51 @@ describe('GalleryPage', () => {
     ).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Hent flere billeder' }))
     expect(mocks.photosQuery.fetchNextPage).toHaveBeenCalledOnce()
+  })
+
+  it('browses through the filtered photos from the lightbox', () => {
+    mocks.photosQuery.data = {
+      photos: [
+        photo('photo-1', 'Bål', 'event-1'),
+        photo('photo-2', 'Sø', 'event-2'),
+        photo('photo-3', 'Skov', 'event-1'),
+      ],
+    }
+    mocks.photosQuery.isSuccess = true
+    renderGallery('/billeder?event=event-1&photo=photo-1')
+
+    expect(screen.getByText('Billede 1 af 2')).toBeTruthy()
+    expect(
+      screen
+        .getByRole('button', { name: 'Forrige billede' })
+        .hasAttribute('disabled'),
+    ).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Næste billede' }))
+
+    // Billedet uden for filteret springes over.
+    expect(screen.getByRole('dialog', { name: 'Åbent photo-3' })).toBeTruthy()
+    expect(screen.getByText('Billede 2 af 2')).toBeTruthy()
+    expect(
+      screen
+        .getByRole('button', { name: 'Næste billede' })
+        .hasAttribute('disabled'),
+    ).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Forrige billede' }))
+    expect(screen.getByRole('dialog', { name: 'Åbent photo-1' })).toBeTruthy()
+  })
+
+  it('fetches the next page when browsing towards the end of the loaded photos', () => {
+    mocks.photosQuery.data = {
+      photos: [photo('photo-1', 'Bål', null), photo('photo-2', 'Sø', null)],
+    }
+    mocks.photosQuery.isSuccess = true
+    mocks.photosQuery.hasNextPage = true
+    renderGallery('/billeder?photo=photo-2')
+
+    expect(mocks.photosQuery.fetchNextPage).toHaveBeenCalledOnce()
+    expect(screen.getByText('Billede 2 af 2+')).toBeTruthy()
   })
 
   it('links camera validation only to the camera control', async () => {

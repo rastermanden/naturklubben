@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type TouchEvent,
+} from 'react'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { useDisplayUrl } from './useDisplayUrl'
 import { useAuth } from '../auth/useAuth'
@@ -9,6 +15,10 @@ import {
 } from './optimizationStatus'
 import type { Photo } from './types'
 
+// En vandret bevægelse skal være tydeligt vandret, før den tæller som et
+// swipe — ellers bladrer galleriet, når man scroller eller trykker skævt.
+const SWIPE_THRESHOLD_PX = 50
+
 interface PhotoLightboxProps {
   photo: Photo
   onClose: () => void
@@ -17,6 +27,10 @@ interface PhotoLightboxProps {
   deleting: boolean
   retrying: boolean
   actionError: string | null
+  onPrevious?: (() => void) | null
+  onNext?: (() => void) | null
+  positionLabel?: string | null
+  loadingNext?: boolean
 }
 
 export function PhotoLightbox({
@@ -27,6 +41,10 @@ export function PhotoLightbox({
   deleting,
   retrying,
   actionError,
+  onPrevious = null,
+  onNext = null,
+  positionLabel = null,
+  loadingNext = false,
 }: PhotoLightboxProps) {
   const { url, isLoading, error, refetch } = useDisplayUrl(photo, 'full')
   const { session } = useAuth()
@@ -34,18 +52,81 @@ export function PhotoLightbox({
   const isOwner = session?.user.id === photo.uploaded_by
   const canRetry = canRetryOptimization(photo, session?.user.id)
   const statusLabel = optimizationStatusLabel(photo)
-  const [shareStatus, setShareStatus] = useState<string | null>(null)
+  // Statusbeskeden hører til det billede, den blev vist for: lightboxen bliver
+  // stående, mens man bladrer, så beskeden skal ikke følge med til det næste.
+  const [shareStatus, setShareStatus] = useState<{
+    photoId: string
+    message: string
+  } | null>(null)
+  const visibleShareStatus =
+    shareStatus?.photoId === photo.id ? shareStatus.message : null
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const swipedRef = useRef(false)
   const dialogRef = useDialogFocus<HTMLDivElement>({
     onClose,
     initialFocusRef: closeButtonRef,
   })
+  const canBrowse = Boolean(onPrevious || onNext || loadingNext)
 
   useEffect(() => {
     if (!shareStatus) return
     const timeout = window.setTimeout(() => setShareStatus(null), 2500)
     return () => window.clearTimeout(timeout)
   }, [shareStatus])
+
+  useEffect(() => {
+    if (!onPrevious && !onNext) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return
+      }
+      const target = event.target
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT')
+      ) {
+        return
+      }
+      const browse = event.key === 'ArrowLeft' ? onPrevious : onNext
+      if (!browse) return
+      event.preventDefault()
+      browse()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onNext, onPrevious])
+
+  function handleTouchStart(event: TouchEvent<HTMLDivElement>) {
+    swipedRef.current = false
+    const touch = event.touches[0]
+    touchStartRef.current = touch
+      ? { x: touch.clientX, y: touch.clientY }
+      : null
+  }
+
+  function handleTouchEnd(event: TouchEvent<HTMLDivElement>) {
+    const start = touchStartRef.current
+    touchStartRef.current = null
+    const touch = event.changedTouches[0]
+    if (!start || !touch) return
+    const deltaX = touch.clientX - start.x
+    const deltaY = touch.clientY - start.y
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX) return
+    if (Math.abs(deltaX) <= Math.abs(deltaY)) return
+    const browse = deltaX > 0 ? onPrevious : onNext
+    if (!browse) return
+    // Et swipe på baggrunden udløser også et klik bagefter; uden det her flag
+    // ville lightboxen lukke i samme bevægelse, som bladrer videre.
+    swipedRef.current = true
+    browse()
+  }
 
   async function handleShareClick(event: MouseEvent<HTMLButtonElement>) {
     event.stopPropagation()
@@ -65,14 +146,20 @@ export function PhotoLightbox({
       }
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareLink)
-        setShareStatus('Link kopieret.')
+        setShareStatus({ photoId: photo.id, message: 'Link kopieret.' })
         return
       }
-      setShareStatus(`Kopiér link manuelt: ${shareLink}`)
+      setShareStatus({
+        photoId: photo.id,
+        message: `Kopiér link manuelt: ${shareLink}`,
+      })
       return
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
-      setShareStatus('Kunne ikke dele link. Prøv igen.')
+      setShareStatus({
+        photoId: photo.id,
+        message: 'Kunne ikke dele link. Prøv igen.',
+      })
     }
   }
 
@@ -84,8 +171,14 @@ export function PhotoLightbox({
       aria-label={photo.caption ?? 'Billede'}
       tabIndex={-1}
       onClick={(event) => {
+        if (swipedRef.current) {
+          swipedRef.current = false
+          return
+        }
         if (event.target === event.currentTarget) onClose()
       }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/90 p-4"
     >
       <button
@@ -105,6 +198,37 @@ export function PhotoLightbox({
       >
         ×
       </button>
+
+      {canBrowse && (
+        <>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onPrevious?.()
+            }}
+            disabled={!onPrevious}
+            aria-label="Forrige billede"
+            className="absolute top-1/2 left-2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-3xl text-white disabled:opacity-30"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onNext?.()
+            }}
+            disabled={!onNext}
+            aria-label={
+              loadingNext ? 'Henter flere billeder…' : 'Næste billede'
+            }
+            className="absolute top-1/2 right-2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-3xl text-white disabled:opacity-30"
+          >
+            <span aria-hidden="true">›</span>
+          </button>
+        </>
+      )}
 
       {isLoading && <p className="text-white">Henter billede…</p>}
       {error && (
@@ -138,6 +262,12 @@ export function PhotoLightbox({
             <p className="text-sm text-white/70">{photo.event.title}</p>
           )}
         </div>
+      )}
+
+      {positionLabel && (
+        <p role="status" aria-live="polite" className="text-sm text-white/70">
+          {positionLabel}
+        </p>
       )}
 
       {statusLabel && (
@@ -196,7 +326,7 @@ export function PhotoLightbox({
         onClick={(event) => event.stopPropagation()}
         className="min-h-[1.25rem] text-sm text-white/80"
       >
-        {shareStatus ?? ''}
+        {visibleShareStatus ?? ''}
       </p>
     </div>
   )
