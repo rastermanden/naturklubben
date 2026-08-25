@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { usePhoto, usePhotos } from '../features/gallery/usePhotos'
 import {
@@ -21,6 +21,10 @@ import type { Photo } from '../features/gallery/types'
 import { useErrorFocus } from '../hooks/useErrorFocus'
 
 const EMPTY_PHOTOS: Photo[] = []
+
+// Hent næste side, inden man bladrer helt ud til kanten af det indlæste
+// galleri, så bladringen ikke står stille og venter på et netværkskald.
+const PREFETCH_MARGIN = 5
 
 function queueStatus(item: UploadQueueItem) {
   switch (item.status) {
@@ -81,6 +85,35 @@ function GalleryPage() {
       : undefined
   const sharedPhotoQuery = usePhoto(sharedPhotoId, cachedActivePhoto)
   const activePhoto = cachedActivePhoto ?? sharedPhotoQuery.data ?? null
+  const activeIndex = activePhoto
+    ? filteredPhotos.findIndex((photo) => photo.id === activePhoto.id)
+    : -1
+  const previousPhoto =
+    activeIndex > 0 ? filteredPhotos[activeIndex - 1] : undefined
+  const nextPhoto =
+    activeIndex >= 0 ? filteredPhotos[activeIndex + 1] : undefined
+  const hasNextPage = photosQuery.hasNextPage
+  const fetchNextPage = photosQuery.fetchNextPage
+  const isFetchingNextPage = photosQuery.isFetchingNextPage
+  const positionLabel =
+    activeIndex >= 0
+      ? `Billede ${activeIndex + 1} af ${filteredPhotos.length}${
+          hasNextPage ? '+' : ''
+        }`
+      : null
+
+  useEffect(() => {
+    if (activeIndex < 0) return
+    if (activeIndex < filteredPhotos.length - 1 - PREFETCH_MARGIN) return
+    if (!hasNextPage || isFetchingNextPage) return
+    void fetchNextPage()
+  }, [
+    activeIndex,
+    fetchNextPage,
+    filteredPhotos.length,
+    hasNextPage,
+    isFetchingNextPage,
+  ])
 
   // To separate inputs: det ene uden `capture`, så telefonen viser hele
   // vælgeren; det andet med `capture`, så kameraet åbner direkte.
@@ -91,8 +124,23 @@ function GalleryPage() {
   const focusFileError = useErrorFocus(fileButtonRef)
   const focusCameraError = useErrorFocus(cameraButtonRef)
 
-  function setGalleryParam(key: 'event' | 'photo', value: string | null) {
-    setSearchParams((current) => updateGallerySearchParam(current, key, value))
+  function setGalleryParam(
+    key: 'event' | 'photo',
+    value: string | null,
+    options?: { replace?: boolean },
+  ) {
+    setSearchParams(
+      (current) => updateGallerySearchParam(current, key, value),
+      options,
+    )
+  }
+
+  // Bladring erstatter historikposten, så Tilbage lukker lightboxen i stedet
+  // for at gå ét billede baglæns ad gangen.
+  function showPhoto(photo: Photo | undefined) {
+    if (!photo) return
+    setActionError(null)
+    setGalleryParam('photo', photo.id, { replace: true })
   }
 
   function handleFilesSelected(
@@ -464,9 +512,12 @@ function GalleryPage() {
 
       {activePhoto && (
         <PhotoLightbox
-          key={activePhoto.id}
           photo={activePhoto}
           onClose={() => setGalleryParam('photo', null)}
+          onPrevious={previousPhoto ? () => showPhoto(previousPhoto) : null}
+          onNext={nextPhoto ? () => showPhoto(nextPhoto) : null}
+          positionLabel={positionLabel}
+          loadingNext={activeIndex >= 0 && !nextPhoto && hasNextPage}
           deleting={deletePhoto.isPending}
           onDelete={removePhoto}
           retrying={
