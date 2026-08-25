@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { AttendanceSection } from '../features/calendar/AttendanceSection'
+import { EventTasksSection } from '../features/calendar/EventTasksSection'
 import { EventForm } from '../features/calendar/EventForm'
 import { downloadIcal } from '../features/calendar/ical'
 import {
@@ -132,6 +133,8 @@ function EventDetails({
         </dl>
 
         <AttendanceSection eventId={event.id} userId={userId} />
+
+        <EventTasksSection eventId={event.id} userId={userId} />
 
         {error && (
           <p role="alert" className="mt-4 text-sm text-red-700">
