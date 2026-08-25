@@ -2,8 +2,13 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import type { Photo } from '../features/gallery/types'
+import type { EventPhotoCount } from '../features/gallery/useEventPhotoCounts'
 
 const mocks = vi.hoisted(() => ({
+  eventPhotoCounts: {
+    data: [] as EventPhotoCount[],
+    isError: false,
+  },
   photosQuery: {
     data: undefined as { photos: Photo[] } | undefined,
     isLoading: false,
@@ -60,6 +65,9 @@ vi.mock('../features/gallery/useEventsForSelect', () => ({
     data: [],
     isError: false,
   }),
+}))
+vi.mock('../features/gallery/useEventPhotoCounts', () => ({
+  useEventPhotoCounts: () => mocks.eventPhotoCounts,
 }))
 vi.mock('../features/gallery/PhotoThumbnail', () => ({
   PhotoThumbnail: ({ photo }: { photo: Photo }) => (
@@ -130,6 +138,8 @@ function renderGallery(path = '/billeder') {
 }
 
 beforeEach(() => {
+  mocks.eventPhotoCounts.data = []
+  mocks.eventPhotoCounts.isError = false
   mocks.photosQuery.data = undefined
   mocks.photosQuery.isLoading = false
   mocks.photosQuery.isError = false
@@ -186,6 +196,25 @@ describe('GalleryPage', () => {
     expect(screen.getByRole('button', { name: 'Sø' })).toBeTruthy()
   })
 
+  it('only lists events that have photos, with their photo count (#149)', () => {
+    mocks.photosQuery.data = { photos: [] }
+    mocks.photosQuery.isSuccess = true
+    mocks.eventPhotoCounts.data = [
+      { event_id: 'event-1', title: 'Bål-tur', photo_count: 3 },
+    ]
+    renderGallery()
+
+    const select = screen.getByLabelText(
+      'Filtrér efter begivenhed',
+    ) as HTMLSelectElement
+    const optionLabels = [...select.options].map((option) => option.text)
+
+    expect(optionLabels).toContain('Bål-tur (3)')
+    // "Fugletur" har ingen billeder og har derfor ikke sin egen række i
+    // eventPhotoCounts-viewet -- den må ikke optræde i dropdown'en.
+    expect(optionLabels).not.toContain('Fugletur')
+  })
+
   it('filters by event through the URL-backed select', () => {
     mocks.photosQuery.data = {
       photos: [
@@ -194,6 +223,10 @@ describe('GalleryPage', () => {
       ],
     }
     mocks.photosQuery.isSuccess = true
+    mocks.eventPhotoCounts.data = [
+      { event_id: 'event-1', title: 'Event event-1', photo_count: 1 },
+      { event_id: 'event-2', title: 'Event event-2', photo_count: 1 },
+    ]
     renderGallery('/billeder?event=event-1')
 
     expect(screen.getByRole('button', { name: 'Bål' })).toBeTruthy()
