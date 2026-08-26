@@ -10,7 +10,10 @@ function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [submitted, setSubmitted] = useState(false)
+  // Hvad der faktisk skete -- ikke bare "der kom ingen fejl". Se handleSubmit.
+  const [outcome, setOutcome] = useState<'confirm-email' | 'signed-in' | null>(
+    null,
+  )
   const [submitting, setSubmitting] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
@@ -26,7 +29,7 @@ function SignupPage() {
     setErrorField(null)
     setSubmitting(true)
 
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -54,10 +57,57 @@ function SignupPage() {
       }
       return
     }
-    setSubmitted(true)
+
+    // Supabase svarer uden fejl i tre forskellige situationer, og kun den ene
+    // sender en mail. Kigger vi kun på `signUpError`, kommer appen til at
+    // påstå, at der er sendt en bekræftelsesmail, i alle tre.
+
+    // 1. Bekræftelse er slået fra på projektet (sådan er en Supabase Preview
+    //    Branch typisk sat op): brugeren er logget ind med det samme, og der
+    //    bliver aldrig sendt nogen mail.
+    if (data?.session) {
+      setOutcome('signed-in')
+      return
+    }
+
+    // 2. Adressen er allerede oprettet. Med email-enumeration-beskyttelse slået
+    //    til røber Supabase det ikke med en fejl -- kendetegnet er en tom
+    //    identities-liste -- og der sendes ingen ny bekræftelsesmail.
+    if (data?.user && data.user.identities?.length === 0) {
+      setError(toFriendlyAuthError('User already registered'))
+      setErrorField('email')
+      focusEmailError()
+      return
+    }
+
+    // 3. Alt normalt: brugeren er oprettet, og mailen er på vej.
+    setOutcome('confirm-email')
   }
 
-  if (submitted) {
+  if (outcome === 'signed-in') {
+    return (
+      <main className="mx-auto flex min-h-svh max-w-sm flex-col justify-center gap-4 p-6 text-center">
+        <h1 className="text-2xl font-semibold text-green-900">
+          Du er oprettet
+        </h1>
+        <p className="text-green-800">
+          Din bruger er klar, og du er logget ind med det samme -- der er ingen
+          mail at bekræfte.
+        </p>
+        <Link
+          to="/kalender"
+          className="inline-flex min-h-11 items-center justify-center rounded bg-green-800 px-4 py-2 text-white"
+        >
+          Se kalenderen
+        </Link>
+        <Link to="/" className="text-sm text-green-800 underline">
+          Gå til forsiden
+        </Link>
+      </main>
+    )
+  }
+
+  if (outcome === 'confirm-email') {
     return (
       <main className="mx-auto flex min-h-svh max-w-sm flex-col justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold text-green-900">
