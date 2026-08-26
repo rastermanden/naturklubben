@@ -19,6 +19,10 @@ Deno.test('generateIcal: feed metadata kan tilføjes af calendar-feed', () => {
   assert.match(calendar, /\r\nX-PUBLISHED-TTL:PT1H\r\n/)
   assert.match(calendar, /\r\nDTSTART:20260905T163000Z\r\n/)
   assert.match(calendar, /\r\nDTEND:20260905T180000Z\r\n/)
+  assert.ok(
+    calendar.endsWith('END:VCALENDAR\r\n'),
+    'iCal skal slutte med END:VCALENDAR\\r\\n (RFC 5545 §3.1)',
+  )
 })
 
 Deno.test('generateIcal: browserkalendere får ikke feed metadata', () => {
@@ -26,4 +30,8 @@ Deno.test('generateIcal: browserkalendere får ikke feed metadata', () => {
 
   assert.doesNotMatch(calendar, /REFRESH-INTERVAL/)
   assert.doesNotMatch(calendar, /X-PUBLISHED-TTL/)
+  assert.ok(
+    calendar.endsWith('END:VCALENDAR\r\n'),
+    'iCal skal slutte med END:VCALENDAR\\r\\n (RFC 5545 §3.1)',
+  )
 })
