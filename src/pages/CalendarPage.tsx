@@ -3,6 +3,7 @@ import { AttendanceSection } from '../features/calendar/AttendanceSection'
 import { EventTasksSection } from '../features/calendar/EventTasksSection'
 import { EventForm } from '../features/calendar/EventForm'
 import { downloadIcal } from '../features/calendar/ical'
+import { SubscribeDialog } from '../features/calendar/SubscribeDialog'
 import {
   useEvents,
   type CalendarEvent,
@@ -11,8 +12,9 @@ import {
 import { useAuth } from '../features/auth/useAuth'
 import { useDialogFocus } from '../hooks/useDialogFocus'
 
-// Feed-URL til live iCal-abonnement (webcal://). Udledes af SUPABASE_URL så
-// der ikke er brug for en ekstra env-variabel.
+// Feed-URL til live iCal-abonnement. Udledes af SUPABASE_URL så der ikke er
+// brug for en ekstra env-variabel. Deles som https — se SubscribeDialog for
+// hvorfor webcal:// ikke er den primære vej.
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
 const CALENDAR_FEED_URL = supabaseUrl
   ? `${supabaseUrl}/functions/v1/calendar-feed`
@@ -189,6 +191,7 @@ function CalendarPage() {
     CalendarEvent | 'new' | null
   >(null)
   const [mutationError, setMutationError] = useState<string | null>(null)
+  const [subscribeOpen, setSubscribeOpen] = useState(false)
 
   const eventsByDay = useMemo(() => {
     const grouped = new Map<string, CalendarEvent[]>()
@@ -262,22 +265,12 @@ function CalendarPage() {
         </div>
         <div className="flex flex-wrap gap-3">
           {CALENDAR_FEED_URL && (
-            <a
-              href={CALENDAR_FEED_URL.replace(/^https?:\/\//, 'webcal://')}
-              className="inline-flex min-h-11 items-center rounded border border-green-700 px-5 py-2 text-green-800 hover:bg-green-50"
-            >
-              Abonnér på kalender
-            </a>
-          )}
-          {eventsQuery.data && eventsQuery.data.length > 0 && (
             <button
               type="button"
-              onClick={() =>
-                downloadIcal(eventsQuery.data, 'naturklubben-kalender.ics')
-              }
+              onClick={() => setSubscribeOpen(true)}
               className="min-h-11 rounded border border-green-700 px-5 py-2 text-green-800 hover:bg-green-50"
             >
-              Eksportér kalender
+              Abonnér på kalender
             </button>
           )}
           <button
@@ -444,6 +437,13 @@ function CalendarPage() {
               `${selectedEvent.title.replace(/[/\\:*?"<>|]/g, '-')}.ics`,
             )
           }
+        />
+      )}
+
+      {subscribeOpen && CALENDAR_FEED_URL && (
+        <SubscribeDialog
+          feedUrl={CALENDAR_FEED_URL}
+          onClose={() => setSubscribeOpen(false)}
         />
       )}
 

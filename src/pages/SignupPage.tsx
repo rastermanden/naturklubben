@@ -49,7 +49,8 @@ function SignupPage() {
         focusPasswordError()
       } else if (
         signUpError.message === 'User already registered' ||
-        signUpError.message === 'Email not allowed'
+        signUpError.message === 'Email not allowed' ||
+        signUpError.message === 'Database error saving new user'
       ) {
         setErrorField('email')
         focusEmailError()

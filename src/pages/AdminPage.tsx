@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth'
 import {
   toFriendlyAllowedEmailError,
@@ -11,15 +12,16 @@ import {
 } from '../features/probation/useProbationApplications'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { AdminRolesSection } from '../features/admin/AdminRolesSection'
+import { AdminSection } from '../features/admin/AdminSection'
+import { AdminTabPanel, AdminTabs } from '../features/admin/AdminTabs'
+import { AllowedEmailsSection } from '../features/admin/AllowedEmailsSection'
+import { ProbationApplicationsSection } from '../features/admin/ProbationApplicationsSection'
+import {
+  ADMIN_TAB_PARAM,
+  parseAdminTab,
+  type AdminTabId,
+} from '../features/admin/adminTabs'
 import { useErrorFocus } from '../hooks/useErrorFocus'
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString('da-DK', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
 
 function AdminPage() {
   const { session } = useAuth()
@@ -32,6 +34,9 @@ function AdminPage() {
     retryNotification,
   } = useProbationApplications()
 
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = parseAdminTab(searchParams.get(ADMIN_TAB_PARAM))
+
   const [email, setEmail] = useState('')
   const [note, setNote] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
@@ -40,6 +45,21 @@ function AdminPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const emailRef = useRef<HTMLInputElement>(null)
   const focusInviteError = useErrorFocus(emailRef)
+
+  // Fanen ligger i URL'en, så et genindlæst eller delt admin-link lander samme
+  // sted. `replace` holder browserens tilbage-knap ude af fanevalget.
+  function selectTab(tab: AdminTabId) {
+    const next = new URLSearchParams(searchParams)
+    next.set(ADMIN_TAB_PARAM, tab)
+    setSearchParams(next, { replace: true })
+  }
+
+  function resetMessages() {
+    setActionError(null)
+    setInviteError(null)
+    setInviteEmailInvalid(false)
+    setSuccessMsg(null)
+  }
 
   function showDeliveryFailure(
     delivery: NotificationDelivery,
@@ -56,10 +76,7 @@ function AdminPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    setActionError(null)
-    setInviteError(null)
-    setInviteEmailInvalid(false)
-    setSuccessMsg(null)
+    resetMessages()
 
     const trimmed = email.trim().toLowerCase()
     if (!trimmed) return
@@ -90,10 +107,7 @@ function AdminPage() {
       return
     }
 
-    setActionError(null)
-    setInviteError(null)
-    setInviteEmailInvalid(false)
-    setSuccessMsg(null)
+    resetMessages()
     try {
       await removeEmail.mutateAsync(emailToRemove)
       setSuccessMsg(`${emailToRemove} er fjernet fra listen.`)
@@ -103,10 +117,7 @@ function AdminPage() {
   }
 
   async function handleApprove(applicationId: number, applicantEmail: string) {
-    setActionError(null)
-    setInviteError(null)
-    setInviteEmailInvalid(false)
-    setSuccessMsg(null)
+    resetMessages()
 
     try {
       const delivery = await approveApplication.mutateAsync(applicationId)
@@ -128,10 +139,7 @@ function AdminPage() {
       return
     }
 
-    setActionError(null)
-    setInviteError(null)
-    setInviteEmailInvalid(false)
-    setSuccessMsg(null)
+    resetMessages()
 
     try {
       const delivery = await rejectApplication.mutateAsync(applicationId)
@@ -148,10 +156,7 @@ function AdminPage() {
     applicationId: number,
     kind: 'admin' | 'decision',
   ) {
-    setActionError(null)
-    setInviteError(null)
-    setInviteEmailInvalid(false)
-    setSuccessMsg(null)
+    resetMessages()
     try {
       const delivery = await retryNotification.mutateAsync({
         applicationId,
@@ -185,6 +190,14 @@ function AdminPage() {
         </p>
       </div>
 
+      <AdminTabs
+        activeTab={activeTab}
+        onSelect={selectTab}
+        badges={{ ansoegninger: applications.length }}
+      />
+
+      {/* Beskederne står uden for fanepanelerne, så en kvittering ikke
+          forsvinder, hvis handlingen skifter fane. */}
       {successMsg && (
         <p role="status" className="text-sm text-green-700">
           {successMsg}
@@ -196,270 +209,60 @@ function AdminPage() {
         </p>
       )}
 
-      <section className="space-y-2 rounded-lg border border-green-200 bg-green-50 p-4">
-        <h2 className="font-medium text-green-900">Admin-notifikationer</h2>
-        <p className="text-sm text-green-700">
-          Slå dem til på mindst én administrators enhed for at få besked om nye
-          ansøgninger.
-        </p>
-        <NotificationToggle userId={userId} />
-      </section>
+      <AdminTabPanel tab="ansoegninger" activeTab={activeTab}>
+        <ProbationApplicationsSection
+          applications={applications}
+          isPending={applicationsQuery.isPending}
+          isError={applicationsQuery.isError}
+          isSuccess={applicationsQuery.isSuccess}
+          error={applicationsQuery.error}
+          handlingApplication={handlingApplication}
+          retryingNotification={retryingNotification}
+          onApprove={(id, applicantEmail) =>
+            void handleApprove(id, applicantEmail)
+          }
+          onReject={(id, applicantEmail) =>
+            void handleReject(id, applicantEmail)
+          }
+          onRetryNotification={(id, kind) =>
+            void handleRetryNotification(id, kind)
+          }
+        />
+      </AdminTabPanel>
 
-      <AdminRolesSection currentUserId={userId} />
+      <AdminTabPanel tab="medlemmer" activeTab={activeTab}>
+        <AdminRolesSection currentUserId={userId} />
+      </AdminTabPanel>
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 p-4"
-      >
-        <h2 className="font-medium text-green-900">Inviter en e-mail</h2>
+      <AdminTabPanel tab="adgang" activeTab={activeTab}>
+        <AllowedEmailsSection
+          emails={emails}
+          isPending={allowedEmailsQuery.isPending}
+          isError={allowedEmailsQuery.isError}
+          isSuccess={allowedEmailsQuery.isSuccess}
+          error={allowedEmailsQuery.error}
+          email={email}
+          note={note}
+          onEmailChange={setEmail}
+          onNoteChange={setNote}
+          onSubmit={(event) => void handleSubmit(event)}
+          onRemove={(entry) => void handleRemove(entry)}
+          adding={addEmail.isPending}
+          removing={removeEmail.isPending}
+          inviteError={inviteError}
+          inviteEmailInvalid={inviteEmailInvalid}
+          emailRef={emailRef}
+        />
+      </AdminTabPanel>
 
-        <label className="flex flex-col gap-1 text-sm text-green-900">
-          E-mail
-          <input
-            id="admin-invite-email"
-            ref={emailRef}
-            type="email"
-            required
-            autoComplete="off"
-            placeholder="navn@eksempel.dk"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            aria-invalid={inviteEmailInvalid ? true : undefined}
-            aria-describedby={
-              inviteEmailInvalid ? 'admin-invite-error' : undefined
-            }
-            className="rounded border border-green-300 bg-white px-3 py-2 text-base text-green-950"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm text-green-900">
-          Note (valgfri)
-          <input
-            id="admin-invite-note"
-            type="text"
-            placeholder="Fx “Anne fra bestyrelsen”"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            className="rounded border border-green-300 bg-white px-3 py-2 text-base text-green-950"
-          />
-        </label>
-
-        {inviteError && (
-          <p
-            id="admin-invite-error"
-            role={inviteEmailInvalid ? undefined : 'alert'}
-            className="text-sm text-red-700"
-          >
-            {inviteError}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={addEmail.isPending}
-          className="min-h-11 self-start rounded-lg bg-green-800 px-6 py-2 text-white disabled:opacity-50"
+      <AdminTabPanel tab="indstillinger" activeTab={activeTab}>
+        <AdminSection
+          title="Admin-notifikationer"
+          description="Slå dem til på mindst én administrators enhed for at få besked om nye ansøgninger."
         >
-          {addEmail.isPending ? 'Tilføjer…' : 'Tilføj til listen'}
-        </button>
-      </form>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="font-medium text-green-900">
-          Ansøgninger om prøvemedlemskab
-          {applications.length > 0 && ` (${applications.length})`}
-        </h2>
-
-        {applicationsQuery.isPending && (
-          <p className="text-sm text-green-700">Henter ansøgninger…</p>
-        )}
-
-        {applicationsQuery.isError && (
-          <p role="alert" className="text-sm text-red-700">
-            Ansøgningerne kunne ikke hentes:{' '}
-            {toFriendlyProbationApplicationError(applicationsQuery.error)}
-          </p>
-        )}
-
-        {applicationsQuery.isSuccess && applications.length === 0 && (
-          <p className="text-sm text-green-700">
-            Der ligger ingen åbne ansøgninger lige nu.
-          </p>
-        )}
-
-        <ul className="flex flex-col gap-2">
-          {applications.map((application) => (
-            <li
-              key={application.id}
-              className="flex flex-col gap-3 rounded-lg border border-green-200 px-4 py-3"
-            >
-              <div className="space-y-1">
-                <p className="text-green-950">{application.full_name}</p>
-                <p className="text-sm text-green-800">{application.email}</p>
-                <p className="text-sm text-green-700">
-                  Ansøgt {formatDate(application.created_at)}
-                </p>
-                <p className="whitespace-pre-wrap text-sm text-green-900">
-                  {application.motivation}
-                </p>
-                {application.status !== 'pending' && (
-                  <p className="text-sm font-medium text-green-800">
-                    {application.status === 'approved'
-                      ? 'Ansøgningen er godkendt.'
-                      : 'Ansøgningen er afvist.'}
-                  </p>
-                )}
-              </div>
-              {application.status === 'pending' && (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void handleApprove(application.id, application.email)
-                    }
-                    disabled={handlingApplication}
-                    className="min-h-11 rounded-lg bg-green-800 px-4 py-2 text-white disabled:opacity-50"
-                  >
-                    Godkend
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void handleReject(application.id, application.email)
-                    }
-                    disabled={handlingApplication}
-                    className="min-h-11 rounded-lg border border-red-300 px-4 py-2 text-red-700 disabled:opacity-50"
-                  >
-                    Afvis
-                  </button>
-                </div>
-              )}
-
-              {application.status === 'pending' &&
-                application.admin_notification_status === 'failed' && (
-                  <div className="space-y-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                    <p>
-                      Admin-notifikationen er ikke leveret
-                      {application.admin_notification_error
-                        ? `: ${application.admin_notification_error}`
-                        : '.'}
-                    </p>
-                    {application.notification_function_url && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleRetryNotification(application.id, 'admin')
-                        }
-                        disabled={retryingNotification}
-                        className="min-h-11 rounded border border-amber-500 px-3 py-2 disabled:opacity-50"
-                      >
-                        Prøv admin-notifikationen igen
-                      </button>
-                    )}
-                  </div>
-                )}
-
-              {application.status === 'pending' &&
-                (application.admin_notification_status === 'pending' ||
-                  application.admin_notification_status === 'sending') && (
-                  <p className="text-sm text-amber-800">
-                    Admin-notifikationen venter på levering…
-                  </p>
-                )}
-
-              {application.status !== 'pending' &&
-                application.decision_notification_status === 'failed' && (
-                  <div className="space-y-2 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-                    <p>
-                      Beslutningen er gemt, men ansøgerens notifikation er ikke
-                      leveret
-                      {application.decision_notification_error
-                        ? `: ${application.decision_notification_error}`
-                        : '.'}
-                    </p>
-                    {application.notification_function_url && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleRetryNotification(
-                            application.id,
-                            'decision',
-                          )
-                        }
-                        disabled={retryingNotification}
-                        className="min-h-11 rounded border border-red-400 px-3 py-2 disabled:opacity-50"
-                      >
-                        Prøv ansøgernotifikationen igen
-                      </button>
-                    )}
-                  </div>
-                )}
-
-              {application.status !== 'pending' &&
-                (application.decision_notification_status === 'pending' ||
-                  application.decision_notification_status === 'sending') && (
-                  <p className="text-sm text-green-700">
-                    Ansøgerens notifikation venter på levering…
-                  </p>
-                )}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="font-medium text-green-900">
-          Tilladte e-mails{emails.length > 0 && ` (${emails.length})`}
-        </h2>
-
-        {allowedEmailsQuery.isPending && (
-          <p className="text-sm text-green-700">Henter listen…</p>
-        )}
-
-        {allowedEmailsQuery.isError && (
-          <p role="alert" className="text-sm text-red-700">
-            Listen kunne ikke hentes:{' '}
-            {toFriendlyAllowedEmailError(allowedEmailsQuery.error)}
-          </p>
-        )}
-
-        {allowedEmailsQuery.isSuccess && emails.length === 0 && (
-          <p className="text-sm text-green-700">
-            Der er ingen e-mails på listen endnu.
-          </p>
-        )}
-
-        <ul className="flex flex-col gap-2">
-          {emails.map((entry) => (
-            <li
-              key={entry.email}
-              className="flex items-center justify-between gap-3 rounded-lg border border-green-200 px-4 py-3"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-green-950">
-                  {entry.email}
-                  {entry.is_admin && (
-                    <span className="ml-2 rounded bg-green-800 px-2 py-0.5 align-middle text-xs text-white">
-                      Admin
-                    </span>
-                  )}
-                </p>
-                <p className="truncate text-xs text-green-700">
-                  {entry.note ? `${entry.note} · ` : ''}
-                  Tilføjet {formatDate(entry.created_at)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleRemove(entry.email)}
-                disabled={removeEmail.isPending}
-                className="min-h-11 shrink-0 rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 disabled:opacity-50"
-              >
-                Fjern
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+          <NotificationToggle userId={userId} />
+        </AdminSection>
+      </AdminTabPanel>
     </main>
   )
 }

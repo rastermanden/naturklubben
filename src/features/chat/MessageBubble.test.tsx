@@ -215,6 +215,35 @@ describe('MessageBubble', () => {
     expect(screen.queryByText('God idé!')).toBeNull()
   })
 
+  it('renders an action message as an unattributed centered line', () => {
+    const { container } = render(
+      <MessageBubble
+        message={{
+          ...message,
+          message_type: 'action',
+          content: 'slår Ada rundt med en stor ørred',
+          reply_to_message_id: null,
+          reply_to: null,
+        }}
+        author={author}
+        replyAuthor={undefined}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.textContent === '* Bo slår Ada rundt med en stor ørred',
+      ),
+    ).toBeTruthy()
+    // Handlingslinjen har ingen afsenderavatar, i modsætning til en almindelig boble.
+    expect(container.querySelector('li')?.children.length).toBe(1)
+  })
+
   it('replaces a deleted reply preview instead of exposing its old content', () => {
     render(
       <MessageBubble
