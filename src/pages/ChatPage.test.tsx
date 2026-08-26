@@ -205,8 +205,12 @@ describe('ChatPage slash commands', () => {
       }),
     )
     expect(
-      screen.getByRole('textbox', { name: 'Skriv en besked' }),
-    ).toHaveValue('')
+      (
+        screen.getByRole('textbox', {
+          name: 'Skriv en besked',
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toBe('')
   })
 
   it('sends a normal message without a messageType field', () => {
