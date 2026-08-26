@@ -416,7 +416,18 @@ allerede har det. CI (`ci.yml`) fejler på dubletter.
 
 `allowed_emails` afgør, hvem der kan oprette en bruger. Triggeren `check_allowed_email`
 på `auth.users` afviser en signup med `Email not allowed`, hvis adressen ikke står på
-listen (klienten oversætter fejlen til en dansk besked i `src/features/auth/authErrors.ts`).
+listen.
+
+Den tekst når dog aldrig frem til klienten: GoTrue pakker enhver exception fra en trigger
+på `auth.users` ind i sit eget svar og returnerer 500 med den faste besked
+`Database error saving new user`. Det er altså **den** streng,
+`src/features/auth/authErrors.ts` skal kende for at kunne sige noget brugbart om en
+afvist invitation -- `Email not allowed` bliver stående som oversættelse, hvis Supabase
+en dag begynder at sende databasens egen tekst videre, men i dag rammer den ikke.
+
+Skriver man en adresse forkert på listen, ser den, der prøver at oprette sig, derfor bare
+en generisk fejl. Tjek `allowed_emails` i `/admin`, før du leder efter fejlen i koden --
+`20260826170000_fix_mikkel_allowlist_email.sql` rettede netop sådan en tastefejl.
 
 Admins vedligeholder listen på `/admin` i appen. At fjerne en adresse spærrer kun for
 _nye_ oprettelser -- en allerede oprettet bruger i `auth.users` bliver ikke slettet af

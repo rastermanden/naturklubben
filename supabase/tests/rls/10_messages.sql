@@ -7,7 +7,7 @@ begin;
 -- ligge i search_path. public først, så appens egne navne aldrig skygges.
 set local search_path = public, tests;
 
-select plan(12);
+select plan(14);
 
 do $$
 begin
@@ -67,6 +67,27 @@ select throws_ok(
   '42501',
   null,
   'et medlem kan ikke sende en besked i en andens navn'
+);
+
+select throws_ok(
+  $$insert into public.messages (user_id, content, message_type)
+    values (
+      '00000000-0000-0000-0000-00000000000a', 'Ugyldig type', 'ukendt'
+    )$$,
+  '23514',
+  null,
+  'message_type accepterer kun text og action'
+);
+
+select lives_ok(
+  $$insert into public.messages (id, user_id, content, message_type)
+    values (
+      '00000000-0000-0000-0000-00000000ac02',
+      '00000000-0000-0000-0000-00000000000a',
+      'slår rundt med en stor ørred',
+      'action'
+    )$$,
+  'et medlem kan sende en handlingsbesked'
 );
 
 select throws_ok(

@@ -7,10 +7,13 @@ import {
 } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
 
+export type MessageType = 'text' | 'action'
+
 export interface Message {
   id: string
   user_id: string | null
   content: string
+  message_type?: MessageType
   created_at: string
   deleted_at: string | null
   deleted_by: string | null
@@ -30,6 +33,7 @@ export interface MessageRow {
   id: string
   user_id: string | null
   content: string
+  message_type?: string
   created_at: string
   deleted_at?: string | null
   deleted_by?: string | null
@@ -53,6 +57,7 @@ export const messageFields = `
   id,
   user_id,
   content,
+  message_type,
   created_at,
   deleted_at,
   deleted_by,
@@ -75,6 +80,7 @@ export function normalizeMessage(row: MessageRow): Message {
     id: row.id,
     user_id: row.user_id,
     content: row.content,
+    message_type: row.message_type === 'action' ? 'action' : 'text',
     created_at: row.created_at,
     deleted_at: row.deleted_at ?? null,
     deleted_by: row.deleted_by ?? null,
@@ -417,10 +423,12 @@ export function useMessages() {
       userId,
       content,
       replyToMessageId,
+      messageType = 'text',
     }: {
       userId: string
       content: string
       replyToMessageId: string | null
+      messageType?: MessageType
     }) => {
       const { data, error } = await supabase
         .from('messages')
@@ -428,6 +436,7 @@ export function useMessages() {
           user_id: userId,
           content,
           reply_to_message_id: replyToMessageId,
+          message_type: messageType,
         })
         .select(messageFields)
         .single()

@@ -130,6 +130,33 @@ describe('auth form errors', () => {
     expect(document.activeElement).toBe(email)
   })
 
+  it('links a rejected allowlist signup to e-mail', async () => {
+    // Allowlist-triggeren rejser 'Email not allowed' i databasen, men GoTrue
+    // svarer klienten med sin egen faste 500-tekst. Testen bruger derfor den
+    // tekst, brugeren rent faktisk får.
+    auth.signUp.mockResolvedValue({
+      error: { message: 'Database error saving new user' },
+    })
+    renderPage(<SignupPage />)
+
+    fireEvent.change(screen.getByLabelText('Navn'), {
+      target: { value: 'Maja Medlem' },
+    })
+    const email = screen.getByLabelText('E-mail')
+    fireEvent.change(email, { target: { value: 'maja@example.com' } })
+    fireEvent.change(screen.getByLabelText('Adgangskode'), {
+      target: { value: 'hemmelig' },
+    })
+    fireEvent.submit(email.closest('form')!)
+
+    const error = await screen.findByText(
+      'Brugeren kunne ikke oprettes. Er e-mailadressen inviteret til Naturklubben?',
+    )
+    expectLinkedError(email, error)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(document.activeElement).toBe(email)
+  })
+
   it('keeps each field error non-live while moving focus between fields', async () => {
     auth.signUp
       .mockResolvedValueOnce({
