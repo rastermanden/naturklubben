@@ -86,7 +86,10 @@ export function MessageBubble({
         style={
           isAction
             ? undefined
-            : { backgroundColor: isOwn ? color : color + '22', color: textColor }
+            : {
+                backgroundColor: isOwn ? color : color + '22',
+                color: textColor,
+              }
         }
       >
         {!isAction && message.reply_to_message_id && (
@@ -107,7 +110,9 @@ export function MessageBubble({
         )}
         {!isAction && (
           <p
-            className={`mb-0.5 text-xs font-medium ${isOwn ? 'text-right' : ''}`}
+            className={`mb-0.5 text-xs font-medium ${
+              isOwn ? 'text-right' : ''
+            }`}
           >
             {name}
           </p>
@@ -126,7 +131,9 @@ export function MessageBubble({
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         )}
         <p
-          className={`mt-1 text-xs ${isAction ? 'text-center opacity-70' : 'text-right'}`}
+          className={`mt-1 text-xs ${
+            isAction ? 'text-center opacity-70' : 'text-right'
+          }`}
           title={fullTimestamp}
         >
           {formatRelativeTime(message.created_at)}
