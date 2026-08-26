@@ -500,6 +500,23 @@ Wildcarden `/naturklubben/**` dækker også PR-previewenes kopier af appen
 (`/naturklubben/pr-preview/pr-<nr>/velkommen`), så signup-flowet kan afprøves på et
 preview-link -- mod previewets egen database.
 
+### Bekræftelsesmailen på et PR-preview
+
+En Preview Branch er sit eget Supabase-projekt med sin egen auth-opsætning, og
+bekræftelse af e-mail er typisk **slået fra** dér. Så returnerer `signUp()` en session
+med det samme, og der bliver aldrig sendt en mail -- man er logget ind uden at have
+bekræftet noget. Det er ikke en fejl i mailopsætningen; der er bare ikke noget at
+bekræfte.
+
+`src/pages/SignupPage.tsx` skelner derfor mellem de tre svar, Supabase giver _uden_ en
+fejl: en session (bekræftelse slået fra -> "du er oprettet og logget ind"), en bruger med
+tom `identities`-liste (adressen findes allerede, og der sendes ingen ny mail) og en
+almindelig oprettelse (mailen er på vej). Kigger man kun på `error`, kommer appen til at
+love en bekræftelsesmail i alle tre tilfælde.
+
+Bemærk også, at Supabase' indbyggede mailtjeneste er stramt rate limited og kun er
+tiltænkt test. Rammer man grænsen, svarer Auth med en fejl -- ikke med tavshed.
+
 De to sider, links kan lande på:
 
 - `/velkommen` (`src/pages/WelcomePage.tsx`) -- bekræftet e-mail. Sessionen kommer med i

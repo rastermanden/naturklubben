@@ -225,4 +225,76 @@ describe('auth form errors', () => {
     await waitFor(() => expect(document.activeElement).toBe(repeated))
     await waitFor(() => expect(auth.updateUser).not.toHaveBeenCalled())
   })
+
+  // Supabase svarer uden fejl i tre forskellige situationer, og kun den ene
+  // sender en mail. Tidligere viste siden "vi har sendt en bekræftelsesmail" i
+  // alle tre -- også når der aldrig blev sendt noget.
+  it('siger "du er logget ind" i stedet for at love en mail, når bekræftelse er slået fra', async () => {
+    auth.signUp.mockResolvedValue({
+      data: { session: { access_token: 'abc' }, user: { id: 'ny-bruger' } },
+      error: null,
+    })
+    renderPage(<SignupPage />)
+
+    fireEvent.change(screen.getByLabelText('Navn'), {
+      target: { value: 'Maja Medlem' },
+    })
+    const email = screen.getByLabelText('E-mail')
+    fireEvent.change(email, { target: { value: 'maja@example.com' } })
+    fireEvent.change(screen.getByLabelText('Adgangskode'), {
+      target: { value: 'hemmelig' },
+    })
+    fireEvent.submit(email.closest('form')!)
+
+    await screen.findByText('Du er oprettet')
+    expect(screen.queryByText(/bekræftelsesmail/)).toBeNull()
+  })
+
+  it('afslører en allerede oprettet adresse frem for at love en mail, der ikke sendes', async () => {
+    // Email-enumeration-beskyttelse: ingen fejl, men en tom identities-liste.
+    auth.signUp.mockResolvedValue({
+      data: { session: null, user: { id: 'skygge', identities: [] } },
+      error: null,
+    })
+    renderPage(<SignupPage />)
+
+    fireEvent.change(screen.getByLabelText('Navn'), {
+      target: { value: 'Maja Medlem' },
+    })
+    const email = screen.getByLabelText('E-mail')
+    fireEvent.change(email, { target: { value: 'maja@example.com' } })
+    fireEvent.change(screen.getByLabelText('Adgangskode'), {
+      target: { value: 'hemmelig' },
+    })
+    fireEvent.submit(email.closest('form')!)
+
+    const error = await screen.findByText(
+      'Der findes allerede en bruger med den e-mail.',
+    )
+    expectLinkedError(email, error)
+    expect(screen.queryByText(/bekræftelsesmail/)).toBeNull()
+  })
+
+  it('lover kun en mail, når der faktisk bliver sendt en', async () => {
+    auth.signUp.mockResolvedValue({
+      data: {
+        session: null,
+        user: { id: 'ny-bruger', identities: [{ id: 'identitet' }] },
+      },
+      error: null,
+    })
+    renderPage(<SignupPage />)
+
+    fireEvent.change(screen.getByLabelText('Navn'), {
+      target: { value: 'Maja Medlem' },
+    })
+    const email = screen.getByLabelText('E-mail')
+    fireEvent.change(email, { target: { value: 'maja@example.com' } })
+    fireEvent.change(screen.getByLabelText('Adgangskode'), {
+      target: { value: 'hemmelig' },
+    })
+    fireEvent.submit(email.closest('form')!)
+
+    await screen.findByText('Tjek din e-mail')
+  })
 })

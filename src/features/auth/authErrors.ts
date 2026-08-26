@@ -8,6 +8,12 @@ export function toFriendlyAuthError(message: string): string {
       'Adgangskoden skal være på mindst 6 tegn.',
     'Email not allowed':
       'Denne e-mailadresse er ikke inviteret til Naturklubben.',
+    // Supabase' indbyggede mailtjeneste er stramt rate limited. Uden den her
+    // blev svaret til et intetsigende "Der skete en fejl".
+    'Email rate limit exceeded':
+      'Der er sendt for mange mails på kort tid. Prøv igen om en time.',
+    'For security purposes, you can only request this after 60 seconds.':
+      'Vent et minut, før du prøver igen.',
   }
   return known[message] ?? 'Der skete en fejl. Prøv igen om lidt.'
 }
