@@ -183,6 +183,54 @@ describe('ChatPage replies', () => {
   })
 })
 
+describe('ChatPage slash commands', () => {
+  it('sends /slap as an action message and clears the composer', () => {
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: { value: '/slap Bo' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        userId: 'current-member',
+        content: 'slår Bo rundt med en stor ørred',
+        replyToMessageId: null,
+        messageType: 'action',
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    )
+    expect(
+      screen.getByRole('textbox', { name: 'Skriv en besked' }),
+    ).toHaveValue('')
+  })
+
+  it('sends a normal message without a messageType field', () => {
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: { value: 'Hej med jer' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        userId: 'current-member',
+        content: 'Hej med jer',
+        replyToMessageId: null,
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    )
+  })
+})
+
 describe('ChatPage reactions', () => {
   it('adds a reaction the member has not given yet', () => {
     render(<ChatPage />)

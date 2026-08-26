@@ -9,6 +9,7 @@ import {
   summarizeReactions,
 } from '../features/chat/reactions'
 import { useOnlinePresence } from '../features/chat/useOnlinePresence'
+import { parseSlapCommand } from '../features/chat/slashCommands'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
@@ -171,27 +172,36 @@ function ChatPage() {
   }
 
   function sendCurrentDraft() {
-    const content = draft.trim()
+    const rawContent = draft.trim()
     if (
-      !content ||
-      content.length > MAX_MESSAGE_LENGTH ||
+      !rawContent ||
+      rawContent.length > MAX_MESSAGE_LENGTH ||
       sendMessage.isPending
     ) {
       return
     }
 
+    const slapCommand = parseSlapCommand(rawContent)
+    const content = slapCommand ? slapCommand.content : rawContent
+    if (content.length > MAX_MESSAGE_LENGTH) return
+
     setSendError(null)
     setDraft('')
     const replyToMessageId = replyingTo?.id ?? null
     sendMessage.mutate(
-      { userId, content, replyToMessageId },
+      {
+        userId,
+        content,
+        replyToMessageId,
+        ...(slapCommand ? { messageType: 'action' as const } : {}),
+      },
       {
         onSuccess: () =>
           setReplyingToId((current) =>
             current === replyToMessageId ? null : current,
           ),
         onError: () => {
-          setDraft((current) => current || content)
+          setDraft((current) => current || rawContent)
           setSendError('Beskeden kunne ikke sendes. Prøv igen.')
         },
       },
