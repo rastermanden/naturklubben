@@ -11,6 +11,9 @@ import {
 } from '../features/probation/useProbationApplications'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { AdminRolesSection } from '../features/admin/AdminRolesSection'
+import { BadgeCatalogSection } from '../features/badges/BadgeCatalogSection'
+import { BadgeNominationsSection } from '../features/badges/BadgeNominationsSection'
+import { BadgeProductionsSection } from '../features/badges/BadgeProductionsSection'
 import { useErrorFocus } from '../hooks/useErrorFocus'
 
 function formatDate(value: string) {
@@ -180,8 +183,8 @@ function AdminPage() {
       <div>
         <h1 className="text-2xl font-semibold text-green-900">Admin</h1>
         <p className="text-green-700">
-          Her administrerer du medlemmer, adminroller, ansøgninger og hvem der
-          må oprette en bruger i Naturklubben.
+          Her administrerer du medlemmer, adminroller, badges, ansøgninger og
+          hvem der må oprette en bruger i Naturklubben.
         </p>
       </div>
 
@@ -206,6 +209,12 @@ function AdminPage() {
       </section>
 
       <AdminRolesSection currentUserId={userId} />
+
+      <BadgeNominationsSection adminId={userId} />
+
+      <BadgeProductionsSection adminId={userId} />
+
+      <BadgeCatalogSection />
 
       <form
         onSubmit={handleSubmit}

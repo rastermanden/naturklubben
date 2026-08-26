@@ -19,6 +19,11 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 | `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                                             | Ingen offentlig insert-policy; kun den service-role-beskyttede submit-RPC kan oprette, og kun admins kan læse/behandle.                                                                                             |
 | `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                                              | Ingen policies og ingen grants -- kun `probation-notifications` med Secret key kan læse rækken.                                                                                                                     |
 | `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                                               | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                                                                                                  |
+| `badges`                                   | Badge-kataloget (#159): navn, uploadet billede, den runde beskæring (`crop_x`/`crop_y`/`crop_size`), fysiske mål og status på trykfilen.                | Alle medlemmer kan læse; kun admins kan skrive. `print_*` er revoked fra kolonnegrant'en og ejes af `render-badge-print` gennem `claim_badge_print`/`complete_badge_print`.                                         |
+| `badge_nominations`                        | Indstillinger af ét medlem til én badge, med begrundelse. Delvist unikt indeks tillader kun én åben indstilling pr. (badge, medlem).                    | Admins og den, der selv har indstillet, kan læse. INSERT/UPDATE/DELETE er revoked -- kun `nominate_member_for_badge` og `vote_on_badge_nomination` skriver.                                                         |
+| `badge_nomination_approvals`               | Én række pr. admin-stemme (`approve`/`reject`) med valgfri kommentar. Unik på (indstilling, admin).                                                     | Samme læseregel som indstillingen. Ingen klientskrivning.                                                                                                                                                           |
+| `member_badges`                            | De tildelte badges. `nominated_by`/`reason` kopieres med, så vitrinen kan vise dem uden at åbne indstillingerne for alle.                               | Alle medlemmer kan læse. Ingen klientskrivning -- tildeling sker kun i `vote_on_badge_nomination`.                                                                                                                  |
+| `badge_productions`                        | Produktionsopgaven på det fysiske badge, med `due_at` = tildeling + 24 timer.                                                                           | Kun admins kan læse. Skrivning gennem `claim_badge_production`/`complete_badge_production`.                                                                                                                         |
 | `private.probation_submission_attempts`    | Kortlivede HMAC-hashes til server-side rate limiting; indeholder aldrig rå IP, subnet eller e-mail.                                                     | `private` eksponeres ikke gennem Data API'et; ingen grants til `anon`/`authenticated`.                                                                                                                              |
 
 ## Storage buckets
@@ -30,6 +35,18 @@ Oprettet manuelt i #2:
   fordi et sikkert genforsøg med samme tilfældige sti kræver Storage `upsert`.
 - `photos-optimized` (public) -- alle kan læse. Kun `optimize-image`-edge-functionen
   (Secret key, omgår RLS) kan skrive -- der er bevidst ingen insert-policy for andre.
+
+Oprettet i SQL (kommer automatisk med på preview-branches og i produktion):
+
+- `badge-images` (public) -- alle kan læse, fordi badgen vises på profiler og
+  medlemslisten og derfor har brug for en permanent URL. Kun admins kan skrive
+  (`public.is_admin()` i insert/update/delete-policyerne), og der er ingen per-bruger
+  mappe som i `avatars`. Kun PNG/JPEG/WebP, højst 10 MB -- større end `avatars`' 5 MB,
+  fordi originalen er forlægget for trykket og aldrig nedskaleres. SVG er udeladt
+  bevidst: en SVG i en offentlig bucket kan indeholde script, og `imagescript` kan ikke
+  rasterisere vektor. Trykfilerne (`<badge-id>/print-<forsøg>.png`) skrives af
+  `render-badge-print` med Secret key.
+- `avatars` (public) -- profilbilleder. Skrivning er afgrænset til brugerens egen mappe.
 
 ## Edge Functions
 
@@ -117,6 +134,18 @@ Oprettet manuelt i #2:
   den validerede brugers id. Billedreferencer får signerede Storage-URL'er med 15
   minutters levetid, og svaret kan downloades som JSON uden andre medlemmers
   private data.
+- `render-badge-print` (#159): laver den trykklare PNG til et badge. Kaldes fra
+  admin-panelet, når en badge oprettes eller dens billede/beskæring ændres. Kalderen
+  valideres som admin, og `claim_badge_print` fencer arbejdet med et forsøgsnummer på
+  samme måde som `optimize-image`. Filen indeholder motivet beskåret efter
+  `crop_*`-værdierne, plus bleed hele vejen rundt, og en stiplet cirkel dér, hvor badget
+  skæres. PNG frem for JPEG, fordi trykfilen skal være tabsfri (og fordi
+  `imagescript@1.3.0` kun kan encode JPEG og PNG).
+- `badge-notifications` (#159): push til admins, når en indstilling oprettes, og til
+  både medlemmet og admins, når en badge tildeles. Genbruger `push_subscriptions`,
+  VAPID-nøglerne og `_shared/webpush.ts` fra `chat-push`. Som `chat-push` tager den kun
+  et id fra klienten -- aldrig teksten -- og afviser både en indstilling, kalderen ikke
+  selv har lavet, og en hændelse, der er mere end fem minutter gammel.
 - Deployes **ikke** manuelt -- `.github/workflows/deploy-functions.yml` kører
   `supabase functions deploy` ikke-interaktivt ved push til `main`, når noget under
   `supabase/functions/` ændres. Kræver `SUPABASE_ACCESS_TOKEN` og `SUPABASE_PROJECT_REF`
@@ -146,6 +175,35 @@ PR'ens Supabase Preview Branch, ikke med en lokal mockdatabase:
 6. Slet originalobjektet, sæt rækken `failed`, og genforsøg som bruger A. Rækken skal
    ende `failed` med beskeden om, at originalfilen mangler; den må ikke blive stående
    `processing`.
+
+## Badges
+
+Kataloget ejes af admins, medlemmerne indstiller hinanden, og **to forskellige admins**
+skal godkende, før en badge tildeles (#159).
+
+- Hele vejen fra indstilling til tildeling går gennem `security definer`-RPC'er, ikke
+  direkte writes: `nominate_member_for_badge`, `vote_on_badge_nomination`,
+  `claim_badge_production`, `complete_badge_production`.
+- `vote_on_badge_nomination` tager en advisory lock på indstillingen _og_ `for update`
+  på rækken, tæller stemmerne, tildeler badgen og opretter produktionsopgaven i samme
+  transaktion. To samtidige godkendelser kan derfor hverken tildele badgen to gange
+  eller løbe forbi to-admin-kravet.
+- Den admin, der selv har indstillet, afvises som godkender (`badge_vote_nominator`).
+  Uden den regel ville kravet i praksis være én godkender.
+- En afvisning lukker indstillingen med det samme; der kræves ikke to afvisninger.
+- Indstillinger er rate limited pr. medlem (5 i timen, 20 i døgnet) direkte i RPC'en --
+  indstillingerne bevares i forvejen og er derfor deres eget spor, så en separat
+  attempts-tabel som `probation_application_rate_limits` er unødvendig her.
+- En tildelt badge kan ikke slettes (`badges_prevent_awarded_delete`); den deaktiveres,
+  så historikken bevares.
+- Beskæringen vælges i UI'et og gemmes som tal på badge-rækken. Appen viser den runde
+  badge med CSS (`border-radius: 50%` plus en skaleret/forskudt `img`), mens
+  `render-badge-print` bruger _de samme tal_ til trykfilen -- se
+  `supabase/functions/_shared/badgePrint.ts`, som er testet i `deno test`.
+- Autorisationsmodellen er dækket af `supabase/tests/rls/80_badges.sql`: at et medlem
+  ikke kan tildele sig selv en badge, at én admin ikke er nok, at indstilleren ikke kan
+  være den ene af de to, at en admin ikke kan stemme to gange, og at et almindeligt
+  medlem hverken kan uploade i `badge-images` eller se produktionslisten.
 
 ## Migrations
 

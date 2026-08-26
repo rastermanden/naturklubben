@@ -60,8 +60,24 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ vars.VAPID_SUBJECT || 'mailto:naturklubben@example.com' }}
 
+      # Trykfilen skrives med Secret key, men kalderen er en admin i browseren
+      # med sit eget access-token. Gateway-JWT'en forbliver derfor slået til.
+      - name: Deploy render-badge-print
+        run: supabase functions deploy render-badge-print --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
       - name: Deploy chat-push
         run: supabase functions deploy chat-push --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      # Kaldes af medlemmets/adminens egen browser med deres access-token lige
+      # efter en indstilling eller en tildeling -- samme mønster som chat-push.
+      - name: Deploy badge-notifications
+        run: supabase functions deploy badge-notifications --project-ref "$SUPABASE_PROJECT_REF"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
