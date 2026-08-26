@@ -43,6 +43,21 @@ vi.mock('../features/notifications/NotificationToggle', () => ({
 vi.mock('../features/admin/AdminRolesSection', () => ({
   AdminRolesSection: () => <p>Medlemsliste</p>,
 }))
+// Badge-sektionerne har deres egne tests. Her holdes de ude, så testen af
+// invitationsformularen ikke også skal stille en Supabase-klient til rådighed.
+vi.mock('../features/badges/BadgeCatalogSection', () => ({
+  BadgeCatalogSection: () => null,
+}))
+vi.mock('../features/badges/BadgeNominationsSection', () => ({
+  BadgeNominationsSection: () => null,
+}))
+vi.mock('../features/badges/BadgeProductionsSection', () => ({
+  BadgeProductionsSection: () => null,
+}))
+// Siden selv henter de åbne nomineringer for at kunne vise tallet på fanen.
+vi.mock('../features/badges/useBadgeNominations', () => ({
+  useBadgeNominations: () => ({ data: [] }),
+}))
 
 import AdminPage from './AdminPage'
 

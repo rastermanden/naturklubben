@@ -1,6 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { DeleteAccountSection } from '../features/account/DeleteAccountSection'
+import { BadgeShowcase } from '../features/badges/BadgeShowcase'
+import {
+  groupBadgesByMember,
+  useMemberBadges,
+} from '../features/badges/useMemberBadges'
+import { useMembers } from '../features/members/useMembers'
 import { useAuth } from '../features/auth/useAuth'
 import { ChatColorOption } from '../features/chat/ChatColorOption'
 import { profilesMapQueryKey } from '../features/chat/useProfilesMap'
@@ -30,6 +36,8 @@ function ProfilePage() {
   const userId = session!.user.id
   const email = session!.user.email
   const queryClient = useQueryClient()
+  const memberBadgesQuery = useMemberBadges()
+  const membersQuery = useMembers()
 
   const [fullName, setFullName] = useState('')
   const [chatColor, setChatColor] = useState('#16a34a')
@@ -332,6 +340,27 @@ function ProfilePage() {
           {saving ? 'Gemmer…' : 'Gem profil'}
         </button>
       </form>
+
+      <section className="flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
+        <div>
+          <h2 className="font-medium text-green-900">Mine badges</h2>
+          <p className="text-sm text-green-700">
+            Badges tildeles, når to administratorer har godkendt en indstilling
+            fra et andet medlem. Klik på en badge for at se, hvem der
+            indstillede dig -- og hvorfor.
+          </p>
+        </div>
+        <BadgeShowcase
+          badges={groupBadgesByMember(memberBadgesQuery.data).get(userId) ?? []}
+          nameFor={(profileId) =>
+            membersQuery.data
+              ?.find((member) => member.id === profileId)
+              ?.full_name?.trim() ?? null
+          }
+          size="lg"
+          emptyText="Du har ingen badges endnu."
+        />
+      </section>
 
       {email && <DeleteAccountSection email={email} />}
     </main>

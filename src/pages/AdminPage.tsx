@@ -21,6 +21,10 @@ import {
   parseAdminTab,
   type AdminTabId,
 } from '../features/admin/adminTabs'
+import { BadgeCatalogSection } from '../features/badges/BadgeCatalogSection'
+import { BadgeNominationsSection } from '../features/badges/BadgeNominationsSection'
+import { BadgeProductionsSection } from '../features/badges/BadgeProductionsSection'
+import { useBadgeNominations } from '../features/badges/useBadgeNominations'
 import { useErrorFocus } from '../hooks/useErrorFocus'
 
 function AdminPage() {
@@ -33,6 +37,9 @@ function AdminPage() {
     rejectApplication,
     retryNotification,
   } = useProbationApplications()
+  // Kun til tallet på fanen. Sektionen bruger samme query-nøgle, så det
+  // koster ikke et ekstra kald.
+  const nominationsQuery = useBadgeNominations()
 
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = parseAdminTab(searchParams.get(ADMIN_TAB_PARAM))
@@ -185,15 +192,18 @@ function AdminPage() {
       <div>
         <h1 className="text-2xl font-semibold text-green-900">Admin</h1>
         <p className="text-green-700">
-          Her administrerer du medlemmer, adminroller, ansøgninger og hvem der
-          må oprette en bruger i Naturklubben.
+          Her administrerer du medlemmer, adminroller, badges, ansøgninger og
+          hvem der må oprette en bruger i Naturklubben.
         </p>
       </div>
 
       <AdminTabs
         activeTab={activeTab}
         onSelect={selectTab}
-        badges={{ ansoegninger: applications.length }}
+        badges={{
+          ansoegninger: applications.length,
+          badges: nominationsQuery.data?.length ?? 0,
+        }}
       />
 
       {/* Beskederne står uden for fanepanelerne, så en kvittering ikke
@@ -232,6 +242,12 @@ function AdminPage() {
 
       <AdminTabPanel tab="medlemmer" activeTab={activeTab}>
         <AdminRolesSection currentUserId={userId} />
+      </AdminTabPanel>
+
+      <AdminTabPanel tab="badges" activeTab={activeTab}>
+        <BadgeNominationsSection adminId={userId} />
+        <BadgeProductionsSection adminId={userId} />
+        <BadgeCatalogSection />
       </AdminTabPanel>
 
       <AdminTabPanel tab="adgang" activeTab={activeTab}>

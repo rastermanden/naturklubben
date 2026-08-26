@@ -15,6 +15,10 @@ export const ADMIN_TABS = [
     label: 'Ansøgninger',
   },
   { id: 'medlemmer', label: 'Medlemmer' },
+  // Badge-kataloget, de åbne nomineringer og produktionen af de fysiske
+  // badges. Nomineringer hedder netop ikke "indstillinger" i UI'et --
+  // panelet har allerede en fane med det navn i betydningen *settings*.
+  { id: 'badges', label: 'Badges' },
   { id: 'adgang', label: 'Adgang' },
   {
     id: 'indstillinger',

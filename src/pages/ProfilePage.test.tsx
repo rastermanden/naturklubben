@@ -16,6 +16,18 @@ vi.mock('../features/auth/useAuth', () => ({
 vi.mock('../features/account/DeleteAccountSection', () => ({
   DeleteAccountSection: () => null,
 }))
+// Badge-vitrinen har sin egen test. Her ville den bare trække react-query og
+// Supabase med ind i en test om avatar-fejlbeskeden.
+vi.mock('../features/badges/BadgeShowcase', () => ({
+  BadgeShowcase: () => null,
+}))
+vi.mock('../features/badges/useMemberBadges', () => ({
+  useMemberBadges: () => ({ data: [] }),
+  groupBadgesByMember: () => new Map(),
+}))
+vi.mock('../features/members/useMembers', () => ({
+  useMembers: () => ({ data: [] }),
+}))
 vi.mock('../lib/supabaseClient', () => {
   const profileQuery = {
     select: vi.fn(),

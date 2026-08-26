@@ -15,3 +15,16 @@ verify_jwt = false
 [functions.export-account]
 enabled = true
 verify_jwt = true
+
+# Badges (#159). Begge kaldes fra browseren med medlemmets eget access-token,
+# så gateway-JWT'en skal være slået til -- samme opsætning som i
+# deploy-functions.yml, hvor de deployes uden --no-verify-jwt.
+# Uden dem her svarer preview-branchen 404 på functionen (og browseren melder
+# det som en CORS-fejl, fordi preflighten er dét, der får 404'eren).
+[functions.render-badge-print]
+enabled = true
+verify_jwt = true
+
+[functions.badge-notifications]
+enabled = true
+verify_jwt = true

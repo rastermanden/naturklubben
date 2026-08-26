@@ -34,7 +34,7 @@ describe('AdminTabs', () => {
 
     const active = screen.getByRole('tab', { name: 'Medlemmer' })
     fireEvent.keyDown(active, { key: 'ArrowRight' })
-    expect(onSelect).toHaveBeenCalledWith('adgang')
+    expect(onSelect).toHaveBeenCalledWith('badges')
 
     fireEvent.keyDown(active, { key: 'ArrowLeft' })
     expect(onSelect).toHaveBeenCalledWith('ansoegninger')
