@@ -201,8 +201,10 @@ select results_eq(
 
 do $$ begin perform tests.logout(); end $$;
 
-select is_empty(
+select throws_ok(
   $$select * from public.gallery_event_photo_counts$$,
+  '42501',
+  null,
   'anonyme kan ikke læse begivenhedernes billedantal'
 );
 
