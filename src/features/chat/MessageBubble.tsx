@@ -44,6 +44,7 @@ export function MessageBubble({
     ? 'Tidligere medlem'
     : (author?.full_name ?? 'Medlem')
   const color = isFormerMember ? '#64748b' : (author?.chat_color ?? '#16a34a')
+  const isAction = message.message_type === 'action'
   const fullTimestamp = new Date(message.created_at).toLocaleString('da-DK')
   const replyName =
     message.reply_to?.user_id === null
@@ -61,25 +62,34 @@ export function MessageBubble({
   return (
     <li
       data-message-id={message.id}
-      className={`flex items-end gap-2 rounded-lg ${
-        isOwn ? 'flex-row-reverse' : ''
+      className={`flex rounded-lg ${
+        isAction
+          ? 'justify-center'
+          : `items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`
       } ${isHighlighted ? 'outline-4 outline-amber-300' : ''}`}
     >
-      <Avatar
-        name={name}
-        avatarUrl={author?.avatar_url ?? null}
-        color={color}
-        size="md"
-        decorative
-      />
+      {!isAction && (
+        <Avatar
+          name={name}
+          avatarUrl={author?.avatar_url ?? null}
+          color={color}
+          size="md"
+          decorative
+        />
+      )}
       <div
-        className="max-w-[75%] rounded-2xl px-4 py-2"
-        style={{
-          backgroundColor: isOwn ? color : color + '22',
-          color: textColor,
-        }}
+        className={
+          isAction
+            ? 'max-w-[85%] rounded-full px-4 py-1.5'
+            : 'max-w-[75%] rounded-2xl px-4 py-2'
+        }
+        style={
+          isAction
+            ? undefined
+            : { backgroundColor: isOwn ? color : color + '22', color: textColor }
+        }
       >
-        {message.reply_to_message_id && (
+        {!isAction && message.reply_to_message_id && (
           <blockquote
             className={`mb-2 rounded-lg border-l-4 px-3 py-2 text-sm ${
               isOwn
@@ -95,25 +105,39 @@ export function MessageBubble({
             </p>
           </blockquote>
         )}
-        <p
-          className={`mb-0.5 text-xs font-medium ${isOwn ? 'text-right' : ''}`}
-        >
-          {name}
-        </p>
+        {!isAction && (
+          <p
+            className={`mb-0.5 text-xs font-medium ${isOwn ? 'text-right' : ''}`}
+          >
+            {name}
+          </p>
+        )}
         {isDeleted ? (
           <div className="py-1 text-sm italic opacity-75">
             <p>Beskeden er slettet.</p>
             {wasDeletedByAdmin && <p>Slettet af en administrator.</p>}
           </div>
+        ) : isAction ? (
+          <p className="text-center text-sm italic text-green-800">
+            <span aria-hidden="true">* </span>
+            <span className="font-medium">{name}</span> {message.content}
+          </p>
         ) : (
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         )}
-        <p className="mt-1 text-right text-xs" title={fullTimestamp}>
+        <p
+          className={`mt-1 text-xs ${isAction ? 'text-center opacity-70' : 'text-right'}`}
+          title={fullTimestamp}
+        >
           {formatRelativeTime(message.created_at)}
         </p>
         {!isDeleted && (
           <>
-            <div className="mt-1 flex flex-wrap items-center justify-end gap-1">
+            <div
+              className={`mt-1 flex flex-wrap items-center gap-1 ${
+                isAction ? 'justify-center' : 'justify-end'
+              }`}
+            >
               <button
                 type="button"
                 onClick={() => onReply(message)}
