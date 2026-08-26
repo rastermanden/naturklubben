@@ -91,15 +91,17 @@ export function generateIcal(
       ]
     : []
 
-  return [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Naturklubben//Kalender//DA',
-    `X-WR-CALNAME:${escapeText(calendarName)}`,
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
-    ...refreshLines,
-    ...events.map((event) => buildVevent(event, dtstamp)),
-    'END:VCALENDAR',
-  ].join('\r\n')
+  return (
+    [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Naturklubben//Kalender//DA',
+      `X-WR-CALNAME:${escapeText(calendarName)}`,
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      ...refreshLines,
+      ...events.map((event) => buildVevent(event, dtstamp)),
+      'END:VCALENDAR',
+    ].join('\r\n') + '\r\n'
+  )
 }
