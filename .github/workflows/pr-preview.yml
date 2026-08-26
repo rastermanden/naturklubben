@@ -44,6 +44,7 @@ jobs:
           FALLBACK_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           set -uo pipefail
+          echo "SUPABASE_PREVIEW_BRANCH_USED=false" >> "$GITHUB_ENV"
 
           # Bruges, når der ikke er en brugbar Preview Branch for PR'en.
           use_production() {
@@ -67,6 +68,7 @@ jobs:
           }
 
           # Supabase opretter ofte branchen lidt efter synchronize-eventet.
+          # 24 forsøg á 10 sekunder giver ~4 minutters timeout-budget.
           attempts=24
           echo "Leder efter Supabase Preview Branch for '$GIT_BRANCH' / PR #$PR_NUMBER."
 
@@ -106,11 +108,14 @@ jobs:
             if [ "$attempt" -lt "$attempts" ]; then sleep 10; fi
           done
 
-          if [ -z "$branch_ref" ] || [ -z "$publishable" ]; then
-            if [ -z "$branch_ref" ]; then
-              use_production "Supabase oprettede ingen Preview Branch for PR #$PR_NUMBER"
-            fi
-            use_production "Supabase Preview Branch '$branch_ref' mangler publishable key"
+          if [ -z "$branch_ref" ]; then
+            use_production "Supabase oprettede ingen Preview Branch for PR #$PR_NUMBER"
+          fi
+
+          if [ -z "$publishable" ]; then
+            echo "::error::Supabase Preview Branch '$branch_ref' mangler publishable key."
+            echo "Tjek at SUPABASE_ACCESS_TOKEN stadig kan læse branchens API keys." >&2
+            exit 1
           fi
 
           echo "::add-mask::$publishable"
