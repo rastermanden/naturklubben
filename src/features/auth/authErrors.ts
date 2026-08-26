@@ -8,6 +8,13 @@ export function toFriendlyAuthError(message: string): string {
       'Adgangskoden skal være på mindst 6 tegn.',
     'Email not allowed':
       'Denne e-mailadresse er ikke inviteret til Naturklubben.',
+    // GoTrue sender aldrig databasens egen fejltekst videre: rejser en trigger
+    // på auth.users en exception -- fx allowlistens 'Email not allowed' --
+    // svarer den 500 med netop denne faste besked. Uden linjen her endte en
+    // afvist invitation derfor som 'Der skete en fejl', og den, der prøvede at
+    // oprette sig, fik intet at vide om, at adressen ikke stod på listen.
+    'Database error saving new user':
+      'Brugeren kunne ikke oprettes. Er e-mailadressen inviteret til Naturklubben?',
   }
   return known[message] ?? 'Der skete en fejl. Prøv igen om lidt.'
 }
