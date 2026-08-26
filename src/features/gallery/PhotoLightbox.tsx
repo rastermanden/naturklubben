@@ -181,23 +181,50 @@ export function PhotoLightbox({
       onTouchEnd={handleTouchEnd}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/90 p-4"
     >
-      <button
-        type="button"
-        onClick={handleShareClick}
-        className="absolute top-4 left-4 z-10 min-h-11 rounded border border-white px-4 py-2 text-white"
-      >
-        Del link
-      </button>
+      {/* Del og luk hører sammen som ét sæt handlinger på billedet, så de står
+          som en gruppe i samme hjørne — del først, så tab-rækkefølgen følger
+          den visuelle. */}
+      <div className="absolute top-4 right-4 z-10 flex items-center gap-1">
+        <button
+          type="button"
+          onClick={handleShareClick}
+          aria-label="Del link"
+          className="flex h-11 w-11 items-center justify-center rounded text-white"
+        >
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 3v12M12 3 8 7M12 3l4 4"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M6 11H4.5v8.5h15V11H18"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
 
-      <button
-        ref={closeButtonRef}
-        type="button"
-        onClick={onClose}
-        aria-label="Luk"
-        className="absolute top-4 right-4 z-10 flex h-11 w-11 items-center justify-center rounded text-2xl text-white"
-      >
-        ×
-      </button>
+        <button
+          ref={closeButtonRef}
+          type="button"
+          onClick={onClose}
+          aria-label="Luk"
+          className="flex h-11 w-11 items-center justify-center rounded text-2xl text-white"
+        >
+          ×
+        </button>
+      </div>
 
       {canBrowse && (
         <>
