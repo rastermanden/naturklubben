@@ -2,8 +2,19 @@
 <html lang="da">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <!-- Ikonerne peger på absolutte stier, som Vite præfikser med base-stien
+         ved build. Relative stier ("favicon.svg") slog fejl for alt, der
+         henter dem ud fra en dyb rute: de blev slået op i rutens egen mappe.
+         favicon.ico er den, ikke-browser-værktøjer leder efter -- bl.a.
+         Omarchys webapp-installer, som skal have et rasterikon til .desktop-
+         filen og ikke kan bruge en SVG. Den ligger først, så alt, der bare
+         tager det første ikon, får en brugbar fil; browsere, der forstår SVG,
+         vælger selv den skarpe favicon.svg. -->
+    <link rel="icon" href="/naturklubben/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/svg+xml" href="/naturklubben/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/naturklubben/pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/naturklubben/pwa-512x512.png" />
+    <link rel="apple-touch-icon" href="/naturklubben/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#166534" />
     <meta
