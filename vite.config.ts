@@ -148,10 +148,14 @@ export default defineConfig(({ command, mode }) => {
               strategies: 'injectManifest',
               srcDir: 'src',
               filename: 'sw.ts',
-              // favicon.svg/apple-touch-icon.png refereres kun via <link> i
-              // index.html, ikke manifestets icons-liste -- skal derfor
-              // eksplicit bedes precachet.
-              includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+              // favicon.ico/favicon.svg/apple-touch-icon.png refereres kun
+              // via <link> i index.html, ikke manifestets icons-liste --
+              // skal derfor eksplicit bedes precachet.
+              includeAssets: [
+                'favicon.ico',
+                'favicon.svg',
+                'apple-touch-icon.png',
+              ],
               // Uden dette registreres der ingen service worker under
               // `npm run dev` -- installer-knappen (beforeinstallprompt)
               // kræver én, så den ville aldrig dukke op lokalt i dev.
