@@ -43,6 +43,10 @@ vi.mock('../features/notifications/NotificationToggle', () => ({
 vi.mock('../features/admin/AdminRolesSection', () => ({
   AdminRolesSection: () => <p>Medlemsliste</p>,
 }))
+// Aktivitetssektionen har sin egen test og taler ellers med Supabase.
+vi.mock('../features/activities/ActivitiesSection', () => ({
+  ActivitiesSection: () => <p>Aktivitetsliste</p>,
+}))
 // Badge-sektionerne har deres egne tests. Her holdes de ude, så testen af
 // invitationsformularen ikke også skal stille en Supabase-klient til rådighed.
 vi.mock('../features/badges/BadgeCatalogSection', () => ({

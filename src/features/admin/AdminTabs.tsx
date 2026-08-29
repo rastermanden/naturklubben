@@ -56,10 +56,14 @@ export function AdminTabs({
   }
 
   return (
+    // Fanerne ombrydes frem for at scrolle vandret. Med seks faner var rækken
+    // bredere end panelets max-w-2xl, og så stod der en vandret scrollbar under
+    // dem med den første fane skåret over i kanten. En ekstra række koster
+    // ingenting; en scrollbar skjuler faner, man ikke kan se er der.
     <div
       role="tablist"
       aria-label="Admin-sektioner"
-      className="-mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0"
+      className="flex flex-wrap gap-x-1"
     >
       {ADMIN_TABS.map((tab) => {
         const selected = tab.id === activeTab
@@ -84,8 +88,8 @@ export function AdminTabs({
             onKeyDown={handleKeyDown}
             className={
               selected
-                ? 'flex min-h-11 shrink-0 items-center gap-2 rounded-t-lg border-b-2 border-green-800 px-4 py-2 font-medium text-green-900'
-                : 'flex min-h-11 shrink-0 items-center gap-2 rounded-t-lg border-b-2 border-transparent px-4 py-2 text-green-700 hover:text-green-900'
+                ? 'flex min-h-11 shrink-0 items-center gap-2 rounded-t-lg border-b-2 border-green-800 px-3 py-2 font-medium text-green-900'
+                : 'flex min-h-11 shrink-0 items-center gap-2 rounded-t-lg border-b-2 border-transparent px-3 py-2 text-green-700 hover:text-green-900'
             }
           >
             {tab.label}

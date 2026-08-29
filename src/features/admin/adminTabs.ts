@@ -19,6 +19,9 @@ export const ADMIN_TABS = [
   // badges. Nomineringer hedder netop ikke "indstillinger" i UI'et --
   // panelet har allerede en fane med det navn i betydningen *settings*.
   { id: 'badges', label: 'Badges' },
+  // Indholdet på de offentlige sider. Aktiviteterne kunne før kun ændres
+  // med en migration.
+  { id: 'aktiviteter', label: 'Aktiviteter' },
   { id: 'adgang', label: 'Adgang' },
   {
     id: 'indstillinger',
