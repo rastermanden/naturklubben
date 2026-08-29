@@ -28,10 +28,12 @@ import type { MentionMember } from '../features/chat/mentions'
 import { ChatNotificationPreference } from '../features/notifications/ChatNotificationPreference'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import type { Message } from '../features/chat/useMessages'
 
 const MAX_MESSAGE_LENGTH = 2000
 const SCROLL_BOTTOM_THRESHOLD = 80
+const SEARCH_DEBOUNCE_MS = 250
 
 function ChatPage() {
   const { session } = useAuth()
@@ -70,7 +72,12 @@ function ChatPage() {
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null)
-  const searchQuery = useMessageSearch(searchTerm)
+  // Søgefeltet slår op ved hvert tastetryk; uden pausen ville en hel
+  // søgestreng koste ét opslag pr. bogstav, hvoraf kun det sidste bruges.
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, SEARCH_DEBOUNCE_MS)
+  const searchQuery = useMessageSearch(debouncedSearchTerm)
+  // Mens pausen løber, hører resultaterne på skærmen til en ældre søgestreng.
+  const isSearchSettling = searchTerm.trim() !== debouncedSearchTerm.trim()
   const commandHints = useMemo(() => matchSlashCommandHints(draft), [draft])
 
   // Alle med et navn kan nævnes; pickeren viser bare ikke én selv.
@@ -454,7 +461,7 @@ function ChatPage() {
         />
         {searchTerm.trim() && (
           <div className="absolute z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-green-200 bg-white p-2 shadow-lg">
-            {searchQuery.isPending && (
+            {(searchQuery.isPending || isSearchSettling) && (
               <p role="status" className="p-3 text-green-700">
                 Søger…
               </p>
@@ -469,9 +476,11 @@ function ChatPage() {
                 Beskeden kunne ikke åbnes. Den kan være slettet.
               </p>
             )}
-            {searchQuery.isSuccess && searchResults.length === 0 && (
-              <p className="p-3 text-green-700">Ingen beskeder fundet.</p>
-            )}
+            {searchQuery.isSuccess &&
+              !isSearchSettling &&
+              searchResults.length === 0 && (
+                <p className="p-3 text-green-700">Ingen beskeder fundet.</p>
+              )}
             {searchResults.length > 0 && (
               <ul aria-label="Søgeresultater">
                 {searchResults.map((message) => {
