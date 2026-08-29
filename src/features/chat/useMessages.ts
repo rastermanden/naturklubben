@@ -14,6 +14,8 @@ export interface Message {
   user_id: string | null
   content: string
   message_type?: MessageType
+  /** Bruger-id'er på de medlemmer, beskeden nævner (#179). */
+  mentions: string[]
   created_at: string
   deleted_at: string | null
   deleted_by: string | null
@@ -34,6 +36,7 @@ export interface MessageRow {
   user_id: string | null
   content: string
   message_type?: string
+  mentions?: string[] | null
   created_at: string
   deleted_at?: string | null
   deleted_by?: string | null
@@ -58,6 +61,7 @@ export const messageFields = `
   user_id,
   content,
   message_type,
+  mentions,
   created_at,
   deleted_at,
   deleted_by,
@@ -81,6 +85,7 @@ export function normalizeMessage(row: MessageRow): Message {
     user_id: row.user_id,
     content: row.content,
     message_type: row.message_type === 'action' ? 'action' : 'text',
+    mentions: row.mentions ?? [],
     created_at: row.created_at,
     deleted_at: row.deleted_at ?? null,
     deleted_by: row.deleted_by ?? null,
@@ -424,11 +429,13 @@ export function useMessages() {
       content,
       replyToMessageId,
       messageType = 'text',
+      mentions = [],
     }: {
       userId: string
       content: string
       replyToMessageId: string | null
       messageType?: MessageType
+      mentions?: string[]
     }) => {
       const { data, error } = await supabase
         .from('messages')
@@ -437,6 +444,7 @@ export function useMessages() {
           content,
           reply_to_message_id: replyToMessageId,
           message_type: messageType,
+          mentions,
         })
         .select(messageFields)
         .single()

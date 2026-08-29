@@ -20,13 +20,14 @@ const mocks = vi.hoisted(() => ({
       id: 'message-1',
       user_id: 'other-member',
       content: 'Skal vi mødes ved søen?',
+      mentions: [],
       created_at: '2026-08-23T12:00:00.000Z',
       deleted_at: null,
       deleted_by: null,
       reply_to_message_id: null,
       reply_to: null,
     },
-  ] satisfies Message[],
+  ] as Message[],
 }))
 
 vi.mock('../features/auth/useAuth', () => ({
@@ -89,6 +90,11 @@ vi.mock('../features/chat/useProfilesMap', () => ({
         avatar_url: null,
         chat_color: '#15803d',
       },
+      'third-member': {
+        full_name: 'Åge Bruun',
+        avatar_url: null,
+        chat_color: '#15803d',
+      },
     },
     refetch: vi.fn(),
   }),
@@ -109,6 +115,10 @@ vi.mock('../features/notifications/NotificationToggle', () => ({
   NotificationToggle: () => null,
 }))
 
+vi.mock('../features/notifications/ChatNotificationPreference', () => ({
+  ChatNotificationPreference: () => null,
+}))
+
 beforeEach(() => {
   mocks.mutate.mockReset()
   mocks.toggleReaction.mockReset()
@@ -124,6 +134,7 @@ beforeEach(() => {
       id: 'message-1',
       user_id: 'other-member',
       content: 'Skal vi mødes ved søen?',
+      mentions: [],
       created_at: '2026-08-23T12:00:00.000Z',
       deleted_at: null,
       deleted_by: null,
@@ -421,6 +432,7 @@ describe('ChatPage live updates', () => {
         id: 'message-2',
         user_id: 'other-member',
         content: 'Ny besked',
+        mentions: [],
         created_at: '2026-08-23T12:01:00.000Z',
         deleted_at: null,
         deleted_by: null,
@@ -440,6 +452,7 @@ describe('ChatPage live updates', () => {
           id: 'message-0',
           user_id: 'other-member',
           content: 'Ældre besked',
+          mentions: [],
           created_at: '2026-08-23T11:59:00.000Z',
           deleted_at: null,
           deleted_by: null,
@@ -520,5 +533,118 @@ describe('ChatPage deletion authorization', () => {
       'message-1',
       expect.objectContaining({ onError: expect.any(Function) }),
     )
+  })
+})
+
+describe('ChatPage mentions', () => {
+  it('suggests members while a mention is typed and inserts the chosen name', () => {
+    render(<ChatPage />)
+
+    const composer = screen.getByRole('textbox', { name: 'Skriv en besked' })
+    fireEvent.change(composer, { target: { value: 'Hej @a' } })
+
+    expect(screen.getByRole('button', { name: 'Nævn Ada' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nævn Ada' }))
+
+    expect((composer as HTMLTextAreaElement).value).toBe('Hej @Ada ')
+    expect(document.activeElement).toBe(composer)
+  })
+
+  it('matches Danish letters however the name is capitalised', () => {
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: { value: '@åge' },
+    })
+
+    expect(screen.getByRole('button', { name: 'Nævn Åge Bruun' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Nævn Ada' })).toBeNull()
+  })
+
+  it('picks a member with the keyboard instead of sending the message', () => {
+    render(<ChatPage />)
+
+    const composer = screen.getByRole('textbox', { name: 'Skriv en besked' })
+    fireEvent.change(composer, { target: { value: 'Hej @' } })
+    fireEvent.keyDown(composer, { key: 'ArrowDown' })
+    fireEvent.keyDown(composer, { key: 'Enter' })
+
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    expect((composer as HTMLTextAreaElement).value).toBe('Hej @Åge Bruun ')
+  })
+
+  it('closes the list with Escape so Enter sends the message again', () => {
+    render(<ChatPage />)
+
+    const composer = screen.getByRole('textbox', { name: 'Skriv en besked' })
+    fireEvent.change(composer, { target: { value: 'Hej @a' } })
+    fireEvent.keyDown(composer, { key: 'Escape' })
+
+    expect(screen.queryByRole('button', { name: 'Nævn Ada' })).toBeNull()
+
+    fireEvent.keyDown(composer, { key: 'Enter' })
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'Hej @a' }),
+      expect.anything(),
+    )
+  })
+
+  it('sends the mentioned member ids resolved from the text', () => {
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: { value: 'Hej @Ada, kommer du?' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        userId: 'current-member',
+        content: 'Hej @Ada, kommer du?',
+        replyToMessageId: null,
+        mentions: ['other-member'],
+      },
+      expect.anything(),
+    )
+  })
+
+  it('sends no mentions field for a message that names nobody', () => {
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: { value: 'Skriv til ada@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        userId: 'current-member',
+        content: 'Skriv til ada@example.com',
+        replyToMessageId: null,
+      },
+      expect.anything(),
+    )
+  })
+
+  it('marks a message that mentions the reader', () => {
+    mocks.messages = [
+      {
+        id: 'message-1',
+        user_id: 'other-member',
+        content: 'Hej, kommer du?',
+        mentions: ['current-member'],
+        created_at: '2026-08-23T12:00:00.000Z',
+        deleted_at: null,
+        deleted_by: null,
+        reply_to_message_id: null,
+        reply_to: null,
+      },
+    ]
+
+    render(<ChatPage />)
+
+    expect(screen.getByText('Du er nævnt')).toBeTruthy()
   })
 })
