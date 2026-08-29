@@ -667,6 +667,18 @@ function ChatPage() {
             </button>
           </div>
         )}
+        {mentionQuery &&
+          !mentionDismissed &&
+          mentionCandidates.length === 0 &&
+          pickableMembers.length === 0 && (
+            <p
+              role="status"
+              aria-live="polite"
+              className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-950"
+            >
+              Der er ingen andre medlemmer at nævne endnu.
+            </p>
+          )}
         {mentionCandidates.length > 0 && (
           <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-950">
             <p role="status" aria-live="polite" className="sr-only">

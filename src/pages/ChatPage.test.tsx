@@ -15,6 +15,21 @@ const mocks = vi.hoisted(() => ({
   searchFetchNextPage: vi.fn(),
   searchPages: undefined as
     { messages: Message[]; hasMore: boolean }[] | undefined,
+  profiles: {
+    'other-member': {
+      full_name: 'Ada',
+      avatar_url: null,
+      chat_color: '#15803d',
+    },
+    'third-member': {
+      full_name: 'Åge Bruun',
+      avatar_url: null,
+      chat_color: '#15803d',
+    },
+  } as Record<
+    string,
+    { full_name: string | null; avatar_url: string | null; chat_color: string }
+  >,
   messages: [
     {
       id: 'message-1',
@@ -83,21 +98,7 @@ vi.mock('../features/admin/useIsAdmin', () => ({
 }))
 
 vi.mock('../features/chat/useProfilesMap', () => ({
-  useProfilesMap: () => ({
-    data: {
-      'other-member': {
-        full_name: 'Ada',
-        avatar_url: null,
-        chat_color: '#15803d',
-      },
-      'third-member': {
-        full_name: 'Åge Bruun',
-        avatar_url: null,
-        chat_color: '#15803d',
-      },
-    },
-    refetch: vi.fn(),
-  }),
+  useProfilesMap: () => ({ data: mocks.profiles, refetch: vi.fn() }),
 }))
 
 vi.mock('../features/chat/useOnlinePresence', () => ({
@@ -129,6 +130,18 @@ beforeEach(() => {
   mocks.presenceAway = []
   mocks.fetchNextPage.mockReset()
   mocks.searchPages = undefined
+  mocks.profiles = {
+    'other-member': {
+      full_name: 'Ada',
+      avatar_url: null,
+      chat_color: '#15803d',
+    },
+    'third-member': {
+      full_name: 'Åge Bruun',
+      avatar_url: null,
+      chat_color: '#15803d',
+    },
+  }
   mocks.messages = [
     {
       id: 'message-1',
@@ -626,6 +639,28 @@ describe('ChatPage mentions', () => {
       },
       expect.anything(),
     )
+  })
+
+  it('says so when there is nobody else to mention yet', () => {
+    // Er man alene i klubben -- fx på et frisk preview -- ville en tom liste
+    // være til at forveksle med, at der slet ingen autocomplete er.
+    mocks.profiles = {
+      'current-member': {
+        full_name: 'Mig Selv',
+        avatar_url: null,
+        chat_color: '#15803d',
+      },
+    }
+
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: { value: 'Hej @' },
+    })
+
+    expect(
+      screen.getByText('Der er ingen andre medlemmer at nævne endnu.'),
+    ).toBeTruthy()
   })
 
   it('marks a message that mentions the reader', () => {
