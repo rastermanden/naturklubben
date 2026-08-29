@@ -45,6 +45,21 @@ grænse, gives kontrollerede testdata gennem den nærmeste provider eller et moc
 grænsen; `ProtectedRoute.test.tsx` viser provider-mønsteret for auth. Kald aldrig den
 rigtige Supabase-klient fra en test. CI kører samme `npm test` på pull requests og `main`.
 
+## App-version
+
+Footeren viser, hvilket build der kører, fx `Version 37a86ae · 29.08.2026`. Strengen
+kommer fra `git describe --tags --always` og commit-datoen, og inlines ved build af
+`vite.config.ts` (se `src/lib/appVersion.ts`).
+
+Der er bevidst **ingen** manuelt vedligeholdt version i `package.json` og ingen krav om
+tags: hver merge til `main` deployer, så commit'en _er_ udgivelsen. Vil man alligevel
+markere en milepæl, koster det ikke andet end at sætte et tag på `main` -- så viser
+footeren tagget (`v1.2.0`) i stedet for sha'en, og `v1.2.0-3-gabc1234` for de commits, der
+kommer efter. Derfor checker `deploy.yml` og `pr-preview.yml` ud med `fetch-depth: 0`.
+
+Preview-builds får deres PR-nummer med i strengen (`Version PR #123 · abc1234 · ...`), så
+man kan se på selve appen, at man ikke er på produktionssitet.
+
 ## Links fra mails og dybe links
 
 Bekræftelses- og nulstillingsmails fra Supabase lander på `/velkommen` og
