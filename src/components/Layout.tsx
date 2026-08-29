@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
+import { FeatureAnnouncementBanner } from '../features/announcements/FeatureAnnouncementBanner'
 import { useAuth } from '../features/auth/useAuth'
 import type { RouteMetadata } from '../routeMetadata'
 import { navLinks } from './navLinks'
@@ -108,6 +109,10 @@ export function Layout({ routes }: LayoutProps) {
       />
 
       <div id="main-content" tabIndex={-1} className="flex-1">
+        {/* Nyheder om nye funktioner står i app-shellen og ikke på en enkelt
+            side: det, der er nyt, skal møde medlemmet, hvor det nu åbner
+            appen. */}
+        {session && <FeatureAnnouncementBanner userId={session.user.id} />}
         <Outlet />
       </div>
 
