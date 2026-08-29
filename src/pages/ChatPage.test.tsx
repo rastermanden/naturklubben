@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   deleteMutate: vi.fn(),
   isAdmin: false,
   mutateAsync: vi.fn(),
+  presenceAway: [] as unknown[],
   fetchNextPage: vi.fn(),
   searchFetchNextPage: vi.fn(),
   searchPages: undefined as
@@ -94,7 +95,10 @@ vi.mock('../features/chat/useProfilesMap', () => ({
 }))
 
 vi.mock('../features/chat/useOnlinePresence', () => ({
-  useOnlinePresence: () => [],
+  useOnlinePresence: (_userId: string, away: unknown) => {
+    mocks.presenceAway.push(away)
+    return []
+  },
 }))
 
 vi.mock('../features/chat/OnlineMembers', () => ({
@@ -112,6 +116,7 @@ beforeEach(() => {
   mocks.deleteMutate.mockReset()
   mocks.isAdmin = false
   mocks.mutateAsync.mockReset()
+  mocks.presenceAway = []
   mocks.fetchNextPage.mockReset()
   mocks.searchPages = undefined
   mocks.messages = [
@@ -235,6 +240,63 @@ describe('ChatPage slash commands', () => {
     )
   })
 
+  it('sends /shrug as an ordinary message without a messageType field', () => {
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: { value: '/shrug det ved jeg ikke' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        userId: 'current-member',
+        content: 'det ved jeg ikke ¯\\_(ツ)_/¯',
+        replyToMessageId: null,
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    )
+  })
+
+  it('answers /help with a system line only the sender sees', () => {
+    render(<ChatPage />)
+    const composer = screen.getByRole('textbox', {
+      name: 'Skriv en besked',
+    }) as HTMLTextAreaElement
+
+    fireEvent.change(composer, { target: { value: '/help' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    expect(composer.value).toBe('')
+    expect(screen.getByText(/Kommandoer i chatten/)).toBeTruthy()
+    expect(screen.getByText(/\/slap \[navn\]/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Luk systembesked' }))
+    expect(screen.queryByText(/Kommandoer i chatten/)).toBeNull()
+  })
+
+  it('marks the sender away with /away and clears it with /back', () => {
+    render(<ChatPage />)
+    const composer = screen.getByRole('textbox', { name: 'Skriv en besked' })
+
+    fireEvent.change(composer, { target: { value: '/away til frokost' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    expect(mocks.presenceAway.at(-1)).toEqual({ message: 'til frokost' })
+    expect(screen.getByText(/markeret som væk: til frokost/)).toBeTruthy()
+
+    fireEvent.change(composer, { target: { value: '/back' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.presenceAway.at(-1)).toBeNull()
+    expect(screen.getByText(/ikke længere markeret som væk/)).toBeTruthy()
+  })
+
   it('suggests the commands while a slash command is typed', () => {
     render(<ChatPage />)
     const composer = screen.getByRole('textbox', { name: 'Skriv en besked' })
@@ -242,7 +304,9 @@ describe('ChatPage slash commands', () => {
     expect(screen.queryByText('/slap [navn]')).toBeNull()
 
     fireEvent.change(composer, { target: { value: '/' } })
+    expect(screen.getByText('/help')).toBeTruthy()
     expect(screen.getByText('/me <tekst>')).toBeTruthy()
+    expect(screen.getByText('/shrug [tekst]')).toBeTruthy()
     expect(screen.getByText('/slap [navn]')).toBeTruthy()
 
     fireEvent.change(composer, { target: { value: '/sl' } })

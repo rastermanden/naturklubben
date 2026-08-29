@@ -1,54 +1,127 @@
 import { describe, expect, it } from 'vitest'
-import { matchSlashCommandHints, parseActionCommand } from './slashCommands'
+import {
+  helpText,
+  matchSlashCommandHints,
+  parseChatCommand,
+  SLASH_COMMANDS,
+} from './slashCommands'
 
-describe('parseActionCommand', () => {
+describe('parseChatCommand', () => {
   it('builds a slap action with the typed target', () => {
-    expect(parseActionCommand('/slap Bo')).toEqual({
+    expect(parseChatCommand('/slap Bo')).toEqual({
+      kind: 'message',
+      messageType: 'action',
       content: 'slår Bo rundt med en stor ørred',
     })
   })
 
   it('builds a slap action with no target', () => {
-    expect(parseActionCommand('/slap')).toEqual({
+    expect(parseChatCommand('/slap')).toEqual({
+      kind: 'message',
+      messageType: 'action',
       content: 'slår rundt med en stor ørred',
     })
   })
 
   it('builds an action from /me with the typed text', () => {
-    expect(parseActionCommand('/me kigger efter fiskehejren')).toEqual({
+    expect(parseChatCommand('/me kigger efter fiskehejren')).toEqual({
+      kind: 'message',
+      messageType: 'action',
       content: 'kigger efter fiskehejren',
     })
   })
 
   it('is case-insensitive and tolerates surrounding whitespace', () => {
-    expect(parseActionCommand('  /SLAP   Ada  ')).toEqual({
+    expect(parseChatCommand('  /SLAP   Ada  ')).toEqual({
+      kind: 'message',
+      messageType: 'action',
       content: 'slår Ada rundt med en stor ørred',
     })
-    expect(parseActionCommand('  /ME   vinker  ')).toEqual({
+    expect(parseChatCommand('  /ME   vinker  ')).toEqual({
+      kind: 'message',
+      messageType: 'action',
       content: 'vinker',
+    })
+    expect(parseChatCommand('  /SHRUG   nå  ')).toEqual({
+      kind: 'message',
+      messageType: 'text',
+      content: 'nå ¯\\_(ツ)_/¯',
     })
   })
 
   it('does not treat an unrelated message as a command', () => {
-    expect(parseActionCommand('/slapping around')).toBeNull()
-    expect(parseActionCommand('/mere kaffe tak')).toBeNull()
-    expect(parseActionCommand('Skal vi mødes ved søen?')).toBeNull()
+    expect(parseChatCommand('/slapping around')).toBeNull()
+    expect(parseChatCommand('/mere kaffe tak')).toBeNull()
+    expect(parseChatCommand('/shrugging it off')).toBeNull()
+    expect(parseChatCommand('Skal vi mødes ved søen?')).toBeNull()
   })
 
   it('leaves a bare /me as a normal message', () => {
-    expect(parseActionCommand('/me')).toBeNull()
+    expect(parseChatCommand('/me')).toBeNull()
+  })
+
+  it('appends a shrug as an ordinary message, not an action', () => {
+    expect(parseChatCommand('/shrug det ved jeg ikke')).toEqual({
+      kind: 'message',
+      messageType: 'text',
+      content: 'det ved jeg ikke ¯\\_(ツ)_/¯',
+    })
+    expect(parseChatCommand('/shrug')).toEqual({
+      kind: 'message',
+      messageType: 'text',
+      content: '¯\\_(ツ)_/¯',
+    })
+    expect(parseChatCommand('/shrugging')).toBeNull()
+  })
+})
+
+describe('parseChatCommand: lokale kommandoer', () => {
+  it('parses /help', () => {
+    expect(parseChatCommand('/help')).toEqual({ kind: 'help' })
+    expect(parseChatCommand('/help mig')).toBeNull()
+  })
+
+  it('parses /away with and without a reason', () => {
+    expect(parseChatCommand('/away til frokost')).toEqual({
+      kind: 'away',
+      message: 'til frokost',
+    })
+    expect(parseChatCommand('/away')).toEqual({ kind: 'away', message: null })
+  })
+
+  it('parses /back', () => {
+    expect(parseChatCommand('  /BACK ')).toEqual({ kind: 'back' })
+    expect(parseChatCommand('/back snart')).toBeNull()
+  })
+})
+
+describe('helpText', () => {
+  it('lists every command with its usage', () => {
+    const text = helpText()
+    for (const command of SLASH_COMMANDS) {
+      expect(text).toContain(command.usage)
+      expect(text).toContain(command.description)
+    }
   })
 })
 
 describe('matchSlashCommandHints', () => {
   it('suggests every command while the slash is alone', () => {
     expect(matchSlashCommandHints('/').map((hint) => hint.command)).toEqual([
+      '/away',
+      '/back',
+      '/help',
       '/me',
+      '/shrug',
       '/slap',
     ])
   })
 
   it('narrows the suggestions as the name is typed', () => {
+    expect(matchSlashCommandHints('/s').map((hint) => hint.command)).toEqual([
+      '/shrug',
+      '/slap',
+    ])
     expect(matchSlashCommandHints('  /SL')).toEqual([
       {
         command: '/slap',
@@ -67,6 +140,18 @@ describe('matchSlashCommandHints', () => {
     expect(matchSlashCommandHints('/slap')[0].isComplete).toBe(true)
     expect(matchSlashCommandHints('/slap Bo')[0].isComplete).toBe(true)
     expect(matchSlashCommandHints('/me vinker')[0].command).toBe('/me')
+  })
+
+  it('keeps the hint while an argument is typed', () => {
+    expect(matchSlashCommandHints('/away til frokost')).toEqual([
+      {
+        command: '/away',
+        usage: '/away [besked]',
+        description: 'Markerer dig som væk for de andre online',
+        completion: '/away ',
+        isComplete: true,
+      },
+    ])
   })
 
   it('drops the hints for anything that is not a command', () => {
