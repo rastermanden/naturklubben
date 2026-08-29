@@ -10,9 +10,12 @@ import {
 } from '../features/chat/reactions'
 import { useOnlinePresence } from '../features/chat/useOnlinePresence'
 import {
+  helpText,
   matchSlashCommandHints,
-  parseActionCommand,
+  parseChatCommand,
 } from '../features/chat/slashCommands'
+import type { ParsedCommand } from '../features/chat/slashCommands'
+import type { AwayState } from '../features/chat/useOnlinePresence'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
@@ -28,7 +31,8 @@ function ChatPage() {
     useMessages()
   const { isAdmin } = useIsAdmin()
   const { data: profiles, refetch: refetchProfiles } = useProfilesMap()
-  const onlineUserIds = useOnlinePresence(userId)
+  const [away, setAway] = useState<AwayState | null>(null)
+  const onlineMembers = useOnlinePresence(userId, away)
   const messages = useMemo(
     () => messagesQuery.data?.messages ?? [],
     [messagesQuery.data?.messages],
@@ -46,6 +50,8 @@ function ChatPage() {
   const [isNearBottom, setIsNearBottom] = useState(true)
   const [replyingToId, setReplyingToId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [notices, setNotices] = useState<{ id: number; text: string }[]>([])
+  const nextNoticeId = useRef(1)
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null)
@@ -175,18 +181,51 @@ function ChatPage() {
     if (nearBottom) setNewMessageCount(0)
   }
 
+  function pushNotice(text: string) {
+    setNotices((current) => [...current, { id: nextNoticeId.current++, text }])
+    // Systemlinjen står nederst i strømmen, så den skal rulles frem som en
+    // ny besked ville blive det.
+    requestAnimationFrame(() => scrollToBottom('smooth'))
+  }
+
+  // Kommandoer, der ikke sender noget til chatten, men kun virker for
+  // afsenderen selv -- svaret vises som en systemlinje, ingen andre ser.
+  function runLocalCommand(
+    command: Exclude<ParsedCommand, { kind: 'message' }>,
+  ) {
+    if (command.kind === 'help') {
+      pushNotice(helpText())
+      return
+    }
+    if (command.kind === 'away') {
+      setAway({ message: command.message })
+      pushNotice(
+        command.message
+          ? `Du er nu markeret som væk: ${command.message}`
+          : 'Du er nu markeret som væk.',
+      )
+      return
+    }
+    setAway(null)
+    pushNotice('Du er ikke længere markeret som væk.')
+  }
+
   function sendCurrentDraft() {
     const rawContent = draft.trim()
-    if (
-      !rawContent ||
-      rawContent.length > MAX_MESSAGE_LENGTH ||
-      sendMessage.isPending
-    ) {
+    if (!rawContent || rawContent.length > MAX_MESSAGE_LENGTH) return
+
+    // De lokale kommandoer sender ingenting og skal derfor virke, også mens
+    // en tidligere besked stadig er undervejs.
+    const command = parseChatCommand(rawContent)
+    if (command && command.kind !== 'message') {
+      setDraft('')
+      setSendError(null)
+      runLocalCommand(command)
       return
     }
 
-    const actionCommand = parseActionCommand(rawContent)
-    const content = actionCommand ? actionCommand.content : rawContent
+    if (sendMessage.isPending) return
+    const content = command ? command.content : rawContent
     if (content.length > MAX_MESSAGE_LENGTH) return
 
     setSendError(null)
@@ -197,7 +236,9 @@ function ChatPage() {
         userId,
         content,
         replyToMessageId,
-        ...(actionCommand ? { messageType: 'action' as const } : {}),
+        ...(command?.messageType === 'action'
+          ? { messageType: 'action' as const }
+          : {}),
       },
       {
         onSuccess: () =>
@@ -288,7 +329,7 @@ function ChatPage() {
         <NotificationToggle userId={userId} />
       </div>
       <OnlineMembers
-        onlineUserIds={onlineUserIds}
+        members={onlineMembers}
         profiles={profiles}
         currentUserId={userId}
       />
@@ -452,6 +493,28 @@ function ChatPage() {
                 onDelete={deleteSelectedMessage}
                 isHighlighted={message.id === highlightedMessageId}
               />
+            ))}
+            {notices.map((notice) => (
+              <li
+                key={notice.id}
+                className="flex items-start justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900"
+              >
+                <p role="status" className="whitespace-pre-wrap">
+                  {notice.text}
+                </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNotices((current) =>
+                      current.filter((entry) => entry.id !== notice.id),
+                    )
+                  }
+                  aria-label="Luk systembesked"
+                  className="min-h-11 shrink-0 rounded px-2 font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-green-800"
+                >
+                  Luk
+                </button>
+              </li>
             ))}
           </ul>
 

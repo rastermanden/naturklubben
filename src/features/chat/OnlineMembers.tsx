@@ -1,23 +1,25 @@
 import { Avatar } from '../../components/Avatar'
+import type { PresenceMember } from './useOnlinePresence'
 import type { ProfileSummary } from './useProfilesMap'
 
 export function OnlineMembers({
-  onlineUserIds,
+  members,
   profiles,
   currentUserId,
 }: {
-  onlineUserIds: string[]
+  members: PresenceMember[]
   profiles: Record<string, ProfileSummary> | undefined
   currentUserId: string
 }) {
-  if (onlineUserIds.length === 0) return null
+  if (members.length === 0) return null
 
   // Vis den aktuelle bruger sidst
-  const sorted = [...onlineUserIds].sort((a, b) => {
-    if (a === currentUserId) return 1
-    if (b === currentUserId) return -1
+  const sorted = [...members].sort((a, b) => {
+    if (a.userId === currentUserId) return 1
+    if (b.userId === currentUserId) return -1
     return 0
   })
+  const awayCount = members.filter((member) => member.isAway).length
 
   return (
     <div className="flex items-center gap-2">
@@ -26,23 +28,39 @@ export function OnlineMembers({
         aria-hidden="true"
       />
       <span className="text-sm text-green-700">
-        {`${onlineUserIds.length} online`}
+        {awayCount > 0
+          ? `${members.length} online · ${awayCount} væk`
+          : `${members.length} online`}
       </span>
       <div className="flex -space-x-1.5" aria-label="Online medlemmer">
-        {sorted.map((id) => {
-          const profile = profiles?.[id]
-          const name =
-            id === currentUserId
-              ? (profile?.full_name ?? 'Dig')
-              : (profile?.full_name ?? 'Medlem')
+        {sorted.map((member) => {
+          const profile = profiles?.[member.userId]
+          const isCurrentUser = member.userId === currentUserId
+          const name = isCurrentUser
+            ? (profile?.full_name ?? 'Dig')
+            : (profile?.full_name ?? 'Medlem')
           const color = profile?.chat_color ?? '#16a34a'
+          const label = [
+            isCurrentUser ? `${name} (dig)` : name,
+            member.isAway
+              ? member.awayMessage
+                ? `(væk: ${member.awayMessage})`
+                : '(væk)'
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' ')
           return (
-            <Avatar
-              key={id}
-              name={id === currentUserId ? `${name} (dig)` : name}
-              avatarUrl={profile?.avatar_url ?? null}
-              color={color}
-            />
+            <span
+              key={member.userId}
+              className={member.isAway ? 'opacity-50 grayscale' : undefined}
+            >
+              <Avatar
+                name={label}
+                avatarUrl={profile?.avatar_url ?? null}
+                color={color}
+              />
+            </span>
           )
         })}
       </div>
