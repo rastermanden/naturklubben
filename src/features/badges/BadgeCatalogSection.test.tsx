@@ -48,7 +48,14 @@ const renderPrint = vi.fn()
 
 function mockQueries(printStatus: Badge['print_status'] = 'pending') {
   vi.mocked(useBadges).mockReturnValue({
-    data: [{ ...badge, print_status: printStatus }],
+    data: [
+      {
+        ...badge,
+        print_status: printStatus,
+        print_path:
+          printStatus === 'ready' ? 'badge-1/print-1.png' : badge.print_path,
+      },
+    ],
     isPending: false,
     isError: false,
     isSuccess: true,
@@ -105,6 +112,19 @@ describe('BadgeCatalogSection', () => {
     expect((await screen.findByRole('status')).textContent).toMatch(
       /er i gang\. Listen opdaterer sig selv/,
     )
+  })
+
+  it('åbner trykfilen i en ny fane', () => {
+    // download-attributten virkede alligevel ikke: filen ligger på Supabases
+    // eget domæne, og browsere ignorerer download på tværs af origins. Linket
+    // sendte derfor admin væk fra panelet og hen på PNG'en.
+    mockQueries('ready')
+    render(<BadgeCatalogSection />)
+
+    const link = screen.getByRole('link', { name: 'Hent trykfil' })
+
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
   it('viser functionens egen forklaring, når renderingen fejler', async () => {

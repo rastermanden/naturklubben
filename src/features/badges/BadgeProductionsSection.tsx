@@ -154,7 +154,8 @@ export function BadgeProductionsSection({ adminId }: { adminId: string }) {
                 {badge.print_path && (
                   <a
                     href={badgeImageUrl(badge.print_path)}
-                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="min-h-11 rounded-lg border border-green-300 px-3 py-2 text-sm text-green-800"
                   >
                     Hent trykfil
