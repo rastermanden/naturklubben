@@ -110,3 +110,81 @@ Deno.test('recommendedCropSizePx: 300 dpi på den synlige cirkel', () => {
   // px i UI'et rigelig, også med bleed.
   assert.ok(recommendedCropSizePx(58) < 1000)
 })
+
+Deno.test(
+  'badgePrintGeometry: renderingen holder sig i trykfilens opløsning',
+  () => {
+    // Et helt almindeligt telefonbillede: 4032x3024 med et stort udsnit.
+    // Uden nedskaleringen ville renderingen allokere flere buffere på
+    // canvasSize x canvasSize (~3000 px) -- mere end Edge-runtimen har.
+    const geometry = badgePrintGeometry({
+      imageWidth: 4032,
+      imageHeight: 3024,
+      cropX: 800,
+      cropY: 300,
+      cropSize: 2400,
+      diameterMm: 58,
+      bleedMm: 5,
+    })
+
+    assert.ok(geometry.canvasSize > geometry.printPx)
+    assert.equal(geometry.renderScale, geometry.printPx / geometry.canvasSize)
+    // Udsnittet dækker hele canvas'et, så det skaleres præcis ned til filens
+    // kant -- ingen hvid strimmel af afrunding.
+    assert.equal(geometry.needsEdgeFill, false)
+    assert.equal(geometry.scaledRegionWidth, geometry.printPx)
+    assert.equal(geometry.scaledRegionHeight, geometry.printPx)
+    assert.equal(geometry.scaledOffsetX, 0)
+    assert.equal(geometry.scaledOffsetY, 0)
+  },
+)
+
+Deno.test(
+  'badgePrintGeometry: det skalerede udsnit kan ikke lande uden for filen',
+  () => {
+    // Udsnittet rører alle fire kanter, så bleed'en mangler billede hele vejen
+    // rundt. Afrundingen af både størrelse og placering skal stadig holde sig
+    // inden for printPx -- imagescript kaster på en composite uden for kanten.
+    const geometry = badgePrintGeometry({
+      imageWidth: 1001,
+      imageHeight: 1001,
+      cropX: 0,
+      cropY: 0,
+      cropSize: 1001,
+      diameterMm: 37,
+      bleedMm: 3,
+    })
+
+    assert.equal(geometry.needsEdgeFill, true)
+    assert.ok(geometry.scaledOffsetX > 0)
+    assert.ok(geometry.scaledOffsetY > 0)
+    assert.ok(
+      geometry.scaledOffsetX + geometry.scaledRegionWidth <= geometry.printPx,
+    )
+    assert.ok(
+      geometry.scaledOffsetY + geometry.scaledRegionHeight <= geometry.printPx,
+    )
+  },
+)
+
+Deno.test(
+  'badgePrintGeometry: en original mindre end trykfilen skaleres op',
+  () => {
+    // 300 dpi kræver ~685 px for et 58 mm badge. Er originalen mindre, må
+    // renderingen skalere op -- men stadig kun én gang, til printPx.
+    const geometry = badgePrintGeometry({
+      imageWidth: 400,
+      imageHeight: 400,
+      cropX: 50,
+      cropY: 50,
+      cropSize: 300,
+      diameterMm: 58,
+      bleedMm: 5,
+    })
+
+    assert.ok(geometry.renderScale > 1)
+    assert.ok(geometry.effectiveDpi < 300)
+    assert.ok(geometry.scaledRegionWidth <= geometry.printPx)
+    assert.ok(geometry.scaledRegionHeight <= geometry.printPx)
+  },
+)

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { BadgeForm } from './BadgeForm'
 import { BadgeMedal } from './BadgeMedal'
 import { toFriendlyBadgeError } from './badgeErrors'
+import { isStalePrintRender, printStatusLabel } from './printStatus'
 import {
   badgeImageUrl,
   useBadges,
@@ -9,13 +10,6 @@ import {
   useSetBadgeActive,
 } from './useBadges'
 import type { Badge } from './types'
-
-const printStatusText: Record<Badge['print_status'], string> = {
-  pending: 'Trykfilen mangler',
-  rendering: 'Trykfilen laves…',
-  ready: 'Trykfil klar',
-  failed: 'Trykfilen fejlede',
-}
 
 export function BadgeCatalogSection() {
   const badgesQuery = useBadges()
@@ -50,8 +44,16 @@ export function BadgeCatalogSection() {
     setStatus(null)
     setError(null)
     try {
-      await renderPrint.mutateAsync(badge.id)
-      setStatus(`Trykfilen til ${badge.name} er lavet.`)
+      const result = await renderPrint.mutateAsync(badge.id)
+      // Kun 'ready' betyder, at filen ligger der. Meldte vi "er lavet" på alle
+      // svar, ville en rendering, der stadig kører -- eller er død og venter på
+      // at blive forældet -- se ud som en succes, mens listen blev ved med at
+      // sige "Trykfilen laves…".
+      setStatus(
+        result.status === 'ready'
+          ? `Trykfilen til ${badge.name} er lavet.`
+          : `Trykfilen til ${badge.name} er i gang. Listen opdaterer sig selv, når den er klar.`,
+      )
     } catch (mutationError) {
       setError(toFriendlyBadgeError(mutationError))
     }
@@ -136,12 +138,13 @@ export function BadgeCatalogSection() {
                   className={`rounded-full px-2 py-0.5 text-xs ${
                     badge.print_status === 'ready'
                       ? 'bg-green-100 text-green-800'
-                      : badge.print_status === 'failed'
+                      : badge.print_status === 'failed' ||
+                          isStalePrintRender(badge)
                         ? 'bg-red-100 text-red-800'
                         : 'bg-amber-100 text-amber-900'
                   }`}
                 >
-                  {printStatusText[badge.print_status]}
+                  {printStatusLabel(badge)}
                 </span>
               </p>
               {badge.description && (

@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
+import { BadgeUserFacingError } from './badgeErrors'
+import { badgePrintPollInterval } from './printStatus'
 import type { Badge } from './types'
 
 export const BADGE_IMAGE_BUCKET = 'badge-images'
@@ -17,7 +19,7 @@ export const BADGE_IMAGE_MIME_TYPES = [
 export const badgesQueryKey = ['badges'] as const
 
 const BADGE_COLUMNS =
-  'id, slug, name, description, image_path, image_width, image_height, image_mime_type, crop_x, crop_y, crop_size, diameter_mm, bleed_mm, print_path, print_status, print_error, is_active, created_at'
+  'id, slug, name, description, image_path, image_width, image_height, image_mime_type, crop_x, crop_y, crop_size, diameter_mm, bleed_mm, print_path, print_status, print_error, print_started_at, is_active, created_at, updated_at'
 
 /** Den permanente offentlige URL. Bucketten er offentlig, netop derfor. */
 export function badgeImageUrl(path: string) {
@@ -35,8 +37,17 @@ async function fetchBadges(): Promise<Badge[]> {
   return (data ?? []) as Badge[]
 }
 
+// Så længe en trykfil er undervejs, henter kataloget sig selv igen. Uden det
+// bliver "Trykfilen laves…" stående, til admin genindlæser siden. Pollingen
+// stopper, når renderingen enten er færdig eller er gået i stå -- se
+// printStatus.ts.
 export function useBadges() {
-  return useQuery({ queryKey: badgesQueryKey, queryFn: fetchBadges })
+  return useQuery({
+    queryKey: badgesQueryKey,
+    queryFn: fetchBadges,
+    refetchInterval: (query) => badgePrintPollInterval(query.state.data),
+    refetchIntervalInBackground: false,
+  })
 }
 
 export interface BadgeImageUpload {
@@ -73,16 +84,88 @@ function fileExtension(file: File) {
   return 'jpg'
 }
 
+/** Svaret fra render-badge-print. 202 er ikke en fejl -- se nedenfor. */
+export interface PrintRenderResult {
+  /**
+   * 'ready' = filen ligger klar. 'rendering' = en anden (eller en tidligere)
+   * rendering af samme badge er i gang. 'superseded' = et nyere forsøg overhalede
+   * vores; det er det nyere forsøg, der bestemmer.
+   */
+  status: 'ready' | 'rendering' | 'superseded'
+  printPath: string | null
+}
+
+// Renderingen tager sekunder, ikke minutter. Bliver svaret væk alligevel --
+// koldstart, en worker der dør, et netværk der falder ud -- skal klienten ikke
+// vente i det uendelige på det: knappen ville stå som "i gang" resten af
+// sessionen. Kataloget poller selv videre bagefter.
+const PRINT_RENDER_TIMEOUT_MS = 60_000
+
+function isAbortError(error: unknown): boolean {
+  const named = (value: unknown) =>
+    typeof value === 'object' && value !== null && 'name' in value
+      ? String((value as { name?: unknown }).name)
+      : ''
+  const context =
+    typeof error === 'object' && error !== null && 'context' in error
+      ? (error as { context?: unknown }).context
+      : undefined
+  const names = [named(error), named(context)]
+  return names.includes('AbortError') || names.includes('TimeoutError')
+}
+
+/**
+ * Functionen svarer med en dansk forklaring i `error`-feltet ved 4xx/5xx.
+ * supabase-js pakker det svar væk i en generisk FunctionsHttpError, så teksten
+ * hentes ud her -- ellers ville admin få "Prøv igen om lidt" på en fejl, der
+ * fortæller præcis, hvad der er galt.
+ */
+async function functionErrorMessage(error: unknown): Promise<string | null> {
+  const context =
+    typeof error === 'object' && error !== null && 'context' in error
+      ? (error as { context?: unknown }).context
+      : undefined
+  if (!(context instanceof Response)) return null
+  try {
+    const body: unknown = await context.clone().json()
+    const message =
+      typeof body === 'object' && body !== null && 'error' in body
+        ? (body as { error?: unknown }).error
+        : null
+    return typeof message === 'string' && message ? message : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Beder render-badge-print om en ny trykfil. Kaldet er bevidst "best effort":
  * badges.print_status står som pending, indtil den lykkes, så admin-panelet kan
  * vise, at der mangler en trykfil, og prøve igen.
  */
-async function requestPrintRender(badgeId: string) {
-  const { error } = await supabase.functions.invoke('render-badge-print', {
+async function requestPrintRender(badgeId: string): Promise<PrintRenderResult> {
+  const { data, error } = await supabase.functions.invoke<{
+    status?: string
+    printPath?: string | null
+  }>('render-badge-print', {
     body: { badgeId },
+    timeout: PRINT_RENDER_TIMEOUT_MS,
   })
-  if (error) throw error
+
+  if (error) {
+    // Et afbrudt kald siger intet om renderingen: den kører videre i Edge
+    // Functionen, og statussen på rækken er svaret.
+    if (isAbortError(error)) return { status: 'rendering', printPath: null }
+    const message = await functionErrorMessage(error)
+    throw message ? new BadgeUserFacingError(message) : error
+  }
+
+  const status = data?.status
+  return {
+    status:
+      status === 'ready' || status === 'superseded' ? status : 'rendering',
+    printPath: data?.printPath ?? null,
+  }
 }
 
 /**
@@ -173,12 +256,16 @@ export function useSaveBadge() {
     },
     onSuccess: async ({ id }) => {
       await queryClient.invalidateQueries({ queryKey: badgesQueryKey })
-      try {
-        await requestPrintRender(id)
-      } catch (renderError) {
-        console.error('Trykfilen kunne ikke genereres', renderError)
-      }
-      await queryClient.invalidateQueries({ queryKey: badgesQueryKey })
+      // Trykfilen laves i baggrunden. Ventede vi på den her, ville "Gemmer…"
+      // stå på knappen, til renderingen var færdig -- og hænge helt, hvis
+      // svaret aldrig kom. Kataloget poller selv, mens filen er undervejs.
+      void requestPrintRender(id)
+        .catch((renderError: unknown) => {
+          console.error('Trykfilen kunne ikke genereres', renderError)
+        })
+        .finally(() => {
+          void queryClient.invalidateQueries({ queryKey: badgesQueryKey })
+        })
     },
   })
 }

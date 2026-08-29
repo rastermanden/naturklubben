@@ -141,6 +141,13 @@ Oprettet i SQL (kommer automatisk med på preview-branches og i produktion):
   `crop_*`-værdierne, plus bleed hele vejen rundt, og en stiplet cirkel dér, hvor badget
   skæres. PNG frem for JPEG, fordi trykfilen skal være tabsfri (og fordi
   `imagescript@1.3.0` kun kan encode JPEG og PNG).
+  Renderingen sker i **trykfilens** opløsning, ikke originalens: udsnittet skaleres
+  ned, før det komponeres. Den omvendte rækkefølge kostede tre buffere på
+  originalens skala (et telefonbillede giver let 3000x3000 px hver), og en worker,
+  der løber tør for hukommelse, dør uden at nå at kalde `complete_badge_print` --
+  badgen bliver stående som `rendering`. Derfor giver `claim_badge_print` også
+  claim'et fri igen efter to minutter, og admin-panelet skriver "Trykfilen gik i
+  stå" i stedet for at love, at den er på vej (se `src/features/badges/printStatus.ts`).
 - `badge-notifications` (#159): push til admins, når en indstilling oprettes, og til
   både medlemmet og admins, når en badge tildeles. Genbruger `push_subscriptions`,
   VAPID-nøglerne og `_shared/webpush.ts` fra `chat-push`. Som `chat-push` tager den kun

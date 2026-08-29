@@ -151,7 +151,20 @@ async function renderPrintFile(
     geometry.regionHeight,
   )
 
-  const canvas = new Image(geometry.canvasSize, geometry.canvasSize)
+  // Ned i trykfilens opløsning *før* der komponeres. Gjorde vi det omvendt --
+  // komponerede på originalens skala og skalerede canvas'et til sidst -- ville
+  // et almindeligt telefonbillede kræve tre buffere på 3000x3000 px eller
+  // mere. Det er mere hukommelse, end en Edge Function har, og workeren dør
+  // uden svar: badgen bliver stående som 'rendering', og admin ser en trykfil,
+  // der aldrig bliver færdig. Billedet bliver det samme -- regnestykket er
+  // bare lagt i en anden rækkefølge.
+  const scaled =
+    geometry.scaledRegionWidth === geometry.regionWidth &&
+    geometry.scaledRegionHeight === geometry.regionHeight
+      ? region
+      : region.resize(geometry.scaledRegionWidth, geometry.scaledRegionHeight)
+
+  const canvas = new Image(geometry.printPx, geometry.printPx)
   canvas.fill(Image.rgbaToColor(255, 255, 255, 255))
 
   if (geometry.needsEdgeFill) {
@@ -159,14 +172,13 @@ async function renderPrintFile(
     // blive synlig, når knapmaskinen folder om -- lægges en let opskaleret
     // kopi af samme udsnit under. Den del af trykket ender bag på badget.
     canvas.composite(
-      region.clone().resize(geometry.canvasSize, geometry.canvasSize),
+      scaled.clone().resize(geometry.printPx, geometry.printPx),
       0,
       0,
     )
   }
 
-  canvas.composite(region, geometry.offsetX, geometry.offsetY)
-  canvas.resize(geometry.printPx, geometry.printPx)
+  canvas.composite(scaled, geometry.scaledOffsetX, geometry.scaledOffsetY)
   drawCutLine(canvas, geometry.cutRadiusPx)
 
   return await canvas.encode()

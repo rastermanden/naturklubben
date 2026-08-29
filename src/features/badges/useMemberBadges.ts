@@ -5,7 +5,7 @@ import type { MemberBadge } from './types'
 export const memberBadgesQueryKey = ['member_badges'] as const
 
 const SELECT =
-  'id, badge_id, profile_id, nominated_by, reason, awarded_at, badges(id, slug, name, description, image_path, image_width, image_height, image_mime_type, crop_x, crop_y, crop_size, diameter_mm, bleed_mm, print_path, print_status, print_error, is_active, created_at)'
+  'id, badge_id, profile_id, nominated_by, reason, awarded_at, badges(id, slug, name, description, image_path, image_width, image_height, image_mime_type, crop_x, crop_y, crop_size, diameter_mm, bleed_mm, print_path, print_status, print_error, print_started_at, is_active, created_at, updated_at)'
 
 async function fetchMemberBadges(): Promise<MemberBadge[]> {
   const { data, error } = await supabase

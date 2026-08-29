@@ -5,7 +5,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(29);
+select plan(32);
 
 do $$
 begin
@@ -429,6 +429,52 @@ select is(
   ),
   'ready',
   'render-badge-print kan claime og afslutte en trykrendering'
+);
+
+-- Dør renderingen undervejs (Edge-runtimen løber tør, workeren ryger), kommer
+-- der aldrig et complete_badge_print. Uden en aldersgrænse ville badgen stå
+-- som "Trykfilen laves..." for evigt, og et nyt forsøg blive afvist. Grænsen
+-- måles her ved faktisk at claime igen -- ikke ved at læse intervallet i
+-- SQL-filen.
+do $$ begin perform tests.login_service(); end $$;
+
+select isnt_empty(
+  $$select claimed_attempt
+    from public.claim_badge_print(
+      '00000000-0000-0000-0000-0000000000f2',
+      '00000000-0000-0000-0000-000000000001'
+    )$$,
+  'en færdig trykfil kan claimes om -- fx efter en ny beskæring'
+);
+
+select is_empty(
+  $$select claimed_attempt
+    from public.claim_badge_print(
+      '00000000-0000-0000-0000-0000000000f2',
+      '00000000-0000-0000-0000-000000000001'
+    )$$,
+  'en rendering, der lige er startet, claimes ikke af to workers på én gang'
+);
+
+-- Lad claim'et blive gammelt. print_started_at kan kun sættes af en
+-- privilegeret session -- netop derfor skiftes der rolle her.
+do $$
+begin
+  perform tests.reset_session();
+  update public.badges
+  set print_started_at = now() - interval '5 minutes'
+  where id = '00000000-0000-0000-0000-0000000000f2';
+  perform tests.login_service();
+end
+$$;
+
+select isnt_empty(
+  $$select claimed_attempt
+    from public.claim_badge_print(
+      '00000000-0000-0000-0000-0000000000f2',
+      '00000000-0000-0000-0000-000000000001'
+    )$$,
+  'en rendering, der er død undervejs, kan claimes forfra'
 );
 
 do $$ begin perform tests.reset_session(); end $$;

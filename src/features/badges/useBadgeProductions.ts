@@ -5,7 +5,7 @@ import { compareProductions } from './productionCountdown'
 import type { BadgeProduction } from './types'
 
 const SELECT =
-  'id, member_badge_id, due_at, claimed_by, claimed_at, status, completed_at, created_at, member_badges(id, profile_id, awarded_at, badges(id, slug, name, description, image_path, image_width, image_height, image_mime_type, crop_x, crop_y, crop_size, diameter_mm, bleed_mm, print_path, print_status, print_error, is_active, created_at))'
+  'id, member_badge_id, due_at, claimed_by, claimed_at, status, completed_at, created_at, member_badges(id, profile_id, awarded_at, badges(id, slug, name, description, image_path, image_width, image_height, image_mime_type, crop_x, crop_y, crop_size, diameter_mm, bleed_mm, print_path, print_status, print_error, print_started_at, is_active, created_at, updated_at))'
 
 async function fetchProductions(): Promise<BadgeProduction[]> {
   const { data, error } = await supabase
