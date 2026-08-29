@@ -71,6 +71,11 @@ export const routeMetadata = [
     announcement: 'Chat indlæst',
   },
   {
+    path: '/naturlog',
+    documentTitle: 'Naturlog | Naturklubben',
+    announcement: 'Naturlog indlæst',
+  },
+  {
     path: '/medlemmer',
     documentTitle: 'Medlemmer | Naturklubben',
     announcement: 'Medlemmer indlæst',

@@ -17,7 +17,7 @@ export const PHOTO_PAGE_SIZE = 40
 export const PHOTO_OPTIMIZATION_POLL_LIMIT = 40
 export const photosQueryKey = ['photos'] as const
 const photoQueryKey = (photoId: string) => ['photo', photoId] as const
-const photoFields =
+export const photoFields =
   'id, storage_path, optimized_path, thumbnail_path, caption, event_id, event:events(id, title), uploaded_by, created_at, optimization_status, optimization_attempts, optimization_started_at, optimization_completed_at, optimization_error'
 
 export interface PhotoPage {
