@@ -10,6 +10,7 @@ import {
   type NotificationDelivery,
   useProbationApplications,
 } from '../features/probation/useProbationApplications'
+import { ChatNotificationPreference } from '../features/notifications/ChatNotificationPreference'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { ActivitiesSection } from '../features/activities/ActivitiesSection'
 import { AdminRolesSection } from '../features/admin/AdminRolesSection'
@@ -282,6 +283,12 @@ function AdminPage() {
           description="Slå dem til på mindst én administrators enhed for at få besked om nye ansøgninger."
         >
           <NotificationToggle userId={userId} />
+        </AdminSection>
+        <AdminSection
+          title="Chatnotifikationer"
+          description="Vælg hvor meget chatten må sende til dine enheder. Valget er dit eget og følger dig på tværs af telefon og computer."
+        >
+          <ChatNotificationPreference userId={userId} />
         </AdminSection>
       </AdminTabPanel>
     </main>

@@ -1,11 +1,52 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Avatar } from '../../components/Avatar'
 import { MessageReactions, ReactionPicker } from './MessageReactions'
 import { readableTextColor } from '../../lib/colorContrast'
 import { formatRelativeTime } from './formatRelativeTime'
+import { splitMentions } from './mentions'
+import type { MentionMember } from './mentions'
 import type { ReactionSummary } from './reactions'
 import type { Message } from './useMessages'
 import type { ProfileSummary } from './useProfilesMap'
+
+/**
+ * Beskedteksten med de nævnte medlemmer fremhævet. Navnet, der fremhæves, er
+ * det, afsenderen skrev -- id'et bag mention'en afgør bare, om der skal
+ * fremhæves. Har den nævnte skiftet navn siden, står den gamle stavemåde
+ * tilbage som almindelig tekst; selve mention'en er der stadig, og beskeden er
+ * fortsat markeret for den, den gælder.
+ */
+function MessageText({
+  content,
+  mentions,
+  members,
+}: {
+  content: string
+  mentions: string[]
+  members: readonly MentionMember[]
+}) {
+  const segments = useMemo(
+    () => splitMentions(content, mentions, members),
+    [content, mentions, members],
+  )
+
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.mentionedId ? (
+          <span
+            key={index}
+            className="rounded bg-amber-200/80 px-1 font-semibold text-green-950"
+          >
+            {segment.text}
+          </span>
+        ) : (
+          <span key={index}>{segment.text}</span>
+        ),
+      )}
+    </>
+  )
+}
 
 export function MessageBubble({
   message,
@@ -19,6 +60,8 @@ export function MessageBubble({
   onToggleReaction,
   onDelete,
   isHighlighted = false,
+  isMentioned = false,
+  members = [],
 }: {
   message: Message
   author: ProfileSummary | undefined
@@ -31,6 +74,10 @@ export function MessageBubble({
   onToggleReaction: (message: Message, emoji: string) => void
   onDelete?: (message: Message) => void
   isHighlighted?: boolean
+  /** Er læseren selv nævnt i beskeden? */
+  isMentioned?: boolean
+  /** Medlemmer, mentions kan slås op i -- navnet følger et navneskift. */
+  members?: readonly MentionMember[]
 }) {
   const [, forceUpdate] = useState(0)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -66,7 +113,9 @@ export function MessageBubble({
         isAction
           ? 'justify-center'
           : `items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`
-      } ${isHighlighted ? 'outline-4 outline-amber-300' : ''}`}
+      } ${isHighlighted ? 'outline-4 outline-amber-300' : ''} ${
+        isMentioned && !isDeleted ? 'ring-2 ring-amber-400' : ''
+      }`}
     >
       {!isAction && (
         <Avatar
@@ -117,6 +166,15 @@ export function MessageBubble({
             {name}
           </p>
         )}
+        {isMentioned && !isDeleted && (
+          <p
+            className={`mb-1 text-xs font-semibold ${
+              isAction ? 'text-center text-green-800' : ''
+            }`}
+          >
+            Du er nævnt
+          </p>
+        )}
         {isDeleted ? (
           <div className="py-1 text-sm italic opacity-75">
             <p>Beskeden er slettet.</p>
@@ -125,10 +183,21 @@ export function MessageBubble({
         ) : isAction ? (
           <p className="text-center text-sm italic text-green-800">
             <span aria-hidden="true">* </span>
-            <span className="font-medium">{name}</span> {message.content}
+            <span className="font-medium">{name}</span>{' '}
+            <MessageText
+              content={message.content}
+              mentions={message.mentions}
+              members={members}
+            />
           </p>
         ) : (
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          <p className="whitespace-pre-wrap break-words">
+            <MessageText
+              content={message.content}
+              mentions={message.mentions}
+              members={members}
+            />
+          </p>
         )}
         <p
           className={`mt-1 text-xs ${

@@ -9,6 +9,7 @@ const message: Message = {
   id: 'message-2',
   user_id: 'member-2',
   content: 'God idé!',
+  mentions: [],
   created_at: '2026-08-23T12:01:00.000Z',
   deleted_at: null,
   deleted_by: null,
@@ -267,5 +268,76 @@ describe('MessageBubble', () => {
 
     expect(screen.getByText('Beskeden er slettet.')).toBeTruthy()
     expect(screen.queryByText('Vi mødes ved søen.')).toBeNull()
+  })
+})
+
+describe('MessageBubble mentions', () => {
+  const members = [
+    { id: 'member-1', name: 'Ada' },
+    { id: 'member-3', name: 'Martin Jensen' },
+  ]
+
+  const mentioning: Message = {
+    ...message,
+    content: 'Hej @Martin Jensen og @Ada',
+    mentions: ['member-3'],
+    reply_to_message_id: null,
+    reply_to: null,
+  }
+
+  function renderBubble(overrides: Partial<Message> = {}, isMentioned = false) {
+    render(
+      <MessageBubble
+        message={{ ...mentioning, ...overrides }}
+        author={author}
+        replyAuthor={undefined}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+        isMentioned={isMentioned}
+        members={members}
+      />,
+    )
+  }
+
+  it('highlights only the members the message was sent with', () => {
+    renderBubble()
+
+    expect(screen.getByText('@Martin Jensen').tagName).toBe('SPAN')
+    expect(screen.queryByText('@Ada')).toBeNull()
+  })
+
+  it('shows the reader that they are mentioned', () => {
+    renderBubble({}, true)
+
+    expect(screen.getByText('Du er nævnt')).toBeTruthy()
+  })
+
+  it('says nothing about mentions on a deleted message', () => {
+    renderBubble(
+      { content: '', deleted_at: '2026-08-23T12:05:00.000Z', mentions: [] },
+      true,
+    )
+
+    expect(screen.getByText('Beskeden er slettet.')).toBeTruthy()
+    expect(screen.queryByText('Du er nævnt')).toBeNull()
+  })
+
+  it('renders a mention of a member without a profile as plain text', () => {
+    render(
+      <MessageBubble
+        message={{ ...mentioning, mentions: ['tidligere-medlem'] }}
+        author={author}
+        replyAuthor={undefined}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+        members={members}
+      />,
+    )
+
+    expect(screen.getByText('Hej @Martin Jensen og @Ada')).toBeTruthy()
   })
 })

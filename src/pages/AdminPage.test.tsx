@@ -37,6 +37,10 @@ vi.mock('../features/probation/useProbationApplications', () => ({
   }),
   toFriendlyProbationApplicationError: () => 'Ansøgningen fejlede.',
 }))
+vi.mock('../features/notifications/ChatNotificationPreference', () => ({
+  ChatNotificationPreference: () => null,
+}))
+
 vi.mock('../features/notifications/NotificationToggle', () => ({
   NotificationToggle: () => null,
 }))
