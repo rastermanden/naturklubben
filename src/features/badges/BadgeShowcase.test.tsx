@@ -25,8 +25,10 @@ const badge: Badge = {
   print_path: 'badge-1/print-1.png',
   print_status: 'ready',
   print_error: null,
+  print_started_at: '2026-08-26T10:00:10.000Z',
   is_active: true,
   created_at: '2026-08-26T10:00:00.000Z',
+  updated_at: '2026-08-26T10:00:20.000Z',
 }
 
 const memberBadge: MemberBadge = {

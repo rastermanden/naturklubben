@@ -10,7 +10,7 @@ export const badgeNominationsQueryKey = [
 export const badgeProductionsQueryKey = ['badge_productions'] as const
 
 const SELECT =
-  'id, badge_id, nominee_id, nominated_by, reason, status, created_at, resolved_at, badges(id, slug, name, description, image_path, image_width, image_height, image_mime_type, crop_x, crop_y, crop_size, diameter_mm, bleed_mm, print_path, print_status, print_error, is_active, created_at), badge_nomination_approvals(id, admin_id, vote, comment, created_at)'
+  'id, badge_id, nominee_id, nominated_by, reason, status, created_at, resolved_at, badges(id, slug, name, description, image_path, image_width, image_height, image_mime_type, crop_x, crop_y, crop_size, diameter_mm, bleed_mm, print_path, print_status, print_error, print_started_at, is_active, created_at, updated_at), badge_nomination_approvals(id, admin_id, vote, comment, created_at)'
 
 async function fetchPendingNominations(): Promise<BadgeNomination[]> {
   const { data, error } = await supabase

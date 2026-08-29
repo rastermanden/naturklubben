@@ -43,6 +43,18 @@ export interface BadgePrintGeometry {
   /** Hvor udsnittet lander på canvas'et. */
   offsetX: number
   offsetY: number
+  /**
+   * Skalaen fra originalens pixels til trykfilens (printPx / canvasSize).
+   * Renderingen skalerer udsnittet med den, *før* det komponeres -- se
+   * begrundelsen nede i badgePrintGeometry.
+   */
+  renderScale: number
+  /** Udsnittet målt i trykfilens pixels -- det, der faktisk komponeres. */
+  scaledRegionWidth: number
+  scaledRegionHeight: number
+  /** Udsnittets placering, målt i trykfilens pixels. */
+  scaledOffsetX: number
+  scaledOffsetY: number
   /** Sandt, når bleed'en rækker uden for originalen og skal fyldes ud. */
   needsEdgeFill: boolean
   /** Effektiv opløsning i dpi, hvis originalen bruges som den er. */
@@ -96,6 +108,21 @@ export function badgePrintGeometry(input: BadgePrintInput): BadgePrintGeometry {
   const regionWidth = Math.max(0, regionRight - regionX)
   const regionHeight = Math.max(0, regionBottom - regionY)
 
+  const offsetX = regionX - originX
+  const offsetY = regionY - originY
+
+  // Renderingen sker i trykfilens opløsning, ikke originalens: et canvas på
+  // originalens skala kan sagtens blive 3000x3000 px eller mere, og tre
+  // buffere i den størrelse (canvas + udsnit + den opskalerede bleed-kopi)
+  // sprænger hukommelsen i Edge-runtimen -- hvorefter workeren dør uden svar,
+  // og badgen står som 'rendering', til claim'et bliver forældet. Skalerer vi
+  // ned først, er alt arbejde bundet af printPx i stedet.
+  const renderScale = printPx / canvasSize
+  const scaledRegionWidth =
+    regionWidth > 0 ? Math.max(1, Math.round(regionWidth * renderScale)) : 0
+  const scaledRegionHeight =
+    regionHeight > 0 ? Math.max(1, Math.round(regionHeight * renderScale)) : 0
+
   return {
     printPx,
     cutRadiusPx: (printPx * (diameterMm / sideMm)) / 2,
@@ -104,8 +131,23 @@ export function badgePrintGeometry(input: BadgePrintInput): BadgePrintGeometry {
     regionY,
     regionWidth,
     regionHeight,
-    offsetX: regionX - originX,
-    offsetY: regionY - originY,
+    offsetX,
+    offsetY,
+    renderScale,
+    scaledRegionWidth,
+    scaledRegionHeight,
+    // Afrundingen må aldrig skubbe udsnittet uden for canvas'et: imagescript
+    // kaster, hvis en composite lander uden for kanten.
+    scaledOffsetX: clamp(
+      Math.round(offsetX * renderScale),
+      0,
+      Math.max(0, printPx - scaledRegionWidth),
+    ),
+    scaledOffsetY: clamp(
+      Math.round(offsetY * renderScale),
+      0,
+      Math.max(0, printPx - scaledRegionHeight),
+    ),
     needsEdgeFill: regionWidth !== canvasSize || regionHeight !== canvasSize,
     effectiveDpi: canvasSize / (sideMm / MM_PER_INCH),
   }

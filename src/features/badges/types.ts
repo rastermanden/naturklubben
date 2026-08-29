@@ -20,8 +20,11 @@ export interface Badge {
   print_path: string | null
   print_status: BadgePrintStatus
   print_error: string | null
+  /** Hvornår renderingen blev claimet -- se printStatus.ts. */
+  print_started_at: string | null
   is_active: boolean
   created_at: string
+  updated_at: string
 }
 
 /** De felter, en rund visning har brug for. */

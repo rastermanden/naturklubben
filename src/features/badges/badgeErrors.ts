@@ -1,3 +1,16 @@
+/**
+ * En fejl, hvis besked allerede er skrevet til et menneske -- fx den tekst,
+ * render-badge-print selv sender med i sit svar. Uden den ville en præcis
+ * forklaring ("Billedfilen mangler eller kunne ikke læses") blive vasket væk
+ * til den generiske "Prøv igen om lidt".
+ */
+export class BadgeUserFacingError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BadgeUserFacingError'
+  }
+}
+
 function errorProperty(error: unknown, property: 'code' | 'message') {
   if (typeof error !== 'object' || error === null) return ''
 
@@ -17,6 +30,8 @@ function errorProperty(error: unknown, property: 'code' | 'message') {
  * en rå Postgres-fejl siger ikke medlemmet noget.
  */
 export function toFriendlyBadgeError(error: unknown): string {
+  if (error instanceof BadgeUserFacingError) return error.message
+
   const code = errorProperty(error, 'code')
   const message = errorProperty(error, 'message')
 
