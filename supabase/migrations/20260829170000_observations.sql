@@ -1,6 +1,11 @@
 -- Naturlog (#186): medlemmer registrerer, hvad de har set i naturen -- art,
 -- sted, dato, noter, valgfri position og valgfrit billede fra galleriet.
-create table public.observations (
+--
+-- Alt her er skrevet, så det kan køres igen: PR'ens Preview Branch fik en
+-- tidligere udgave af filen under et andet versionsnummer, og Supabase kører
+-- kun *nye* filnavne -- en gentagelse må derfor ikke vælte på, at tabellen
+-- allerede findes.
+create table if not exists public.observations (
   id uuid primary key default gen_random_uuid(),
   species text not null
     check (char_length(btrim(species)) between 1 and 120),
@@ -22,25 +27,33 @@ create table public.observations (
     check ((latitude is null) = (longitude is null))
 );
 
-create index observations_observed_on_idx
+create index if not exists observations_observed_on_idx
   on public.observations (observed_on desc, created_at desc);
 
-create index observations_created_by_idx on public.observations (created_by);
+create index if not exists observations_created_by_idx
+  on public.observations (created_by);
 
-create index observations_photo_id_idx on public.observations (photo_id);
+create index if not exists observations_photo_id_idx
+  on public.observations (photo_id);
 
 alter table public.observations enable row level security;
 
+drop policy if exists "Authenticated can read observations"
+  on public.observations;
 create policy "Authenticated can read observations"
   on public.observations for select
   to authenticated
   using (true);
 
+drop policy if exists "Members can create their own observations"
+  on public.observations;
 create policy "Members can create their own observations"
   on public.observations for insert
   to authenticated
   with check (auth.uid() = created_by);
 
+drop policy if exists "Observers can update their own observations"
+  on public.observations;
 create policy "Observers can update their own observations"
   on public.observations for update
   to authenticated
@@ -48,6 +61,8 @@ create policy "Observers can update their own observations"
   with check (auth.uid() = created_by);
 
 -- Admins kan slette alt som moderation -- på samme vilkår som i galleriet.
+drop policy if exists "Observers and admins can delete observations"
+  on public.observations;
 create policy "Observers and admins can delete observations"
   on public.observations for delete
   to authenticated
@@ -70,7 +85,19 @@ begin
 end
 $$;
 
+drop trigger if exists observations_set_updated_at on public.observations;
 create trigger observations_set_updated_at
   before update on public.observations
   for each row
   execute function public.set_observation_updated_at();
+
+-- Fortæl medlemmerne, at naturloggen findes (se CLAUDE.md, "Nye funktioner
+-- meldes til medlemmerne").
+insert into public.feature_announcements (slug, title, body, path)
+values (
+  'naturlog',
+  'Ny: Naturlog -- skriv, hvad du har set',
+  'Set en rød glente eller fundet kantareller? Åbn Naturlog i menuen, skriv art, sted og dato -- og læg gerne et billede og din position ved. Hele klubben kan se loggen, og billedet ryger også i galleriet.',
+  'naturlog'
+)
+on conflict (slug) do nothing;

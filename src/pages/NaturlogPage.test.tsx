@@ -199,6 +199,20 @@ describe('NaturlogPage', () => {
     expect(mocks.uploadObservationPhoto).not.toHaveBeenCalled()
   })
 
+  it('har de samme billedknapper som galleriet', () => {
+    mocks.observationsQuery.data = []
+    render(<NaturlogPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ny observation' }))
+    expect(screen.getByRole('button', { name: 'Vælg billede' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Tag billede' })).toBeTruthy()
+    expect(screen.getByLabelText('Vælg et billede fra enheden')).toBeTruthy()
+    expect(
+      screen
+        .getByLabelText('Tag et billede med kameraet')
+        .getAttribute('capture'),
+    ).toBe('environment')
+  })
+
   it('viser en fejl, når arten mangler', () => {
     mocks.observationsQuery.data = []
     render(<NaturlogPage />)

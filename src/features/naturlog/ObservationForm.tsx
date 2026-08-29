@@ -58,6 +58,8 @@ export function ObservationForm({
   const observedOnRef = useRef<HTMLInputElement>(null)
   const locationRef = useRef<HTMLInputElement>(null)
   const notesRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
   const dialogRef = useDialogFocus<HTMLDivElement>({
     onClose: onCancel,
     initialFocusRef: speciesRef,
@@ -111,13 +113,17 @@ export function ObservationForm({
     )
   }
 
+  function clearPhoto() {
+    setPhotoFile(null)
+    setPhotoError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
+  }
+
   function handleFile(files: FileList | null) {
     const file = files?.[0] ?? null
     setPhotoError(null)
-    if (!file) {
-      setPhotoFile(null)
-      return
-    }
+    if (!file) return
     const problem = validateFiles([file])
     if (problem) {
       setPhotoError(problem)
@@ -300,24 +306,78 @@ export function ObservationForm({
               </span>
             )}
             <input
-              id="observation-photo"
+              id="observation-photo-file"
+              ref={fileInputRef}
               type="file"
+              aria-label="Vælg et billede fra enheden"
               accept="image/*"
-              aria-label="Vælg et billede til observationen"
               onChange={(changeEvent) => handleFile(changeEvent.target.files)}
               aria-invalid={photoError ? true : undefined}
               aria-describedby={
                 photoError ? 'observation-photo-error' : undefined
               }
-              className="text-sm"
+              className="sr-only"
             />
-            {previewUrl && (
-              <img
-                src={previewUrl}
-                alt=""
-                className="h-32 w-32 rounded object-cover"
-              />
+            <input
+              id="observation-photo-camera"
+              ref={cameraInputRef}
+              type="file"
+              aria-label="Tag et billede med kameraet"
+              accept="image/*"
+              capture="environment"
+              onChange={(changeEvent) => handleFile(changeEvent.target.files)}
+              aria-invalid={photoError ? true : undefined}
+              aria-describedby={
+                photoError ? 'observation-photo-error' : undefined
+              }
+              className="sr-only"
+            />
+
+            {photoFile ? (
+              <div className="flex flex-wrap items-center gap-3">
+                {previewUrl && (
+                  <img
+                    src={previewUrl}
+                    alt=""
+                    className="h-20 w-20 rounded object-cover"
+                  />
+                )}
+                <span className="min-w-0 flex-1 truncate text-green-800">
+                  {photoFile.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearPhoto}
+                  className="min-h-11 rounded-lg border border-green-300 px-3 text-green-800"
+                >
+                  Fjern billede
+                </button>
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:flex sm:flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  aria-describedby={
+                    photoError ? 'observation-photo-error' : undefined
+                  }
+                  className="min-h-11 rounded-lg bg-green-800 px-5 py-2 text-white"
+                >
+                  Vælg billede
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  aria-describedby={
+                    photoError ? 'observation-photo-error' : undefined
+                  }
+                  className="min-h-11 rounded-lg border border-green-800 px-5 py-2 text-green-900"
+                >
+                  Tag billede
+                </button>
+              </div>
             )}
+
             {photoError && (
               <span
                 id="observation-photo-error"
@@ -327,8 +387,9 @@ export function ObservationForm({
                 {photoError}
               </span>
             )}
-            <span className="text-green-700">
-              Billedet lægges også i galleriet under Billeder.
+            <span className="text-xs text-green-700">
+              Vælg fra kamerarullen eller dine filer. Maks. 15 MB. Billedet
+              lægges også i galleriet under Billeder.
             </span>
           </fieldset>
 
