@@ -74,7 +74,16 @@ for suite in "${suites[@]}"; do
   echo "--- $name"
   # Hver fil er sin egen transaktion, der rulles tilbage til sidst. En fejlende
   # fil stopper ikke de øvrige -- hele billedet er mere værd end den første fejl.
-  if ! run_sql --file "$suite"; then
+  status=0
+  output="$(run_sql --file "$suite" 2>&1)" || status=$?
+  printf '%s\n' "$output"
+  if [ "$status" -ne 0 ]; then
+    failed+=("$name")
+  elif printf '%s\n' "$output" | grep -q 'Looks like you planned'; then
+    # pgTAP melder et forkert plan-tal som en kommentar og går alligevel ud med
+    # 0. En fil, hvor plan og assertions ikke stemmer, kan miste en assertion,
+    # uden at nogen opdager det -- så den tæller også som en fejl her.
+    echo "::error file=supabase/tests/rls/$name::plan() passer ikke med antallet af assertions" >&2
     failed+=("$name")
   fi
 done
