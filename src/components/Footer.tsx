@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { appBuildDate, appVersion, formatAppVersion } from '../lib/appVersion'
 
 export function Footer() {
   return (
@@ -7,6 +8,12 @@ export function Footer() {
       <Link to="/datapolitik" className="mt-1 inline-block underline">
         Politik for dataopbevaring
       </Link>
+      {/* Så et medlem kan læse op, hvilket build de sidder med, når noget
+          driller -- appen er en PWA og kan køre på en cachet, ældre version. */}
+      <p className="mt-3 text-xs text-green-600">
+        Version{' '}
+        <span translate="no">{formatAppVersion(appVersion, appBuildDate)}</span>
+      </p>
     </footer>
   )
 }

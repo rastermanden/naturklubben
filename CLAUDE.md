@@ -116,6 +116,15 @@ lokale terminal. Derfor gælder:
   `VITE_SUPABASE_PUBLISHABLE_KEY` er tomme, og `vite.config.ts` afviser at udgive en
   app-løs bundle.
 
+## App-version
+
+- Appens version er **commit'en**, ikke et nummer nogen vedligeholder. `vite.config.ts`
+  kører `git describe --tags --always` + commit-datoen ved build og inliner resultatet;
+  footeren viser det. Hæv derfor ikke `version` i `package.json` -- den bruges ikke.
+- Tags er valgfri pynt: findes der et tag, viser footeren det (`v1.2.0`), ellers
+  commit-sha'en. Derfor skal `deploy.yml` og `pr-preview.yml` blive ved med at checke ud
+  med `fetch-depth: 0` -- en shallow checkout uden tags kan `git describe` ikke bruge.
+
 ## Branch-oprydning
 
 - `cleanup-branches.yml` sletter branches, hvis arbejde allerede er i `main`: PR'ens egen

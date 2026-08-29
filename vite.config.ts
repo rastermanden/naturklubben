@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -7,6 +8,58 @@ import { VitePWA } from 'vite-plugin-pwa'
 // PR-preview-workflowet overstyrer denne til en pr-preview/pr-<nr>/-understi.
 const basePath = process.env.VITE_BASE_PATH ?? '/naturklubben/'
 const isProductionBuild = basePath === '/naturklubben/'
+
+/** Kører en git-kommando og giver null, hvis git ikke kan svare. */
+function git(args: string[]): string | null {
+  try {
+    return (
+      execFileSync('git', args, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim() || null
+    )
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Finder den version, appen viser i footeren.
+ *
+ * Kilden er commit'en, ikke et versionsnummer i package.json: hver merge til
+ * main deployer, så commit'en *er* udgivelsen, og et nummer, nogen skal huske
+ * at hæve, ville kun være rigtigt indtil første gang det blev glemt.
+ *
+ * `git describe --tags --always` giver den korte commit-sha, når der ingen
+ * tags er, og tagget (fx `v1.2.0` eller `v1.2.0-3-gabc1234`), hvis nogen
+ * senere begynder at tagge. Tags virker altså uden at være et krav -- de
+ * pynter bare på strengen, når de findes. Det forudsætter, at workflowene
+ * checker ud med `fetch-depth: 0`, ellers er der hverken tags eller historik
+ * at beskrive ud fra, og vi falder tilbage til commit-sha'en fra GITHUB_SHA.
+ */
+function resolveAppVersion(basePath: string) {
+  const described =
+    git(['describe', '--tags', '--always', '--dirty']) ??
+    process.env.GITHUB_SHA?.slice(0, 7) ??
+    'ukendt'
+
+  // Commit-datoen frem for byggetidspunktet: to builds af samme commit er
+  // samme version, og datoen svarer til det, man ser i git-historikken.
+  const commitDate =
+    git(['log', '-1', '--format=%cI']) ?? new Date().toISOString()
+
+  // PR-previews ligger i undermapper af produktionssitet. Uden mærkatet er der
+  // ingen måde at se på selve appen, om man kigger på et preview eller på den
+  // rigtige side.
+  const previewNumber = basePath.match(/pr-preview[/]pr-([0-9]+)[/]/)?.[1]
+
+  return {
+    version: previewNumber ? `PR #${previewNumber} · ${described}` : described,
+    date: commitDate,
+  }
+}
+
+const appVersion = resolveAppVersion(basePath)
 
 /**
  * Stopper et build, hvis Supabase-env'et mangler.
@@ -126,6 +179,12 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     base: basePath,
+    // Versionen inlines ved build, så appen kan vise præcis hvilket build der
+    // kører -- se src/lib/appVersion.ts.
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion.version),
+      __APP_BUILD_DATE__: JSON.stringify(appVersion.date),
+    },
     plugins: [
       react(),
       tailwindcss(),
