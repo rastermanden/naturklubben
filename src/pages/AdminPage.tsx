@@ -11,6 +11,7 @@ import {
   useProbationApplications,
 } from '../features/probation/useProbationApplications'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
+import { ActivitiesSection } from '../features/activities/ActivitiesSection'
 import { AdminRolesSection } from '../features/admin/AdminRolesSection'
 import { AdminSection } from '../features/admin/AdminSection'
 import { AdminTabPanel, AdminTabs } from '../features/admin/AdminTabs'
@@ -192,8 +193,8 @@ function AdminPage() {
       <div>
         <h1 className="text-2xl font-semibold text-green-900">Admin</h1>
         <p className="text-green-700">
-          Her administrerer du medlemmer, adminroller, badges, ansøgninger og
-          hvem der må oprette en bruger i Naturklubben.
+          Her administrerer du medlemmer, adminroller, badges, ansøgninger,
+          klubbens aktiviteter og hvem der må oprette en bruger i Naturklubben.
         </p>
       </div>
 
@@ -248,6 +249,10 @@ function AdminPage() {
         <BadgeNominationsSection adminId={userId} />
         <BadgeProductionsSection adminId={userId} />
         <BadgeCatalogSection />
+      </AdminTabPanel>
+
+      <AdminTabPanel tab="aktiviteter" activeTab={activeTab}>
+        <ActivitiesSection />
       </AdminTabPanel>
 
       <AdminTabPanel tab="adgang" activeTab={activeTab}>
