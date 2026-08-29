@@ -17,6 +17,7 @@ const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
 const GalleryPage = lazy(() => import('./pages/GalleryPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const MembersPage = lazy(() => import('./pages/MembersPage'))
+const NewsPage = lazy(() => import('./pages/NewsPage'))
 const ProbationApplicationPage = lazy(
   () => import('./pages/ProbationApplicationPage'),
 )
@@ -71,6 +72,7 @@ const routeElements: Record<AppRoutePath, ReactNode> = {
   '/billeder': <ProtectedRoute>{loadRoute(<GalleryPage />)}</ProtectedRoute>,
   '/chat': <ProtectedRoute>{loadRoute(<ChatPage />)}</ProtectedRoute>,
   '/medlemmer': <ProtectedRoute>{loadRoute(<MembersPage />)}</ProtectedRoute>,
+  '/nyheder': <ProtectedRoute>{loadRoute(<NewsPage />)}</ProtectedRoute>,
   '/admin': (
     <ProtectedRoute>
       <AdminRoute>{loadRoute(<AdminPage />)}</AdminRoute>

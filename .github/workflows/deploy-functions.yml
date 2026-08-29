@@ -82,6 +82,16 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
 
+      # Leverer nyhederne om nye funktioner. Kaldes af et medlems egen browser
+      # med deres access-token, når appen åbnes efter et deploy -- kaldet
+      # bestemmer hverken tekst eller modtagere, dem henter functionen selv fra
+      # feature_announcements.
+      - name: Deploy feature-announcements
+        run: supabase functions deploy feature-announcements --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
       - name: Deploy calendar-feed
         # Kalender-apps kan ikke sende en Authorization-header. Feedet er derfor
         # offentligt ved gatewayen og læser kun den anon-begrænsede database-view.
