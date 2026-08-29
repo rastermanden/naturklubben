@@ -17,12 +17,23 @@ import {
 import type { ParsedCommand } from '../features/chat/slashCommands'
 import type { AwayState } from '../features/chat/useOnlinePresence'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
+import {
+  applyMention,
+  matchMentionCandidates,
+  matchMentionQuery,
+  mentionMembers,
+  resolveMentions,
+} from '../features/chat/mentions'
+import type { MentionMember } from '../features/chat/mentions'
+import { ChatNotificationPreference } from '../features/notifications/ChatNotificationPreference'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import type { Message } from '../features/chat/useMessages'
 
 const MAX_MESSAGE_LENGTH = 2000
 const SCROLL_BOTTOM_THRESHOLD = 80
+const SEARCH_DEBOUNCE_MS = 250
 
 function ChatPage() {
   const { session } = useAuth()
@@ -44,6 +55,12 @@ function ChatPage() {
   )
 
   const [draft, setDraft] = useState('')
+  // Markørens position i skrivefeltet: en mention kan skrives midt i teksten,
+  // så det er den, og ikke slutningen af feltet, der afgør, hvad der søges på.
+  const [caret, setCaret] = useState(0)
+  const [pickedMentionIds, setPickedMentionIds] = useState<string[]>([])
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const [mentionDismissed, setMentionDismissed] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [newMessageCount, setNewMessageCount] = useState(0)
@@ -55,8 +72,34 @@ function ChatPage() {
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null)
-  const searchQuery = useMessageSearch(searchTerm)
+  // Søgefeltet slår op ved hvert tastetryk; uden pausen ville en hel
+  // søgestreng koste ét opslag pr. bogstav, hvoraf kun det sidste bruges.
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, SEARCH_DEBOUNCE_MS)
+  const searchQuery = useMessageSearch(debouncedSearchTerm)
+  // Mens pausen løber, hører resultaterne på skærmen til en ældre søgestreng.
+  const isSearchSettling = searchTerm.trim() !== debouncedSearchTerm.trim()
   const commandHints = useMemo(() => matchSlashCommandHints(draft), [draft])
+
+  // Alle med et navn kan nævnes; pickeren viser bare ikke én selv.
+  const allMembers = useMemo(() => mentionMembers(profiles), [profiles])
+  const pickableMembers = useMemo(
+    () => mentionMembers(profiles, userId),
+    [profiles, userId],
+  )
+  const mentionQuery = useMemo(
+    () => matchMentionQuery(draft, caret),
+    [draft, caret],
+  )
+  const mentionCandidates = useMemo(
+    () =>
+      mentionQuery && !mentionDismissed
+        ? matchMentionCandidates(pickableMembers, mentionQuery.query)
+        : [],
+    [mentionQuery, mentionDismissed, pickableMembers],
+  )
+  const activeMention =
+    mentionCandidates[Math.min(mentionIndex, mentionCandidates.length - 1)] ??
+    null
 
   function nameOf(id: string) {
     return profiles?.[id]?.full_name ?? 'Medlem'
@@ -210,6 +253,29 @@ function ChatPage() {
     pushNotice('Du er ikke længere markeret som væk.')
   }
 
+  function updateDraft(value: string, nextCaret: number) {
+    setDraft(value)
+    setCaret(nextCaret)
+    setMentionDismissed(false)
+    setMentionIndex(0)
+  }
+
+  function selectMention(member: MentionMember) {
+    if (!mentionQuery) return
+    const next = applyMention(draft, mentionQuery, member)
+    updateDraft(next.text, next.caret)
+    setPickedMentionIds((current) =>
+      current.includes(member.id) ? current : [...current, member.id],
+    )
+    const field = draftRef.current
+    field?.focus()
+    // Feltet skal have den nye markørposition, når React har skrevet teksten
+    // -- ellers står markøren tilbage i slutningen af feltet.
+    requestAnimationFrame(() =>
+      field?.setSelectionRange(next.caret, next.caret),
+    )
+  }
+
   function sendCurrentDraft() {
     const rawContent = draft.trim()
     if (!rawContent || rawContent.length > MAX_MESSAGE_LENGTH) return
@@ -228,8 +294,19 @@ function ChatPage() {
     const content = command ? command.content : rawContent
     if (content.length > MAX_MESSAGE_LENGTH) return
 
+    // Mentions læses af den tekst, der faktisk sendes: et navn valgt fra
+    // listen og rettet væk igen skal ikke efterlade en usynlig mention. Man
+    // nævner ikke sig selv -- chat-push springer alligevel afsenderen over.
+    const mentions = resolveMentions(
+      content,
+      allMembers,
+      pickedMentionIds,
+    ).filter((id) => id !== userId)
+
     setSendError(null)
     setDraft('')
+    setCaret(0)
+    setPickedMentionIds([])
     const replyToMessageId = replyingTo?.id ?? null
     sendMessage.mutate(
       {
@@ -239,6 +316,7 @@ function ChatPage() {
         ...(command?.messageType === 'action'
           ? { messageType: 'action' as const }
           : {}),
+        ...(mentions.length > 0 ? { mentions } : {}),
       },
       {
         onSuccess: () =>
@@ -296,7 +374,7 @@ function ChatPage() {
   }
 
   function completeCommand(completion: string) {
-    setDraft(completion)
+    updateDraft(completion, completion.length)
     draftRef.current?.focus()
   }
 
@@ -308,6 +386,35 @@ function ChatPage() {
       : null
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Mention-listen har forrang for både Tab og Enter, mens den er åben:
+    // Enter skal vælge det fremhævede navn, ikke sende en halvskrevet besked.
+    if (activeMention) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setMentionIndex(
+          (index) => (index + 1) % Math.max(mentionCandidates.length, 1),
+        )
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setMentionIndex(
+          (index) =>
+            (index - 1 + mentionCandidates.length) % mentionCandidates.length,
+        )
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setMentionDismissed(true)
+        return
+      }
+      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+        event.preventDefault()
+        selectMention(activeMention)
+        return
+      }
+    }
     if (event.key === 'Tab' && tabCompletion) {
       event.preventDefault()
       completeCommand(tabCompletion)
@@ -326,7 +433,10 @@ function ChatPage() {
           <h1 className="text-2xl font-semibold text-green-900">Chat</h1>
           <p className="text-green-700">Fælles snak for alle medlemmer.</p>
         </div>
-        <NotificationToggle userId={userId} />
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <NotificationToggle userId={userId} />
+          <ChatNotificationPreference userId={userId} />
+        </div>
       </div>
       <OnlineMembers
         members={onlineMembers}
@@ -351,7 +461,7 @@ function ChatPage() {
         />
         {searchTerm.trim() && (
           <div className="absolute z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-green-200 bg-white p-2 shadow-lg">
-            {searchQuery.isPending && (
+            {(searchQuery.isPending || isSearchSettling) && (
               <p role="status" className="p-3 text-green-700">
                 Søger…
               </p>
@@ -366,9 +476,11 @@ function ChatPage() {
                 Beskeden kunne ikke åbnes. Den kan være slettet.
               </p>
             )}
-            {searchQuery.isSuccess && searchResults.length === 0 && (
-              <p className="p-3 text-green-700">Ingen beskeder fundet.</p>
-            )}
+            {searchQuery.isSuccess &&
+              !isSearchSettling &&
+              searchResults.length === 0 && (
+                <p className="p-3 text-green-700">Ingen beskeder fundet.</p>
+              )}
             {searchResults.length > 0 && (
               <ul aria-label="Søgeresultater">
                 {searchResults.map((message) => {
@@ -492,6 +604,8 @@ function ChatPage() {
                 onToggleReaction={reactTo}
                 onDelete={deleteSelectedMessage}
                 isHighlighted={message.id === highlightedMessageId}
+                isMentioned={message.mentions.includes(userId)}
+                members={allMembers}
               />
             ))}
             {notices.map((notice) => (
@@ -562,6 +676,47 @@ function ChatPage() {
             </button>
           </div>
         )}
+        {mentionQuery &&
+          !mentionDismissed &&
+          mentionCandidates.length === 0 &&
+          pickableMembers.length === 0 && (
+            <p
+              role="status"
+              aria-live="polite"
+              className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-950"
+            >
+              Der er ingen andre medlemmer at nævne endnu.
+            </p>
+          )}
+        {mentionCandidates.length > 0 && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-950">
+            <p role="status" aria-live="polite" className="sr-only">
+              {mentionCandidates.length === 1
+                ? `1 medlem foreslås: ${mentionCandidates[0].name}.`
+                : `${mentionCandidates.length} medlemmer foreslås. Vælg med piletasterne og Enter.`}
+            </p>
+            <ul id="chat-mentions" aria-label="Nævn et medlem">
+              {mentionCandidates.map((member) => (
+                <li key={member.id}>
+                  <button
+                    type="button"
+                    onClick={() => selectMention(member)}
+                    aria-label={`Nævn ${member.name}`}
+                    aria-current={member.id === activeMention?.id}
+                    className={`flex min-h-11 w-full items-center gap-2 rounded px-1 text-left hover:bg-green-100 focus-visible:outline-2 focus-visible:outline-green-800 ${
+                      member.id === activeMention?.id ? 'bg-green-100' : ''
+                    }`}
+                  >
+                    <span className="font-medium">@{member.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 px-1 text-xs opacity-75">
+              Tryk Enter eller Tab for at indsætte navnet.
+            </p>
+          </div>
+        )}
         {commandHints.length > 0 && (
           <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-950">
             <p role="status" aria-live="polite" className="sr-only">
@@ -597,8 +752,20 @@ function ChatPage() {
           <textarea
             ref={draftRef}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) =>
+              updateDraft(
+                event.target.value,
+                event.target.selectionStart ?? event.target.value.length,
+              )
+            }
+            onSelect={(event) =>
+              setCaret(event.currentTarget.selectionStart ?? caret)
+            }
             onKeyDown={handleKeyDown}
+            aria-controls={
+              mentionCandidates.length > 0 ? 'chat-mentions' : undefined
+            }
+            aria-expanded={mentionCandidates.length > 0}
             maxLength={MAX_MESSAGE_LENGTH}
             rows={1}
             placeholder="Skriv en besked…"

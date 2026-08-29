@@ -14,6 +14,7 @@ export const navLinks: NavLink[] = [
   { to: '/chat', label: 'Chat', requiresAuth: true },
   { to: '/naturlog', label: 'Naturlog', requiresAuth: true },
   { to: '/medlemmer', label: 'Medlemmer', requiresAuth: true },
+  { to: '/nyheder', label: 'Nyheder', requiresAuth: true },
   { to: '/profil', label: 'Profil', requiresAuth: true },
   { to: '/admin', label: 'Admin', requiresAuth: true, requiresAdmin: true },
 ]

@@ -5,7 +5,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(10);
+select plan(11);
 
 do $$
 begin

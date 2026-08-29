@@ -1,7 +1,10 @@
 // Edge Function: chat-push
 //
-// Sender en Web Push-notifikation til alle *andre* medlemmers telefoner, når
-// nogen skriver i chatten (#14).
+// Sender en Web Push-notifikation til de andre medlemmers telefoner, når nogen
+// skriver i chatten (#14) -- så vidt de vil have den: hvert medlem vælger på
+// sin profil mellem alle beskeder, kun når det nævnes, og ingen (#179).
+// Filtreringen sker her, fordi klienten ikke kan undlade at modtage en
+// notifikation, den allerede har fået.
 //
 // To endpoints i én function:
 //   GET   -> { publicKey } : VAPID-nøglen, klienten skal abonnere med. Den
@@ -24,6 +27,12 @@ import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
 import { handleCors } from '../_shared/cors.ts'
 import { getVapidDetails } from '../_shared/vapid.ts'
 import { sendPushNotification, type VapidDetails } from '../_shared/webpush.ts'
+import {
+  chatPushPayload,
+  normalizePreference,
+  selectRecipients,
+  type ChatNotificationPreference,
+} from './recipients.ts'
 
 // Notifikationsteksten er et smugkig, ikke hele beskeden -- resten læses i
 // appen. Holder også payloaden langt under push-tjenesternes 4 KB-grænse.
@@ -119,7 +128,7 @@ Deno.serve(async (req) => {
 
   const { data: message, error: messageError } = await supabase
     .from('messages')
-    .select('id, user_id, content, created_at')
+    .select('id, user_id, content, created_at, mentions')
     .eq('id', messageId)
     .single()
   if (messageError || !message) {
@@ -148,7 +157,7 @@ Deno.serve(async (req) => {
   // sin egen besked på sin anden enhed heller.
   const { data: subscriptions, error: subscriptionsError } = await supabase
     .from('push_subscriptions')
-    .select('id, endpoint, p256dh, auth')
+    .select('id, user_id, endpoint, p256dh, auth')
     .neq('user_id', user.id)
   if (subscriptionsError) {
     return jsonResponse({ error: subscriptionsError.message }, corsHeaders, 500)
@@ -157,19 +166,49 @@ Deno.serve(async (req) => {
     return jsonResponse({ sent: 0, failed: 0, removed: 0 }, corsHeaders)
   }
 
-  const payload = JSON.stringify({
-    title: senderProfile?.full_name?.trim() || 'Ny besked i Naturklubben',
-    body: previewOf(message.content),
-    // Ét fælles chatrum -> ét tag, så flere ubesvarede beskeder erstatter
-    // hinanden i notifikationsskuffen i stedet for at stable sig op.
-    tag: 'naturklubben-chat',
-    path: 'chat',
-    messageId: message.id,
+  // Præferencerne hentes for netop de medlemmer, der har et abonnement --
+  // resten er der alligevel ingen at sende til.
+  const subscriberIds = [...new Set(subscriptions.map((row) => row.user_id))]
+  const { data: preferenceRows, error: preferencesError } = await supabase
+    .from('profiles')
+    .select('id, chat_notification_preference')
+    .in('id', subscriberIds)
+  if (preferencesError) {
+    return jsonResponse({ error: preferencesError.message }, corsHeaders, 500)
+  }
+
+  const preferences = new Map<string, ChatNotificationPreference>()
+  for (const row of preferenceRows ?? []) {
+    preferences.set(
+      row.id as string,
+      normalizePreference(row.chat_notification_preference),
+    )
+  }
+
+  const recipients = selectRecipients({
+    subscriptions,
+    preferences,
+    mentionedIds: (message.mentions ?? []) as string[],
+    senderId: user.id,
   })
+  if (recipients.length === 0) {
+    return jsonResponse({ sent: 0, failed: 0, removed: 0 }, corsHeaders)
+  }
+
+  const preview = previewOf(message.content)
 
   const results = await Promise.allSettled(
-    subscriptions.map(async (subscription) => {
-      const result = await sendPushNotification(subscription, payload, vapid)
+    recipients.map(async ({ subscription, isMentioned }) => {
+      const result = await sendPushNotification(
+        subscription,
+        chatPushPayload({
+          senderName: senderProfile?.full_name,
+          preview,
+          messageId: message.id,
+          isMentioned,
+        }),
+        vapid,
+      )
       if (result.isGone) {
         await supabase
           .from('push_subscriptions')

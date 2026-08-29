@@ -116,6 +116,41 @@ lokale terminal. Derfor gælder:
   `VITE_SUPABASE_PUBLISHABLE_KEY` er tomme, og `vite.config.ts` afviser at udgive en
   app-løs bundle.
 
+## Nye funktioner meldes til medlemmerne
+
+- **Hver ny funktion, medlemmerne kan mærke, tager sin egen nyhed med.** Nyheden er en
+  `insert` i `public.feature_announcements` i den migration, ændringen alligevel har --
+  ikke noget, nogen taster ind i et panel bagefter. Så følger beskeden med deployet,
+  præcis som koden gør.
+- Skabelonen er tre linjer i slutningen af migrationen:
+
+  ```sql
+  insert into public.feature_announcements (slug, title, body, path)
+  values (
+    'kalender-tilmelding',
+    'Du kan nu melde dig til en tur',
+    'Åbn kalenderen, vælg en tur og tryk "Jeg kommer". Så kan de andre se det.',
+    'kalender'
+  )
+  on conflict (slug) do nothing;
+  ```
+
+  `slug` er stabil og skrives i små bogstaver med bindestreger. `title` (maks. 120 tegn)
+  og `body` (maks. 600 tegn) er til medlemmerne, ikke til udviklere -- skriv, hvad man kan
+  gøre nu, ikke hvad der er refaktoreret. `path` er den side i appen, nyheden åbner,
+  relativ og uden skråstreg foran (`kalender`, `billeder`, ...); udelad den, hvis der ikke
+  er ét oplagt sted at sende folk hen.
+
+- **Ændringer uden en oplevelse skal ikke have en nyhed**: refaktoreringer, rettelser i
+  CI, tekstjusteringer. En notifikation er et afbrud i nogens dag, og en strøm af dem om
+  ting, ingen kan se, gør, at den næste rigtige nyhed også bliver slået fra.
+- Nyheden lander tre steder: i banneret "Nyt i appen" i app-shellen, på siden
+  `/nyheder`, og som en push-notifikation til de medlemmer, der har notifikationer slået
+  til og ikke har fravalgt netop dem (`profiles.feature_notifications_enabled`). Selve
+  udsendelsen sker fra Edge Functionen `feature-announcements`; se `supabase/README.md`
+  for hvorfor det er klienten, der sætter den i gang, og hvorfor en nyhed kun sendes én
+  gang og kun inden for syv dage.
+
 ## App-version
 
 - Appens version er **commit'en**, ikke et nummer nogen vedligeholder. `vite.config.ts`
