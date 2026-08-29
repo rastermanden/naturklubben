@@ -9,7 +9,10 @@ import {
   summarizeReactions,
 } from '../features/chat/reactions'
 import { useOnlinePresence } from '../features/chat/useOnlinePresence'
-import { parseSlapCommand } from '../features/chat/slashCommands'
+import {
+  matchSlashCommandHints,
+  parseActionCommand,
+} from '../features/chat/slashCommands'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
@@ -47,6 +50,7 @@ function ChatPage() {
     string | null
   >(null)
   const searchQuery = useMessageSearch(searchTerm)
+  const commandHints = useMemo(() => matchSlashCommandHints(draft), [draft])
 
   function nameOf(id: string) {
     return profiles?.[id]?.full_name ?? 'Medlem'
@@ -181,8 +185,8 @@ function ChatPage() {
       return
     }
 
-    const slapCommand = parseSlapCommand(rawContent)
-    const content = slapCommand ? slapCommand.content : rawContent
+    const actionCommand = parseActionCommand(rawContent)
+    const content = actionCommand ? actionCommand.content : rawContent
     if (content.length > MAX_MESSAGE_LENGTH) return
 
     setSendError(null)
@@ -193,7 +197,7 @@ function ChatPage() {
         userId,
         content,
         replyToMessageId,
-        ...(slapCommand ? { messageType: 'action' as const } : {}),
+        ...(actionCommand ? { messageType: 'action' as const } : {}),
       },
       {
         onSuccess: () =>
@@ -250,7 +254,24 @@ function ChatPage() {
     sendCurrentDraft()
   }
 
+  function completeCommand(completion: string) {
+    setDraft(completion)
+    draftRef.current?.focus()
+  }
+
+  // Tab udfylder kun, når der er ét oplagt forslag tilbage -- ellers skal
+  // tabulator stadig kunne flytte fokus videre til Send-knappen.
+  const tabCompletion =
+    commandHints.length === 1 && !commandHints[0].isComplete
+      ? commandHints[0].completion
+      : null
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Tab' && tabCompletion) {
+      event.preventDefault()
+      completeCommand(tabCompletion)
+      return
+    }
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       sendCurrentDraft()
@@ -476,6 +497,37 @@ function ChatPage() {
             >
               Annuller
             </button>
+          </div>
+        )}
+        {commandHints.length > 0 && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-950">
+            <p role="status" aria-live="polite" className="sr-only">
+              {commandHints.length === 1
+                ? `Kommando: ${commandHints[0].usage}. ${commandHints[0].description}.`
+                : `${commandHints.length} kommandoer foreslås.`}
+            </p>
+            <ul className="flex flex-col gap-1">
+              {commandHints.map((hint) => (
+                <li key={hint.command}>
+                  <button
+                    type="button"
+                    onClick={() => completeCommand(hint.completion)}
+                    aria-label={`Indsæt ${hint.command}`}
+                    className="flex min-h-11 w-full items-baseline gap-2 rounded px-1 text-left hover:bg-green-100 focus-visible:outline-2 focus-visible:outline-green-800"
+                  >
+                    <span className="shrink-0 font-medium">{hint.usage}</span>
+                    <span className="min-w-0 truncate opacity-75">
+                      {hint.description}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {tabCompletion && (
+              <p className="mt-1 px-1 text-xs opacity-75">
+                Tryk Tab for at udfylde.
+              </p>
+            )}
           </div>
         )}
         <div className="flex items-end gap-2">

@@ -213,6 +213,72 @@ describe('ChatPage slash commands', () => {
     ).toBe('')
   })
 
+  it('sends /me as an action message with the typed text', () => {
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: { value: '/me kigger efter fiskehejren' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        userId: 'current-member',
+        content: 'kigger efter fiskehejren',
+        replyToMessageId: null,
+        messageType: 'action',
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    )
+  })
+
+  it('suggests the commands while a slash command is typed', () => {
+    render(<ChatPage />)
+    const composer = screen.getByRole('textbox', { name: 'Skriv en besked' })
+
+    expect(screen.queryByText('/slap [navn]')).toBeNull()
+
+    fireEvent.change(composer, { target: { value: '/' } })
+    expect(screen.getByText('/me <tekst>')).toBeTruthy()
+    expect(screen.getByText('/slap [navn]')).toBeTruthy()
+
+    fireEvent.change(composer, { target: { value: '/sl' } })
+    expect(screen.queryByText('/me <tekst>')).toBeNull()
+    expect(screen.getByText('/slap [navn]')).toBeTruthy()
+
+    fireEvent.change(composer, { target: { value: 'Hej med jer' } })
+    expect(screen.queryByText('/slap [navn]')).toBeNull()
+  })
+
+  it('completes the command from the hint and from Tab', () => {
+    render(<ChatPage />)
+    const composer = screen.getByRole('textbox', {
+      name: 'Skriv en besked',
+    }) as HTMLTextAreaElement
+
+    fireEvent.change(composer, { target: { value: '/sl' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Indsæt /slap' }))
+    expect(composer.value).toBe('/slap ')
+
+    fireEvent.change(composer, { target: { value: '/m' } })
+    fireEvent.keyDown(composer, { key: 'Tab' })
+    expect(composer.value).toBe('/me ')
+  })
+
+  it('leaves Tab alone when the command is already complete', () => {
+    render(<ChatPage />)
+    const composer = screen.getByRole('textbox', {
+      name: 'Skriv en besked',
+    }) as HTMLTextAreaElement
+
+    fireEvent.change(composer, { target: { value: '/slap Bo' } })
+    fireEvent.keyDown(composer, { key: 'Tab' })
+    expect(composer.value).toBe('/slap Bo')
+  })
+
   it('sends a normal message without a messageType field', () => {
     render(<ChatPage />)
 
