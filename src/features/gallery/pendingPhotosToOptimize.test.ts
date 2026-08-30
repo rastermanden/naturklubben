@@ -45,10 +45,41 @@ describe('pendingPhotosToOptimize', () => {
 
   it('leaves statuses the client must not restart', () => {
     const others = (
-      ['processing', 'ready', 'failed', 'deleting', 'delete_failed'] as const
+      ['ready', 'failed', 'deleting', 'delete_failed'] as const
     ).map((optimization_status) => photo({ optimization_status }))
 
     expect(pendingPhotosToOptimize(others, 'member', none, NOW)).toEqual([])
+  })
+
+  it('picks up a photo stuck in a stale processing claim', () => {
+    const stuck = photo({
+      optimization_status: 'processing',
+      optimization_started_at: new Date(NOW - 11 * 60 * 1000).toISOString(),
+    })
+
+    expect(
+      pendingPhotosToOptimize([stuck], 'member', none, NOW).map((p) => p.id),
+    ).toEqual(['photo-1'])
+  })
+
+  it('picks up a processing photo with no recorded start time', () => {
+    const stuck = photo({
+      optimization_status: 'processing',
+      optimization_started_at: null,
+    })
+
+    expect(
+      pendingPhotosToOptimize([stuck], 'member', none, NOW).map((p) => p.id),
+    ).toEqual(['photo-1'])
+  })
+
+  it('leaves a photo that is still actively processing', () => {
+    const active = photo({
+      optimization_status: 'processing',
+      optimization_started_at: new Date(NOW - 60 * 1000).toISOString(),
+    })
+
+    expect(pendingPhotosToOptimize([active], 'member', none, NOW)).toEqual([])
   })
 
   it('leaves a fresh upload to the queue that just requested it', () => {
