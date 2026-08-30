@@ -6,6 +6,7 @@ import {
   announcementTag,
   ANNOUNCEMENT_PATH,
   selectAnnouncementRecipients,
+  selectUndeliveredRecipients,
   type PushSubscriptionRow,
 } from './announcements'
 
@@ -64,6 +65,48 @@ describe('selectAnnouncementRecipients', () => {
     })
 
     expect(recipients).toHaveLength(1)
+  })
+})
+
+describe('selectUndeliveredRecipients', () => {
+  const recipients = [
+    subscription('ida'),
+    subscription('ida', 'ida-computer'),
+    subscription('jens'),
+  ]
+
+  it('springer de enheder over, der allerede har fået nyheden', () => {
+    const targets = selectUndeliveredRecipients(
+      recipients,
+      new Set(['ida-device', 'jens-device']),
+    )
+
+    expect(targets.map((target) => target.id)).toEqual(['ida-computer'])
+  })
+
+  it('sender til alle, første gang nyheden går ud', () => {
+    expect(selectUndeliveredRecipients(recipients, new Set())).toHaveLength(3)
+  })
+
+  it('gentager ikke nyheden for nogen, når alle har fået den', () => {
+    const targets = selectUndeliveredRecipients(
+      recipients,
+      new Set(recipients.map((recipient) => recipient.id)),
+    )
+
+    expect(targets).toEqual([])
+  })
+
+  it('rammer kun den enhed, der mangler nyheden -- ikke medlemmets anden', () => {
+    const targets = selectUndeliveredRecipients(
+      recipients,
+      new Set(['ida-device']),
+    )
+
+    expect(targets.map((target) => target.id)).toEqual([
+      'ida-computer',
+      'jens-device',
+    ])
   })
 })
 

@@ -58,3 +58,21 @@ export function announcementPayload(announcement: FeatureAnnouncement): string {
     path: announcement.path ?? ANNOUNCEMENT_PATH,
   })
 }
+
+/**
+ * Af de abonnementer, der vil have nyheder, dem der ikke allerede har fået
+ * netop denne.
+ *
+ * Et forsøg nummer to findes, fordi ét dødt endpoint kan vælte hele
+ * udsendelsen -- ikke fordi de andre skal have beskeden igen. Uden det her
+ * ville en nyhed, der fejlede for én enhed, blive gentaget for alle de andre,
+ * hver gang udsendelsen blev forsøgt.
+ */
+export function selectUndeliveredRecipients(
+  recipients: readonly PushSubscriptionRow[],
+  deliveredSubscriptionIds: ReadonlySet<string>,
+): PushSubscriptionRow[] {
+  return recipients.filter(
+    (subscription) => !deliveredSubscriptionIds.has(subscription.id),
+  )
+}

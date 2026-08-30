@@ -7,7 +7,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(21);
+select plan(25);
 
 do $$
 begin
@@ -37,6 +37,16 @@ begin
     'En kommende nyhed',
     'Den er ikke sluppet ud endnu.',
     now() + interval '1 day'
+  );
+
+  -- Idas telefon. Leveringsloggen hænger på abonnementet, ikke på medlemmet.
+  insert into public.push_subscriptions (id, user_id, endpoint, p256dh, auth)
+  values (
+    '00000000-0000-0000-0000-0000000000d1',
+    '00000000-0000-0000-0000-0000000000f1',
+    'https://fcm.googleapis.com/fcm/send/ida-telefon',
+    'p256dh',
+    'auth'
   );
 end
 $$;
@@ -159,6 +169,25 @@ select is(
   'et medlem kan ikke se, hvad andre har læst'
 );
 
+select throws_ok(
+  $$select count(*) from public.feature_announcement_push_deliveries$$,
+  '42501',
+  null,
+  'et medlem kan ikke se, hvilke enheder der har fået en notifikation'
+);
+
+select throws_ok(
+  $$insert into public.feature_announcement_push_deliveries
+      (announcement_id, subscription_id)
+    values (
+      '00000000-0000-0000-0000-0000000000e1',
+      '00000000-0000-0000-0000-0000000000d1'
+    )$$,
+  '42501',
+  null,
+  'et medlem kan ikke skrive i leveringsloggen'
+);
+
 -- Ida har slået dem fra ovenfor. Jens' forsøg på at slå dem til igen rammer
 -- ingen rækker, fordi profilpolitikken kun lader ham røre sin egen.
 update public.profiles
@@ -235,6 +264,28 @@ select is(
   ),
   0,
   'en nyhed, der ikke er udgivet endnu, kan ikke sendes'
+);
+
+select lives_ok(
+  $$insert into public.feature_announcement_push_deliveries
+      (announcement_id, subscription_id)
+    values (
+      '00000000-0000-0000-0000-0000000000e1',
+      '00000000-0000-0000-0000-0000000000d1'
+    )$$,
+  'functionen kan skrive ned, at enheden har fået nyheden -- så et genforsøg '
+  || 'kan lade den være'
+);
+
+-- Loggen holder ikke liv i et abonnement, der er væk: slår medlemmet
+-- notifikationer fra eller sletter sin konto, forsvinder leveringerne med.
+delete from public.push_subscriptions
+where id = '00000000-0000-0000-0000-0000000000d1';
+
+select is(
+  (select count(*)::int from public.feature_announcement_push_deliveries),
+  0,
+  'leveringen forsvinder sammen med det abonnement, den handler om'
 );
 
 do $$
