@@ -306,13 +306,19 @@ Deno.serve(async (req) => {
 
     const orientation = readExifOrientation(bytes)
 
+    // Ét fuldt decode af originalen, ikke to. Selve decode'et er den dyreste
+    // del af optimeringen med et rent JS/WASM-bibliotek (se kommentaren
+    // øverst i filen om hvorfor), og især ved flere samtidige uploads kunne
+    // functionen løbe tør for sin tids-/hukommelsesramme midt i det andet
+    // decode -- uden nogensinde at nå frem til fejlhåndteringen nedenfor, så
+    // billedet sad fast som "Optimerer…" for evigt (#189-opfølgning).
     const web = applyOrientation(await Image.decode(bytes), orientation)
     if (web.width > WEB_MAX_WIDTH) {
       web.resize(WEB_MAX_WIDTH, Image.RESIZE_AUTO)
     }
     const webBytes = await web.encodeJPEG(WEB_JPEG_QUALITY)
 
-    const thumbnail = applyOrientation(await Image.decode(bytes), orientation)
+    const thumbnail = web.clone()
     if (thumbnail.width > THUMBNAIL_MAX_WIDTH) {
       thumbnail.resize(THUMBNAIL_MAX_WIDTH, Image.RESIZE_AUTO)
     }

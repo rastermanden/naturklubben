@@ -35,12 +35,26 @@ export function canRetryOptimization(photo: Photo, userId: string | undefined) {
 }
 
 /**
- * Egne billeder, der venter på deres første optimering uden at nogen har
- * bestilt den. Nyligt uploadede springes over: dér har uploadkøen selv lige
- * kaldt optimeringen, og en gentagelse ville kun ramme et optaget claim.
+ * Egne billeder, der venter på (eller sidder fast i) en optimering, som intet
+ * i øjeblikket arbejder på. To slags rækker tælles med:
+ * - `pending`, hvor uploadkøen ikke selv lige har bestilt den (nyligt
+ *   uploadede springes over, så en gentagelse ikke rammer et optaget claim).
+ * - `processing`, hvis claim er forældet efter samme ti-minutters grænse som
+ *   claim_photo_optimization selv bruger til at afgøre det. Dør
+ *   optimize-image midt i arbejdet (timeout, hukommelse, flere samtidige
+ *   uploads) uden at nå complete_photo_optimization, bliver rækken ellers
+ *   stående som "Optimerer…" for evigt, fordi kun ejeren selv kunne trykke
+ *   "prøv igen" manuelt (se docs/kodegennemgang-2026-08-23.md, fund #2).
  */
 export function pendingPhotosToOptimize(
-  photos: Photo[],
+  photos: readonly Pick<
+    Photo,
+    | 'id'
+    | 'uploaded_by'
+    | 'created_at'
+    | 'optimization_status'
+    | 'optimization_started_at'
+  >[],
   userId: string | undefined,
   alreadyRequested: ReadonlySet<string>,
   now = Date.now(),
@@ -49,9 +63,10 @@ export function pendingPhotosToOptimize(
   return photos.filter(
     (photo) =>
       photo.uploaded_by === userId &&
-      photo.optimization_status === 'pending' &&
-      !isPendingOptimizationActive(photo, now) &&
-      !alreadyRequested.has(photo.id),
+      !alreadyRequested.has(photo.id) &&
+      ((photo.optimization_status === 'pending' &&
+        !isPendingOptimizationActive(photo, now)) ||
+        isStaleOptimization(photo, now)),
   )
 }
 
