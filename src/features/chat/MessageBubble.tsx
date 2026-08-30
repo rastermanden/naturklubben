@@ -3,6 +3,7 @@ import { Avatar } from '../../components/Avatar'
 import { MessageReactions, ReactionPicker } from './MessageReactions'
 import { readableTextColor } from '../../lib/colorContrast'
 import { formatRelativeTime } from './formatRelativeTime'
+import { splitLinks } from './linkify'
 import { splitMentions } from './mentions'
 import type { MentionMember } from './mentions'
 import type { ReactionSummary } from './reactions'
@@ -41,7 +42,32 @@ function MessageText({
             {segment.text}
           </span>
         ) : (
-          <span key={index}>{segment.text}</span>
+          <LinkifiedText key={index} text={segment.text} />
+        ),
+      )}
+    </>
+  )
+}
+
+/** Almindelig tekst med links gjort klikbare. */
+function LinkifiedText({ text }: { text: string }) {
+  const segments = useMemo(() => splitLinks(text), [text])
+
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.href ? (
+          <a
+            key={index}
+            href={segment.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:no-underline"
+          >
+            {segment.text}
+          </a>
+        ) : (
+          segment.text
         ),
       )}
     </>

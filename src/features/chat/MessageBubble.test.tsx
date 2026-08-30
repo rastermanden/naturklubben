@@ -245,6 +245,32 @@ describe('MessageBubble', () => {
     expect(container.querySelector('li')?.children.length).toBe(1)
   })
 
+  it('makes a pasted link clickable', () => {
+    render(
+      <MessageBubble
+        message={{
+          ...message,
+          content: 'Se https://naturklubben.dk for turen',
+          reply_to_message_id: null,
+          reply_to: null,
+        }}
+        author={author}
+        replyAuthor={undefined}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    const link = screen.getByRole('link', {
+      name: 'https://naturklubben.dk',
+    })
+    expect(link.getAttribute('href')).toBe('https://naturklubben.dk')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+  })
+
   it('replaces a deleted reply preview instead of exposing its old content', () => {
     render(
       <MessageBubble
