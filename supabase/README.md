@@ -20,6 +20,7 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 | `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                                                                                                                             | Ingen policies og ingen grants -- kun `probation-notifications` med Secret key kan læse rækken.                                                                                                                     |
 | `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                                                                                                                              | Ingen policies og ingen grants -- kun Edge Functionens Secret key kan læse rækken.                                                                                                                                  |
 | `feature_announcements`                    | Nyheder om nye funktioner i appen (#184). Rækkerne skrives af migrationer; `push_*`-felterne er outboxen for udsendelsen.                                                                                                              | Medlemmer kan læse udgivne nyheder gennem en kolonnegrant uden `push_*`. Ingen klientskrivning -- kun `claim_/complete_feature_announcement_push` (service_role) rører status.                                      |
+| `feature_announcement_push_deliveries`     | Hvilke abonnementer der allerede har fået push om en given nyhed, så et genforsøg kun rammer dem, der mangler den. Rækkerne følger abonnementet og forsvinder med det.                                                                 | Ingen policies og ingen grants -- kun `feature-announcements` med Secret key rører loggen.                                                                                                                          |
 | `feature_announcement_reads`               | Hvilke nyheder det enkelte medlem har set, så banneret ved, hvornår det skal tie.                                                                                                                                                      | Kun ejeren kan læse, oprette og fjerne sine egne rækker. UPDATE er revoked -- `read_at` er et tidspunkt, ikke et felt, der redigeres.                                                                               |
 | `badges`                                   | Badge-kataloget (#159): navn, uploadet billede, den runde beskæring (`crop_x`/`crop_y`/`crop_size`), fysiske mål og status på trykfilen.                                                                                               | Alle medlemmer kan læse; kun admins kan skrive. `print_*` er revoked fra kolonnegrant'en og ejes af `render-badge-print` gennem `claim_badge_print`/`complete_badge_print`.                                         |
 | `badge_nominations`                        | Indstillinger af ét medlem til én badge, med begrundelse. Delvist unikt indeks tillader kun én åben indstilling pr. (badge, medlem).                                                                                                   | Admins og den, der selv har indstillet, kan læse. INSERT/UPDATE/DELETE er revoked -- kun `nominate_member_for_badge` og `vote_on_badge_nomination` skriver.                                                         |
@@ -159,7 +160,9 @@ Oprettet i SQL (kommer automatisk med på preview-branches og i produktion):
   oprettes af migrationer i `feature_announcements`; functionen er kun leveringen. Den
   tager intet fra kalderen -- hverken tekst eller modtagere -- og hver nyhed sendes kun
   én gang, fordi `claim_feature_announcement_push` kun lykkes for den første, der
-  kalder. Se "Nyheder om nye funktioner" nedenfor.
+  kalder. Slår en enkelt levering fejl, forsøges nyheden igen -- men kun for de
+  abonnementer, der ikke allerede står i `feature_announcement_push_deliveries`. Se
+  "Nyheder om nye funktioner" nedenfor.
 - Deployes **ikke** manuelt -- `.github/workflows/deploy-functions.yml` kører
   `supabase functions deploy` ikke-interaktivt ved push til `main`, når noget under
   `supabase/functions/` ændres. Kræver `SUPABASE_ACCESS_TOKEN` og `SUPABASE_PROJECT_REF`
@@ -710,8 +713,10 @@ Flowet, ende til ende:
    ("Nyt i appen") og på `/nyheder`. Klienten kalder samtidig `feature-announcements`.
 3. Functionen slår selv de udestående nyheder op med `pending_feature_announcement_pushes()`,
    tager hver enkelt med `claim_feature_announcement_push` og sender push til alle
-   abonnementer, hvis ejer ikke har slået nyhedsnotifikationer fra. Resultatet meldes
-   tilbage med `complete_feature_announcement_push`.
+   abonnementer, hvis ejer ikke har slået nyhedsnotifikationer fra -- og som ikke allerede
+   står i `feature_announcement_push_deliveries` for netop den nyhed. Hver levering, der
+   lykkes, skrives ind i loggen, og resultatet meldes tilbage med
+   `complete_feature_announcement_push`.
 4. Service workeren viser notifikationen med nyhedens eget tag, og et klik åbner den side,
    nyheden peger på (`path`), ellers `/nyheder`.
 
@@ -731,6 +736,23 @@ de ni andre får `0` tilbage og sender ikke noget.
 Prisen er, at notifikationen først går ud, når nogen åbner appen efter deployet. Det er
 acceptabelt for en nyhed -- den er ikke tidskritisk som en besked i chatten -- og nyheden
 står i appen uanset, også for dem, der aldrig har slået notifikationer til.
+
+### Genforsøg rammer kun dem, der mangler nyheden
+
+Udsendelsen tælles pr. abonnement i `feature_announcement_push_deliveries`, ikke kun på
+nyheden. Uden det ville ét dødt endpoint -- en push-tjeneste, der svarer 403 eller 500 --
+sætte hele nyheden tilbage til `failed`, og næste forsøg ville sende den forfra til _alle_,
+også dem, der fik den første gang. Det viste sig som en gentagelse, netop når en ny funktion
+landede: klienten kalder kun functionen, så længe der findes en nyhed under syv dage gammel,
+så en ældre nyhed, der aldrig nåede `sent`, lå stille, indtil den næste nyhed vækkede
+udsendelsen -- og så kom de to af sted sammen.
+
+Loggen hænger på abonnementet og ikke på medlemmet, så et genforsøg kan nå den ene enhed
+uden at vække den anden igen, og den forsvinder sammen med abonnementet (fravalg,
+kontosletning eller et endpoint, push-tjenesten har meldt dødt). Kan en levering
+undtagelsesvis ikke skrives ned, lukkes nyheden alligevel som sendt: et genforsøg ville ikke
+vide, hvem der lige havde fået den. Hellere en notifikation, der mangler, end den samme to
+gange.
 
 ### Vinduet på syv dage
 
