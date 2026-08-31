@@ -91,7 +91,7 @@ jobs:
       # aldrig kan opføre sig anderledes i CI end i produktion.
       PGOPTIONS: -c search_path=public,extensions
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Afspil migrationer og kør pgTAP-tests
         run: supabase/tests/run.sh
