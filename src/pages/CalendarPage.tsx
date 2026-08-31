@@ -10,6 +10,7 @@ import {
   type EventInput,
 } from '../features/calendar/useEvents'
 import { useAuth } from '../features/auth/useAuth'
+import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { useDialogFocus } from '../hooks/useDialogFocus'
 
 // Feed-URL til live iCal-abonnement. Udledes af SUPABASE_URL så der ikke er
@@ -58,7 +59,8 @@ function monthCells(month: Date) {
 function EventDetails({
   event,
   userId,
-  isOwner,
+  canEdit,
+  canDelete,
   deleting,
   error,
   onClose,
@@ -68,7 +70,8 @@ function EventDetails({
 }: {
   event: CalendarEvent
   userId: string
-  isOwner: boolean
+  canEdit: boolean
+  canDelete: boolean
   deleting: boolean
   error: string | null
   onClose: () => void
@@ -153,23 +156,27 @@ function EventDetails({
             Tilføj til kalender
           </button>
 
-          {isOwner && (
+          {(canEdit || canDelete) && (
             <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={onDelete}
-                disabled={deleting}
-                className="min-h-11 rounded border border-red-700 px-4 py-2 text-red-700 disabled:opacity-60"
-              >
-                {deleting ? 'Sletter…' : 'Slet'}
-              </button>
-              <button
-                type="button"
-                onClick={onEdit}
-                className="min-h-11 rounded bg-green-800 px-4 py-2 text-white"
-              >
-                Redigér
-              </button>
+              {canDelete && (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  disabled={deleting}
+                  className="min-h-11 rounded border border-red-700 px-4 py-2 text-red-700 disabled:opacity-60"
+                >
+                  {deleting ? 'Sletter…' : 'Slet'}
+                </button>
+              )}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="min-h-11 rounded bg-green-800 px-4 py-2 text-white"
+                >
+                  Redigér
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -181,6 +188,7 @@ function EventDetails({
 function CalendarPage() {
   const { session } = useAuth()
   const userId = session!.user.id
+  const { isAdmin } = useIsAdmin()
   const { eventsQuery, createEvent, updateEvent, deleteEvent } =
     useEvents(userId)
   const [visibleMonth, setVisibleMonth] = useState(
@@ -425,7 +433,8 @@ function CalendarPage() {
         <EventDetails
           event={selectedEvent}
           userId={userId}
-          isOwner={selectedEvent.created_by === userId}
+          canEdit={selectedEvent.created_by === userId || isAdmin}
+          canDelete={selectedEvent.created_by === userId}
           deleting={deleteEvent.isPending}
           error={mutationError}
           onClose={() => setSelectedEvent(null)}
