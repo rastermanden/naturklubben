@@ -7,6 +7,7 @@ import App from './App.tsx'
 import { queryClient } from './lib/queryClient'
 import { restoreSpaRedirect } from './lib/spaRedirect'
 import { AuthProvider } from './features/auth/AuthProvider'
+import { ThemeProvider } from './features/theme/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { installGlobalErrorReporting } from './lib/errorReporting'
 
@@ -17,14 +18,16 @@ restoreSpaRedirect()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary variant="app" reportSource="react-global">
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter basename={import.meta.env.BASE_URL}>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </ErrorBoundary>
+    <ThemeProvider>
+      <ErrorBoundary variant="app" reportSource="react-global">
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter basename={import.meta.env.BASE_URL}>
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          </BrowserRouter>
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </ThemeProvider>
   </StrictMode>,
 )

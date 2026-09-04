@@ -74,31 +74,31 @@ export function AdminRolesSection({
         count={members.length}
       >
         {success && (
-          <p role="status" className="text-sm text-green-700">
+          <p role="status" className="text-sm text-ink-subtle">
             {success}
           </p>
         )}
         {error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         )}
 
         {membersQuery.isPending && (
-          <p role="status" className="text-sm text-green-700">
+          <p role="status" className="text-sm text-ink-subtle">
             Henter medlemmer…
           </p>
         )}
         {membersQuery.isError && (
           <div
             role="alert"
-            className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+            className="flex items-center justify-between gap-3 rounded-lg border border-danger-line bg-danger-surface p-3 text-sm text-danger-strong"
           >
             <p>Medlemmerne kunne ikke hentes.</p>
             <button
               type="button"
               onClick={() => membersQuery.refetch()}
-              className="min-h-11 shrink-0 rounded-lg border border-red-300 px-3 py-2"
+              className="min-h-11 shrink-0 rounded-lg border border-danger-line px-3 py-2"
             >
               Prøv igen
             </button>
@@ -106,7 +106,7 @@ export function AdminRolesSection({
         )}
 
         {membersQuery.isSuccess && members.length === 0 && (
-          <p className="text-sm text-green-700">
+          <p className="text-sm text-ink-subtle">
             Der er ingen medlemmer at vise.
           </p>
         )}
@@ -118,7 +118,7 @@ export function AdminRolesSection({
             return (
               <li
                 key={member.id}
-                className="flex flex-wrap items-center gap-3 rounded-lg border border-green-200 px-4 py-3"
+                className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-4 py-3"
               >
                 <Avatar
                   name={name}
@@ -128,13 +128,16 @@ export function AdminRolesSection({
                   decorative
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-green-950">
+                  <p className="truncate font-medium text-ink">
                     {name}
                     {member.id === currentUserId && (
-                      <span className="font-normal text-green-700"> (dig)</span>
+                      <span className="font-normal text-ink-subtle">
+                        {' '}
+                        (dig)
+                      </span>
                     )}
                   </p>
-                  <p className="text-sm text-green-700">
+                  <p className="text-sm text-ink-subtle">
                     {member.is_admin ? 'Administrator' : 'Medlem'}
                   </p>
                 </div>
@@ -144,8 +147,8 @@ export function AdminRolesSection({
                   disabled={setAdminRole.isPending}
                   className={
                     member.is_admin
-                      ? 'min-h-11 rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 disabled:opacity-50'
-                      : 'min-h-11 rounded-lg bg-green-800 px-3 py-2 text-sm text-white disabled:opacity-50'
+                      ? 'min-h-11 rounded-lg border border-danger-line px-3 py-2 text-sm text-danger disabled:opacity-50'
+                      : 'min-h-11 rounded-lg bg-accent px-3 py-2 text-sm text-white disabled:opacity-50'
                   }
                 >
                   {member.is_admin
@@ -163,17 +166,17 @@ export function AdminRolesSection({
         description="De seneste 20 ændringer vises her."
       >
         {roleChangesQuery.isPending && (
-          <p role="status" className="text-sm text-green-700">
+          <p role="status" className="text-sm text-ink-subtle">
             Henter rollehistorik…
           </p>
         )}
         {roleChangesQuery.isError && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-danger">
             Rollehistorikken kunne ikke hentes.
           </p>
         )}
         {roleChangesQuery.isSuccess && roleChanges.length === 0 && (
-          <p className="text-sm text-green-700">
+          <p className="text-sm text-ink-subtle">
             Der er endnu ingen rolleændringer.
           </p>
         )}
@@ -182,9 +185,9 @@ export function AdminRolesSection({
           {roleChanges.map((change) => (
             <li
               key={change.id}
-              className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm"
+              className="rounded-lg border border-line-soft bg-surface-sunken px-4 py-3 text-sm"
             >
-              <p className="text-green-950">
+              <p className="text-ink">
                 <span className="font-medium">{change.actor_name}</span>{' '}
                 {change.new_is_admin
                   ? 'gjorde'
@@ -192,7 +195,7 @@ export function AdminRolesSection({
                 <span className="font-medium">{change.target_name}</span>
                 {change.new_is_admin && ' til administrator'}.
               </p>
-              <p className="mt-1 text-xs text-green-700">
+              <p className="mt-1 text-xs text-ink-subtle">
                 {change.old_is_admin ? 'Administrator' : 'Medlem'} →{' '}
                 {change.new_is_admin ? 'Administrator' : 'Medlem'} ·{' '}
                 {changedAtFormatter.format(new Date(change.changed_at))}

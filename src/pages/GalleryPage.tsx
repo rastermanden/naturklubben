@@ -197,12 +197,12 @@ function GalleryPage() {
     <main className="mx-auto w-full max-w-5xl p-4 sm:p-6">
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-green-900">Billeder</h1>
-          <p className="mt-1 text-green-700">
+          <h1 className="text-2xl font-semibold text-ink-body">Billeder</h1>
+          <p className="mt-1 text-ink-subtle">
             Billeder fra klubbens ture og begivenheder.
           </p>
         </div>
-        <label className="flex min-w-60 flex-col gap-1 text-sm text-green-900">
+        <label className="flex min-w-60 flex-col gap-1 text-sm text-ink-body">
           Filtrér efter begivenhed
           <select
             id="gallery-filter-event"
@@ -210,7 +210,7 @@ function GalleryPage() {
             onChange={(event) =>
               setGalleryParam('event', event.target.value || null)
             }
-            className="min-h-11 rounded border border-green-300 bg-white px-3 py-2 text-base"
+            className="min-h-11 rounded border border-line-strong bg-surface px-3 py-2 text-base"
           >
             <option value="">Alle billeder</option>
             <option value={WITHOUT_EVENT_FILTER}>Uden begivenhed</option>
@@ -236,36 +236,33 @@ function GalleryPage() {
         onDrop={handleDrop}
         className={`mb-6 flex flex-col gap-3 rounded-lg border-2 border-dashed p-4 ${
           dragActive
-            ? 'border-green-700 bg-green-50'
-            : 'border-green-200 bg-white'
+            ? 'border-accent-soft bg-surface-sunken'
+            : 'border-line bg-surface'
         }`}
       >
-        <h2
-          id="upload-heading"
-          className="text-lg font-semibold text-green-900"
-        >
+        <h2 id="upload-heading" className="text-lg font-semibold text-ink-body">
           Upload billeder
         </h2>
 
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           Billedtekst (valgfri)
           <input
             id="gallery-upload-caption"
             type="text"
             value={caption}
             onChange={(event) => setCaption(event.target.value)}
-            className="min-h-11 rounded border border-green-300 px-3 py-2 text-base"
+            className="min-h-11 rounded border border-line-strong px-3 py-2 text-base"
           />
         </label>
 
         {eventsQuery.data && eventsQuery.data.length > 0 && (
-          <label className="flex flex-col gap-1 text-sm text-green-900">
+          <label className="flex flex-col gap-1 text-sm text-ink-body">
             Knyt til begivenhed (valgfri)
             <select
               id="gallery-upload-event"
               value={eventId}
               onChange={(event) => setEventId(event.target.value)}
-              className="min-h-11 rounded border border-green-300 bg-white px-3 py-2 text-base"
+              className="min-h-11 rounded border border-line-strong bg-surface px-3 py-2 text-base"
             >
               <option value="">Ingen</option>
               {eventsQuery.data.map((event) => (
@@ -278,7 +275,7 @@ function GalleryPage() {
         )}
 
         {eventsQuery.isError && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-danger">
             Begivenheder kunne ikke hentes. Du kan stadig uploade uden at vælge
             en begivenhed.
           </p>
@@ -323,7 +320,7 @@ function GalleryPage() {
             aria-describedby={
               formErrorSource === 'files' ? 'gallery-upload-error' : undefined
             }
-            className="min-h-11 rounded-lg bg-green-800 px-5 py-2 text-white"
+            className="min-h-11 rounded-lg bg-accent px-5 py-2 text-white"
           >
             Vælg billeder
           </button>
@@ -334,32 +331,32 @@ function GalleryPage() {
             aria-describedby={
               formErrorSource === 'camera' ? 'gallery-upload-error' : undefined
             }
-            className="min-h-11 rounded-lg border border-green-800 px-5 py-2 text-green-900"
+            className="min-h-11 rounded-lg border border-accent px-5 py-2 text-ink-body"
           >
             Tag billede
           </button>
         </div>
 
-        <p className="text-xs text-green-700">
+        <p className="text-xs text-ink-subtle">
           Vælg fra kamerarullen eller dine filer — eller træk billeder herind.
           Maks. 15 MB pr. billede.
         </p>
 
         {formError && (
-          <p id="gallery-upload-error" className="text-sm text-red-700">
+          <p id="gallery-upload-error" className="text-sm text-danger">
             {formError}
           </p>
         )}
 
         {upload.items.length > 0 && (
-          <div className="mt-1 border-t border-green-100 pt-3">
+          <div className="mt-1 border-t border-line-soft pt-3">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="font-medium text-green-900">Uploadstatus</h3>
+              <h3 className="font-medium text-ink-body">Uploadstatus</h3>
               {upload.items.some((item) => item.status === 'saved') && (
                 <button
                   type="button"
                   onClick={upload.clearSaved}
-                  className="min-h-11 text-sm text-green-800 underline"
+                  className="min-h-11 text-sm text-ink-muted underline"
                 >
                   Skjul færdige
                 </button>
@@ -369,17 +366,17 @@ function GalleryPage() {
               {upload.items.map((item) => (
                 <li
                   key={item.id}
-                  className="flex min-h-14 flex-wrap items-center justify-between gap-2 rounded bg-green-50 px-3 py-2 text-sm"
+                  className="flex min-h-14 flex-wrap items-center justify-between gap-2 rounded bg-surface-sunken px-3 py-2 text-sm"
                 >
                   <span className="min-w-0">
-                    <span className="block truncate font-medium text-green-950">
+                    <span className="block truncate font-medium text-ink">
                       {item.file.name}
                     </span>
                     <span
                       className={
                         item.status === 'failed'
-                          ? 'text-red-700'
-                          : 'text-green-700'
+                          ? 'text-danger'
+                          : 'text-ink-subtle'
                       }
                     >
                       {queueStatus(item)}
@@ -389,7 +386,7 @@ function GalleryPage() {
                     <button
                       type="button"
                       onClick={() => upload.retry(item)}
-                      className="min-h-11 rounded border border-red-700 px-3 py-2 text-red-700"
+                      className="min-h-11 rounded border border-danger-line-strong px-3 py-2 text-danger"
                     >
                       Prøv upload igen
                     </button>
@@ -407,7 +404,7 @@ function GalleryPage() {
       </section>
 
       {photosQuery.isLoading && (
-        <p role="status" className="py-12 text-center text-green-800">
+        <p role="status" className="py-12 text-center text-ink-muted">
           Henter billeder…
         </p>
       )}
@@ -415,7 +412,7 @@ function GalleryPage() {
       {photosQuery.isError && (
         <div
           role="alert"
-          className="rounded border border-red-200 bg-red-50 p-4 text-red-800"
+          className="rounded border border-danger-line bg-danger-surface p-4 text-danger-strong"
         >
           Galleriet kunne ikke hentes.
           <button
@@ -429,7 +426,7 @@ function GalleryPage() {
       )}
 
       {photosQuery.isSuccess && photos.length === 0 && (
-        <p className="rounded bg-green-50 p-5 text-green-800">
+        <p className="rounded bg-surface-sunken p-5 text-ink-muted">
           Ingen billeder endnu — vær den første til at uploade et.
         </p>
       )}
@@ -438,7 +435,7 @@ function GalleryPage() {
         !photosQuery.hasNextPage &&
         photos.length > 0 &&
         filteredPhotos.length === 0 && (
-          <div className="rounded bg-green-50 p-5 text-green-800">
+          <div className="rounded bg-surface-sunken p-5 text-ink-muted">
             <p>Der er ingen billeder for det valgte filter.</p>
             <button
               type="button"
@@ -471,7 +468,7 @@ function GalleryPage() {
             type="button"
             onClick={() => void photosQuery.fetchNextPage()}
             disabled={photosQuery.isFetchingNextPage}
-            className="min-h-11 rounded-lg border border-green-800 px-5 py-2 text-green-900 disabled:cursor-wait disabled:opacity-60"
+            className="min-h-11 rounded-lg border border-accent px-5 py-2 text-ink-body disabled:cursor-wait disabled:opacity-60"
           >
             {photosQuery.isFetchingNextPage
               ? 'Henter flere billeder…'
@@ -481,7 +478,7 @@ function GalleryPage() {
       )}
 
       {photosQuery.isFetchNextPageError && (
-        <p role="alert" className="mt-3 text-center text-red-700">
+        <p role="alert" className="mt-3 text-center text-danger">
           Flere billeder kunne ikke hentes. Prøv igen.
         </p>
       )}
@@ -492,7 +489,7 @@ function GalleryPage() {
         sharedPhotoQuery.isSuccess && (
           <div
             role="alert"
-            className="fixed right-4 bottom-4 z-30 rounded bg-red-50 p-4 text-red-800 shadow"
+            className="fixed right-4 bottom-4 z-30 rounded bg-danger-surface p-4 text-danger-strong shadow"
           >
             Billedlinket findes ikke længere.
             <button

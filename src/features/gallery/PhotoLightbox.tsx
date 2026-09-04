@@ -181,6 +181,10 @@ export function PhotoLightbox({
       onTouchEnd={handleTouchEnd}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/90 p-4"
     >
+      {/* Lysbordet bruger med vilje ikke tema-variablerne. Det ligger på
+          bg-black/90, fordi et billede skal ses mod noget neutralt -- og dermed
+          er det allerede mørkt i lys tilstand. Hvide knapper og lys tekst her
+          er derfor rigtige i begge temaer, ikke en glemt oversættelse. */}
       {/* Del og luk hører sammen som ét sæt handlinger på billedet, så de står
           som en gruppe i samme hjørne — del først, så tab-rækkefølgen følger
           den visuelle. */}

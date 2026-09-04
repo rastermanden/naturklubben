@@ -24,10 +24,10 @@ export function OnlineMembers({
   return (
     <div className="flex items-center gap-2">
       <span
-        className="flex h-2 w-2 shrink-0 rounded-full bg-green-500"
+        className="flex h-2 w-2 shrink-0 rounded-full bg-online"
         aria-hidden="true"
       />
-      <span className="text-sm text-green-700">
+      <span className="text-sm text-ink-subtle">
         {awayCount > 0
           ? `${members.length} online · ${awayCount} væk`
           : `${members.length} online`}

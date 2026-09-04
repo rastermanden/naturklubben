@@ -196,8 +196,8 @@ function ProfilePage() {
   return (
     <main className="mx-auto flex w-full max-w-lg flex-col gap-6 p-4 sm:p-6">
       <div>
-        <h1 className="text-2xl font-semibold text-green-900">Min profil</h1>
-        <p className="text-green-700">Tilpas dit navn, farve og billede.</p>
+        <h1 className="text-2xl font-semibold text-ink-body">Min profil</h1>
+        <p className="text-ink-subtle">Tilpas dit navn, farve og billede.</p>
       </div>
 
       <form onSubmit={handleSave} className="flex flex-col gap-6">
@@ -248,7 +248,7 @@ function ProfilePage() {
             className="sr-only"
             onChange={handleAvatarChange}
           />
-          <p className="text-xs text-green-700">
+          <p className="text-xs text-ink-subtle">
             Klik på billedet for at uploade et nyt foto.
           </p>
         </div>
@@ -257,7 +257,7 @@ function ProfilePage() {
         <div className="flex flex-col gap-1">
           <label
             htmlFor="fullName"
-            className="text-sm font-medium text-green-900"
+            className="text-sm font-medium text-ink-body"
           >
             Navn
           </label>
@@ -267,13 +267,13 @@ function ProfilePage() {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             placeholder="Dit navn"
-            className="rounded-lg border border-green-300 px-4 py-2 text-green-950"
+            className="rounded-lg border border-line-strong px-4 py-2 text-ink"
           />
         </div>
 
         {/* Chat color */}
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-green-900">Chat-farve</p>
+          <p className="text-sm font-medium text-ink-body">Chat-farve</p>
           <div className="flex flex-wrap gap-3">
             {PRESET_COLORS.map(({ value, label }) => (
               <ChatColorOption
@@ -318,7 +318,7 @@ function ProfilePage() {
         </div>
 
         {successMsg && (
-          <p role="status" className="text-sm text-green-700">
+          <p role="status" className="text-sm text-ink-subtle">
             {successMsg}
           </p>
         )}
@@ -326,7 +326,7 @@ function ProfilePage() {
           <p
             id="profile-form-error"
             role={errorSource === 'avatar' ? undefined : 'alert'}
-            className="text-sm text-red-700"
+            className="text-sm text-danger"
           >
             {errorMsg}
           </p>
@@ -335,16 +335,16 @@ function ProfilePage() {
         <button
           type="submit"
           disabled={saving || uploading}
-          className="min-h-11 rounded-lg bg-green-800 px-6 py-2 text-white disabled:opacity-50"
+          className="min-h-11 rounded-lg bg-accent px-6 py-2 text-white disabled:opacity-50"
         >
           {saving ? 'Gemmer…' : 'Gem profil'}
         </button>
       </form>
 
-      <section className="flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
+      <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface-sunken p-4">
         <div>
-          <h2 className="font-medium text-green-900">Mine badges</h2>
-          <p className="text-sm text-green-700">
+          <h2 className="font-medium text-ink-body">Mine badges</h2>
+          <p className="text-sm text-ink-subtle">
             Badges tildeles, når to administratorer har godkendt en indstilling
             fra et andet medlem. Klik på en badge for at se, hvem der
             indstillede dig -- og hvorfor.

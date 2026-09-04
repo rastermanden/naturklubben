@@ -192,8 +192,8 @@ function AdminPage() {
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 sm:p-6">
       <div>
-        <h1 className="text-2xl font-semibold text-green-900">Admin</h1>
-        <p className="text-green-700">
+        <h1 className="text-2xl font-semibold text-ink-body">Admin</h1>
+        <p className="text-ink-subtle">
           Her administrerer du medlemmer, adminroller, badges, ansøgninger,
           klubbens aktiviteter og hvem der må oprette en bruger i Naturklubben.
         </p>
@@ -211,12 +211,12 @@ function AdminPage() {
       {/* Beskederne står uden for fanepanelerne, så en kvittering ikke
           forsvinder, hvis handlingen skifter fane. */}
       {successMsg && (
-        <p role="status" className="text-sm text-green-700">
+        <p role="status" className="text-sm text-ink-subtle">
           {successMsg}
         </p>
       )}
       {actionError && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           {actionError}
         </p>
       )}

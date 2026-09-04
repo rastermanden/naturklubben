@@ -1,6 +1,148 @@
 @import 'tailwindcss';
 
+/* Farverne er semantiske, ikke bogstavelige: koden siger `bg-surface` og
+   `text-ink-muted`, ikke `bg-white` og `text-green-800`. Det er dét, der gør
+   en mørk tilstand mulig uden at røre hver enkelt komponent -- kun listen
+   herunder skifter værdi, og hele appen følger med.
+
+   Lysdelen er 1:1 med de Tailwind-greens, appen havde før, så lys tilstand
+   ser ud præcis som den plejer. */
+@theme {
+  /* Flader */
+  --color-app: #ffffff; /* sidens bund */
+  --color-surface: #ffffff; /* kort, header, dialoger */
+  --color-surface-sunken: #f0fdf4; /* green-50: roligt felt inde i et kort */
+  --color-surface-raised: #dcfce7; /* green-100: markeret/aktiv flade */
+  --color-surface-strong: #bbf7d0; /* green-200 */
+  --color-field: #ffffff; /* input, select, textarea */
+
+  /* Tekst */
+  --color-ink: #052e16; /* green-950: overskrifter og brødtekst */
+  --color-ink-body: #14532d; /* green-900 */
+  --color-ink-muted: #166534; /* green-800: sekundær tekst */
+  --color-ink-subtle: #15803d; /* green-700: hjælpetekst */
+  --color-ink-fixed: #052e16; /* tekst på flader, der ER lyse i begge
+                                tilstande (fx den gule markering i chatten) */
+
+  /* Streger */
+  --color-line-soft: #dcfce7; /* green-100 */
+  --color-line: #bbf7d0; /* green-200 */
+  --color-line-strong: #86efac; /* green-300 */
+
+  /* Handlinger */
+  --color-accent: #166534; /* green-800: primær knap */
+  --color-accent-hover: #14532d; /* green-900 */
+  --color-accent-soft: #15803d; /* green-700 */
+  --color-on-accent: #ffffff; /* tekst på en accent-flade */
+
+  /* Fejl */
+  --color-danger: #b91c1c; /* red-700: fejltekst */
+  --color-danger-strong: #991b1b; /* red-800 */
+  --color-danger-surface: #fef2f2; /* red-50 */
+  --color-danger-line: #fecaca; /* red-200 */
+  --color-danger-line-strong: #fca5a5; /* red-300 */
+  --color-danger-solid: #b91c1c; /* red-700: destruktiv knap med hvid tekst */
+
+  /* Advarsler og fremhævning */
+  --color-warn: #92400e; /* amber-800 */
+  --color-warn-strong: #78350f; /* amber-900 */
+  --color-warn-surface: #fffbeb; /* amber-50 */
+  --color-warn-raised: #fef3c7; /* amber-100 */
+  --color-warn-line: #fcd34d; /* amber-300 */
+  --color-warn-ring: #fbbf24; /* amber-400 */
+
+  /* Citatet i en chatboble. Boblen har medlemmets egen farve som bund, så
+     citatet skal lysne eller mørkne dén -- ikke lægge en fast farve ovenpå. */
+  --color-quote: rgb(255 255 255 / 0.7);
+  --color-quote-line: rgb(34 197 94 / 0.5);
+  --color-quote-own: rgb(0 0 0 / 0.1);
+  --color-quote-own-line: rgb(255 255 255 / 0.6);
+
+  /* Farver, der betyder det samme i begge tilstande: prikken for "online" og
+     bunden bag et billede, der beskæres. */
+  --color-online: #22c55e;
+  --color-media-backdrop: #052e16;
+}
+
+/* Mørk tilstand.
+
+   Der er kun ét selektor-tilfælde, fordi `data-theme` altid er *afgjort* --
+   enten `light` eller `dark`, aldrig `auto`. Selve valget (som gerne må være
+   "følg systemet") ligger i localStorage, og det lille script i index.html
+   oversætter det til et konkret tema, før siden tegnes. En media-query som
+   reserve ville være død kode: uden JavaScript er der ingen app at farve.
+
+   Værdierne er grønlige nær-sorte frem for rent sort. Ren sort giver hårde
+   kanter mod lys tekst om aftenen og smører på OLED-skærme, når man scroller. */
+html[data-theme='dark'] {
+  --color-app: #0b120e;
+  --color-surface: #131b16;
+  --color-surface-sunken: #101812;
+  --color-surface-raised: #1b251e;
+  --color-surface-strong: #243027;
+  --color-field: #0f1712;
+
+  --color-ink: #e9f2ec;
+  --color-ink-body: #d9e8de;
+  --color-ink-muted: #b0c8b8;
+  --color-ink-subtle: #95b09e;
+  /* --color-ink-fixed skifter med vilje ikke. */
+
+  --color-line-soft: #1f2a23;
+  --color-line: #2a382f;
+  --color-line-strong: #3a4d40;
+
+  --color-accent: #1f7a45;
+  --color-accent-hover: #238550;
+  --color-accent-soft: #22794a;
+
+  --color-danger: #f3a3a3;
+  --color-danger-strong: #f8c4c4;
+  --color-danger-surface: #2a1414;
+  --color-danger-line: #4a2323;
+  --color-danger-line-strong: #6a3030;
+  --color-danger-solid: #a32323;
+
+  --color-warn: #e8b978;
+  --color-warn-strong: #f2d3a0;
+  --color-warn-surface: #2a2013;
+  --color-warn-raised: #3a2c17;
+  --color-warn-line: #6b5320;
+  --color-warn-ring: #d9a441;
+
+  --color-quote: rgb(0 0 0 / 0.35);
+  --color-quote-line: rgb(255 255 255 / 0.35);
+  --color-quote-own: rgb(0 0 0 / 0.3);
+  --color-quote-own-line: rgb(255 255 255 / 0.5);
+}
+
 @layer base {
+  html {
+    /* Får browserens egne dele -- scrollbars, datovælgere, autofyld -- til at
+       følge med over. Uden den sidder en hvid kalenderpopup midt i den mørke
+       app. */
+    color-scheme: light;
+  }
+
+  html[data-theme='dark'] {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-app);
+    color: var(--color-ink-body);
+  }
+
+  /* Formularfelterne havde ingen egen baggrund og lånte browserens hvide.
+     Den lån holder ikke i mørk tilstand. Utility-klasser ligger i et senere
+     lag og vinder stadig, hvor et felt selv siger fra. */
+  input,
+  select,
+  textarea {
+    background-color: var(--color-field);
+    color: var(--color-ink);
+  }
+
   :where(a, button, input, select, textarea, [tabindex]):focus-visible {
     outline: 3px solid white;
     outline-offset: 2px;

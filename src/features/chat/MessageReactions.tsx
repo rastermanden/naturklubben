@@ -32,10 +32,10 @@ export function MessageReactions({
             title={summary.names.join(', ')}
             // Egen reaktion markeres med en tykkere kant og fed tekst, ikke
             // kun med farve.
-            className={`flex min-h-11 items-center gap-1 rounded-full bg-white/80 px-2.5 text-sm text-green-950 ${
+            className={`flex min-h-11 items-center gap-1 rounded-full bg-surface/80 px-2.5 text-sm text-ink ${
               summary.reactedByMe
-                ? 'border-2 border-green-800 font-semibold'
-                : 'border border-green-300'
+                ? 'border-2 border-accent font-semibold'
+                : 'border border-line-strong'
             }`}
           >
             <span aria-hidden="true">{summary.emoji}</span>
@@ -75,10 +75,10 @@ export function ReactionPicker({
                   ? `Fjern din ${emoji}-reaktion`
                   : `Reagér med ${emoji}`
               }
-              className={`flex h-11 w-11 items-center justify-center rounded-full bg-white/80 ${
+              className={`flex h-11 w-11 items-center justify-center rounded-full bg-surface/80 ${
                 reactedByMe
-                  ? 'border-2 border-green-800'
-                  : 'border border-green-300'
+                  ? 'border-2 border-accent'
+                  : 'border border-line-strong'
               }`}
             >
               <span aria-hidden="true">{emoji}</span>

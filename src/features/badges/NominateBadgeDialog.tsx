@@ -71,31 +71,31 @@ export function NominateBadgeDialog({
     >
       <form
         onSubmit={handleSubmit}
-        className="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-white p-6"
+        className="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-surface p-6"
       >
         <div>
-          <h2 className="text-xl font-semibold text-green-950">
+          <h2 className="text-xl font-semibold text-ink">
             Indstil {nomineeName}
           </h2>
-          <p className="text-sm text-green-700">
+          <p className="text-sm text-ink-subtle">
             To administratorer skal godkende, før badgen tildeles. Den, der
             indstiller, tæller ikke med som godkender.
           </p>
         </div>
 
         {badges.length === 0 ? (
-          <p className="text-sm text-green-800">
+          <p className="text-sm text-ink-muted">
             Der er ingen aktive badges at indstille til lige nu.
           </p>
         ) : (
           <fieldset className="flex flex-col gap-2">
-            <legend className="text-sm font-medium text-green-900">
+            <legend className="text-sm font-medium text-ink-body">
               Vælg badge
             </legend>
             <ul className="flex max-h-56 flex-col gap-1 overflow-y-auto">
               {badges.map((badge) => (
                 <li key={badge.id}>
-                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-green-200 p-2 has-checked:border-green-700 has-checked:bg-green-50">
+                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-line p-2 has-checked:border-accent-soft has-checked:bg-surface-sunken">
                     <input
                       type="radio"
                       name="badge"
@@ -106,11 +106,11 @@ export function NominateBadgeDialog({
                     />
                     <BadgeMedal badge={badge} size="sm" decorative />
                     <span className="min-w-0">
-                      <span className="block truncate text-green-950">
+                      <span className="block truncate text-ink">
                         {badge.name}
                       </span>
                       {badge.description && (
-                        <span className="block truncate text-xs text-green-700">
+                        <span className="block truncate text-xs text-ink-subtle">
                           {badge.description}
                         </span>
                       )}
@@ -122,7 +122,7 @@ export function NominateBadgeDialog({
           </fieldset>
         )}
 
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           Begrundelse
           <textarea
             value={reason}
@@ -131,12 +131,12 @@ export function NominateBadgeDialog({
             maxLength={2000}
             required
             placeholder={`Hvorfor fortjener ${nomineeName} badgen?`}
-            className="rounded border border-green-300 px-3 py-2 text-base text-green-950"
+            className="rounded border border-line-strong px-3 py-2 text-base text-ink"
           />
         </label>
 
         {error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         )}
@@ -145,7 +145,7 @@ export function NominateBadgeDialog({
           <button
             type="submit"
             disabled={nominate.isPending || badges.length === 0}
-            className="min-h-11 rounded-lg bg-green-800 px-6 py-2 text-white disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-accent px-6 py-2 text-white disabled:opacity-50"
           >
             {nominate.isPending ? 'Sender…' : 'Send indstilling'}
           </button>
@@ -153,7 +153,7 @@ export function NominateBadgeDialog({
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            className="min-h-11 rounded-lg border border-green-300 px-4 py-2 text-green-800"
+            className="min-h-11 rounded-lg border border-line-strong px-4 py-2 text-ink-muted"
           >
             Annullér
           </button>

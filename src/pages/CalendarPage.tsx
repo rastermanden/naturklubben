@@ -96,9 +96,9 @@ function EventDetails({
       aria-labelledby="event-title"
       tabIndex={-1}
     >
-      <article className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
+      <article className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-surface p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
         <div className="flex items-start justify-between gap-4">
-          <h2 id="event-title" className="text-xl font-semibold text-green-900">
+          <h2 id="event-title" className="text-xl font-semibold text-ink-body">
             {event.title}
           </h2>
           <button
@@ -106,15 +106,15 @@ function EventDetails({
             type="button"
             onClick={onClose}
             aria-label="Luk"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-2xl text-green-900"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-2xl text-ink-body"
           >
             ×
           </button>
         </div>
 
-        <dl className="mt-4 grid gap-3 text-green-950">
+        <dl className="mt-4 grid gap-3 text-ink">
           <div>
-            <dt className="text-sm font-medium text-green-700">Tidspunkt</dt>
+            <dt className="text-sm font-medium text-ink-subtle">Tidspunkt</dt>
             <dd>
               <span className="capitalize">{dateFormatter.format(start)}</span>
               {`, kl. ${timeFormatter.format(start)}`}
@@ -123,13 +123,13 @@ function EventDetails({
           </div>
           {event.location && (
             <div>
-              <dt className="text-sm font-medium text-green-700">Sted</dt>
+              <dt className="text-sm font-medium text-ink-subtle">Sted</dt>
               <dd>{event.location}</dd>
             </div>
           )}
           {event.description && (
             <div>
-              <dt className="text-sm font-medium text-green-700">
+              <dt className="text-sm font-medium text-ink-subtle">
                 Beskrivelse
               </dt>
               <dd className="whitespace-pre-wrap">{event.description}</dd>
@@ -142,7 +142,7 @@ function EventDetails({
         <EventTasksSection eventId={event.id} userId={userId} />
 
         {error && (
-          <p role="alert" className="mt-4 text-sm text-red-700">
+          <p role="alert" className="mt-4 text-sm text-danger">
             {error}
           </p>
         )}
@@ -151,7 +151,7 @@ function EventDetails({
           <button
             type="button"
             onClick={onIcal}
-            className="min-h-11 rounded border border-green-700 px-4 py-2 text-green-800 hover:bg-green-50"
+            className="min-h-11 rounded border border-accent-soft px-4 py-2 text-ink-muted hover:bg-surface-sunken"
           >
             Tilføj til kalender
           </button>
@@ -163,7 +163,7 @@ function EventDetails({
                   type="button"
                   onClick={onDelete}
                   disabled={deleting}
-                  className="min-h-11 rounded border border-red-700 px-4 py-2 text-red-700 disabled:opacity-60"
+                  className="min-h-11 rounded border border-danger-line-strong px-4 py-2 text-danger disabled:opacity-60"
                 >
                   {deleting ? 'Sletter…' : 'Slet'}
                 </button>
@@ -172,7 +172,7 @@ function EventDetails({
                 <button
                   type="button"
                   onClick={onEdit}
-                  className="min-h-11 rounded bg-green-800 px-4 py-2 text-white"
+                  className="min-h-11 rounded bg-accent px-4 py-2 text-white"
                 >
                   Redigér
                 </button>
@@ -266,8 +266,8 @@ function CalendarPage() {
     <main className="mx-auto w-full max-w-6xl p-4 sm:p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-green-900">Kalender</h1>
-          <p className="mt-1 text-green-700">
+          <h1 className="text-3xl font-semibold text-ink-body">Kalender</h1>
+          <p className="mt-1 text-ink-subtle">
             Klubbens kommende ture og arrangementer.
           </p>
         </div>
@@ -276,7 +276,7 @@ function CalendarPage() {
             <button
               type="button"
               onClick={() => setSubscribeOpen(true)}
-              className="min-h-11 rounded border border-green-700 px-5 py-2 text-green-800 hover:bg-green-50"
+              className="min-h-11 rounded border border-accent-soft px-5 py-2 text-ink-muted hover:bg-surface-sunken"
             >
               Abonnér på kalender
             </button>
@@ -284,7 +284,7 @@ function CalendarPage() {
           <button
             type="button"
             onClick={() => openForm('new')}
-            className="min-h-11 rounded bg-green-800 px-5 py-2 text-white"
+            className="min-h-11 rounded bg-accent px-5 py-2 text-white"
           >
             Opret begivenhed
           </button>
@@ -292,13 +292,13 @@ function CalendarPage() {
       </div>
 
       {eventsQuery.isLoading && (
-        <p className="py-12 text-center text-green-700">Henter kalender…</p>
+        <p className="py-12 text-center text-ink-subtle">Henter kalender…</p>
       )}
 
       {eventsQuery.isError && (
         <div
           role="alert"
-          className="rounded border border-red-200 bg-red-50 p-4 text-red-800"
+          className="rounded border border-danger-line bg-danger-surface p-4 text-danger-strong"
         >
           Kalenderen kunne ikke hentes.
           <button
@@ -320,28 +320,28 @@ function CalendarPage() {
                 onClick={() => moveMonth(-1)}
                 disabled={!canGoBack}
                 aria-label="Forrige måned"
-                className="min-h-11 rounded border border-green-300 px-4 text-green-900 disabled:opacity-30"
+                className="min-h-11 rounded border border-line-strong px-4 text-ink-body disabled:opacity-30"
               >
                 ←
               </button>
-              <h2 className="text-xl font-semibold capitalize text-green-900">
+              <h2 className="text-xl font-semibold capitalize text-ink-body">
                 {monthFormatter.format(visibleMonth)}
               </h2>
               <button
                 type="button"
                 onClick={() => moveMonth(1)}
                 aria-label="Næste måned"
-                className="min-h-11 rounded border border-green-300 px-4 text-green-900"
+                className="min-h-11 rounded border border-line-strong px-4 text-ink-body"
               >
                 →
               </button>
             </div>
 
-            <div className="grid grid-cols-7 border-l border-t border-green-200">
+            <div className="grid grid-cols-7 border-l border-t border-line">
               {weekDays.map((day) => (
                 <div
                   key={day}
-                  className="border-b border-r border-green-200 bg-green-50 p-2 text-center text-sm font-medium text-green-800"
+                  className="border-b border-r border-line bg-surface-sunken p-2 text-center text-sm font-medium text-ink-muted"
                 >
                   {day}
                 </div>
@@ -349,11 +349,11 @@ function CalendarPage() {
               {monthCells(visibleMonth).map((date, index) => (
                 <div
                   key={date ? dateKey(date) : `empty-${index}`}
-                  className="min-h-32 border-b border-r border-green-200 p-2"
+                  className="min-h-32 border-b border-r border-line p-2"
                 >
                   {date && (
                     <>
-                      <span className="text-sm font-medium text-green-900">
+                      <span className="text-sm font-medium text-ink-body">
                         {date.getDate()}
                       </span>
                       <div className="mt-1 flex flex-col gap-1">
@@ -365,7 +365,7 @@ function CalendarPage() {
                               setMutationError(null)
                               setSelectedEvent(event)
                             }}
-                            className="rounded bg-green-100 px-2 py-1 text-left text-xs text-green-950 hover:bg-green-200"
+                            className="rounded bg-surface-raised px-2 py-1 text-left text-xs text-ink hover:bg-surface-strong"
                           >
                             <span className="font-medium">
                               {timeFormatter.format(new Date(event.start_at))}
@@ -384,7 +384,7 @@ function CalendarPage() {
           <section className="md:hidden" aria-label="Kommende begivenheder">
             <h2 className="sr-only">Kommende begivenheder</h2>
             {eventsQuery.data.length === 0 ? (
-              <p className="rounded bg-green-50 p-5 text-green-800">
+              <p className="rounded bg-surface-sunken p-5 text-ink-muted">
                 Der er ingen kommende begivenheder endnu.
               </p>
             ) : (
@@ -399,9 +399,9 @@ function CalendarPage() {
                         setMutationError(null)
                         setSelectedEvent(event)
                       }}
-                      className="flex min-h-20 items-center gap-4 rounded-lg border border-green-200 p-4 text-left"
+                      className="flex min-h-20 items-center gap-4 rounded-lg border border-line p-4 text-left"
                     >
-                      <span className="flex w-14 shrink-0 flex-col items-center rounded bg-green-50 px-2 py-1 text-green-900">
+                      <span className="flex w-14 shrink-0 flex-col items-center rounded bg-surface-sunken px-2 py-1 text-ink-body">
                         <span className="text-xs uppercase">
                           {start.toLocaleDateString('da-DK', {
                             month: 'short',
@@ -412,10 +412,10 @@ function CalendarPage() {
                         </span>
                       </span>
                       <span>
-                        <span className="block font-medium text-green-950">
+                        <span className="block font-medium text-ink">
                           {event.title}
                         </span>
-                        <span className="text-sm text-green-700">
+                        <span className="text-sm text-ink-subtle">
                           kl. {timeFormatter.format(start)}
                           {event.location && ` · ${event.location}`}
                         </span>

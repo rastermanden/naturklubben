@@ -69,6 +69,30 @@
     />
     <meta name="apple-mobile-web-app-title" content="Naturklubben" />
     <title>Naturklubben</title>
+    <!-- Temaet afgøres, før siden tegnes. Ville React sætte det, ville en
+         mørk app blinke hvidt ved hver opstart -- præcis det, man ikke vil
+         møde med skærmen tæt på ansigtet om aftenen. Derfor står det her,
+         synkront, uden bundle imellem.
+         Nøglen og de tre værdier skal matche src/features/theme/theme.ts. -->
+    <script>
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('naturklubben:theme')
+          var dark =
+            stored === 'dark' ||
+            ((stored === 'auto' || stored === null) &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+          if (dark) {
+            document
+              .querySelector('meta[name="theme-color"]')
+              .setAttribute('content', '#0b120e')
+          }
+        } catch (error) {
+          document.documentElement.dataset.theme = 'light'
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

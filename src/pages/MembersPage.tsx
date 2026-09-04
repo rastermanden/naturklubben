@@ -27,12 +27,12 @@ function MembersLoadingState() {
         <div
           key={index}
           aria-hidden="true"
-          className="flex items-center gap-4 rounded-xl border border-green-100 bg-white p-4"
+          className="flex items-center gap-4 rounded-xl border border-line-soft bg-surface p-4"
         >
-          <span className="h-16 w-16 shrink-0 rounded-full bg-green-100 motion-safe:animate-pulse" />
+          <span className="h-16 w-16 shrink-0 rounded-full bg-surface-raised motion-safe:animate-pulse" />
           <span className="flex flex-1 flex-col gap-2">
-            <span className="h-5 w-3/4 rounded bg-green-100 motion-safe:animate-pulse" />
-            <span className="h-4 w-full rounded bg-green-50 motion-safe:animate-pulse" />
+            <span className="h-5 w-3/4 rounded bg-surface-raised motion-safe:animate-pulse" />
+            <span className="h-4 w-full rounded bg-surface-sunken motion-safe:animate-pulse" />
           </span>
         </div>
       ))}
@@ -63,15 +63,15 @@ function MembersPage() {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 sm:p-6">
       <div>
-        <h1 className="text-2xl font-semibold text-green-900">Medlemmer</h1>
-        <p className="text-green-700">
+        <h1 className="text-2xl font-semibold text-ink-body">Medlemmer</h1>
+        <p className="text-ink-subtle">
           Mød de andre medlemmer i Naturklubben -- og indstil dem til en badge,
           de fortjener.
         </p>
       </div>
 
       {nominationStatus && (
-        <p role="status" className="text-sm text-green-700">
+        <p role="status" className="text-sm text-ink-subtle">
           {nominationStatus}
         </p>
       )}
@@ -81,13 +81,13 @@ function MembersPage() {
       {membersQuery.isError && (
         <div
           role="alert"
-          className="flex flex-col items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800 sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col items-start gap-3 rounded-xl border border-danger-line bg-danger-surface p-4 text-danger-strong sm:flex-row sm:items-center sm:justify-between"
         >
           <p>Medlemmerne kunne ikke hentes.</p>
           <button
             type="button"
             onClick={() => membersQuery.refetch()}
-            className="min-h-11 rounded-lg border border-red-300 px-4 py-2 font-medium"
+            className="min-h-11 rounded-lg border border-danger-line px-4 py-2 font-medium"
           >
             Prøv igen
           </button>
@@ -95,7 +95,7 @@ function MembersPage() {
       )}
 
       {membersQuery.data?.length === 0 && (
-        <div className="rounded-xl border border-green-100 bg-white px-4 py-12 text-center text-green-700">
+        <div className="rounded-xl border border-line-soft bg-surface px-4 py-12 text-center text-ink-subtle">
           Ingen medlemmer at vise endnu.
         </div>
       )}
@@ -109,14 +109,14 @@ function MembersPage() {
             return (
               <li
                 key={member.id}
-                className="flex min-w-0 flex-col gap-3 rounded-xl border border-green-100 bg-white p-4 shadow-sm"
+                className="flex min-w-0 flex-col gap-3 rounded-xl border border-line-soft bg-surface p-4 shadow-sm"
               >
                 <div className="flex min-w-0 items-center gap-4">
                   <button
                     type="button"
                     onClick={() => setActiveMember(member)}
                     aria-label={`Se stort billede af ${name}`}
-                    className="shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700"
+                    className="shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-soft"
                   >
                     <Avatar
                       name={name}
@@ -128,16 +128,16 @@ function MembersPage() {
                   </button>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="min-w-0 truncate font-medium text-green-950">
+                      <h2 className="min-w-0 truncate font-medium text-ink">
                         {name}
                       </h2>
                       {member.is_admin && (
-                        <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                        <span className="shrink-0 rounded-full bg-surface-raised px-2 py-0.5 text-xs font-medium text-ink-muted">
                           Administrator
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-sm text-green-700">
+                    <p className="mt-1 text-sm text-ink-subtle">
                       Medlem siden{' '}
                       {memberSinceFormatter.format(new Date(member.created_at))}
                     </p>
@@ -157,7 +157,7 @@ function MembersPage() {
                       setNominationStatus(null)
                       setNominating(member)
                     }}
-                    className="min-h-11 self-start rounded-lg border border-green-300 px-3 py-2 text-sm text-green-800"
+                    className="min-h-11 self-start rounded-lg border border-line-strong px-3 py-2 text-sm text-ink-muted"
                   >
                     Indstil til en badge
                   </button>

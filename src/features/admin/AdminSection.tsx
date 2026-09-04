@@ -18,13 +18,13 @@ export function AdminSection({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-lg border border-green-200 bg-white p-4 sm:p-5">
-      <h2 className="font-medium text-green-900">
+    <section className="rounded-lg border border-line bg-surface p-4 sm:p-5">
+      <h2 className="font-medium text-ink-body">
         {title}
         {count !== undefined && count > 0 && ` (${count})`}
       </h2>
       {description && (
-        <p className="mt-1 text-sm text-green-700">{description}</p>
+        <p className="mt-1 text-sm text-ink-subtle">{description}</p>
       )}
       <div className="mt-4 flex flex-col gap-3">{children}</div>
     </section>

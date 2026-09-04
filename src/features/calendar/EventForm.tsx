@@ -59,7 +59,7 @@ export function EventForm({
   }
 
   const inputClass =
-    'rounded border border-green-300 px-3 py-2 text-base text-gray-950'
+    'rounded border border-line-strong px-3 py-2 text-base text-ink'
 
   return (
     <div
@@ -70,16 +70,16 @@ export function EventForm({
       aria-labelledby="event-form-title"
       tabIndex={-1}
     >
-      <div className="max-h-[95svh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
+      <div className="max-h-[95svh] w-full overflow-y-auto rounded-t-xl bg-surface p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
         <h2
           id="event-form-title"
-          className="mb-5 text-xl font-semibold text-green-900"
+          className="mb-5 text-xl font-semibold text-ink-body"
         >
           {event ? 'Redigér begivenhed' : 'Ny begivenhed'}
         </h2>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1 text-sm text-green-900">
+          <label className="flex flex-col gap-1 text-sm text-ink-body">
             Titel
             <input
               id="event-title"
@@ -92,7 +92,7 @@ export function EventForm({
             />
           </label>
 
-          <label className="flex flex-col gap-1 text-sm text-green-900">
+          <label className="flex flex-col gap-1 text-sm text-ink-body">
             Beskrivelse
             <textarea
               id="event-description"
@@ -105,7 +105,7 @@ export function EventForm({
             />
           </label>
 
-          <label className="flex flex-col gap-1 text-sm text-green-900">
+          <label className="flex flex-col gap-1 text-sm text-ink-body">
             Sted
             <input
               id="event-location"
@@ -116,7 +116,7 @@ export function EventForm({
           </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm text-green-900">
+            <label className="flex flex-col gap-1 text-sm text-ink-body">
               Starter
               <input
                 id="event-start-at"
@@ -128,7 +128,7 @@ export function EventForm({
               />
             </label>
 
-            <label className="flex flex-col gap-1 text-sm text-green-900">
+            <label className="flex flex-col gap-1 text-sm text-ink-body">
               Slutter
               <input
                 id="event-end-at"
@@ -150,7 +150,7 @@ export function EventForm({
             <p
               id="event-form-error"
               role={validationError ? undefined : 'alert'}
-              className="text-sm text-red-700"
+              className="text-sm text-danger"
             >
               {validationError ?? error}
             </p>
@@ -160,14 +160,14 @@ export function EventForm({
             <button
               type="button"
               onClick={onCancel}
-              className="min-h-11 rounded border border-green-800 px-4 py-2 text-green-800"
+              className="min-h-11 rounded border border-accent px-4 py-2 text-ink-muted"
             >
               Annuller
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="min-h-11 rounded bg-green-800 px-4 py-2 text-white disabled:opacity-60"
+              className="min-h-11 rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
             >
               {submitting ? 'Gemmer…' : 'Gem'}
             </button>

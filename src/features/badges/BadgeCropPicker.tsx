@@ -89,7 +89,7 @@ export function BadgeCropPicker({
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        className="relative aspect-square w-full max-w-xs touch-none overflow-hidden rounded-lg bg-green-950 select-none"
+        className="relative aspect-square w-full max-w-xs touch-none overflow-hidden rounded-lg bg-media-backdrop select-none"
       >
         <img
           src={imageUrl}
@@ -104,11 +104,11 @@ export function BadgeCropPicker({
         />
       </div>
 
-      <p className="text-xs text-green-700">
+      <p className="text-xs text-ink-subtle">
         Træk i billedet for at flytte udsnittet, eller brug skyderne.
       </p>
 
-      <label className="flex flex-col gap-1 text-sm text-green-900">
+      <label className="flex flex-col gap-1 text-sm text-ink-body">
         Zoom
         <input
           type="range"
@@ -126,7 +126,7 @@ export function BadgeCropPicker({
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm text-green-900">
+      <label className="flex flex-col gap-1 text-sm text-ink-body">
         Vandret
         <input
           type="range"
@@ -140,7 +140,7 @@ export function BadgeCropPicker({
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm text-green-900">
+      <label className="flex flex-col gap-1 text-sm text-ink-body">
         Lodret
         <input
           type="range"

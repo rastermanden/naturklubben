@@ -4,6 +4,7 @@ import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { useAuth } from '../features/auth/useAuth'
 import { useDialogFocus } from '../hooks/useDialogFocus'
 import { navLinks } from './navLinks'
+import { ThemeToggle } from '../features/theme/ThemeToggle'
 import { InstallAppButton } from './InstallAppButton'
 
 interface BurgerMenuProps {
@@ -61,7 +62,7 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
         aria-modal="true"
         aria-label="Navigation"
         tabIndex={-1}
-        className="fixed inset-y-0 right-0 z-50 flex w-72 max-w-[85vw] flex-col gap-2 bg-white p-4 shadow-xl md:hidden"
+        className="fixed inset-y-0 right-0 z-50 flex w-72 max-w-[85vw] flex-col gap-2 bg-surface p-4 shadow-xl md:hidden"
         style={{
           paddingTop: 'max(1rem, env(safe-area-inset-top))',
           paddingRight: 'max(1rem, env(safe-area-inset-right))',
@@ -74,7 +75,7 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
             type="button"
             onClick={onClose}
             aria-label="Luk menu"
-            className="flex h-11 w-11 items-center justify-center rounded text-2xl text-green-900"
+            className="flex h-11 w-11 items-center justify-center rounded text-2xl text-ink-body"
           >
             ×
           </button>
@@ -88,7 +89,9 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
               onClick={onClose}
               className={({ isActive }) =>
                 `flex min-h-11 items-center rounded px-3 py-2 text-lg ${
-                  isActive ? 'bg-green-100 text-green-900' : 'text-green-800'
+                  isActive
+                    ? 'bg-surface-raised text-ink-body'
+                    : 'text-ink-muted'
                 }`
               }
             >
@@ -97,8 +100,9 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
           ))}
         </nav>
 
-        <div className="mt-auto flex flex-col gap-1 border-t border-green-100 pt-4">
-          <InstallAppButton className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-lg text-green-800" />
+        <div className="mt-auto flex flex-col gap-1 border-t border-line-soft pt-4">
+          <ThemeToggle className="mb-2" />
+          <InstallAppButton className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-lg text-ink-muted" />
           {session ? (
             <button
               type="button"
@@ -106,7 +110,7 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
                 await signOut()
                 onClose()
               }}
-              className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-lg text-green-800"
+              className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-lg text-ink-muted"
             >
               Log ud
             </button>
@@ -114,7 +118,7 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
             <NavLink
               to="/login"
               onClick={onClose}
-              className="flex min-h-11 items-center rounded px-3 py-2 text-lg text-green-800"
+              className="flex min-h-11 items-center rounded px-3 py-2 text-lg text-ink-muted"
             >
               Log ind
             </NavLink>

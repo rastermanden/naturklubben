@@ -19,6 +19,13 @@ vi.mock('./InstallAppButton', () => ({
   InstallAppButton: () => null,
 }))
 
+// Testen handler om fokus og lukning, ikke om udseende. Temavælgeren stubbes
+// derfor væk, præcis som InstallAppButton -- ellers ville den trække en
+// ThemeProvider og et matchMedia-svar med ind, som testen selv stubber om på.
+vi.mock('../features/theme/ThemeToggle', () => ({
+  ThemeToggle: () => null,
+}))
+
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()

@@ -79,21 +79,21 @@ export function ExportAccountDialog({
       tabIndex={-1}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-6"
     >
-      <article className="max-h-[95svh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
+      <article className="max-h-[95svh] w-full overflow-y-auto rounded-t-xl bg-surface p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
         <h2
           id="export-account-title"
-          className="text-xl font-semibold text-green-900"
+          className="text-xl font-semibold text-ink-body"
         >
           Hent en kopi af dine data
         </h2>
-        <p className="mt-3 text-green-950">
+        <p className="mt-3 text-ink">
           Du får en JSON-fil med din profil, egne chatbeskeder,
           billedoplysninger og aktivitetstilmeldinger. Billedlinks virker i 15
           minutter.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4">
-          <label className="flex flex-col gap-1 text-sm text-green-950">
+          <label className="flex flex-col gap-1 text-sm text-ink">
             Nuværende adgangskode
             <input
               ref={passwordRef}
@@ -105,25 +105,25 @@ export function ExportAccountDialog({
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? 'export-account-error' : undefined}
               disabled={exporting}
-              className="rounded border border-green-300 px-3 py-2 text-base"
+              className="rounded border border-line-strong px-3 py-2 text-base"
             />
           </label>
 
           {error && (
-            <p id="export-account-error" className="text-sm text-red-700">
+            <p id="export-account-error" className="text-sm text-danger">
               {error}
             </p>
           )}
           {data && (
             <div
               role="status"
-              className="rounded border border-green-200 bg-green-50 p-3 text-sm text-green-950"
+              className="rounded border border-line bg-surface-sunken p-3 text-sm text-ink"
             >
               <p>Din dataudlevering er hentet.</p>
               <button
                 type="button"
                 onClick={() => download(data)}
-                className="mt-2 min-h-11 rounded border border-green-700 px-4 py-2 font-medium text-green-800"
+                className="mt-2 min-h-11 rounded border border-accent-soft px-4 py-2 font-medium text-ink-muted"
               >
                 Download igen
               </button>
@@ -135,14 +135,14 @@ export function ExportAccountDialog({
               type="button"
               onClick={onClose}
               disabled={exporting}
-              className="min-h-11 rounded border border-green-400 px-4 py-2 text-green-900 disabled:opacity-50"
+              className="min-h-11 rounded border border-line-strong px-4 py-2 text-ink-body disabled:opacity-50"
             >
               Luk
             </button>
             <button
               type="submit"
               disabled={!password || exporting}
-              className="min-h-11 rounded bg-green-700 px-4 py-2 text-white disabled:opacity-50"
+              className="min-h-11 rounded bg-accent-soft px-4 py-2 text-white disabled:opacity-50"
             >
               {exporting ? 'Samler dine data…' : 'Hent data som JSON'}
             </button>
@@ -230,29 +230,31 @@ export function DeleteAccountDialog({
       tabIndex={-1}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-6"
     >
-      <article className="max-h-[95svh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
+      <article className="max-h-[95svh] w-full overflow-y-auto rounded-t-xl bg-surface p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
         <h2
           id="delete-account-title"
-          className="text-xl font-semibold text-red-900"
+          className="text-xl font-semibold text-danger-strong"
         >
           Slet konto permanent
         </h2>
-        <p className="mt-3 text-green-950">
+        <p className="mt-3 text-ink">
           Handlingen kan ikke fortrydes. Hvis du vil være medlem igen, skal en
           administrator invitere dig på ny.
         </p>
 
         <div className="mt-4 grid gap-3 text-sm">
-          <section className="rounded border border-red-200 bg-red-50 p-3">
-            <h3 className="font-semibold text-red-900">Slettes permanent</h3>
-            <p className="mt-1 text-red-950">
+          <section className="rounded border border-danger-line bg-danger-surface p-3">
+            <h3 className="font-semibold text-danger-strong">
+              Slettes permanent
+            </h3>
+            <p className="mt-1 text-danger-strong">
               Login, profil, avatar, egne billeder, tilmeldinger,
               push-abonnementer og medlemsadgang.
             </p>
           </section>
-          <section className="rounded border border-green-200 bg-green-50 p-3">
-            <h3 className="font-semibold text-green-900">Bevares anonymt</h3>
-            <p className="mt-1 text-green-950">
+          <section className="rounded border border-line bg-surface-sunken p-3">
+            <h3 className="font-semibold text-ink-body">Bevares anonymt</h3>
+            <p className="mt-1 text-ink">
               Chatbeskeder og kalenderbegivenheder bliver stående i klubbens
               fælles historik som fra “Tidligere medlem”.
             </p>
@@ -260,7 +262,7 @@ export function DeleteAccountDialog({
         </div>
 
         <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4">
-          <label className="flex flex-col gap-1 text-sm text-green-950">
+          <label className="flex flex-col gap-1 text-sm text-ink">
             Nuværende adgangskode
             <input
               id="delete-account-password"
@@ -275,11 +277,11 @@ export function DeleteAccountDialog({
                 errorField === 'password' ? 'delete-account-error' : undefined
               }
               disabled={deleting}
-              className="rounded border border-green-300 px-3 py-2 text-base"
+              className="rounded border border-line-strong px-3 py-2 text-base"
             />
           </label>
 
-          <label className="flex flex-col gap-1 text-sm text-green-950">
+          <label className="flex flex-col gap-1 text-sm text-ink">
             Skriv <strong>{ACCOUNT_DELETION_CONFIRMATION}</strong> for at
             bekræfte
             <input
@@ -297,7 +299,7 @@ export function DeleteAccountDialog({
                   : undefined
               }
               disabled={deleting}
-              className="rounded border border-green-300 px-3 py-2 text-base"
+              className="rounded border border-line-strong px-3 py-2 text-base"
             />
           </label>
 
@@ -305,7 +307,7 @@ export function DeleteAccountDialog({
             <p
               id="delete-account-error"
               role={errorField ? undefined : 'alert'}
-              className="text-sm text-red-700"
+              className="text-sm text-danger"
             >
               {error}
             </p>
@@ -316,14 +318,14 @@ export function DeleteAccountDialog({
               type="button"
               onClick={onClose}
               disabled={deleting}
-              className="min-h-11 rounded border border-green-400 px-4 py-2 text-green-900 disabled:opacity-50"
+              className="min-h-11 rounded border border-line-strong px-4 py-2 text-ink-body disabled:opacity-50"
             >
               Annullér
             </button>
             <button
               type="submit"
               disabled={!canDelete}
-              className="min-h-11 rounded bg-red-700 px-4 py-2 text-white disabled:opacity-50"
+              className="min-h-11 rounded bg-danger-solid px-4 py-2 text-white disabled:opacity-50"
             >
               {deleting ? 'Sletter konto…' : 'Slet min konto permanent'}
             </button>
@@ -342,12 +344,12 @@ export function DeleteAccountSection({ email }: { email: string }) {
   const exportTriggerRef = useRef<HTMLButtonElement>(null)
 
   return (
-    <section className="grid gap-4 rounded-lg border border-green-200 p-5">
+    <section className="grid gap-4 rounded-lg border border-line p-5">
       <div>
-        <h2 className="text-lg font-semibold text-green-900">
+        <h2 className="text-lg font-semibold text-ink-body">
           Dine data og din konto
         </h2>
-        <p className="mt-2 text-sm text-green-950">
+        <p className="mt-2 text-sm text-ink">
           Hent først en kopi af dine egne data, hvis du vil gemme dem før en
           eventuel kontosletning.
         </p>
@@ -355,15 +357,15 @@ export function DeleteAccountSection({ email }: { email: string }) {
           ref={exportTriggerRef}
           type="button"
           onClick={() => setExportDialogOpen(true)}
-          className="mt-4 min-h-11 rounded border border-green-700 px-4 py-2 font-medium text-green-800"
+          className="mt-4 min-h-11 rounded border border-accent-soft px-4 py-2 font-medium text-ink-muted"
         >
           Hent mine data
         </button>
       </div>
 
-      <div className="border-t border-red-200 pt-4">
-        <h3 className="text-lg font-semibold text-red-900">Slet konto</h3>
-        <p className="mt-2 text-sm text-green-950">
+      <div className="border-t border-danger-line pt-4">
+        <h3 className="text-lg font-semibold text-danger-strong">Slet konto</h3>
+        <p className="mt-2 text-sm text-ink">
           Fjern din profil, dine billeder og din medlemsadgang permanent. Fælles
           chat- og kalenderhistorik anonymiseres.
         </p>
@@ -371,7 +373,7 @@ export function DeleteAccountSection({ email }: { email: string }) {
           ref={triggerRef}
           type="button"
           onClick={() => setDialogOpen(true)}
-          className="mt-4 min-h-11 rounded border border-red-700 px-4 py-2 text-red-700"
+          className="mt-4 min-h-11 rounded border border-danger-line-strong px-4 py-2 text-danger"
         >
           Start kontosletning
         </button>

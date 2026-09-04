@@ -25,18 +25,18 @@ export function EventTasksSection({
   }
 
   return (
-    <section className="mt-6 border-t border-green-200 pt-5">
-      <h3 className="font-semibold text-green-900">
+    <section className="mt-6 border-t border-line pt-5">
+      <h3 className="font-semibold text-ink-body">
         Opgaver
         {!tasksQuery.isLoading && (
-          <span className="ml-2 font-normal text-green-700">
+          <span className="ml-2 font-normal text-ink-subtle">
             ({tasks.length})
           </span>
         )}
       </h3>
 
       {tasksQuery.isLoading && (
-        <p role="status" className="mt-3 text-sm text-green-700">
+        <p role="status" className="mt-3 text-sm text-ink-subtle">
           Henter opgaver…
         </p>
       )}
@@ -44,7 +44,7 @@ export function EventTasksSection({
       {tasksQuery.isError && (
         <div
           role="alert"
-          className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+          className="mt-3 rounded border border-danger-line bg-danger-surface p-3 text-sm text-danger-strong"
         >
           Opgaverne kunne ikke hentes.
           <button
@@ -58,13 +58,13 @@ export function EventTasksSection({
       )}
 
       {mutationError && (
-        <p role="alert" className="mt-3 text-sm text-red-700">
+        <p role="alert" className="mt-3 text-sm text-danger">
           Handlingen kunne ikke gennemføres. Prøv igen.
         </p>
       )}
 
       {tasksQuery.data && tasks.length === 0 && (
-        <p className="mt-3 text-sm text-green-700">Ingen opgaver endnu.</p>
+        <p className="mt-3 text-sm text-ink-subtle">Ingen opgaver endnu.</p>
       )}
 
       {tasks.length > 0 && (
@@ -83,11 +83,11 @@ export function EventTasksSection({
             return (
               <li
                 key={task.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded bg-green-50 p-2"
+                className="flex flex-wrap items-center justify-between gap-2 rounded bg-surface-sunken p-2"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-green-950">{task.title}</p>
-                  <p className="text-sm text-green-700">
+                  <p className="truncate text-ink">{task.title}</p>
+                  <p className="text-sm text-ink-subtle">
                     {assigneeName
                       ? isMine
                         ? `${assigneeName} (dig)`
@@ -101,7 +101,7 @@ export function EventTasksSection({
                       type="button"
                       onClick={() => claimTask.mutate(task.id)}
                       disabled={busy}
-                      className="min-h-11 rounded border border-green-700 px-3 py-1 text-sm text-green-800 disabled:opacity-60"
+                      className="min-h-11 rounded border border-accent-soft px-3 py-1 text-sm text-ink-muted disabled:opacity-60"
                     >
                       Meld dig
                     </button>
@@ -111,7 +111,7 @@ export function EventTasksSection({
                       type="button"
                       onClick={() => releaseTask.mutate(task.id)}
                       disabled={busy}
-                      className="min-h-11 rounded border border-green-700 px-3 py-1 text-sm text-green-800 disabled:opacity-60"
+                      className="min-h-11 rounded border border-accent-soft px-3 py-1 text-sm text-ink-muted disabled:opacity-60"
                     >
                       Træk dig
                     </button>
@@ -121,7 +121,7 @@ export function EventTasksSection({
                       type="button"
                       onClick={() => deleteTask.mutate(task.id)}
                       disabled={busy}
-                      className="min-h-11 rounded border border-red-700 px-3 py-1 text-sm text-red-700 disabled:opacity-60"
+                      className="min-h-11 rounded border border-danger-line-strong px-3 py-1 text-sm text-danger disabled:opacity-60"
                     >
                       Slet
                     </button>
@@ -143,12 +143,12 @@ export function EventTasksSection({
           value={newTaskTitle}
           onChange={(event) => setNewTaskTitle(event.target.value)}
           placeholder="Ny opgave…"
-          className="min-h-11 flex-1 rounded border border-green-300 px-3 py-2 text-base"
+          className="min-h-11 flex-1 rounded border border-line-strong px-3 py-2 text-base"
         />
         <button
           type="submit"
           disabled={createTask.isPending || newTaskTitle.trim() === ''}
-          className="min-h-11 rounded bg-green-800 px-4 py-2 text-white disabled:opacity-60"
+          className="min-h-11 rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
         >
           {createTask.isPending ? 'Tilføjer…' : 'Tilføj'}
         </button>
