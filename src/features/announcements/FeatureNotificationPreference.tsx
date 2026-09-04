@@ -19,21 +19,21 @@ export function FeatureNotificationPreference({ userId }: { userId: string }) {
         checked={isEnabled}
         disabled={isSaving}
         onChange={(event) => setEnabled(event.target.checked)}
-        className="h-5 w-5 rounded border-green-300 text-green-800 disabled:opacity-50"
+        className="h-5 w-5 rounded border-line-strong text-ink-muted disabled:opacity-50"
       />
       <label
         htmlFor="feature-notification-preference"
-        className="text-sm text-green-900"
+        className="text-sm text-ink-body"
       >
         Send mig en notifikation, når appen får en ny funktion
       </label>
       {isSaving && (
-        <span role="status" className="text-sm text-green-700">
+        <span role="status" className="text-sm text-ink-subtle">
           Gemmer…
         </span>
       )}
       {saveFailed && (
-        <span role="alert" className="text-sm text-red-700">
+        <span role="alert" className="text-sm text-danger">
           Valget kunne ikke gemmes. Prøv igen.
         </span>
       )}

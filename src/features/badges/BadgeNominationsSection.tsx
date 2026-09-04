@@ -68,35 +68,35 @@ export function BadgeNominationsSection({ adminId }: { adminId: string }) {
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="font-medium text-green-900">
+      <h2 className="font-medium text-ink-body">
         Åbne indstillinger
         {nominations.length > 0 && ` (${nominations.length})`}
       </h2>
 
       {status && (
-        <p role="status" className="text-sm text-green-700">
+        <p role="status" className="text-sm text-ink-subtle">
           {status}
         </p>
       )}
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
 
       {nominationsQuery.isPending && (
-        <p className="text-sm text-green-700">Henter indstillinger…</p>
+        <p className="text-sm text-ink-subtle">Henter indstillinger…</p>
       )}
 
       {nominationsQuery.isError && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           Indstillingerne kunne ikke hentes:{' '}
           {toFriendlyBadgeError(nominationsQuery.error)}
         </p>
       )}
 
       {nominationsQuery.isSuccess && nominations.length === 0 && (
-        <p className="text-sm text-green-700">
+        <p className="text-sm text-ink-subtle">
           Der ligger ingen åbne indstillinger lige nu.
         </p>
       )}
@@ -110,41 +110,41 @@ export function BadgeNominationsSection({ adminId }: { adminId: string }) {
           return (
             <li
               key={nomination.id}
-              className="flex flex-col gap-3 rounded-lg border border-green-200 px-4 py-3"
+              className="flex flex-col gap-3 rounded-lg border border-line px-4 py-3"
             >
               <div className="flex items-start gap-3">
                 <BadgeMedal badge={nomination.badges} size="md" decorative />
                 <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-green-950">
+                  <p className="text-ink">
                     {nameById.get(nomination.nominee_id) ?? 'Ukendt medlem'} ·{' '}
                     {nomination.badges.name}
                   </p>
-                  <p className="text-sm text-green-700">
+                  <p className="text-sm text-ink-subtle">
                     Indstillet af{' '}
                     {nameById.get(nomination.nominated_by) ?? 'et medlem'}{' '}
                     {dateFormatter.format(new Date(nomination.created_at))}
                   </p>
-                  <p className="text-sm font-medium text-green-800">
+                  <p className="text-sm font-medium text-ink-muted">
                     Godkendelser: {approvals}/2
                   </p>
-                  <p className="whitespace-pre-wrap text-sm text-green-900">
+                  <p className="whitespace-pre-wrap text-sm text-ink-body">
                     {nomination.reason}
                   </p>
                 </div>
               </div>
 
               {isNominator ? (
-                <p className="text-sm text-amber-800">
+                <p className="text-sm text-warn">
                   Du har selv lavet indstillingen og tæller derfor ikke som en
                   af de to godkendere.
                 </p>
               ) : alreadyVoted ? (
-                <p className="text-sm text-green-700">
+                <p className="text-sm text-ink-subtle">
                   Du har allerede stemt. Der mangler en anden administrator.
                 </p>
               ) : (
                 <>
-                  <label className="flex flex-col gap-1 text-sm text-green-900">
+                  <label className="flex flex-col gap-1 text-sm text-ink-body">
                     Kommentar (valgfri)
                     <input
                       type="text"
@@ -156,7 +156,7 @@ export function BadgeNominationsSection({ adminId }: { adminId: string }) {
                           [nomination.id]: event.target.value,
                         }))
                       }
-                      className="rounded border border-green-300 px-3 py-2 text-base text-green-950"
+                      className="rounded border border-line-strong px-3 py-2 text-base text-ink"
                     />
                   </label>
                   <div className="flex flex-wrap gap-2">
@@ -164,7 +164,7 @@ export function BadgeNominationsSection({ adminId }: { adminId: string }) {
                       type="button"
                       onClick={() => void handleVote(nomination, 'approve')}
                       disabled={vote.isPending}
-                      className="min-h-11 rounded-lg bg-green-800 px-4 py-2 text-white disabled:opacity-50"
+                      className="min-h-11 rounded-lg bg-accent px-4 py-2 text-white disabled:opacity-50"
                     >
                       Godkend
                     </button>
@@ -172,7 +172,7 @@ export function BadgeNominationsSection({ adminId }: { adminId: string }) {
                       type="button"
                       onClick={() => void handleVote(nomination, 'reject')}
                       disabled={vote.isPending}
-                      className="min-h-11 rounded-lg border border-red-300 px-4 py-2 text-red-700 disabled:opacity-50"
+                      className="min-h-11 rounded-lg border border-danger-line px-4 py-2 text-danger disabled:opacity-50"
                     >
                       Afvis
                     </button>

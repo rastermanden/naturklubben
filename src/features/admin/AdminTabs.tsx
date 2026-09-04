@@ -88,8 +88,8 @@ export function AdminTabs({
             onKeyDown={handleKeyDown}
             className={
               selected
-                ? 'flex min-h-11 shrink-0 items-center gap-2 rounded-t-lg border-b-2 border-green-800 px-3 py-2 font-medium text-green-900'
-                : 'flex min-h-11 shrink-0 items-center gap-2 rounded-t-lg border-b-2 border-transparent px-3 py-2 text-green-700 hover:text-green-900'
+                ? 'flex min-h-11 shrink-0 items-center gap-2 rounded-t-lg border-b-2 border-accent px-3 py-2 font-medium text-ink-body'
+                : 'flex min-h-11 shrink-0 items-center gap-2 rounded-t-lg border-b-2 border-transparent px-3 py-2 text-ink-subtle hover:text-ink-body'
             }
           >
             {tab.label}
@@ -98,8 +98,8 @@ export function AdminTabs({
                 aria-hidden="true"
                 className={
                   selected
-                    ? 'rounded-full bg-green-800 px-2 py-0.5 text-xs text-white'
-                    : 'rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-900'
+                    ? 'rounded-full bg-accent px-2 py-0.5 text-xs text-white'
+                    : 'rounded-full bg-surface-raised px-2 py-0.5 text-xs text-ink-body'
                 }
               >
                 {badge}

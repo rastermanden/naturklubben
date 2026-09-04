@@ -1,18 +1,18 @@
 function DataPolicyPage() {
   return (
     <main className="mx-auto w-full max-w-3xl p-4 sm:p-6">
-      <h1 className="text-3xl font-semibold text-green-900">
+      <h1 className="text-3xl font-semibold text-ink-body">
         Politik for dataopbevaring
       </h1>
-      <p className="mt-3 text-green-800">
+      <p className="mt-3 text-ink-muted">
         Naturklubben opbevarer kun data, der er nødvendige for medlemsappen og
         klubbens fælles historik. Denne side beskriver, hvad der gemmes, og hvad
         der sker, når du sletter din konto.
       </p>
 
-      <div className="mt-8 grid gap-7 text-green-950">
+      <div className="mt-8 grid gap-7 text-ink">
         <section>
-          <h2 className="text-xl font-semibold text-green-900">
+          <h2 className="text-xl font-semibold text-ink-body">
             Konto, profil og medlemsadgang
           </h2>
           <p className="mt-2">
@@ -24,7 +24,7 @@ function DataPolicyPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-green-900">
+          <h2 className="text-xl font-semibold text-ink-body">
             Chat og kalender
           </h2>
           <p className="mt-2">
@@ -37,7 +37,7 @@ function DataPolicyPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-green-900">
+          <h2 className="text-xl font-semibold text-ink-body">
             Billeder og lager
           </h2>
           <p className="mt-2">
@@ -52,7 +52,7 @@ function DataPolicyPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-green-900">
+          <h2 className="text-xl font-semibold text-ink-body">
             Push-notifikationer
           </h2>
           <p className="mt-2">
@@ -64,7 +64,7 @@ function DataPolicyPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-green-900">
+          <h2 className="text-xl font-semibold text-ink-body">
             Ansøgninger om prøvemedlemskab
           </h2>
           <p className="mt-2">
@@ -80,7 +80,7 @@ function DataPolicyPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-green-900">
+          <h2 className="text-xl font-semibold text-ink-body">
             Inaktive konti
           </h2>
           <p className="mt-2">
@@ -92,7 +92,7 @@ function DataPolicyPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-green-900">
+          <h2 className="text-xl font-semibold text-ink-body">
             Din ret til dataudlevering
           </h2>
           <p className="mt-2">
@@ -106,7 +106,7 @@ function DataPolicyPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-green-900">
+          <h2 className="text-xl font-semibold text-ink-body">
             Adgang og sikkerhed
           </h2>
           <p className="mt-2">

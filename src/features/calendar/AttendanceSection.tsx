@@ -65,12 +65,12 @@ export function AttendanceSection({
   }
 
   return (
-    <section className="mt-6 border-t border-green-200 pt-5">
+    <section className="mt-6 border-t border-line pt-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="font-semibold text-green-900">
+        <h3 className="font-semibold text-ink-body">
           Deltagere
           {!attendanceQuery.isLoading && (
-            <span className="ml-2 font-normal text-green-700">
+            <span className="ml-2 font-normal text-ink-subtle">
               ({attendance.length})
             </span>
           )}
@@ -81,8 +81,8 @@ export function AttendanceSection({
           disabled={attendanceQuery.isLoading || attendancePending}
           className={`min-h-11 rounded px-4 py-2 font-medium disabled:opacity-60 ${
             isAttending
-              ? 'border border-green-700 text-green-800 hover:bg-green-50'
-              : 'bg-green-800 text-white hover:bg-green-900'
+              ? 'border border-accent-soft text-ink-muted hover:bg-surface-sunken'
+              : 'bg-accent text-white hover:bg-accent-hover'
           }`}
         >
           {attendancePending
@@ -96,7 +96,7 @@ export function AttendanceSection({
       </div>
 
       {attendanceQuery.isLoading && (
-        <p role="status" className="mt-3 text-sm text-green-700">
+        <p role="status" className="mt-3 text-sm text-ink-subtle">
           Henter deltagere…
         </p>
       )}
@@ -104,7 +104,7 @@ export function AttendanceSection({
       {attendanceQuery.isError && (
         <div
           role="alert"
-          className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+          className="mt-3 rounded border border-danger-line bg-danger-surface p-3 text-sm text-danger-strong"
         >
           Deltagerne kunne ikke hentes.
           <button
@@ -118,13 +118,13 @@ export function AttendanceSection({
       )}
 
       {mutationError && (
-        <p role="alert" className="mt-3 text-sm text-red-700">
+        <p role="alert" className="mt-3 text-sm text-danger">
           Tilmeldingen kunne ikke ændres. Prøv igen.
         </p>
       )}
 
       {attendanceQuery.data && attendance.length === 0 && (
-        <p className="mt-3 text-sm text-green-700">
+        <p className="mt-3 text-sm text-ink-subtle">
           Ingen har tilmeldt sig endnu.
         </p>
       )}
@@ -132,12 +132,12 @@ export function AttendanceSection({
       {attendance.length > 0 && (
         <>
           {profilesQuery.isLoading && (
-            <p role="status" className="mt-3 text-sm text-green-700">
+            <p role="status" className="mt-3 text-sm text-ink-subtle">
               Henter deltagerprofiler…
             </p>
           )}
           {profilesQuery.isError && (
-            <p role="alert" className="mt-3 text-sm text-red-700">
+            <p role="alert" className="mt-3 text-sm text-danger">
               Deltagernes profiloplysninger kunne ikke hentes.
             </p>
           )}
@@ -155,14 +155,14 @@ export function AttendanceSection({
               return (
                 <li
                   key={entry.user_id}
-                  className="flex min-w-0 items-center gap-3 rounded bg-green-50 p-2"
+                  className="flex min-w-0 items-center gap-3 rounded bg-surface-sunken p-2"
                 >
                   <ParticipantAvatar
                     name={displayName}
                     avatarUrl={profile?.avatar_url ?? null}
                     color={profile?.chat_color ?? '#16a34a'}
                   />
-                  <span className="truncate text-sm text-green-950">
+                  <span className="truncate text-sm text-ink">
                     {displayName}
                   </span>
                 </li>

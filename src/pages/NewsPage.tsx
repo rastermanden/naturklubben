@@ -42,8 +42,8 @@ function NewsPage() {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
       <div>
-        <h1 className="text-2xl font-semibold text-green-900">Nyheder</h1>
-        <p className="text-green-700">
+        <h1 className="text-2xl font-semibold text-ink-body">Nyheder</h1>
+        <p className="text-ink-subtle">
           Nye funktioner i appen, nyeste først. Du kan få dem som en
           notifikation på telefonen.
         </p>
@@ -51,26 +51,26 @@ function NewsPage() {
 
       <section
         aria-label="Notifikationer om nye funktioner"
-        className="flex flex-col gap-3 rounded-xl border border-green-100 bg-white p-4"
+        className="flex flex-col gap-3 rounded-xl border border-line-soft bg-surface p-4"
       >
         <NotificationToggle userId={userId} />
         <FeatureNotificationPreference userId={userId} />
       </section>
 
       {isLoading && (
-        <p role="status" className="text-green-800">
+        <p role="status" className="text-ink-muted">
           Henter nyheder…
         </p>
       )}
 
       {isError && (
-        <p role="alert" className="text-red-700">
+        <p role="alert" className="text-danger">
           Nyhederne kunne ikke hentes. Prøv igen senere.
         </p>
       )}
 
       {!isLoading && !isError && announcements.length === 0 && (
-        <p className="text-green-800">
+        <p className="text-ink-muted">
           Der er ingen nyheder endnu. Næste gang appen får noget nyt, står det
           her.
         </p>
@@ -80,26 +80,26 @@ function NewsPage() {
         {announcements.map((announcement) => (
           <li
             key={announcement.id}
-            className="rounded-xl border border-green-100 bg-white p-4"
+            className="rounded-xl border border-line-soft bg-surface p-4"
           >
             <div className="flex flex-wrap items-baseline gap-2">
-              <h2 className="text-lg font-medium text-green-950">
+              <h2 className="text-lg font-medium text-ink">
                 {announcement.title}
               </h2>
               {!announcement.isRead && (
-                <span className="rounded-full bg-green-800 px-2 py-0.5 text-xs text-white">
+                <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-white">
                   Ny
                 </span>
               )}
             </div>
-            <p className="text-sm text-green-700">
+            <p className="text-sm text-ink-subtle">
               {releasedFormatter.format(new Date(announcement.released_at))}
             </p>
-            <p className="mt-2 text-green-900">{announcement.body}</p>
+            <p className="mt-2 text-ink-body">{announcement.body}</p>
             {announcement.path && (
               <Link
                 to={`/${announcement.path}`}
-                className="mt-2 inline-block text-sm text-green-800 underline"
+                className="mt-2 inline-block text-sm text-ink-muted underline"
               >
                 Prøv den
               </Link>

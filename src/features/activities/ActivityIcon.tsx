@@ -56,7 +56,7 @@ export function ActivityIcon({
 
   return (
     <span
-      className={`flex ${box} shrink-0 items-center justify-center rounded-full bg-green-100 text-green-800`}
+      className={`flex ${box} shrink-0 items-center justify-center rounded-full bg-surface-raised text-ink-muted`}
     >
       <svg
         viewBox="0 0 24 24"

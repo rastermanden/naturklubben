@@ -16,7 +16,7 @@ export function NotificationToggle({ userId }: { userId: string }) {
 
   if (status.state === 'unavailable') {
     return (
-      <p className="text-sm text-green-700">
+      <p className="text-sm text-ink-subtle">
         {UNAVAILABLE_TEXT[status.reason]}
       </p>
     )
@@ -33,19 +33,19 @@ export function NotificationToggle({ userId }: { userId: string }) {
         aria-pressed={isOn}
         className={`min-h-11 rounded-full border px-4 py-2 text-sm disabled:opacity-50 ${
           isOn
-            ? 'border-green-800 bg-green-800 text-white'
-            : 'border-green-300 bg-white text-green-900'
+            ? 'border-accent bg-accent text-white'
+            : 'border-line-strong bg-surface text-ink-body'
         }`}
       >
         {isOn ? '🔔 Notifikationer til' : '🔕 Slå notifikationer til'}
       </button>
       {isWorking && (
-        <span role="status" className="text-sm text-green-700">
+        <span role="status" className="text-sm text-ink-subtle">
           Arbejder…
         </span>
       )}
       {error && (
-        <span role="alert" className="text-sm text-red-700">
+        <span role="alert" className="text-sm text-danger">
           {error}
         </span>
       )}

@@ -61,15 +61,15 @@ export class ErrorBoundary extends Component<
       <main
         id={isGlobal ? 'main-content' : undefined}
         role="alert"
-        className="flex min-h-[60svh] items-center justify-center bg-green-50 px-4 py-12"
+        className="flex min-h-[60svh] items-center justify-center bg-surface-sunken px-4 py-12"
       >
-        <div className="w-full max-w-lg rounded-2xl border border-green-200 bg-white p-6 text-center shadow-sm sm:p-8">
-          <h1 className="text-2xl font-semibold text-green-950">
+        <div className="w-full max-w-lg rounded-2xl border border-line bg-surface p-6 text-center shadow-sm sm:p-8">
+          <h1 className="text-2xl font-semibold text-ink">
             {isGlobal
               ? 'Naturklubben kunne ikke starte'
               : 'Noget gik galt på denne side'}
           </h1>
-          <p className="mt-3 text-green-900">
+          <p className="mt-3 text-ink-body">
             {isGlobal
               ? 'Prøv at genindlæse appen. Hvis fejlen bliver ved, kan du rydde den gemte version og starte igen.'
               : 'Resten af appen virker stadig. Genindlæs siden, eller brug menuen til at gå et andet sted hen.'}
@@ -79,7 +79,7 @@ export class ErrorBoundary extends Component<
             <button
               type="button"
               onClick={this.reload}
-              className="rounded-lg bg-green-800 px-5 py-3 font-medium text-white hover:bg-green-900"
+              className="rounded-lg bg-accent px-5 py-3 font-medium text-white hover:bg-accent-hover"
             >
               Genindlæs siden
             </button>
@@ -88,7 +88,7 @@ export class ErrorBoundary extends Component<
                 type="button"
                 onClick={() => void this.clearCache()}
                 disabled={this.state.recovering}
-                className="rounded-lg border border-green-700 px-5 py-3 font-medium text-green-900 hover:bg-green-100 disabled:cursor-wait disabled:opacity-60"
+                className="rounded-lg border border-accent-soft px-5 py-3 font-medium text-ink-body hover:bg-surface-raised disabled:cursor-wait disabled:opacity-60"
               >
                 {this.state.recovering
                   ? 'Rydder cache…'
@@ -98,7 +98,7 @@ export class ErrorBoundary extends Component<
           </div>
 
           {this.state.recoveryError && (
-            <p className="mt-4 text-sm font-medium text-red-800">
+            <p className="mt-4 text-sm font-medium text-danger-strong">
               Cachen kunne ikke ryddes automatisk. Luk appen helt, og prøv igen.
             </p>
           )}

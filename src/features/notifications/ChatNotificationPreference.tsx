@@ -29,7 +29,7 @@ export function ChatNotificationPreference({ userId }: { userId: string }) {
     <div className="flex flex-wrap items-center gap-2">
       <label
         htmlFor="chat-notification-preference"
-        className="text-sm text-green-900"
+        className="text-sm text-ink-body"
       >
         Notifikationer fra chatten
       </label>
@@ -38,7 +38,7 @@ export function ChatNotificationPreference({ userId }: { userId: string }) {
         value={preference}
         disabled={isSaving}
         onChange={(event) => setPreference(event.target.value as Preference)}
-        className="min-h-11 rounded-lg border border-green-300 bg-white px-3 py-2 text-sm text-green-950 disabled:opacity-50"
+        className="min-h-11 rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm text-ink disabled:opacity-50"
       >
         {CHAT_NOTIFICATION_PREFERENCES.map((option) => (
           <option key={option} value={option}>
@@ -47,12 +47,12 @@ export function ChatNotificationPreference({ userId }: { userId: string }) {
         ))}
       </select>
       {isSaving && (
-        <span role="status" className="text-sm text-green-700">
+        <span role="status" className="text-sm text-ink-subtle">
           Gemmer…
         </span>
       )}
       {saveFailed && (
-        <span role="alert" className="text-sm text-red-700">
+        <span role="alert" className="text-sm text-danger">
           Valget kunne ikke gemmes. Prøv igen.
         </span>
       )}
