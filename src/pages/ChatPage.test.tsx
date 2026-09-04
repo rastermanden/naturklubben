@@ -164,6 +164,19 @@ afterEach(() => {
 })
 
 describe('ChatPage replies', () => {
+  it('keeps the page fixed while only the message log scrolls', () => {
+    render(<ChatPage />)
+
+    const main = screen.getByRole('main')
+    const messageLog = screen.getByRole('log', { name: 'Beskeder' })
+    const composer = screen.getByRole('textbox', { name: 'Skriv en besked' })
+
+    expect(main.className).toContain('overflow-hidden')
+    expect(messageLog.className).toContain('h-full')
+    expect(messageLog.className).toContain('overflow-y-auto')
+    expect(composer.closest('form')?.className).toContain('shrink-0')
+  })
+
   it('selects and cancels a reply while keeping focus in the composer', () => {
     render(<ChatPage />)
 

@@ -427,102 +427,111 @@ function ChatPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-green-900">Chat</h1>
-          <p className="text-green-700">Fælles snak for alle medlemmer.</p>
+    <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6">
+      <div className="shrink-0">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-green-900">Chat</h1>
+            <p className="text-green-700">Fælles snak for alle medlemmer.</p>
+          </div>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <NotificationToggle userId={userId} />
+            <ChatNotificationPreference userId={userId} />
+          </div>
         </div>
-        <div className="flex flex-col items-start gap-2 sm:items-end">
-          <NotificationToggle userId={userId} />
-          <ChatNotificationPreference userId={userId} />
-        </div>
-      </div>
-      <OnlineMembers
-        members={onlineMembers}
-        profiles={profiles}
-        currentUserId={userId}
-      />
 
-      <div className="relative">
-        <label
-          htmlFor="chat-search"
-          className="mb-1 block text-sm font-medium text-green-900"
-        >
-          Søg i beskeder
-        </label>
-        <input
-          id="chat-search"
-          type="search"
-          value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
-          placeholder="Søg i hele historikken…"
-          className="min-h-11 w-full rounded-lg border border-green-300 px-4 py-2 text-green-950"
-        />
-        {searchTerm.trim() && (
-          <div className="absolute z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-green-200 bg-white p-2 shadow-lg">
-            {(searchQuery.isPending || isSearchSettling) && (
-              <p role="status" className="p-3 text-green-700">
-                Søger…
-              </p>
-            )}
-            {searchQuery.isError && (
-              <p role="alert" className="p-3 text-red-700">
-                Søgningen kunne ikke gennemføres.
-              </p>
-            )}
-            {openMessage.isError && (
-              <p role="alert" className="p-3 text-red-700">
-                Beskeden kunne ikke åbnes. Den kan være slettet.
-              </p>
-            )}
-            {searchQuery.isSuccess &&
-              !isSearchSettling &&
-              searchResults.length === 0 && (
-                <p className="p-3 text-green-700">Ingen beskeder fundet.</p>
-              )}
-            {searchResults.length > 0 && (
-              <ul aria-label="Søgeresultater">
-                {searchResults.map((message) => {
-                  const authorName =
-                    message.user_id === null
-                      ? 'Tidligere medlem'
-                      : (profiles?.[message.user_id]?.full_name ?? 'Medlem')
-                  return (
-                    <li key={message.id}>
-                      <button
-                        type="button"
-                        onClick={() => void openSearchResult(message.id)}
-                        disabled={openMessage.isPending}
-                        className="min-h-11 w-full rounded px-3 py-2 text-left hover:bg-green-50 disabled:opacity-50"
-                      >
-                        <span className="block text-xs font-medium text-green-800">
-                          {authorName} ·{' '}
-                          {new Date(message.created_at).toLocaleString('da-DK')}
-                        </span>
-                        <span className="line-clamp-2 text-sm text-green-950">
-                          {message.content}
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-            {searchQuery.hasNextPage && (
-              <button
-                type="button"
-                onClick={() => void searchQuery.fetchNextPage()}
-                disabled={searchQuery.isFetchingNextPage}
-                className="min-h-11 w-full rounded px-3 text-sm font-medium text-green-800 hover:bg-green-50 disabled:opacity-50"
-              >
-                {searchQuery.isFetchingNextPage
-                  ? 'Henter flere…'
-                  : 'Vis flere resultater'}
-              </button>
-            )}
+        {onlineMembers.length > 0 && (
+          <div className="mt-4">
+            <OnlineMembers
+              members={onlineMembers}
+              profiles={profiles}
+              currentUserId={userId}
+            />
           </div>
         )}
+
+        <div className="relative mt-4">
+          <label
+            htmlFor="chat-search"
+            className="mb-1 block text-sm font-medium text-green-900"
+          >
+            Søg i beskeder
+          </label>
+          <input
+            id="chat-search"
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Søg i hele historikken…"
+            className="min-h-11 w-full rounded-lg border border-green-300 px-4 py-2 text-green-950"
+          />
+          {searchTerm.trim() && (
+            <div className="absolute z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-green-200 bg-white p-2 shadow-lg">
+              {(searchQuery.isPending || isSearchSettling) && (
+                <p role="status" className="p-3 text-green-700">
+                  Søger…
+                </p>
+              )}
+              {searchQuery.isError && (
+                <p role="alert" className="p-3 text-red-700">
+                  Søgningen kunne ikke gennemføres.
+                </p>
+              )}
+              {openMessage.isError && (
+                <p role="alert" className="p-3 text-red-700">
+                  Beskeden kunne ikke åbnes. Den kan være slettet.
+                </p>
+              )}
+              {searchQuery.isSuccess &&
+                !isSearchSettling &&
+                searchResults.length === 0 && (
+                  <p className="p-3 text-green-700">Ingen beskeder fundet.</p>
+                )}
+              {searchResults.length > 0 && (
+                <ul aria-label="Søgeresultater">
+                  {searchResults.map((message) => {
+                    const authorName =
+                      message.user_id === null
+                        ? 'Tidligere medlem'
+                        : (profiles?.[message.user_id]?.full_name ?? 'Medlem')
+                    return (
+                      <li key={message.id}>
+                        <button
+                          type="button"
+                          onClick={() => void openSearchResult(message.id)}
+                          disabled={openMessage.isPending}
+                          className="min-h-11 w-full rounded px-3 py-2 text-left hover:bg-green-50 disabled:opacity-50"
+                        >
+                          <span className="block text-xs font-medium text-green-800">
+                            {authorName} ·{' '}
+                            {new Date(message.created_at).toLocaleString(
+                              'da-DK',
+                            )}
+                          </span>
+                          <span className="line-clamp-2 text-sm text-green-950">
+                            {message.content}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {searchQuery.hasNextPage && (
+                <button
+                  type="button"
+                  onClick={() => void searchQuery.fetchNextPage()}
+                  disabled={searchQuery.isFetchingNextPage}
+                  className="min-h-11 w-full rounded px-3 text-sm font-medium text-green-800 hover:bg-green-50 disabled:opacity-50"
+                >
+                  {searchQuery.isFetchingNextPage
+                    ? 'Henter flere…'
+                    : 'Vis flere resultater'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {messagesQuery.isPending && (
@@ -548,7 +557,7 @@ function ChatPage() {
       )}
 
       {messagesQuery.data && (
-        <div className="relative">
+        <div className="relative min-h-0 flex-1">
           <ul
             ref={listRef}
             onScroll={handleScroll}
@@ -556,7 +565,7 @@ function ChatPage() {
             aria-label="Beskeder"
             aria-live={isNearBottom ? 'polite' : 'off'}
             aria-relevant="additions"
-            className="flex h-[60svh] flex-col gap-3 overflow-y-auto rounded-lg border border-green-100 bg-white p-4"
+            className="flex h-full flex-col gap-3 overflow-y-auto rounded-lg border border-green-100 bg-white p-4"
           >
             {messagesQuery.hasNextPage && (
               <li className="text-center">
@@ -657,7 +666,7 @@ function ChatPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+      <form onSubmit={handleSubmit} className="flex shrink-0 flex-col gap-2">
         {replyingTo && (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-950">
             <p role="status" aria-live="polite" className="min-w-0">
