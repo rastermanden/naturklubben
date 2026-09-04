@@ -427,8 +427,8 @@ function ChatPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-ink-body">Chat</h1>
           <p className="text-ink-subtle">Fælles snak for alle medlemmer.</p>
@@ -438,13 +438,17 @@ function ChatPage() {
           <ChatNotificationPreference userId={userId} />
         </div>
       </div>
-      <OnlineMembers
-        members={onlineMembers}
-        profiles={profiles}
-        currentUserId={userId}
-      />
+      {onlineMembers.length > 0 && (
+        <div className="shrink-0">
+          <OnlineMembers
+            members={onlineMembers}
+            profiles={profiles}
+            currentUserId={userId}
+          />
+        </div>
+      )}
 
-      <div className="relative">
+      <div className="relative shrink-0">
         <label
           htmlFor="chat-search"
           className="mb-1 block text-sm font-medium text-ink-body"
@@ -548,7 +552,7 @@ function ChatPage() {
       )}
 
       {messagesQuery.data && (
-        <div className="relative">
+        <div className="relative min-h-0 flex-1">
           <ul
             ref={listRef}
             onScroll={handleScroll}
@@ -556,7 +560,7 @@ function ChatPage() {
             aria-label="Beskeder"
             aria-live={isNearBottom ? 'polite' : 'off'}
             aria-relevant="additions"
-            className="flex h-[60svh] flex-col gap-3 overflow-y-auto rounded-lg border border-line-soft bg-surface p-4"
+            className="flex h-full flex-col gap-3 overflow-y-auto rounded-lg border border-line-soft bg-surface p-4"
           >
             {messagesQuery.hasNextPage && (
               <li className="text-center">
@@ -657,7 +661,7 @@ function ChatPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+      <form onSubmit={handleSubmit} className="flex shrink-0 flex-col gap-2">
         {replyingTo && (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface-sunken px-3 py-2 text-sm text-ink">
             <p role="status" aria-live="polite" className="min-w-0">
@@ -787,12 +791,12 @@ function ChatPage() {
       </form>
 
       {sendError && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="shrink-0 text-sm text-danger">
           {sendError}
         </p>
       )}
       {deleteError && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="shrink-0 text-sm text-danger">
           {deleteError}
         </p>
       )}

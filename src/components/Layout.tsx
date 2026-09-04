@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { FeatureAnnouncementBanner } from '../features/announcements/FeatureAnnouncementBanner'
 import { useAuth } from '../features/auth/useAuth'
@@ -18,8 +18,10 @@ export function Layout({ routes }: LayoutProps) {
   const { session, signOut } = useAuth()
   const { isAdmin } = useIsAdmin()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const burgerButtonRef = useRef<HTMLButtonElement>(null)
+  const keepsContentInViewport = pathname === '/chat'
 
   const visibleLinks = navLinks.filter(
     (link) =>
@@ -27,7 +29,11 @@ export function Layout({ routes }: LayoutProps) {
   )
 
   return (
-    <div className="flex min-h-svh flex-col">
+    <div
+      className={`flex flex-col ${
+        keepsContentInViewport ? 'h-dvh overflow-hidden' : 'min-h-svh'
+      }`}
+    >
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded focus:bg-surface focus:px-4 focus:py-3 focus:font-medium focus:text-ink"
@@ -36,7 +42,7 @@ export function Layout({ routes }: LayoutProps) {
       </a>
       <RouteNavigation routes={routes} />
       <header
-        className="sticky top-0 z-30 flex items-center justify-between border-b border-line-soft bg-surface px-4 py-3"
+        className="sticky top-0 z-30 flex shrink-0 items-center justify-between border-b border-line-soft bg-surface px-4 py-3"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
       >
         <NavLink to="/" className="text-lg font-semibold text-ink-body">
@@ -108,7 +114,13 @@ export function Layout({ routes }: LayoutProps) {
         triggerRef={burgerButtonRef}
       />
 
-      <div id="main-content" tabIndex={-1} className="flex-1">
+      <div
+        id="main-content"
+        tabIndex={-1}
+        className={`flex-1 ${
+          keepsContentInViewport ? 'flex min-h-0 flex-col overflow-hidden' : ''
+        }`}
+      >
         {/* Nyheder om nye funktioner står i app-shellen og ikke på en enkelt
             side: det, der er nyt, skal møde medlemmet, hvor det nu åbner
             appen. */}

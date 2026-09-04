@@ -28,7 +28,7 @@ export function FeatureAnnouncementBanner({ userId }: { userId: string }) {
   return (
     <aside
       aria-labelledby="feature-announcement-heading"
-      className="mx-4 mt-4 rounded-xl border border-line bg-surface-sunken p-4"
+      className="mx-4 mt-4 shrink-0 rounded-xl border border-line bg-surface-sunken p-4"
     >
       <h2
         id="feature-announcement-heading"

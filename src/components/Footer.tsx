@@ -4,7 +4,7 @@ import { appBuildDate, appVersion, formatAppVersion } from '../lib/appVersion'
 
 export function Footer() {
   return (
-    <footer className="border-t border-line-soft px-4 py-6 text-center text-sm text-ink-subtle">
+    <footer className="shrink-0 border-t border-line-soft px-4 py-6 text-center text-sm text-ink-subtle">
       <ThemeToggle className="mx-auto mb-5 max-w-xs" />
       <p>© {new Date().getFullYear()} Naturklubben</p>
       <Link to="/datapolitik" className="mt-1 inline-block underline">
