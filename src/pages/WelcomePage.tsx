@@ -27,20 +27,20 @@ function WelcomePage() {
   if (errorCode) {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
-        <h1 className="text-2xl font-semibold text-green-900">
+        <h1 className="text-2xl font-semibold text-ink-body">
           Linket virkede ikke
         </h1>
-        <p className="text-green-800">
+        <p className="text-ink-muted">
           {toFriendlyLinkError(errorCode, errorDescription)} Opret dig igen med
           samme e-mail, så sender vi en ny bekræftelsesmail.
         </p>
         <Link
           to="/opret"
-          className="inline-flex min-h-11 items-center justify-center rounded bg-green-800 px-4 py-2 text-white"
+          className="inline-flex min-h-11 items-center justify-center rounded bg-accent px-4 py-2 text-white"
         >
           Prøv igen
         </Link>
-        <Link to="/login" className="text-sm text-green-800 underline">
+        <Link to="/login" className="text-sm text-ink-muted underline">
           Jeg har allerede en bruger
         </Link>
       </main>
@@ -50,7 +50,7 @@ function WelcomePage() {
   if (loading) {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
-        <h1 className="text-2xl font-semibold text-green-900">
+        <h1 className="text-2xl font-semibold text-ink-body">
           Bekræfter din e-mail…
         </h1>
       </main>
@@ -60,17 +60,17 @@ function WelcomePage() {
   if (!session) {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
-        <h1 className="text-2xl font-semibold text-green-900">
+        <h1 className="text-2xl font-semibold text-ink-body">
           {hasCredentials ? 'Næsten i mål' : 'Bekræft din e-mail'}
         </h1>
-        <p className="text-green-800">
+        <p className="text-ink-muted">
           {hasCredentials
             ? 'Din e-mail er bekræftet, men vi kunne ikke logge dig ind automatisk. Log ind med din adgangskode nedenfor.'
             : 'Åbn linket i den mail, vi har sendt dig — eller log ind, hvis du allerede har bekræftet din e-mail.'}
         </p>
         <Link
           to="/login"
-          className="inline-flex min-h-11 items-center justify-center rounded bg-green-800 px-4 py-2 text-white"
+          className="inline-flex min-h-11 items-center justify-center rounded bg-accent px-4 py-2 text-white"
         >
           Log ind
         </Link>
@@ -84,20 +84,20 @@ function WelcomePage() {
 
   return (
     <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
-      <h1 className="text-2xl font-semibold text-green-900">
+      <h1 className="text-2xl font-semibold text-ink-body">
         {name ? `Velkommen, ${name}!` : 'Velkommen til Naturklubben!'}
       </h1>
-      <p className="text-green-800">
+      <p className="text-ink-muted">
         Din e-mail er bekræftet, og du er logget ind. Nu kan du se kalenderen,
         billederne og skrive med i chatten.
       </p>
       <Link
         to="/kalender"
-        className="inline-flex min-h-11 items-center justify-center rounded bg-green-800 px-4 py-2 text-white"
+        className="inline-flex min-h-11 items-center justify-center rounded bg-accent px-4 py-2 text-white"
       >
         Se kalenderen
       </Link>
-      <Link to="/" className="text-sm text-green-800 underline">
+      <Link to="/" className="text-sm text-ink-muted underline">
         Gå til forsiden
       </Link>
     </main>

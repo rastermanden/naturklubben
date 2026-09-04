@@ -56,10 +56,10 @@ function ProbationApplicationPage() {
   if (submitted) {
     return (
       <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-4 p-6 text-center">
-        <h1 className="text-2xl font-semibold text-green-900">
+        <h1 className="text-2xl font-semibold text-ink-body">
           Ansøgning modtaget
         </h1>
-        <p className="text-green-800">
+        <p className="text-ink-muted">
           Tak for din interesse i Naturklubben. Vi gennemgår ansøgningen manuelt
           og sender svaret som en notifikation på denne enhed.
         </p>
@@ -73,10 +73,10 @@ function ProbationApplicationPage() {
   return (
     <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-6 p-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-green-900">
+        <h1 className="text-2xl font-semibold text-ink-body">
           Ansøg om prøvemedlemskab
         </h1>
-        <p className="text-green-800">
+        <p className="text-ink-muted">
           Fortæl kort, hvem du er, og hvorfor du gerne vil være med i klubben.
           Når du sender, beder browseren om lov til at vise notifikationer, så
           du kan få svar på ansøgningen.
@@ -84,7 +84,7 @@ function ProbationApplicationPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           Navn
           <input
             id="probation-full-name"
@@ -94,11 +94,11 @@ function ProbationApplicationPage() {
             autoComplete="name"
             value={fullName}
             onChange={(event) => setFullName(event.target.value)}
-            className="rounded border border-green-300 px-3 py-2 text-base"
+            className="rounded border border-line-strong px-3 py-2 text-base"
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           E-mail
           <input
             id="probation-email"
@@ -108,11 +108,11 @@ function ProbationApplicationPage() {
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="rounded border border-green-300 px-3 py-2 text-base"
+            className="rounded border border-line-strong px-3 py-2 text-base"
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           Hvorfor vil du være med?
           <textarea
             id="probation-motivation"
@@ -121,7 +121,7 @@ function ProbationApplicationPage() {
             rows={5}
             value={motivation}
             onChange={(event) => setMotivation(event.target.value)}
-            className="rounded border border-green-300 px-3 py-2 text-base"
+            className="rounded border border-line-strong px-3 py-2 text-base"
           />
         </label>
 
@@ -129,7 +129,7 @@ function ProbationApplicationPage() {
           <p
             id="probation-application-error"
             role="alert"
-            className="text-sm text-red-700"
+            className="text-sm text-danger"
           >
             {error}
           </p>
@@ -138,7 +138,7 @@ function ProbationApplicationPage() {
         <button
           type="submit"
           disabled={submitApplication.isPending}
-          className="min-h-11 rounded bg-green-800 px-4 py-2 text-white disabled:opacity-60"
+          className="min-h-11 rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
         >
           {submitApplication.isPending
             ? 'Sender…'
@@ -146,7 +146,7 @@ function ProbationApplicationPage() {
         </button>
       </form>
 
-      <div className="flex flex-col gap-1 text-sm text-green-800">
+      <div className="flex flex-col gap-1 text-sm text-ink-muted">
         <span>
           Har du allerede fået grønt lys?{' '}
           <Link to="/opret" className="underline">

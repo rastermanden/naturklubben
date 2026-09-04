@@ -145,7 +145,7 @@ export function ObservationForm({
   }
 
   const inputClass =
-    'rounded border border-green-300 px-3 py-2 text-base text-gray-950'
+    'rounded border border-line-strong px-3 py-2 text-base text-ink'
   const errorId = (field: DraftField) =>
     validation?.field === field ? `observation-${field}-error` : undefined
   const fieldError = (field: DraftField) =>
@@ -153,7 +153,7 @@ export function ObservationForm({
       <span
         id={`observation-${field}-error`}
         role="alert"
-        className="text-red-700"
+        className="text-danger"
       >
         {validation.message}
       </span>
@@ -170,10 +170,10 @@ export function ObservationForm({
       aria-labelledby="observation-form-title"
       tabIndex={-1}
     >
-      <div className="max-h-[95svh] w-full overflow-y-auto rounded-t-xl bg-white p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
+      <div className="max-h-[95svh] w-full overflow-y-auto rounded-t-xl bg-surface p-6 shadow-xl sm:max-w-lg sm:rounded-xl">
         <h2
           id="observation-form-title"
-          className="mb-5 text-xl font-semibold text-green-900"
+          className="mb-5 text-xl font-semibold text-ink-body"
         >
           {observation ? 'Redigér observation' : 'Ny observation'}
         </h2>
@@ -183,7 +183,7 @@ export function ObservationForm({
           className="flex flex-col gap-4"
           noValidate
         >
-          <label className="flex flex-col gap-1 text-sm text-green-900">
+          <label className="flex flex-col gap-1 text-sm text-ink-body">
             Hvad så du?
             <input
               id="observation-species"
@@ -203,7 +203,7 @@ export function ObservationForm({
           </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-sm text-green-900">
+            <label className="flex flex-col gap-1 text-sm text-ink-body">
               Sted
               <input
                 id="observation-location"
@@ -221,7 +221,7 @@ export function ObservationForm({
               {fieldError('location')}
             </label>
 
-            <label className="flex flex-col gap-1 text-sm text-green-900">
+            <label className="flex flex-col gap-1 text-sm text-ink-body">
               Dato
               <input
                 id="observation-observed-on"
@@ -241,7 +241,7 @@ export function ObservationForm({
             </label>
           </div>
 
-          <label className="flex flex-col gap-1 text-sm text-green-900">
+          <label className="flex flex-col gap-1 text-sm text-ink-body">
             Noter
             <textarea
               id="observation-notes"
@@ -260,11 +260,11 @@ export function ObservationForm({
             {fieldError('notes')}
           </label>
 
-          <fieldset className="flex flex-col gap-2 text-sm text-green-900">
+          <fieldset className="flex flex-col gap-2 text-sm text-ink-body">
             <legend className="mb-1">Position</legend>
             {hasPosition ? (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-green-800">
+                <span className="text-ink-muted">
                   {formatPosition(draft.latitude!, draft.longitude!)}
                 </span>
                 <button
@@ -273,7 +273,7 @@ export function ObservationForm({
                     update('latitude', null)
                     update('longitude', null)
                   }}
-                  className="min-h-11 rounded-lg border border-green-300 px-3 text-green-800"
+                  className="min-h-11 rounded-lg border border-line-strong px-3 text-ink-muted"
                 >
                   Fjern position
                 </button>
@@ -283,7 +283,7 @@ export function ObservationForm({
                 type="button"
                 onClick={locate}
                 disabled={position.status === 'locating'}
-                className="min-h-11 self-start rounded-lg border border-green-300 px-3 text-green-800 disabled:opacity-60"
+                className="min-h-11 self-start rounded-lg border border-line-strong px-3 text-ink-muted disabled:opacity-60"
               >
                 {position.status === 'locating'
                   ? 'Finder din position…'
@@ -291,16 +291,16 @@ export function ObservationForm({
               </button>
             )}
             {position.status === 'error' && (
-              <span role="alert" className="text-red-700">
+              <span role="alert" className="text-danger">
                 {position.message}
               </span>
             )}
           </fieldset>
 
-          <fieldset className="flex flex-col gap-2 text-sm text-green-900">
+          <fieldset className="flex flex-col gap-2 text-sm text-ink-body">
             <legend className="mb-1">Billede</legend>
             {observation?.photo_id && !photoFile && (
-              <span className="text-green-700">
+              <span className="text-ink-subtle">
                 Observationen har allerede et billede. Vælg et nyt for at
                 erstatte det -- det gamle bliver i galleriet.
               </span>
@@ -342,13 +342,13 @@ export function ObservationForm({
                     className="h-20 w-20 rounded object-cover"
                   />
                 )}
-                <span className="min-w-0 flex-1 truncate text-green-800">
+                <span className="min-w-0 flex-1 truncate text-ink-muted">
                   {photoFile.name}
                 </span>
                 <button
                   type="button"
                   onClick={clearPhoto}
-                  className="min-h-11 rounded-lg border border-green-300 px-3 text-green-800"
+                  className="min-h-11 rounded-lg border border-line-strong px-3 text-ink-muted"
                 >
                   Fjern billede
                 </button>
@@ -361,7 +361,7 @@ export function ObservationForm({
                   aria-describedby={
                     photoError ? 'observation-photo-error' : undefined
                   }
-                  className="min-h-11 rounded-lg bg-green-800 px-5 py-2 text-white"
+                  className="min-h-11 rounded-lg bg-accent px-5 py-2 text-white"
                 >
                   Vælg billede
                 </button>
@@ -371,7 +371,7 @@ export function ObservationForm({
                   aria-describedby={
                     photoError ? 'observation-photo-error' : undefined
                   }
-                  className="min-h-11 rounded-lg border border-green-800 px-5 py-2 text-green-900"
+                  className="min-h-11 rounded-lg border border-accent px-5 py-2 text-ink-body"
                 >
                   Tag billede
                 </button>
@@ -382,19 +382,19 @@ export function ObservationForm({
               <span
                 id="observation-photo-error"
                 role="alert"
-                className="text-red-700"
+                className="text-danger"
               >
                 {photoError}
               </span>
             )}
-            <span className="text-xs text-green-700">
+            <span className="text-xs text-ink-subtle">
               Vælg fra kamerarullen eller dine filer. Maks. 15 MB. Billedet
               lægges også i galleriet under Billeder.
             </span>
           </fieldset>
 
           {error && (
-            <p role="alert" className="text-sm text-red-700">
+            <p role="alert" className="text-sm text-danger">
               {error}
             </p>
           )}
@@ -404,14 +404,14 @@ export function ObservationForm({
               type="button"
               onClick={onCancel}
               disabled={submitting}
-              className="min-h-11 rounded-lg border border-green-300 px-4 py-2 text-green-800"
+              className="min-h-11 rounded-lg border border-line-strong px-4 py-2 text-ink-muted"
             >
               Annullér
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="min-h-11 rounded-lg bg-green-700 px-4 py-2 font-medium text-white disabled:opacity-60"
+              className="min-h-11 rounded-lg bg-accent-soft px-4 py-2 font-medium text-white disabled:opacity-60"
             >
               {submitting
                 ? 'Gemmer…'

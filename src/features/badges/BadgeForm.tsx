@@ -167,13 +167,13 @@ export function BadgeForm({ badge, onDone, onCancel }: BadgeFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-4 rounded-lg border border-green-300 bg-white p-4"
+      className="flex flex-col gap-4 rounded-lg border border-line-strong bg-surface p-4"
     >
-      <h3 className="font-medium text-green-900">
+      <h3 className="font-medium text-ink-body">
         {badge ? `Ret ${badge.name}` : 'Ny badge'}
       </h3>
 
-      <label className="flex flex-col gap-1 text-sm text-green-900">
+      <label className="flex flex-col gap-1 text-sm text-ink-body">
         Navn
         <input
           type="text"
@@ -185,11 +185,11 @@ export function BadgeForm({ badge, onDone, onCancel }: BadgeFormProps) {
             if (!slugEdited) setSlug(slugifyBadgeName(event.target.value))
           }}
           placeholder="Fx Bonderøven"
-          className="rounded border border-green-300 px-3 py-2 text-base text-green-950"
+          className="rounded border border-line-strong px-3 py-2 text-base text-ink"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm text-green-900">
+      <label className="flex flex-col gap-1 text-sm text-ink-body">
         Slug
         <input
           type="text"
@@ -199,23 +199,23 @@ export function BadgeForm({ badge, onDone, onCancel }: BadgeFormProps) {
             setSlugEdited(true)
             setSlug(event.target.value)
           }}
-          className="rounded border border-green-300 px-3 py-2 text-base text-green-950"
+          className="rounded border border-line-strong px-3 py-2 text-base text-ink"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm text-green-900">
+      <label className="flex flex-col gap-1 text-sm text-ink-body">
         Beskrivelse (valgfri)
         <textarea
           value={description}
           rows={2}
           maxLength={2000}
           onChange={(event) => setDescription(event.target.value)}
-          className="rounded border border-green-300 px-3 py-2 text-base text-green-950"
+          className="rounded border border-line-strong px-3 py-2 text-base text-ink"
         />
       </label>
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-green-900">
+        <span className="text-sm font-medium text-ink-body">
           Billede {badge ? '(vælg et nyt for at udskifte)' : '(påkrævet)'}
         </span>
         <input
@@ -223,15 +223,15 @@ export function BadgeForm({ badge, onDone, onCancel }: BadgeFormProps) {
           accept="image/png,image/jpeg,image/webp"
           aria-label="Vælg badgebillede"
           onChange={handleFileChange}
-          className="text-sm text-green-900"
+          className="text-sm text-ink-body"
         />
-        <p className="text-xs text-green-700">
+        <p className="text-xs text-ink-subtle">
           PNG, JPEG eller WebP. Kvadratisk og mindst 1000x1000 px anbefales --
           originalen bruges som forlæg til det fysiske badge og nedskaleres
           aldrig.
         </p>
         {warning && (
-          <p role="status" className="text-xs text-amber-800">
+          <p role="status" className="text-xs text-warn">
             {warning}
           </p>
         )}
@@ -248,7 +248,7 @@ export function BadgeForm({ badge, onDone, onCancel }: BadgeFormProps) {
             />
           </div>
           <div className="flex flex-col items-center gap-2">
-            <span className="text-xs text-green-700">Sådan ser den ud</span>
+            <span className="text-xs text-ink-subtle">Sådan ser den ud</span>
             <BadgeMedal
               badge={{
                 name: name || 'Badge',
@@ -268,7 +268,7 @@ export function BadgeForm({ badge, onDone, onCancel }: BadgeFormProps) {
       )}
 
       <div className="flex flex-wrap gap-3">
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           Diameter (mm)
           <input
             type="number"
@@ -277,10 +277,10 @@ export function BadgeForm({ badge, onDone, onCancel }: BadgeFormProps) {
             step="0.5"
             value={diameterMm}
             onChange={(event) => setDiameterMm(event.target.value)}
-            className="w-28 rounded border border-green-300 px-3 py-2 text-base text-green-950"
+            className="w-28 rounded border border-line-strong px-3 py-2 text-base text-ink"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           Beskæringsmargin (mm)
           <input
             type="number"
@@ -289,12 +289,12 @@ export function BadgeForm({ badge, onDone, onCancel }: BadgeFormProps) {
             step="0.5"
             value={bleedMm}
             onChange={(event) => setBleedMm(event.target.value)}
-            className="w-28 rounded border border-green-300 px-3 py-2 text-base text-green-950"
+            className="w-28 rounded border border-line-strong px-3 py-2 text-base text-ink"
           />
         </label>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-green-900">
+      <label className="flex items-center gap-2 text-sm text-ink-body">
         <input
           type="checkbox"
           checked={isActive}
@@ -305,7 +305,7 @@ export function BadgeForm({ badge, onDone, onCancel }: BadgeFormProps) {
       </label>
 
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
@@ -314,14 +314,14 @@ export function BadgeForm({ badge, onDone, onCancel }: BadgeFormProps) {
         <button
           type="submit"
           disabled={saveBadge.isPending}
-          className="min-h-11 rounded-lg bg-green-800 px-6 py-2 text-white disabled:opacity-50"
+          className="min-h-11 rounded-lg bg-accent px-6 py-2 text-white disabled:opacity-50"
         >
           {saveBadge.isPending ? 'Gemmer…' : 'Gem badge'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-11 rounded-lg border border-green-300 px-4 py-2 text-green-800"
+          className="min-h-11 rounded-lg border border-line-strong px-4 py-2 text-ink-muted"
         >
           Annullér
         </button>

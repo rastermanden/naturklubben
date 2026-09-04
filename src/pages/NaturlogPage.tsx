@@ -36,10 +36,10 @@ function NaturlogLoadingState() {
         <div
           key={index}
           aria-hidden="true"
-          className="flex flex-col gap-2 rounded-xl border border-green-100 bg-white p-4"
+          className="flex flex-col gap-2 rounded-xl border border-line-soft bg-surface p-4"
         >
-          <span className="h-5 w-1/2 rounded bg-green-100 motion-safe:animate-pulse" />
-          <span className="h-4 w-3/4 rounded bg-green-50 motion-safe:animate-pulse" />
+          <span className="h-5 w-1/2 rounded bg-surface-raised motion-safe:animate-pulse" />
+          <span className="h-4 w-3/4 rounded bg-surface-sunken motion-safe:animate-pulse" />
         </div>
       ))}
       <span className="sr-only">Henter naturloggen…</span>
@@ -162,8 +162,8 @@ function NaturlogPage() {
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-green-900">Naturlog</h1>
-          <p className="text-green-700">
+          <h1 className="text-2xl font-semibold text-ink-body">Naturlog</h1>
+          <p className="text-ink-subtle">
             Hvad har vi set derude? Skriv arten, stedet og datoen -- og læg
             gerne et billede ved.
           </p>
@@ -172,7 +172,7 @@ function NaturlogPage() {
           <button
             type="button"
             onClick={openNew}
-            className="min-h-11 shrink-0 rounded-lg bg-green-700 px-4 py-2 font-medium text-white"
+            className="min-h-11 shrink-0 rounded-lg bg-accent-soft px-4 py-2 font-medium text-white"
           >
             Ny observation
           </button>
@@ -180,20 +180,20 @@ function NaturlogPage() {
       </div>
 
       {status && (
-        <p role="status" className="text-sm text-green-700">
+        <p role="status" className="text-sm text-ink-subtle">
           {status}
         </p>
       )}
 
       {observations.length > 0 && (
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           Søg i loggen
           <input
             type="search"
             value={search}
             onChange={(changeEvent) => setSearch(changeEvent.target.value)}
             placeholder="Art, sted eller noter"
-            className="rounded border border-green-300 px-3 py-2 text-base text-gray-950"
+            className="rounded border border-line-strong px-3 py-2 text-base text-ink"
           />
         </label>
       )}
@@ -203,13 +203,13 @@ function NaturlogPage() {
       {observationsQuery.isError && (
         <div
           role="alert"
-          className="flex flex-col items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800 sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col items-start gap-3 rounded-xl border border-danger-line bg-danger-surface p-4 text-danger-strong sm:flex-row sm:items-center sm:justify-between"
         >
           <p>Naturloggen kunne ikke hentes.</p>
           <button
             type="button"
             onClick={() => observationsQuery.refetch()}
-            className="min-h-11 rounded-lg border border-red-300 px-4 py-2 font-medium"
+            className="min-h-11 rounded-lg border border-danger-line px-4 py-2 font-medium"
           >
             Prøv igen
           </button>
@@ -217,14 +217,14 @@ function NaturlogPage() {
       )}
 
       {observationsQuery.isSuccess && observations.length === 0 && (
-        <div className="rounded-xl border border-green-100 bg-white px-4 py-12 text-center text-green-700">
+        <div className="rounded-xl border border-line-soft bg-surface px-4 py-12 text-center text-ink-subtle">
           Naturloggen er tom endnu. Vær den første til at skrive, hvad du har
           set.
         </div>
       )}
 
       {observations.length > 0 && visible.length === 0 && (
-        <p role="status" className="text-green-700">
+        <p role="status" className="text-ink-subtle">
           Ingen observationer matcher &quot;{search.trim()}&quot;.
         </p>
       )}

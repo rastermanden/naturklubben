@@ -38,7 +38,7 @@ export function BadgeMedal({
 
   return (
     <span
-      className={`relative block shrink-0 overflow-hidden rounded-full bg-green-100 ring-2 ring-green-800/20 ${sizeClasses[size]} ${className}`}
+      className={`relative block shrink-0 overflow-hidden rounded-full bg-surface-raised ring-2 ring-accent/20 ${sizeClasses[size]} ${className}`}
     >
       <img
         src={previewUrl ?? badgeImageUrl(badge.image_path)}

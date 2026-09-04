@@ -30,16 +30,16 @@ export function Layout({ routes }: LayoutProps) {
     <div className="flex min-h-svh flex-col">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded focus:bg-white focus:px-4 focus:py-3 focus:font-medium focus:text-green-950"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded focus:bg-surface focus:px-4 focus:py-3 focus:font-medium focus:text-ink"
       >
         Spring til indhold
       </a>
       <RouteNavigation routes={routes} />
       <header
-        className="sticky top-0 z-30 flex items-center justify-between border-b border-green-100 bg-white px-4 py-3"
+        className="sticky top-0 z-30 flex items-center justify-between border-b border-line-soft bg-surface px-4 py-3"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
       >
-        <NavLink to="/" className="text-lg font-semibold text-green-900">
+        <NavLink to="/" className="text-lg font-semibold text-ink-body">
           Naturklubben
         </NavLink>
 
@@ -49,7 +49,7 @@ export function Layout({ routes }: LayoutProps) {
               key={link.to}
               to={link.to}
               className={({ isActive }) =>
-                `rounded px-2 py-1 ${isActive ? 'font-medium text-green-900' : 'text-green-800'}`
+                `rounded px-2 py-1 ${isActive ? 'font-medium text-ink-body' : 'text-ink-muted'}`
               }
             >
               {link.label}
@@ -62,19 +62,19 @@ export function Layout({ routes }: LayoutProps) {
                 await signOut()
                 navigate('/')
               }}
-              className="rounded px-2 py-1 text-green-800 underline"
+              className="rounded px-2 py-1 text-ink-muted underline"
             >
               Log ud
             </button>
           ) : (
             <NavLink
               to="/login"
-              className="rounded px-2 py-1 text-green-800 underline"
+              className="rounded px-2 py-1 text-ink-muted underline"
             >
               Log ind
             </NavLink>
           )}
-          <InstallAppButton className="rounded border border-green-300 px-3 py-1 text-green-800" />
+          <InstallAppButton className="rounded border border-line-strong px-3 py-1 text-ink-muted" />
         </nav>
 
         <button
@@ -83,7 +83,7 @@ export function Layout({ routes }: LayoutProps) {
           onClick={() => setMenuOpen(true)}
           aria-label="Åbn menu"
           aria-expanded={menuOpen}
-          className="flex h-11 w-11 items-center justify-center rounded text-green-900 md:hidden"
+          className="flex h-11 w-11 items-center justify-center rounded text-ink-body md:hidden"
         >
           <svg
             width="24"

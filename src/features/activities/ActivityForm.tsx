@@ -85,13 +85,13 @@ export function ActivityForm({
   return (
     <form
       onSubmit={(event) => void handleSubmit(event)}
-      className="flex flex-col gap-4 rounded-lg border border-green-300 bg-white p-4"
+      className="flex flex-col gap-4 rounded-lg border border-line-strong bg-surface p-4"
     >
-      <h3 className="font-medium text-green-900">
+      <h3 className="font-medium text-ink-body">
         {activity ? `Ret ${activity.title}` : 'Ny aktivitet'}
       </h3>
 
-      <label className="flex flex-col gap-1 text-sm text-green-900">
+      <label className="flex flex-col gap-1 text-sm text-ink-body">
         Titel
         <input
           type="text"
@@ -100,11 +100,11 @@ export function ActivityForm({
           maxLength={120}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Fx Hornfisk"
-          className="rounded border border-green-300 px-3 py-2 text-base text-green-950"
+          className="rounded border border-line-strong px-3 py-2 text-base text-ink"
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-sm text-green-900">
+      <label className="flex flex-col gap-1 text-sm text-ink-body">
         Beskrivelse
         <textarea
           value={description}
@@ -113,17 +113,17 @@ export function ActivityForm({
           maxLength={2000}
           onChange={(event) => setDescription(event.target.value)}
           placeholder="Hvad mødes I om?"
-          className="rounded border border-green-300 px-3 py-2 text-base text-green-950"
+          className="rounded border border-line-strong px-3 py-2 text-base text-ink"
         />
       </label>
 
       <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           Ikon
           <select
             value={icon}
             onChange={(event) => setIcon(event.target.value)}
-            className="min-h-11 rounded border border-green-300 px-3 py-2 text-base text-green-950"
+            className="min-h-11 rounded border border-line-strong px-3 py-2 text-base text-ink"
           >
             {ACTIVITY_ICONS.map((option) => (
               <option key={option.id} value={option.id}>
@@ -134,15 +134,15 @@ export function ActivityForm({
         </label>
         <div className="flex items-center gap-2 pb-1">
           <ActivityIcon name={icon} size="sm" />
-          <span className="text-xs text-green-700">Sådan ser det ud</span>
+          <span className="text-xs text-ink-subtle">Sådan ser det ud</span>
         </div>
       </div>
 
-      <fieldset className="flex flex-col gap-3 rounded border border-green-200 p-3">
-        <legend className="px-1 text-sm text-green-900">
+      <fieldset className="flex flex-col gap-3 rounded border border-line p-3">
+        <legend className="px-1 text-sm text-ink-body">
           Link (valgfrit -- udfyld begge felter eller ingen)
         </legend>
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           Adresse
           <input
             type="url"
@@ -150,10 +150,10 @@ export function ActivityForm({
             maxLength={500}
             onChange={(event) => setLinkUrl(event.target.value)}
             placeholder="https://bral.dk"
-            className="rounded border border-green-300 px-3 py-2 text-base text-green-950"
+            className="rounded border border-line-strong px-3 py-2 text-base text-ink"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-green-900">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
           Linktekst
           <input
             type="text"
@@ -161,13 +161,13 @@ export function ActivityForm({
             maxLength={120}
             onChange={(event) => setLinkLabel(event.target.value)}
             placeholder="Læs om valutaen på bral.dk"
-            className="rounded border border-green-300 px-3 py-2 text-base text-green-950"
+            className="rounded border border-line-strong px-3 py-2 text-base text-ink"
           />
         </label>
       </fieldset>
 
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
@@ -176,14 +176,14 @@ export function ActivityForm({
         <button
           type="submit"
           disabled={saveActivity.isPending}
-          className="min-h-11 rounded-lg bg-green-800 px-6 py-2 text-white disabled:opacity-50"
+          className="min-h-11 rounded-lg bg-accent px-6 py-2 text-white disabled:opacity-50"
         >
           {saveActivity.isPending ? 'Gemmer…' : 'Gem aktivitet'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-11 rounded-lg border border-green-300 px-4 py-2 text-green-800"
+          className="min-h-11 rounded-lg border border-line-strong px-4 py-2 text-ink-muted"
         >
           Annullér
         </button>

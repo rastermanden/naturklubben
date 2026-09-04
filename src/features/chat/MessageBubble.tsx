@@ -37,7 +37,7 @@ function MessageText({
         segment.mentionedId ? (
           <span
             key={index}
-            className="rounded bg-amber-200/80 px-1 font-semibold text-green-950"
+            className="rounded bg-amber-200/80 px-1 font-semibold text-ink-fixed"
           >
             {segment.text}
           </span>
@@ -124,7 +124,7 @@ export function MessageBubble({
       ? 'Tidligere medlem'
       : (replyAuthor?.full_name ?? 'Medlem')
   const replyExcerpt = message.reply_to?.content.trim().replace(/\s+/g, ' ')
-  const textColor = isOwn ? readableTextColor(color) : '#052e16'
+  const textColor = isOwn ? readableTextColor(color) : 'var(--color-ink)'
   const isDeleted = message.deleted_at !== null
   const wasDeletedByAdmin =
     isDeleted &&
@@ -139,8 +139,8 @@ export function MessageBubble({
         isAction
           ? 'justify-center'
           : `items-end gap-2 ${isOwn ? 'flex-row-reverse' : ''}`
-      } ${isHighlighted ? 'outline-4 outline-amber-300' : ''} ${
-        isMentioned && !isDeleted ? 'ring-2 ring-amber-400' : ''
+      } ${isHighlighted ? 'outline-4 outline-warn-ring' : ''} ${
+        isMentioned && !isDeleted ? 'ring-2 ring-warn-ring' : ''
       }`}
     >
       {!isAction && (
@@ -171,8 +171,8 @@ export function MessageBubble({
           <blockquote
             className={`mb-2 rounded-lg border-l-4 px-3 py-2 text-sm ${
               isOwn
-                ? 'border-white/60 bg-black/10'
-                : 'border-green-500/50 bg-white/70'
+                ? 'border-quote-own-line bg-quote-own'
+                : 'border-quote-line bg-quote'
             }`}
           >
             <p className="text-xs font-semibold">{replyName}</p>
@@ -195,7 +195,7 @@ export function MessageBubble({
         {isMentioned && !isDeleted && (
           <p
             className={`mb-1 text-xs font-semibold ${
-              isAction ? 'text-center text-green-800' : ''
+              isAction ? 'text-center text-ink-muted' : ''
             }`}
           >
             Du er nævnt
@@ -207,7 +207,7 @@ export function MessageBubble({
             {wasDeletedByAdmin && <p>Slettet af en administrator.</p>}
           </div>
         ) : isAction ? (
-          <p className="text-center text-sm italic text-green-800">
+          <p className="text-center text-sm italic text-ink-muted">
             <span aria-hidden="true">* </span>
             <span className="font-medium">{name}</span>{' '}
             <MessageText

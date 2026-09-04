@@ -28,23 +28,23 @@ export function FeatureAnnouncementBanner({ userId }: { userId: string }) {
   return (
     <aside
       aria-labelledby="feature-announcement-heading"
-      className="mx-4 mt-4 rounded-xl border border-green-200 bg-green-50 p-4"
+      className="mx-4 mt-4 rounded-xl border border-line bg-surface-sunken p-4"
     >
       <h2
         id="feature-announcement-heading"
-        className="text-sm font-semibold tracking-wide text-green-900 uppercase"
+        className="text-sm font-semibold tracking-wide text-ink-body uppercase"
       >
         {unread.length === 1 ? 'Nyt i appen' : `Nyt i appen (${unread.length})`}
       </h2>
       <ul className="mt-2 space-y-3">
         {unread.map((announcement) => (
           <li key={announcement.id}>
-            <h3 className="font-medium text-green-950">{announcement.title}</h3>
-            <p className="text-sm text-green-900">{announcement.body}</p>
+            <h3 className="font-medium text-ink">{announcement.title}</h3>
+            <p className="text-sm text-ink-body">{announcement.body}</p>
             {announcement.path && (
               <Link
                 to={`/${announcement.path}`}
-                className="text-sm text-green-800 underline"
+                className="text-sm text-ink-muted underline"
               >
                 Prøv den
               </Link>
@@ -56,11 +56,11 @@ export function FeatureAnnouncementBanner({ userId }: { userId: string }) {
         <button
           type="button"
           onClick={() => void markAsRead(unread.map(({ id }) => id))}
-          className="min-h-11 rounded-full border border-green-800 bg-green-800 px-4 py-2 text-sm text-white"
+          className="min-h-11 rounded-full border border-accent bg-accent px-4 py-2 text-sm text-white"
         >
           Fik den
         </button>
-        <Link to="/nyheder" className="text-sm text-green-800 underline">
+        <Link to="/nyheder" className="text-sm text-ink-muted underline">
           Se alle nyheder
         </Link>
       </div>

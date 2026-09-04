@@ -79,7 +79,7 @@ export function ActivitiesSection() {
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-medium text-green-900">
+        <h2 className="font-medium text-ink-body">
           Klubbens aktiviteter
           {activities.length > 0 && ` (${activities.length})`}
         </h2>
@@ -90,25 +90,25 @@ export function ActivitiesSection() {
               resetMessages()
               setEditing('new')
             }}
-            className="min-h-11 rounded-lg bg-green-800 px-4 py-2 text-white"
+            className="min-h-11 rounded-lg bg-accent px-4 py-2 text-white"
           >
             Ny aktivitet
           </button>
         )}
       </div>
 
-      <p className="text-sm text-green-700">
+      <p className="text-sm text-ink-subtle">
         Rækkefølgen her er den, aktiviteterne vises i -- forsiden viser de tre
         øverste.
       </p>
 
       {status && (
-        <p role="status" className="text-sm text-green-700">
+        <p role="status" className="text-sm text-ink-subtle">
           {status}
         </p>
       )}
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
@@ -130,18 +130,18 @@ export function ActivitiesSection() {
       )}
 
       {activitiesQuery.isPending && (
-        <p className="text-sm text-green-700">Henter aktiviteterne…</p>
+        <p className="text-sm text-ink-subtle">Henter aktiviteterne…</p>
       )}
 
       {activitiesQuery.isError && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           Aktiviteterne kunne ikke hentes:{' '}
           {toFriendlyActivityError(activitiesQuery.error)}
         </p>
       )}
 
       {activitiesQuery.isSuccess && activities.length === 0 && (
-        <p className="text-sm text-green-700">
+        <p className="text-sm text-ink-subtle">
           Der er ingen aktiviteter endnu. Opret den første -- den vises med det
           samme på forsiden og aktivitetssiden.
         </p>
@@ -151,15 +151,15 @@ export function ActivitiesSection() {
         {activities.map((activity, index) => (
           <li
             key={activity.id}
-            className="flex flex-wrap items-center gap-3 rounded-lg border border-green-200 px-4 py-3"
+            className="flex flex-wrap items-center gap-3 rounded-lg border border-line px-4 py-3"
           >
             <ActivityIcon name={activity.icon} size="sm" />
             <div className="min-w-0 flex-1">
-              <p className="text-green-950">{activity.title}</p>
-              <p className="truncate text-sm text-green-700">
+              <p className="text-ink">{activity.title}</p>
+              <p className="truncate text-sm text-ink-subtle">
                 {activity.description}
               </p>
-              <p className="text-xs text-green-700">
+              <p className="text-xs text-ink-subtle">
                 Ikon: {activityIconLabel(activity.icon)}
                 {activity.link_label && ` · Link: ${activity.link_label}`}
               </p>
@@ -171,7 +171,7 @@ export function ActivitiesSection() {
                 onClick={() => void handleMove(activity, 'up')}
                 disabled={busy || index === 0}
                 aria-label={`Flyt ${activity.title} op`}
-                className="min-h-11 rounded-lg border border-green-300 px-3 py-2 text-sm text-green-800 disabled:opacity-50"
+                className="min-h-11 rounded-lg border border-line-strong px-3 py-2 text-sm text-ink-muted disabled:opacity-50"
               >
                 <span aria-hidden="true">&#8593;</span>
               </button>
@@ -180,7 +180,7 @@ export function ActivitiesSection() {
                 onClick={() => void handleMove(activity, 'down')}
                 disabled={busy || index === activities.length - 1}
                 aria-label={`Flyt ${activity.title} ned`}
-                className="min-h-11 rounded-lg border border-green-300 px-3 py-2 text-sm text-green-800 disabled:opacity-50"
+                className="min-h-11 rounded-lg border border-line-strong px-3 py-2 text-sm text-ink-muted disabled:opacity-50"
               >
                 <span aria-hidden="true">&#8595;</span>
               </button>
@@ -190,7 +190,7 @@ export function ActivitiesSection() {
                   resetMessages()
                   setEditing(activity)
                 }}
-                className="min-h-11 rounded-lg border border-green-300 px-3 py-2 text-sm text-green-800"
+                className="min-h-11 rounded-lg border border-line-strong px-3 py-2 text-sm text-ink-muted"
               >
                 Ret
               </button>
@@ -198,7 +198,7 @@ export function ActivitiesSection() {
                 type="button"
                 onClick={() => void handleDelete(activity)}
                 disabled={busy}
-                className="min-h-11 rounded-lg border border-red-300 px-3 py-2 text-sm text-red-800 disabled:opacity-50"
+                className="min-h-11 rounded-lg border border-danger-line px-3 py-2 text-sm text-danger-strong disabled:opacity-50"
               >
                 Slet
               </button>

@@ -33,7 +33,7 @@ function RouteLoadingFallback() {
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className="flex min-h-48 items-center justify-center p-6 text-green-800"
+      className="flex min-h-48 items-center justify-center p-6 text-ink-muted"
     >
       Indlæser siden…
     </div>

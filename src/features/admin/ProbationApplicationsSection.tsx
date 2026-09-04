@@ -42,18 +42,18 @@ export function ProbationApplicationsSection({
       count={applications.length}
     >
       {isPending && (
-        <p className="text-sm text-green-700">Henter ansøgninger…</p>
+        <p className="text-sm text-ink-subtle">Henter ansøgninger…</p>
       )}
 
       {isError && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           Ansøgningerne kunne ikke hentes:{' '}
           {toFriendlyProbationApplicationError(error)}
         </p>
       )}
 
       {isSuccess && applications.length === 0 && (
-        <p className="text-sm text-green-700">
+        <p className="text-sm text-ink-subtle">
           Der ligger ingen åbne ansøgninger lige nu.
         </p>
       )}
@@ -62,19 +62,19 @@ export function ProbationApplicationsSection({
         {applications.map((application) => (
           <li
             key={application.id}
-            className="flex flex-col gap-3 rounded-lg border border-green-200 px-4 py-3"
+            className="flex flex-col gap-3 rounded-lg border border-line px-4 py-3"
           >
             <div className="space-y-1">
-              <p className="text-green-950">{application.full_name}</p>
-              <p className="text-sm text-green-800">{application.email}</p>
-              <p className="text-sm text-green-700">
+              <p className="text-ink">{application.full_name}</p>
+              <p className="text-sm text-ink-muted">{application.email}</p>
+              <p className="text-sm text-ink-subtle">
                 Ansøgt {formatAdminDate(application.created_at)}
               </p>
-              <p className="text-sm whitespace-pre-wrap text-green-900">
+              <p className="text-sm whitespace-pre-wrap text-ink-body">
                 {application.motivation}
               </p>
               {application.status !== 'pending' && (
-                <p className="text-sm font-medium text-green-800">
+                <p className="text-sm font-medium text-ink-muted">
                   {application.status === 'approved'
                     ? 'Ansøgningen er godkendt.'
                     : 'Ansøgningen er afvist.'}
@@ -87,7 +87,7 @@ export function ProbationApplicationsSection({
                   type="button"
                   onClick={() => onApprove(application.id, application.email)}
                   disabled={handlingApplication}
-                  className="min-h-11 rounded-lg bg-green-800 px-4 py-2 text-white disabled:opacity-50"
+                  className="min-h-11 rounded-lg bg-accent px-4 py-2 text-white disabled:opacity-50"
                 >
                   Godkend
                 </button>
@@ -95,7 +95,7 @@ export function ProbationApplicationsSection({
                   type="button"
                   onClick={() => onReject(application.id, application.email)}
                   disabled={handlingApplication}
-                  className="min-h-11 rounded-lg border border-red-300 px-4 py-2 text-red-700 disabled:opacity-50"
+                  className="min-h-11 rounded-lg border border-danger-line px-4 py-2 text-danger disabled:opacity-50"
                 >
                   Afvis
                 </button>
@@ -104,7 +104,7 @@ export function ProbationApplicationsSection({
 
             {application.status === 'pending' &&
               application.admin_notification_status === 'failed' && (
-                <div className="space-y-2 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="space-y-2 rounded border border-warn-line bg-warn-surface p-3 text-sm text-warn-strong">
                   <p>
                     Admin-notifikationen er ikke leveret
                     {application.admin_notification_error
@@ -118,7 +118,7 @@ export function ProbationApplicationsSection({
                         onRetryNotification(application.id, 'admin')
                       }
                       disabled={retryingNotification}
-                      className="min-h-11 rounded border border-amber-500 px-3 py-2 disabled:opacity-50"
+                      className="min-h-11 rounded border border-warn-line px-3 py-2 disabled:opacity-50"
                     >
                       Prøv admin-notifikationen igen
                     </button>
@@ -129,14 +129,14 @@ export function ProbationApplicationsSection({
             {application.status === 'pending' &&
               (application.admin_notification_status === 'pending' ||
                 application.admin_notification_status === 'sending') && (
-                <p className="text-sm text-amber-800">
+                <p className="text-sm text-warn">
                   Admin-notifikationen venter på levering…
                 </p>
               )}
 
             {application.status !== 'pending' &&
               application.decision_notification_status === 'failed' && (
-                <div className="space-y-2 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                <div className="space-y-2 rounded border border-danger-line bg-danger-surface p-3 text-sm text-danger-strong">
                   <p>
                     Beslutningen er gemt, men ansøgerens notifikation er ikke
                     leveret
@@ -151,7 +151,7 @@ export function ProbationApplicationsSection({
                         onRetryNotification(application.id, 'decision')
                       }
                       disabled={retryingNotification}
-                      className="min-h-11 rounded border border-red-400 px-3 py-2 disabled:opacity-50"
+                      className="min-h-11 rounded border border-danger-line-strong px-3 py-2 disabled:opacity-50"
                     >
                       Prøv ansøgernotifikationen igen
                     </button>
@@ -162,7 +162,7 @@ export function ProbationApplicationsSection({
             {application.status !== 'pending' &&
               (application.decision_notification_status === 'pending' ||
                 application.decision_notification_status === 'sending') && (
-                <p className="text-sm text-green-700">
+                <p className="text-sm text-ink-subtle">
                   Ansøgerens notifikation venter på levering…
                 </p>
               )}
