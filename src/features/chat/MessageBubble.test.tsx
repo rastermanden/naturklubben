@@ -367,3 +367,62 @@ describe('MessageBubble mentions', () => {
     expect(screen.getByText('Hej @Martin Jensen og @Ada')).toBeTruthy()
   })
 })
+
+describe('MessageBubble kompakt linje', () => {
+  it('samler navn, tidspunkt og handlinger på én linje', () => {
+    render(
+      <MessageBubble
+        message={message}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        canDelete
+        onReply={vi.fn()}
+        onDelete={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    const meta = screen.getByText('Bo').parentElement!
+    const time = meta.querySelector('time')!
+
+    expect(time).toBeTruthy()
+    expect(
+      meta.contains(
+        screen.getByRole('button', { name: 'Svar på besked fra Bo' }),
+      ),
+    ).toBe(true)
+    expect(
+      meta.contains(
+        screen.getByRole('button', { name: 'Reagér på besked fra Bo' }),
+      ),
+    ).toBe(true)
+    expect(
+      meta.contains(screen.getByRole('button', { name: 'Slet besked fra Bo' })),
+    ).toBe(true)
+  })
+
+  it('skriver alderen kort, men beholder det præcise tidspunkt', () => {
+    render(
+      <MessageBubble
+        message={message}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    const time = screen.getByText('Bo').parentElement!.querySelector('time')!
+    const precise = new Date(message.created_at).toLocaleString('da-DK')
+
+    // Kort på skærmen, præcist for den, der peger på det eller lytter til det.
+    expect(time.textContent).not.toContain('siden')
+    expect(time.getAttribute('title')).toBe(precise)
+    expect(time.getAttribute('aria-label')).toBe(precise)
+    expect(time.getAttribute('datetime')).toBe(message.created_at)
+  })
+})
