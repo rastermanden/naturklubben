@@ -74,6 +74,14 @@ function LinkifiedText({ text }: { text: string }) {
   )
 }
 
+// Ikonknapper i stedet for ord: rækken med Svar/Reagér/Slet fyldte 44 px
+// under hver eneste besked. 32 px er stadig et rigeligt trykmål (WCAG 2.5.8
+// beder om 24), og skærmlæseren får de samme navne som før. Tegnene bærer
+// U+FE0E, så de tegnes som skrifttegn i boblens egen farve og ikke som
+// farvede emoji, der ville stå og lyse på en farvet boble.
+const ACTION_BUTTON_CLASS =
+  'flex h-8 w-8 items-center justify-center rounded-full text-sm hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current disabled:opacity-50'
+
 export function MessageBubble({
   message,
   author,
@@ -156,7 +164,7 @@ export function MessageBubble({
         className={
           isAction
             ? 'max-w-[85%] rounded-full px-4 py-1.5'
-            : 'max-w-[75%] rounded-2xl px-4 py-2'
+            : 'max-w-[75%] rounded-2xl px-3 py-1.5'
         }
         style={
           isAction
@@ -167,6 +175,73 @@ export function MessageBubble({
               }
         }
       >
+        {/* Navn, tidspunkt, "Du er nævnt" og handlingerne stod før på hver
+            sin række: en besked på tre ord fyldte fem linjer, og de tre
+            knapper alene 44 px. Nu deler de én linje, hvor knapperne er
+            ikoner med samme navne til skærmlæseren som før. */}
+        <div
+          className={`mb-0.5 flex flex-wrap items-center gap-x-1.5 text-xs ${
+            isAction
+              ? 'justify-center'
+              : isOwn
+                ? 'flex-row-reverse text-right'
+                : ''
+          }`}
+        >
+          {!isAction && <span className="font-medium">{name}</span>}
+          {/* Kort form på skærmen, præcist tidspunkt til den, der peger på
+              det -- og til skærmlæseren, som ellers ville læse "6 d" op. */}
+          <time
+            dateTime={message.created_at}
+            title={fullTimestamp}
+            aria-label={fullTimestamp}
+            className="opacity-70"
+          >
+            {formatRelativeTime(message.created_at)}
+          </time>
+          {isMentioned && !isDeleted && (
+            <span
+              className={`font-semibold ${isAction ? 'text-ink-muted' : ''}`}
+            >
+              Du er nævnt
+            </span>
+          )}
+          {!isDeleted && (
+            <span className="flex items-center">
+              <button
+                type="button"
+                onClick={() => onReply(message)}
+                aria-label={`Svar på besked fra ${name}`}
+                title="Svar"
+                className={ACTION_BUTTON_CLASS}
+              >
+                <span aria-hidden="true">↩︎</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerOpen((open) => !open)}
+                aria-expanded={pickerOpen}
+                aria-label={`Reagér på besked fra ${name}`}
+                title="Reagér"
+                className={ACTION_BUTTON_CLASS}
+              >
+                <span aria-hidden="true">☺︎</span>
+              </button>
+              {canDelete && onDelete && (
+                <button
+                  type="button"
+                  onClick={() => onDelete(message)}
+                  disabled={isDeleting}
+                  aria-label={`Slet besked fra ${name}`}
+                  title={isDeleting ? 'Sletter…' : 'Slet'}
+                  className={ACTION_BUTTON_CLASS}
+                >
+                  <span aria-hidden="true">{isDeleting ? '…' : '×'}</span>
+                </button>
+              )}
+            </span>
+          )}
+        </div>
         {!isAction && message.reply_to_message_id && (
           <blockquote
             className={`mb-2 rounded-lg border-l-4 px-3 py-2 text-sm ${
@@ -182,24 +257,6 @@ export function MessageBubble({
                 : replyExcerpt || 'Den oprindelige besked er ikke tilgængelig.'}
             </p>
           </blockquote>
-        )}
-        {!isAction && (
-          <p
-            className={`mb-0.5 text-xs font-medium ${
-              isOwn ? 'text-right' : ''
-            }`}
-          >
-            {name}
-          </p>
-        )}
-        {isMentioned && !isDeleted && (
-          <p
-            className={`mb-1 text-xs font-semibold ${
-              isAction ? 'text-center text-ink-muted' : ''
-            }`}
-          >
-            Du er nævnt
-          </p>
         )}
         {isDeleted ? (
           <div className="py-1 text-sm italic opacity-75">
@@ -225,51 +282,8 @@ export function MessageBubble({
             />
           </p>
         )}
-        <p
-          className={`mt-1 text-xs ${
-            isAction ? 'text-center opacity-70' : 'text-right'
-          }`}
-          title={fullTimestamp}
-        >
-          {formatRelativeTime(message.created_at)}
-        </p>
         {!isDeleted && (
           <>
-            <div
-              className={`mt-1 flex flex-wrap items-center gap-1 ${
-                isAction ? 'justify-center' : 'justify-end'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => onReply(message)}
-                aria-label={`Svar på besked fra ${name}`}
-                className="min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current disabled:opacity-50"
-              >
-                Svar
-              </button>
-              <button
-                type="button"
-                onClick={() => setPickerOpen((open) => !open)}
-                aria-expanded={pickerOpen}
-                aria-label={`Reagér på besked fra ${name}`}
-                className="min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
-              >
-                Reagér
-              </button>
-              {canDelete && onDelete && (
-                <button
-                  type="button"
-                  onClick={() => onDelete(message)}
-                  disabled={isDeleting}
-                  aria-label={`Slet besked fra ${name}`}
-                  className="min-h-11 rounded px-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current disabled:opacity-50"
-                >
-                  {isDeleting ? 'Sletter…' : 'Slet'}
-                </button>
-              )}
-            </div>
-
             {pickerOpen && (
               <ReactionPicker
                 summaries={reactions}
