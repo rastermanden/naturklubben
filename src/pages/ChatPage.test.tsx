@@ -696,3 +696,68 @@ describe('ChatPage mentions', () => {
     expect(screen.getByText('Du er nævnt')).toBeTruthy()
   })
 })
+
+describe('ChatPage plads på en telefon', () => {
+  it('folder søgning og notifikationer sammen, indtil man beder om dem', () => {
+    render(<ChatPage />)
+
+    const tools = document.getElementById('chat-tools')
+    const toggle = screen.getByRole('button', {
+      name: 'Søgning og notifikationer',
+    })
+
+    // `hidden` gælder kun under sm-breakpointet: `sm:flex` folder panelet ud
+    // igen på en skærm, hvor der er plads til det hele på én gang.
+    expect(tools?.className).toContain('hidden')
+    expect(tools?.className).toContain('sm:flex')
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+
+    fireEvent.click(toggle)
+
+    expect(document.getElementById('chat-tools')?.className).toContain('flex')
+    expect(
+      screen
+        .getByRole('button', { name: 'Søgning og notifikationer' })
+        .getAttribute('aria-expanded'),
+    ).toBe('true')
+  })
+
+  it('lægger chatten over app-shellen i fuldskærm og beder browseren om sin', () => {
+    const requestFullscreen = vi.fn().mockResolvedValue(undefined)
+    document.documentElement.requestFullscreen = requestFullscreen
+
+    render(<ChatPage />)
+
+    expect(screen.getByRole('main').className).not.toContain('fixed')
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Vis chatten i fuldskærm' }),
+    )
+
+    const main = screen.getByRole('main')
+    expect(main.className).toContain('fixed')
+    expect(main.className).toContain('inset-0')
+    expect(requestFullscreen).toHaveBeenCalled()
+    expect(
+      screen
+        .getByRole('button', { name: 'Afslut fuldskærm' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true')
+  })
+
+  it('følger med ud, når browserens egen fuldskærm forlades', () => {
+    document.documentElement.requestFullscreen = vi
+      .fn()
+      .mockResolvedValue(undefined)
+
+    render(<ChatPage />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Vis chatten i fuldskærm' }),
+    )
+    fireEvent(document, new Event('fullscreenchange'))
+
+    expect(screen.getByRole('main').className).not.toContain('fixed')
+    expect(
+      screen.getByRole('button', { name: 'Vis chatten i fuldskærm' }),
+    ).toBeTruthy()
+  })
+})

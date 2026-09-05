@@ -128,7 +128,11 @@ export function Layout({ routes }: LayoutProps) {
         <Outlet />
       </div>
 
-      <Footer />
+      {/* Chatten er en fuldskærmsvisning: footeren fylder mere end selve
+          beskedstrømmen på en telefon, så den udelades der. Temaskifteren og
+          resten af footerens indhold står i burgermenuen og på alle andre
+          sider. */}
+      {!keepsContentInViewport && <Footer />}
     </div>
   )
 }
