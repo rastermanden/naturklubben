@@ -76,6 +76,16 @@ export const routeMetadata = [
     announcement: 'Naturlog indlæst',
   },
   {
+    path: '/spil',
+    documentTitle: 'Spil | Naturklubben',
+    announcement: 'Spil indlæst',
+  },
+  {
+    path: '/spil/tetris',
+    documentTitle: 'Tetris | Naturklubben',
+    announcement: 'Tetris indlæst',
+  },
+  {
     path: '/medlemmer',
     documentTitle: 'Medlemmer | Naturklubben',
     announcement: 'Medlemmer indlæst',
