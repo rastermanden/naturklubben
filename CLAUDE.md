@@ -209,9 +209,9 @@ lokale terminal. Derfor gælder:
 
 ```
 src/
-  pages/        # HeroPage, ActivitiesPage, CalendarPage, GalleryPage, ChatPage, LoginPage, ...
+  pages/        # HeroPage, ActivitiesPage, CalendarPage, GalleryPage, ChatPage, GamesPage, LoginPage, ...
   components/    # delte UI-komponenter: Navbar, BurgerMenu, ...
-  features/      # feature-specifik logik: auth, calendar, gallery, chat, notifications
+  features/      # feature-specifik logik: auth, calendar, gallery, chat, games, notifications
   lib/           # supabaseClient.ts, queryClient.ts
   hooks/
   sw.ts          # service worker (vite-plugin-pwa injectManifest): precaching + push
