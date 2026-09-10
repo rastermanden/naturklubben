@@ -26,6 +26,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
 const GamesPage = lazy(() => import('./pages/GamesPage'))
 const TetrisPage = lazy(() => import('./pages/TetrisPage'))
+const KaperPage = lazy(() => import('./pages/KaperPage'))
 const SignupPage = lazy(() => import('./pages/SignupPage'))
 const WelcomePage = lazy(() => import('./pages/WelcomePage'))
 
@@ -77,6 +78,7 @@ const routeElements: Record<AppRoutePath, ReactNode> = {
   '/naturlog': <ProtectedRoute>{loadRoute(<NaturlogPage />)}</ProtectedRoute>,
   '/spil': <ProtectedRoute>{loadRoute(<GamesPage />)}</ProtectedRoute>,
   '/spil/tetris': <ProtectedRoute>{loadRoute(<TetrisPage />)}</ProtectedRoute>,
+  '/spil/kaper': <ProtectedRoute>{loadRoute(<KaperPage />)}</ProtectedRoute>,
   '/medlemmer': <ProtectedRoute>{loadRoute(<MembersPage />)}</ProtectedRoute>,
   '/nyheder': <ProtectedRoute>{loadRoute(<NewsPage />)}</ProtectedRoute>,
   '/admin': (

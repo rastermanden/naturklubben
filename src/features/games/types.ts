@@ -1,6 +1,6 @@
 /** Spil, der kan lægge resultater på klubbens liste. Skal matche
  *  `game_scores_game_known` i databasen. */
-export type GameId = 'tetris'
+export type GameId = 'tetris' | 'kaper'
 
 export interface GamePlayer {
   id: string
@@ -13,6 +13,7 @@ export interface GameScore {
   game: GameId
   player_id: string
   score: number
+  /** Ryddede rækker i Tetris, antal træk i Kaptajn Kaper. */
   lines: number
   level: number
   duration_seconds: number

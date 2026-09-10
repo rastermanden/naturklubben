@@ -86,6 +86,11 @@ export const routeMetadata = [
     announcement: 'Tetris indlæst',
   },
   {
+    path: '/spil/kaper',
+    documentTitle: 'Kaptajn Kaper i Kattegat | Naturklubben',
+    announcement: 'Kaptajn Kaper i Kattegat indlæst',
+  },
+  {
     path: '/medlemmer',
     documentTitle: 'Medlemmer | Naturklubben',
     announcement: 'Medlemmer indlæst',
