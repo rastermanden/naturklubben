@@ -1,12 +1,8 @@
 import { Avatar } from '../../components/Avatar'
 import { useIsAdmin } from '../admin/useIsAdmin'
 import { useAuth } from '../auth/useAuth'
-import {
-  formatDuration,
-  formatScore,
-  playerName,
-  rankLeaderboard,
-} from './leaderboard'
+import { gameById } from './games'
+import { formatScore, playerName, rankLeaderboard } from './leaderboard'
 import type { GameId, GameScore } from './types'
 import { useDeleteScore, useLeaderboard } from './useGameScores'
 
@@ -137,8 +133,7 @@ export function Leaderboard({ game, limit, heading }: LeaderboardProps) {
                     )}
                   </span>
                   <span className="truncate text-xs text-ink-subtle">
-                    {score.lines} rækker · niveau {score.level} ·{' '}
-                    {formatDuration(score.duration_seconds)} ·{' '}
+                    {gameById(game).describeScore(score)} ·{' '}
                     {dateFormatter.format(new Date(score.created_at))}
                   </span>
                 </div>

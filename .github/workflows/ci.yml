@@ -35,11 +35,17 @@ jobs:
 
       - run: npm ci
 
+      # --config peger på supabase/deno.json, som slår node_modules fra for
+      # Deno. Uden den ser Deno repoets package.json, bruger node_modules som
+      # kilde til npm-pakker og kræver, at den installerede @supabase/supabase-js
+      # er præcis den version, Edge Functions pinner -- så hver gang Dependabot
+      # hæver package.json, blev dette job rødt. Edge Functions kører aldrig med
+      # node_modules, så her hentes pakken fra registry'et, som ved deploy.
       - name: Test Edge Function-hjælpere
-        run: deno test supabase/functions/_shared/*.test.ts
+        run: deno test --config supabase/deno.json supabase/functions/_shared/*.test.ts
 
       - name: Typecheck Edge Functions
-        run: deno check supabase/functions/*/index.ts
+        run: deno check --config supabase/deno.json supabase/functions/*/index.ts
 
       - name: Test
         run: npm test

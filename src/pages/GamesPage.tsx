@@ -36,15 +36,21 @@ function GamesPage() {
         ))}
       </ul>
 
-      <div className="flex flex-col gap-3">
-        <Leaderboard game="tetris" limit={5} heading="Tetris — de bedste" />
-        <Link
-          to="/spil/tetris"
-          className="self-start text-sm text-ink-muted underline"
-        >
-          Se hele listen og spil
-        </Link>
-      </div>
+      {games.map((game) => (
+        <div key={game.id} className="flex flex-col gap-3">
+          <Leaderboard
+            game={game.id}
+            limit={5}
+            heading={`${game.title} — de bedste`}
+          />
+          <Link
+            to={game.path}
+            className="self-start text-sm text-ink-muted underline"
+          >
+            Se hele listen og spil
+          </Link>
+        </div>
+      ))}
     </main>
   )
 }
