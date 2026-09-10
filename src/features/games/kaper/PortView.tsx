@@ -116,56 +116,56 @@ export function PortView({
         aria-live="polite"
         className="min-h-5 text-sm text-ink-muted"
       >
-        {notice ?? `Du har ${state.taels} taels. Hvad skal det være?`}
+        {notice ?? `Du har ${state.taels} bral. Hvad skal det være?`}
       </p>
 
       <div className="flex flex-col">
         <TradeRow
           id="kaper-buy-men"
           label="Hyr mænd"
-          price={`${prices.men} taels pr. mand · højst ${MAX_MEN - 1} om bord`}
+          price={`${prices.men} bral pr. mand · højst ${MAX_MEN - 1} om bord`}
           action="Hyr"
           onSubmit={buy('men')}
         />
         <TradeRow
           id="kaper-buy-repair"
           label="Reparér skibet"
-          price={`${prices.repair} taels pr. reparationspoint`}
+          price={`${prices.repair} bral pr. reparationspoint`}
           action="Reparér"
           onSubmit={buy('repair')}
         />
         <TradeRow
           id="kaper-buy-cannon"
           label="Køb kanoner"
-          price={`${prices.cannon} taels pr. kanon · højst ${MAX_CANNON - 1} om bord`}
+          price={`${prices.cannon} bral pr. kanon · højst ${MAX_CANNON - 1} om bord`}
           action="Køb"
           onSubmit={buy('cannon')}
         />
         <TradeRow
           id="kaper-buy-grain"
           label="Køb korn"
-          price={`${prices.grain} taels pr. sæk · højst ${MAX_GRAIN - 1} om bord`}
+          price={`${prices.grain} bral pr. sæk · højst ${MAX_GRAIN - 1} om bord`}
           action="Køb"
           onSubmit={buy('grain')}
         />
         <TradeRow
           id="kaper-sell-grain"
           label="Sælg korn"
-          price={`${prices.grain} taels pr. sæk · du har ${Math.floor(state.grain)}`}
+          price={`${prices.grain} bral pr. sæk · du har ${Math.floor(state.grain)}`}
           action="Sælg"
           onSubmit={sell('grain')}
         />
         <TradeRow
           id="kaper-sell-cannon"
           label="Sælg kanoner"
-          price={`${prices.cannon} taels pr. kanon · du har ${state.cannon}`}
+          price={`${prices.cannon} bral pr. kanon · du har ${state.cannon}`}
           action="Sælg"
           onSubmit={sell('cannon')}
         />
         <TradeRow
           id="kaper-sell-jewels"
           label="Sælg juveler"
-          price={`${prices.jewels} taels pr. juvel · du har ${state.jewels}`}
+          price={`${prices.jewels} bral pr. juvel · du har ${state.jewels}`}
           action="Sælg"
           disabled={state.jewels === 0}
           onSubmit={sell('jewels')}

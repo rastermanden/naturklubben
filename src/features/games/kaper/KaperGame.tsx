@@ -324,7 +324,7 @@ function Stage({ state, dispatch }: StageProps) {
         <Panel
           title="De overgiver sig!"
           lines={[
-            `Der er ${screen.enemy.taels} taels om bord på hende.`,
+            `Der er ${screen.enemy.taels} bral om bord på hende.`,
             screen.survivors > 1
               ? `Der er ${screen.survivors} overlevende.`
               : 'Dækket er oversvømmet af lig.',
@@ -574,7 +574,7 @@ export function KaperGame() {
         <StatTile label="Træk" value={String(state.moves)} />
         <StatTile label="Frist (træk)" value={String(state.moveLimit)} />
         <StatTile label="Rang" value={rankName(level)} />
-        <StatTile label="Taels" value={formatScore(state.taels)} />
+        <StatTile label="Bral" value={formatScore(state.taels)} />
         <StatTile label="Mand" value={String(state.men)} />
         <StatTile label="Kanoner" value={String(state.cannon)} />
         <StatTile label="Korn" value={String(Math.floor(state.grain))} />
@@ -738,7 +738,7 @@ export function KaperGame() {
             <li>
               <strong className="text-ink-body">Grænser:</strong> under 20
               reparationspoint eller 10 mand synker skibet. Mere end 500 mand,
-              150 kanoner, 700 sække korn eller 30.000 taels gør det samme.
+              150 kanoner, 700 sække korn eller 30.000 bral gør det samme.
             </li>
           </ul>
           <p>

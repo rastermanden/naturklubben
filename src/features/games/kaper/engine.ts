@@ -327,7 +327,7 @@ function goDown(state: KaperState, cause: string | null): KaperState {
   return gameOver(sunk, 'lost', 'Beklager!', [
     ...(cause ? [cause] : []),
     'Dit skib gik ned med mand og mus!',
-    `Du fik ${sunk.points} point og havde ${sunk.taels} taels.`,
+    `Du fik ${sunk.points} point og havde ${sunk.taels} bral.`,
     `Du endte med ${sunk.men} mand og ${sunk.repair} reparationspoint.`,
   ])
 }
@@ -789,9 +789,9 @@ function investigate(state: KaperState, rng: Rng): KaperState {
       )
     }
     case 2: {
-      const taels = 300 * roll
-      return report({ ...state, taels: state.taels + taels }, 'En ø!', [
-        `Du finder en ø med en skattekiste, der indeholder ${taels} taels!`,
+      const bral = 300 * roll
+      return report({ ...state, taels: state.taels + bral }, 'En ø!', [
+        `Du finder en ø med en skattekiste, der indeholder ${bral} bral!`,
       ])
     }
     case 3: {
@@ -923,7 +923,7 @@ function arriveInPort(state: KaperState, port: number, rng: Rng): KaperState {
   if (port === COPENHAGEN && (state.prizeMen > 0 || state.prizeTaels > 0)) {
     arrival = [
       `Storartet! Her i København venter dine ${state.prizeMen} tapre mænd på dig.`,
-      `De har ${state.prizeTaels} taels i prisepenge med til dig!`,
+      `De har ${state.prizeTaels} bral i prisepenge med til dig!`,
     ]
     next = {
       ...next,
@@ -978,7 +978,7 @@ function buy(
     screen: {
       ...screen,
       arrival: null,
-      notice: `Du købte ${amount} ${ITEM_NAMES[item]} for ${cost} taels.`,
+      notice: `Du købte ${amount} ${ITEM_NAMES[item]} for ${cost} bral.`,
     },
   }
 }
@@ -1004,7 +1004,7 @@ function sell(
     screen: {
       ...screen,
       arrival: null,
-      notice: `Du solgte ${amount} ${ITEM_NAMES[item]} for ${income} taels.`,
+      notice: `Du solgte ${amount} ${ITEM_NAMES[item]} for ${income} bral.`,
     },
   }
 }

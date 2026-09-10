@@ -1,6 +1,6 @@
 /**
  * Fjenderne, som de stod i spillets DATA-linjer 840-910: kanoner, besætning,
- * hvad der er i lasten af taels, og hvor mange sække korn der højst er om
+ * hvad der er i lasten af bral, og hvor mange sække korn der højst er om
  * bord. De syv første er engelske; piratskibet sejler under sit eget flag.
  */
 export interface EnemyType {
