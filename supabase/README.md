@@ -54,6 +54,14 @@ Oprettet i SQL (kommer automatisk med på preview-branches og i produktion):
 
 ## Edge Functions
 
+Deno-konfigurationen til dem ligger i `supabase/deno.json` og bruges med `--config`
+(`deno test --config supabase/deno.json supabase/functions/_shared/*.test.ts`). Den slår
+`node_modules` fra for Deno: Edge Functions pinner `npm:@supabase/supabase-js` til én
+version og kører aldrig med repoets `node_modules`, så pakken hentes fra registry'et og
+låses i `deno.lock`, i stedet for at Deno kræver, at frontendens installerede version
+tilfældigvis er den samme. Filen hedder ikke `supabase/functions/deno.json`, netop for at
+Supabase CLI'en ikke skal læse den ved deploy.
+
 - `optimize-image` (#13): kaldes fra klienten (`useUploadPhotos`) lige efter en upload.
   Klienten sender kun photo-id; functionen validerer bearer-token og afviser alle andre
   end uploaderen. Den claimer `pending`/`failed` arbejde (eller `processing`, der har
