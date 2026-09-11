@@ -1,4 +1,4 @@
-import { supabase } from '../../lib/supabaseClient'
+import { announceInChat } from './announceInChat'
 import { displayPronouns } from './pronouns'
 
 /**
@@ -22,30 +22,6 @@ export function pronounsAnnouncement(pronouns: string): string {
   return `bruger nu pronominerne ${pronouns}`
 }
 
-/**
- * Fortæller de andre om skiftet ad den vej, de allerede kender: en
- * handlingsbesked i chatten (som "/slap") og en push-notifikation gennem
- * chat-push, der selv respekterer hvert medlems notifikationsvalg.
- *
- * Bedste indsats, ligesom notifikationen efter en almindelig besked: profilen
- * er allerede gemt, så en fejl her må ikke ligne, at gemningen slog fejl.
- */
-export async function announcePronouns(userId: string, pronouns: string) {
-  const { data, error } = await supabase
-    .from('messages')
-    .insert({
-      user_id: userId,
-      content: pronounsAnnouncement(pronouns),
-      message_type: 'action',
-    })
-    .select('id')
-    .single()
-  if (error) {
-    console.warn('Pronomin-beskeden kunne ikke sendes til chatten', error)
-    return
-  }
-  const { error: pushError } = await supabase.functions.invoke('chat-push', {
-    body: { messageId: data.id },
-  })
-  if (pushError) console.warn('Notifikationer kunne ikke sendes', pushError)
+export function announcePronouns(userId: string, pronouns: string) {
+  return announceInChat(userId, pronounsAnnouncement(pronouns))
 }

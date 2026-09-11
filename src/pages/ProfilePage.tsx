@@ -10,6 +10,7 @@ import { useMembers } from '../features/members/useMembers'
 import { useAuth } from '../features/auth/useAuth'
 import { ChatColorOption } from '../features/chat/ChatColorOption'
 import { profilesMapQueryKey } from '../features/chat/useProfilesMap'
+import { addedCauses, announceCauses } from '../features/profile/announceCauses'
 import {
   announcePronouns,
   shouldAnnouncePronouns,
@@ -53,6 +54,7 @@ function ProfilePage() {
   // andre skal have besked om.
   const [savedPronouns, setSavedPronouns] = useState<string | null>(null)
   const [causes, setCauses] = useState<string[]>([])
+  const [savedCauses, setSavedCauses] = useState<string[]>([])
   const [chatColor, setChatColor] = useState('#16a34a')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -78,6 +80,7 @@ function ProfilePage() {
         setPronouns(data.pronouns ?? null)
         setSavedPronouns(data.pronouns ?? null)
         setCauses(normalizeCauses(data.causes ?? []))
+        setSavedCauses(normalizeCauses(data.causes ?? []))
         setChatColor(data.chat_color ?? '#16a34a')
         setAvatarUrl(data.avatar_url ?? null)
       }
@@ -175,13 +178,14 @@ function ProfilePage() {
     setErrorMsg(null)
     setErrorSource(null)
     const nextPronouns = normalizePronouns(pronouns)
+    const nextCauses = normalizeCauses(causes)
     try {
       const { error } = await supabase
         .from('profiles')
         .update({
           full_name: fullName || null,
           pronouns: nextPronouns,
-          causes: normalizeCauses(causes),
+          causes: nextCauses,
           chat_color: chatColor,
           avatar_url: avatarUrl,
         })
@@ -195,6 +199,9 @@ function ProfilePage() {
         void announcePronouns(userId, nextPronouns!)
       }
       setSavedPronouns(nextPronouns)
+      const newCauses = addedCauses(savedCauses, nextCauses)
+      if (newCauses.length > 0) void announceCauses(userId, newCauses)
+      setSavedCauses(nextCauses)
     } catch (error) {
       setErrorSource('profile')
       setErrorMsg(

@@ -48,7 +48,8 @@ export function CausesField({
       </div>
       <p className="text-xs text-ink-subtle">
         Små mærker ved dit navn på medlemslisten og i chatten. Vælg dem, der
-        passer på dig -- eller ingen.
+        passer på dig -- eller ingen. Sætter du et nyt, får de andre besked i
+        chatten.
       </p>
     </fieldset>
   )
