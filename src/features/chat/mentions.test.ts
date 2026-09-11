@@ -23,24 +23,28 @@ describe('mentionMembers', () => {
         zaza: {
           full_name: 'Åse',
           pronouns: null,
+          causes: [],
           avatar_url: null,
           chat_color: null,
         },
         anna: {
           full_name: 'Anna',
           pronouns: null,
+          causes: [],
           avatar_url: null,
           chat_color: null,
         },
         ghost: {
           full_name: null,
           pronouns: null,
+          causes: [],
           avatar_url: null,
           chat_color: null,
         },
         me: {
           full_name: 'Mig',
           pronouns: null,
+          causes: [],
           avatar_url: null,
           chat_color: null,
         },

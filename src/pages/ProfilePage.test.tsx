@@ -87,3 +87,20 @@ describe('ProfilePage pronouns', () => {
     expect(screen.queryByLabelText('Dine pronominer')).toBeNull()
   })
 })
+
+describe('ProfilePage hjertesager', () => {
+  it('slår mærker til og fra som trykknapper', async () => {
+    render(<ProfilePage />)
+
+    const ukraine = await screen.findByRole('button', {
+      name: 'Støtter Ukraine',
+    })
+    expect(ukraine.getAttribute('aria-pressed')).toBe('false')
+
+    fireEvent.click(ukraine)
+    expect(ukraine.getAttribute('aria-pressed')).toBe('true')
+
+    fireEvent.click(ukraine)
+    expect(ukraine.getAttribute('aria-pressed')).toBe('false')
+  })
+})

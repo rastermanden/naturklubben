@@ -22,6 +22,7 @@ export interface ProfileExport {
   id: string
   full_name: string | null
   pronouns: string | null
+  causes: string[]
   avatar_url: string | null
   chat_color: string
   is_admin: boolean

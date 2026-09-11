@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { Avatar } from '../../components/Avatar'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
+import { CauseMarks } from '../profile/CauseMarks'
 import { displayPronouns } from '../profile/pronouns'
 import type { Member } from './useMembers'
 
@@ -54,6 +55,7 @@ export function MemberAvatarLightbox({
 
       <p className="text-lg font-medium text-white">{name}</p>
       {pronouns && <p className="text-sm text-white/80">{pronouns}</p>}
+      <CauseMarks causes={member.causes} className="text-2xl" />
     </div>
   )
 }

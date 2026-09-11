@@ -10,6 +10,7 @@ import {
 } from '../features/badges/useMemberBadges'
 import { MemberAvatarLightbox } from '../features/members/MemberAvatarLightbox'
 import { useMembers, type Member } from '../features/members/useMembers'
+import { CauseMarks } from '../features/profile/CauseMarks'
 import { displayPronouns } from '../features/profile/pronouns'
 
 const memberSinceFormatter = new Intl.DateTimeFormat('da-DK', {
@@ -138,6 +139,7 @@ function MembersPage() {
                           {pronouns}
                         </span>
                       )}
+                      <CauseMarks causes={member.causes} />
                       {member.is_admin && (
                         <span className="shrink-0 rounded-full bg-surface-raised px-2 py-0.5 text-xs font-medium text-ink-muted">
                           Administrator
