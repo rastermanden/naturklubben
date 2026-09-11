@@ -6,12 +6,14 @@ const profiles = {
   ada: {
     full_name: 'Ada',
     pronouns: null,
+    causes: [],
     avatar_url: null,
     chat_color: '#15803d',
   },
   bo: {
     full_name: 'Bo',
     pronouns: null,
+    causes: [],
     avatar_url: null,
     chat_color: '#15803d',
   },

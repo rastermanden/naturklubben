@@ -26,6 +26,7 @@ const message: Message = {
 const author = {
   full_name: 'Bo',
   pronouns: null,
+  causes: [],
   avatar_url: null,
   chat_color: '#166534',
 }
@@ -33,6 +34,7 @@ const author = {
 const replyAuthor = {
   full_name: 'Ada',
   pronouns: null,
+  causes: [],
   avatar_url: null,
   chat_color: '#15803d',
 }

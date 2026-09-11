@@ -15,7 +15,13 @@ vi.mock('../chat/useProfilesMap', () => ({
 }))
 
 function profile(pronouns: string | null): ProfileSummary {
-  return { full_name: 'Ida', pronouns, avatar_url: null, chat_color: null }
+  return {
+    full_name: 'Ida',
+    pronouns,
+    causes: [],
+    avatar_url: null,
+    chat_color: null,
+  }
 }
 
 function renderReminder(path = '/kalender') {

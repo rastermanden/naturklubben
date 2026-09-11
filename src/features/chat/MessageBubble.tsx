@@ -8,6 +8,7 @@ import { splitMentions } from './mentions'
 import type { MentionMember } from './mentions'
 import type { ReactionSummary } from './reactions'
 import type { Message } from './useMessages'
+import { CauseMarks } from '../profile/CauseMarks'
 import { displayPronouns } from '../profile/pronouns'
 import type { ProfileSummary } from './useProfilesMap'
 
@@ -195,6 +196,9 @@ export function MessageBubble({
           {!isAction && <span className="font-medium">{name}</span>}
           {!isAction && pronouns && (
             <span className="opacity-70">{pronouns}</span>
+          )}
+          {!isAction && !isFormerMember && (
+            <CauseMarks causes={author?.causes} className="text-xs" />
           )}
           {/* Kort form på skærmen, præcist tidspunkt til den, der peger på
               det -- og til skærmlæseren, som ellers ville læse "6 d" op. */}

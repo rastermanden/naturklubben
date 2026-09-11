@@ -5,6 +5,7 @@ export interface Member {
   id: string
   full_name: string | null
   pronouns: string | null
+  causes: string[]
   avatar_url: string | null
   chat_color: string | null
   is_admin: boolean
@@ -17,7 +18,7 @@ async function fetchMembers(): Promise<Member[]> {
   const { data, error } = await supabase
     .from('profiles')
     .select(
-      'id, full_name, pronouns, avatar_url, chat_color, is_admin, created_at',
+      'id, full_name, pronouns, causes, avatar_url, chat_color, is_admin, created_at',
     )
     .order('full_name', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true })
