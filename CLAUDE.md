@@ -51,6 +51,15 @@ lokale terminal. Derfor gælder:
   `security definer`-RPC'er og grants testes ved at skifte rolle og JWT-claims i
   databasen og måle, hvad der faktisk sker — ikke ved at lede efter tekst i SQL-filen.
   Se `supabase/README.md` for hvordan testene er bygget op.
+- **Hver migration skriver selv sine grants.** Nye Supabase-projekter -- og dermed hver
+  Preview Branch -- giver ikke længere `anon`, `authenticated` og `service_role` adgang
+  til nye tabeller og sekvenser automatisk (#209). En `create table` uden en `grant
+select ... to authenticated` er derfor usynlig for appen på preview'et og i ethvert nyt
+  projekt, selv om RLS-politikkerne er rigtige. Produktionen er et gammelt projekt med de
+  gamle, brede standarder, så fejlen viser sig ikke dér; CI's platform-bootstrap
+  (`supabase/tests/00_platform.sql`) kører med de nye standarder, så en glemt grant fejler
+  i pgTAP. Migrationen `20260911120000_explicit_api_grants.sql` gør de rettigheder,
+  produktionen allerede har, eksplicitte for alt, der fandtes før.
 - **Slet aldrig en migrationsfil, der er kørt i produktion**, og omdøb den ikke
   bagefter. Supabase gemmer de kørte versionsnumre i databasen, og en fil, der
   forsvinder under et af dem, brækker senere migrationskørsler. Er en migration

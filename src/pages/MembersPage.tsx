@@ -10,6 +10,7 @@ import {
 } from '../features/badges/useMemberBadges'
 import { MemberAvatarLightbox } from '../features/members/MemberAvatarLightbox'
 import { useMembers, type Member } from '../features/members/useMembers'
+import { displayPronouns } from '../features/profile/pronouns'
 
 const memberSinceFormatter = new Intl.DateTimeFormat('da-DK', {
   year: 'numeric',
@@ -104,6 +105,7 @@ function MembersPage() {
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {membersQuery.data.map((member) => {
             const name = member.full_name?.trim() || 'Unavngivet medlem'
+            const pronouns = displayPronouns(member.pronouns)
             const memberBadges = badgesByMember.get(member.id) ?? []
 
             return (
@@ -131,6 +133,11 @@ function MembersPage() {
                       <h2 className="min-w-0 truncate font-medium text-ink">
                         {name}
                       </h2>
+                      {pronouns && (
+                        <span className="shrink-0 text-sm text-ink-subtle">
+                          {pronouns}
+                        </span>
+                      )}
                       {member.is_admin && (
                         <span className="shrink-0 rounded-full bg-surface-raised px-2 py-0.5 text-xs font-medium text-ink-muted">
                           Administrator

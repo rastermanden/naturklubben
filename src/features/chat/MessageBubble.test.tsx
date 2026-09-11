@@ -25,12 +25,14 @@ const message: Message = {
 
 const author = {
   full_name: 'Bo',
+  pronouns: null,
   avatar_url: null,
   chat_color: '#166534',
 }
 
 const replyAuthor = {
   full_name: 'Ada',
+  pronouns: null,
   avatar_url: null,
   chat_color: '#15803d',
 }
@@ -53,6 +55,23 @@ describe('MessageBubble', () => {
     expect(screen.getByText('Vi mødes ved søen.').textContent).toBe(
       'Vi mødes ved søen.',
     )
+  })
+
+  it("shows the author's pronouns after the name", () => {
+    render(
+      <MessageBubble
+        message={message}
+        author={{ ...author, pronouns: 'hen/hen' }}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    const name = screen.getByText('Bo')
+    expect(name.nextElementSibling?.textContent).toBe('hen/hen')
   })
 
   it('exposes a named reply action', () => {

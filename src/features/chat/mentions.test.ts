@@ -20,10 +20,30 @@ describe('mentionMembers', () => {
   it('sorts members by name and leaves out the reader and the nameless', () => {
     const list = mentionMembers(
       {
-        zaza: { full_name: 'Åse', avatar_url: null, chat_color: null },
-        anna: { full_name: 'Anna', avatar_url: null, chat_color: null },
-        ghost: { full_name: null, avatar_url: null, chat_color: null },
-        me: { full_name: 'Mig', avatar_url: null, chat_color: null },
+        zaza: {
+          full_name: 'Åse',
+          pronouns: null,
+          avatar_url: null,
+          chat_color: null,
+        },
+        anna: {
+          full_name: 'Anna',
+          pronouns: null,
+          avatar_url: null,
+          chat_color: null,
+        },
+        ghost: {
+          full_name: null,
+          pronouns: null,
+          avatar_url: null,
+          chat_color: null,
+        },
+        me: {
+          full_name: 'Mig',
+          pronouns: null,
+          avatar_url: null,
+          chat_color: null,
+        },
       },
       'me',
     )
