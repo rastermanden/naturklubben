@@ -53,15 +53,22 @@ begin
 end
 $$;
 
--- Supabase giver rollerne adgang til alt nyt i public via default-privilegier.
--- Uden dem ville migrationernes revoke-linjer være meningsløse, og enhver test
--- ville fejle på en manglende grant i stedet for på den politik, den måler.
+-- Supabase gav tidligere API-rollerne adgang til alt nyt i public via
+-- default-privilegier. Nye projekter -- og dermed hver Preview Branch -- gør
+-- ikke længere (#209): tabeller og sekvenser oprettes uden select, insert,
+-- update, delete og usage til anon, authenticated og service_role, og en
+-- migration skal selv skrive sine grants. Funktioner beholder derimod
+-- PostgreSQL's egen standard (execute til public), medmindre en migration
+-- udtrykkeligt trækker den tilbage. CI kører med præcis de standarder, så en
+-- glemt grant fejler her -- ikke først på preview'et eller i et nyt projekt.
+-- Bemærk at supabase/postgres-imaget selv kan lægge brede standarder på
+-- supabase_admin; revoke fjerner dem for den rolle, migrationerne kører som.
 alter default privileges in schema public
-  grant all on tables to anon, authenticated, service_role;
+  revoke all on tables from anon, authenticated, service_role;
 alter default privileges in schema public
-  grant all on functions to anon, authenticated, service_role;
+  revoke all on functions from anon, authenticated, service_role;
 alter default privileges in schema public
-  grant all on sequences to anon, authenticated, service_role;
+  revoke all on sequences from anon, authenticated, service_role;
 
 -- Skemaerne findes måske allerede. Grants sættes altid: imaget opretter
 -- storage-skemaet uden at give API-rollerne adgang (det gør storage-api ellers),
