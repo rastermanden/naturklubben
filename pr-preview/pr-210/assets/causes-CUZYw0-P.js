@@ -1,0 +1,1 @@
+var e=[{slug:`ukraine`,emoji:`🇺🇦`,label:`Støtter Ukraine`},{slug:`regnbue`,emoji:`🏳️‍🌈`,label:`Regnbueflag`},{slug:`vaccine`,emoji:`💉`,label:`Vaccineret`}];new Map(e.map(e=>[e.slug,e]));function t(t){if(!t)return[];let n=new Set(t);return e.filter(e=>n.has(e.slug))}function n(e){return t(e).map(e=>e.slug)}export{n,t as r,e as t};
