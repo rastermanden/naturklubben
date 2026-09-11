@@ -103,7 +103,8 @@ export function PronounsField({
       )}
 
       <p className="text-xs text-ink-subtle">
-        Vises ved dit navn på medlemslisten, så ingen behøver at gætte. Står
+        Vises ved dit navn på medlemslisten og i chatten, så ingen behøver at
+        gætte. Når du vælger eller skifter, får de andre besked i chatten. Står
         dine ikke på listen, så skriv dem selv.
       </p>
     </div>

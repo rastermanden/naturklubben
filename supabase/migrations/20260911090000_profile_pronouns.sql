@@ -30,7 +30,7 @@ insert into public.feature_announcements (slug, title, body, path)
 values (
   'profil-pronominer',
   'Fortæl de andre, hvad du gerne vil kaldes',
-  'På din profil kan du nu vælge dine pronominer -- fx hun/hende, han/ham, de/dem eller hen/hen -- eller skrive dine egne. De vises ved dit navn på medlemslisten, så ingen behøver at gætte.',
+  'På din profil kan du nu vælge dine pronominer -- fx hun/hende, han/ham, de/dem eller hen/hen -- eller skrive dine egne. De vises ved dit navn på medlemslisten og i chatten, så ingen behøver at gætte -- og de andre får besked i chatten, når du vælger.',
   'profil'
 )
 on conflict (slug) do nothing;

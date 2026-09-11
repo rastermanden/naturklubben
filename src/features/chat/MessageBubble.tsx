@@ -8,6 +8,7 @@ import { splitMentions } from './mentions'
 import type { MentionMember } from './mentions'
 import type { ReactionSummary } from './reactions'
 import type { Message } from './useMessages'
+import { displayPronouns } from '../profile/pronouns'
 import type { ProfileSummary } from './useProfilesMap'
 
 /**
@@ -125,6 +126,9 @@ export function MessageBubble({
     ? 'Tidligere medlem'
     : (author?.full_name ?? 'Medlem')
   const color = isFormerMember ? '#64748b' : (author?.chat_color ?? '#16a34a')
+  // Pronominerne står efter navnet, så ingen behøver at gætte midt i en
+  // samtale. Et tidligere medlem har ingen profil og dermed ingen.
+  const pronouns = isFormerMember ? null : displayPronouns(author?.pronouns)
   const isAction = message.message_type === 'action'
   const fullTimestamp = new Date(message.created_at).toLocaleString('da-DK')
   const replyName =
@@ -189,6 +193,9 @@ export function MessageBubble({
           }`}
         >
           {!isAction && <span className="font-medium">{name}</span>}
+          {!isAction && pronouns && (
+            <span className="opacity-70">{pronouns}</span>
+          )}
           {/* Kort form på skærmen, præcist tidspunkt til den, der peger på
               det -- og til skærmlæseren, som ellers ville læse "6 d" op. */}
           <time

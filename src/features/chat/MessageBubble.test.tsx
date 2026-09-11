@@ -57,6 +57,23 @@ describe('MessageBubble', () => {
     )
   })
 
+  it("shows the author's pronouns after the name", () => {
+    render(
+      <MessageBubble
+        message={message}
+        author={{ ...author, pronouns: 'hen/hen' }}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    const name = screen.getByText('Bo')
+    expect(name.nextElementSibling?.textContent).toBe('hen/hen')
+  })
+
   it('exposes a named reply action', () => {
     const onReply = vi.fn()
     render(
