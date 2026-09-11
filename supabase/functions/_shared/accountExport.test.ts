@@ -40,6 +40,7 @@ function repository(overrides: Partial<AccountExportRepository> = {}) {
       return {
         id,
         full_name: 'Medlem',
+        pronouns: null,
         avatar_url: null,
         chat_color: '#166534',
         is_admin: false,
