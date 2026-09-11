@@ -3,8 +3,18 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { OnlineMembers } from './OnlineMembers'
 
 const profiles = {
-  ada: { full_name: 'Ada', avatar_url: null, chat_color: '#15803d' },
-  bo: { full_name: 'Bo', avatar_url: null, chat_color: '#15803d' },
+  ada: {
+    full_name: 'Ada',
+    pronouns: null,
+    avatar_url: null,
+    chat_color: '#15803d',
+  },
+  bo: {
+    full_name: 'Bo',
+    pronouns: null,
+    avatar_url: null,
+    chat_color: '#15803d',
+  },
 }
 
 afterEach(cleanup)

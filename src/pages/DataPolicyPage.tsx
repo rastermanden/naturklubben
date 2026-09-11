@@ -16,9 +16,9 @@ function DataPolicyPage() {
             Konto, profil og medlemsadgang
           </h2>
           <p className="mt-2">
-            Loginoplysninger administreres af Supabase Auth. Navn, avatar og
-            chatfarve bruges til at vise dig i appen, mens din e-mail på
-            medlemslisten afgør, om du må oprette en konto. Oplysningerne
+            Loginoplysninger administreres af Supabase Auth. Navn, pronominer,
+            avatar og chatfarve bruges til at vise dig i appen, mens din e-mail
+            på medlemslisten afgør, om du må oprette en konto. Oplysningerne
             opbevares, mens kontoen er aktiv, og slettes ved kontosletning.
           </p>
         </section>

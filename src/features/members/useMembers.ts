@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabaseClient'
 export interface Member {
   id: string
   full_name: string | null
+  pronouns: string | null
   avatar_url: string | null
   chat_color: string | null
   is_admin: boolean
@@ -15,7 +16,9 @@ export const membersQueryKey = ['profiles', 'members'] as const
 async function fetchMembers(): Promise<Member[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, avatar_url, chat_color, is_admin, created_at')
+    .select(
+      'id, full_name, pronouns, avatar_url, chat_color, is_admin, created_at',
+    )
     .order('full_name', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true })
     .order('id', { ascending: true })

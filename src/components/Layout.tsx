@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { FeatureAnnouncementBanner } from '../features/announcements/FeatureAnnouncementBanner'
 import { useAuth } from '../features/auth/useAuth'
+import { PronounsReminder } from '../features/profile/PronounsReminder'
 import type { RouteMetadata } from '../routeMetadata'
 import { navLinks } from './navLinks'
 import { BurgerMenu } from './BurgerMenu'
@@ -125,6 +126,7 @@ export function Layout({ routes }: LayoutProps) {
             side: det, der er nyt, skal møde medlemmet, hvor det nu åbner
             appen. */}
         {session && <FeatureAnnouncementBanner userId={session.user.id} />}
+        {session && <PronounsReminder userId={session.user.id} />}
         <Outlet />
       </div>
 

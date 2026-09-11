@@ -69,3 +69,21 @@ describe('ProfilePage form errors', () => {
     expect(document.activeElement).toBe(trigger)
   })
 })
+
+describe('ProfilePage pronouns', () => {
+  it('åbner et fritekstfelt, når man vælger at skrive selv', async () => {
+    render(<ProfilePage />)
+
+    const select = await screen.findByLabelText('Pronominer')
+    expect(screen.queryByLabelText('Dine pronominer')).toBeNull()
+    expect(screen.getByRole('option', { name: 'sikker/effektiv' })).toBeTruthy()
+
+    fireEvent.change(select, { target: { value: '__custom__' } })
+
+    const custom = screen.getByLabelText('Dine pronominer')
+    expect(custom.getAttribute('maxlength')).toBe('40')
+
+    fireEvent.change(select, { target: { value: 'de/dem' } })
+    expect(screen.queryByLabelText('Dine pronominer')).toBeNull()
+  })
+})

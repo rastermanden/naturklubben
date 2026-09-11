@@ -13,6 +13,7 @@ const members: Member[] = [
   {
     id: 'admin-id',
     full_name: 'Martin',
+    pronouns: null,
     avatar_url: null,
     chat_color: '#16a34a',
     is_admin: true,
@@ -21,6 +22,7 @@ const members: Member[] = [
   {
     id: 'member-id',
     full_name: 'Kasper',
+    pronouns: null,
     avatar_url: null,
     chat_color: '#2563eb',
     is_admin: false,

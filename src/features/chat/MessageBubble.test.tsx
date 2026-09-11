@@ -25,12 +25,14 @@ const message: Message = {
 
 const author = {
   full_name: 'Bo',
+  pronouns: null,
   avatar_url: null,
   chat_color: '#166534',
 }
 
 const replyAuthor = {
   full_name: 'Ada',
+  pronouns: null,
   avatar_url: null,
   chat_color: '#15803d',
 }

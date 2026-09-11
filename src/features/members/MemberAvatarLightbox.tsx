@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { Avatar } from '../../components/Avatar'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
+import { displayPronouns } from '../profile/pronouns'
 import type { Member } from './useMembers'
 
 export function MemberAvatarLightbox({
@@ -11,6 +12,7 @@ export function MemberAvatarLightbox({
   onClose: () => void
 }) {
   const name = member.full_name?.trim() || 'Unavngivet medlem'
+  const pronouns = displayPronouns(member.pronouns)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useDialogFocus<HTMLDivElement>({
     onClose,
@@ -51,6 +53,7 @@ export function MemberAvatarLightbox({
       />
 
       <p className="text-lg font-medium text-white">{name}</p>
+      {pronouns && <p className="text-sm text-white/80">{pronouns}</p>}
     </div>
   )
 }

@@ -45,7 +45,9 @@ Deno.serve(async (req) => {
     async getProfile(userId) {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, avatar_url, chat_color, is_admin, created_at')
+        .select(
+          'id, full_name, pronouns, avatar_url, chat_color, is_admin, created_at',
+        )
         .eq('id', userId)
         .single()
       queryError('Profil kunne ikke hentes', error)

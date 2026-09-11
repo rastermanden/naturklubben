@@ -10,6 +10,8 @@ import { useMembers } from '../features/members/useMembers'
 import { useAuth } from '../features/auth/useAuth'
 import { ChatColorOption } from '../features/chat/ChatColorOption'
 import { profilesMapQueryKey } from '../features/chat/useProfilesMap'
+import { PronounsField } from '../features/profile/PronounsField'
+import { normalizePronouns } from '../features/profile/pronouns'
 import { useErrorFocus } from '../hooks/useErrorFocus'
 import { readableTextColor } from '../lib/colorContrast'
 import { supabase } from '../lib/supabaseClient'
@@ -40,6 +42,7 @@ function ProfilePage() {
   const membersQuery = useMembers()
 
   const [fullName, setFullName] = useState('')
+  const [pronouns, setPronouns] = useState<string | null>(null)
   const [chatColor, setChatColor] = useState('#16a34a')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -57,11 +60,12 @@ function ProfilePage() {
     async function load() {
       const { data } = await supabase
         .from('profiles')
-        .select('full_name, chat_color, avatar_url')
+        .select('full_name, pronouns, chat_color, avatar_url')
         .eq('id', userId)
         .single()
       if (data) {
         setFullName(data.full_name ?? '')
+        setPronouns(data.pronouns ?? null)
         setChatColor(data.chat_color ?? '#16a34a')
         setAvatarUrl(data.avatar_url ?? null)
       }
@@ -163,6 +167,7 @@ function ProfilePage() {
         .from('profiles')
         .update({
           full_name: fullName || null,
+          pronouns: normalizePronouns(pronouns),
           chat_color: chatColor,
           avatar_url: avatarUrl,
         })
@@ -197,7 +202,9 @@ function ProfilePage() {
     <main className="mx-auto flex w-full max-w-lg flex-col gap-6 p-4 sm:p-6">
       <div>
         <h1 className="text-2xl font-semibold text-ink-body">Min profil</h1>
-        <p className="text-ink-subtle">Tilpas dit navn, farve og billede.</p>
+        <p className="text-ink-subtle">
+          Tilpas dit navn, pronominer, farve og billede.
+        </p>
       </div>
 
       <form onSubmit={handleSave} className="flex flex-col gap-6">
@@ -270,6 +277,8 @@ function ProfilePage() {
             className="rounded-lg border border-line-strong px-4 py-2 text-ink"
           />
         </div>
+
+        <PronounsField value={pronouns} onChange={setPronouns} />
 
         {/* Chat color */}
         <div className="flex flex-col gap-2">
