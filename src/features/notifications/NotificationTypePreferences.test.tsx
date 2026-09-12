@@ -121,6 +121,21 @@ describe('NotificationTypePreferences', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('fortæller, når indstillingerne ikke kunne hentes', async () => {
+    supabaseMocks.from.mockImplementation(() => ({
+      select: () => ({
+        eq: () => Promise.resolve({ data: null, error: new Error('nede') }),
+      }),
+    }))
+    renderPreferences()
+
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      'Indstillingerne kunne ikke hentes. Prøv igen om lidt.',
+    )
+    expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+
   it('fortæller, når valget ikke kunne gemmes', async () => {
     mockPreferenceRows([])
     supabaseMocks.rpc.mockResolvedValue({

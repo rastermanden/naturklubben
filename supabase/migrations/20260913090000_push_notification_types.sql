@@ -454,7 +454,7 @@ select cron.schedule(
 insert into public.feature_announcements (slug, title, body, path)
 values (
   'push-kalender-og-maerker',
-  'Få besked om nye ture og badges',
+  'Få besked om nye ture i kalenderen',
   'Appen kan nu sende dig en notifikation, når der kommer en ny begivenhed i kalenderen, og dagen før en tur du er tilmeldt. Vælg selv hvilke på din profil under "Notifikationer".',
   'profil'
 )
