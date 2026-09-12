@@ -25,7 +25,14 @@ export function NotificationTypePreferences({ userId }: { userId: string }) {
     setEnabled,
   } = useNotificationPreferences(userId)
 
-  if (isLoading || isError) return null
+  if (isLoading) return null
+  if (isError) {
+    return (
+      <p role="alert" className="text-sm text-danger">
+        Indstillingerne kunne ikke hentes. Prøv igen om lidt.
+      </p>
+    )
+  }
 
   const kinds = NOTIFICATION_KINDS.filter(
     (kind) => isAdmin || !ADMIN_ONLY_NOTIFICATION_KINDS.includes(kind),
