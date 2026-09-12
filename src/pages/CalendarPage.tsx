@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AttendanceSection } from '../features/calendar/AttendanceSection'
+import { GuestRequestsSection } from '../features/calendar/GuestRequestsSection'
 import { EventTasksSection } from '../features/calendar/EventTasksSection'
 import { EventForm } from '../features/calendar/EventForm'
 import { downloadIcal } from '../features/calendar/ical'
@@ -56,6 +58,17 @@ function monthCells(month: Date) {
   ]
 }
 
+function PublicBadge({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={`inline-block rounded bg-accent-soft px-1.5 py-0.5 text-[0.7rem] font-medium text-on-accent ${className}`}
+      title="Åben for ikke-medlemmer"
+    >
+      Offentlig
+    </span>
+  )
+}
+
 function EventDetails({
   event,
   userId,
@@ -100,6 +113,7 @@ function EventDetails({
         <div className="flex items-start justify-between gap-4">
           <h2 id="event-title" className="text-xl font-semibold text-ink-body">
             {event.title}
+            {event.is_public && <PublicBadge className="ml-2 align-middle" />}
           </h2>
           <button
             ref={closeButtonRef}
@@ -138,6 +152,10 @@ function EventDetails({
         </dl>
 
         <AttendanceSection eventId={event.id} userId={userId} />
+
+        {event.is_public && (
+          <GuestRequestsSection eventId={event.id} canManage={canEdit} />
+        )}
 
         <EventTasksSection eventId={event.id} userId={userId} />
 
@@ -268,7 +286,10 @@ function CalendarPage() {
         <div>
           <h1 className="text-3xl font-semibold text-ink-body">Kalender</h1>
           <p className="mt-1 text-ink-subtle">
-            Klubbens kommende ture og arrangementer.
+            Klubbens kommende ture og arrangementer.{' '}
+            <Link to="/kalender/offentlig" className="underline">
+              Se den offentlige kalender
+            </Link>
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -371,6 +392,9 @@ function CalendarPage() {
                               {timeFormatter.format(new Date(event.start_at))}
                             </span>{' '}
                             {event.title}
+                            {event.is_public && (
+                              <PublicBadge className="ml-1" />
+                            )}
                           </button>
                         ))}
                       </div>
@@ -414,6 +438,7 @@ function CalendarPage() {
                       <span>
                         <span className="block font-medium text-ink">
                           {event.title}
+                          {event.is_public && <PublicBadge className="ml-2" />}
                         </span>
                         <span className="text-sm text-ink-subtle">
                           kl. {timeFormatter.format(start)}

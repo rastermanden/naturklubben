@@ -200,6 +200,13 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
   function-secrets, og de vinder over tabellen. Den offentlige nøgle bygges bevidst
   **ikke** ind i frontenden; klienten henter den fra `chat-push`, så nøglerne kan roteres
   uden et nyt frontend-build. Se `supabase/README.md`.
+- **E-mail til gæster** (kun Edge Functions, #224): svar på ansøgninger om at deltage i
+  åbne begivenheder sendes med Resend. `RESEND_API_KEY` er et **valgfrit** repo-secret
+  og `EMAIL_FROM` en valgfri repo-variabel; `deploy-functions.yml` skubber dem videre
+  som function-secrets, hvis de findes -- samme mønster som VAPID. Uden nøglen deployes
+  alt stadig, men hvert svar ender som "failed" med en tydelig besked til arrangøren.
+  Det er den ene bevidste undtagelse fra "intet manuelt secret": gæster er ikke i
+  appen og kan ikke få Web Push. Se `supabase/README.md`, "Offentlig kalender".
 - **CI-only** (kun brugt af GitHub Actions, aldrig af en udvikler lokalt):
   `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` — bruges til at deploye Edge Functions
   ikke-interaktivt og til at slå PR'ens Preview Branch op, så preview-buildet rammer den

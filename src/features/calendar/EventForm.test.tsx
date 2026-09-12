@@ -102,4 +102,31 @@ describe('EventForm errors', () => {
       'Begivenheden kunne ikke gemmes.',
     )
   })
+
+  it('submits the public flag so organisers can open an event to non-members', () => {
+    const onSubmit = vi.fn()
+    render(
+      <EventForm
+        submitting={false}
+        error={null}
+        onSubmit={onSubmit}
+        onCancel={() => undefined}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText('Titel'), {
+      target: { value: 'Åben skovtur' },
+    })
+    fireEvent.change(screen.getByLabelText('Starter'), {
+      target: { value: '2026-10-03T10:00' },
+    })
+    const isPublic = screen.getByLabelText(/Åben for ikke-medlemmer/)
+    expect((isPublic as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(isPublic)
+    fireEvent.submit(screen.getByLabelText('Titel').closest('form')!)
+
+    expect(onSubmit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ title: 'Åben skovtur', is_public: true }),
+    )
+  })
 })

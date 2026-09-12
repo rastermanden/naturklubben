@@ -30,6 +30,7 @@ export function EventForm({
   const [location, setLocation] = useState(event?.location ?? '')
   const [startAt, setStartAt] = useState(toLocalDateTime(event?.start_at))
   const [endAt, setEndAt] = useState(toLocalDateTime(event?.end_at))
+  const [isPublic, setIsPublic] = useState(event?.is_public ?? false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const endInputRef = useRef<HTMLInputElement>(null)
@@ -55,6 +56,7 @@ export function EventForm({
       location: location.trim() || null,
       start_at: new Date(startAt).toISOString(),
       end_at: endAt ? new Date(endAt).toISOString() : null,
+      is_public: isPublic,
     })
   }
 
@@ -145,6 +147,25 @@ export function EventForm({
               />
             </label>
           </div>
+
+          <label className="flex items-start gap-3 text-sm text-ink-body">
+            <input
+              id="event-is-public"
+              type="checkbox"
+              checked={isPublic}
+              onChange={(changeEvent) =>
+                setIsPublic(changeEvent.target.checked)
+              }
+              className="mt-1 h-5 w-5 shrink-0 accent-accent"
+            />
+            <span>
+              Åben for ikke-medlemmer
+              <span className="mt-0.5 block text-xs text-ink-subtle">
+                Begivenheden vises på den offentlige kalender, og folk uden for
+                klubben kan søge om at deltage. Du godkender selv ansøgningerne.
+              </span>
+            </span>
+          </label>
 
           {(validationError || error) && (
             <p

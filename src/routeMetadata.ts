@@ -61,6 +61,11 @@ export const routeMetadata = [
     announcement: 'Kalender indlæst',
   },
   {
+    path: '/kalender/offentlig',
+    documentTitle: 'Åbne ture | Naturklubben',
+    announcement: 'Åbne ture indlæst',
+  },
+  {
     path: '/billeder',
     documentTitle: 'Billeder | Naturklubben',
     announcement: 'Billeder indlæst',

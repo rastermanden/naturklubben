@@ -119,6 +119,45 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
 
+      # Offentlig kalender (#224). Gæsteformularen er offentlig som
+      # submit-probation-application: ingen bruger-JWT, men server-side rate
+      # limit og en service-role-only RPC.
+      - name: Deploy submit-event-guest-request
+        run: supabase functions deploy submit-event-guest-request --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      # Svaret til gæsten sendes som e-mail gennem Resend. Nøglen er et
+      # valgfrit repo-secret ligesom VAPID-nøglerne: findes den ikke, deployes
+      # functionen stadig, og hver afgørelse ender som "failed" med en tydelig
+      # besked til arrangøren om, at mailudbyderen mangler. EMAIL_FROM er en
+      # repo-variabel (fx "Naturklubben <hej@naturklubben.dk>" på et domæne,
+      # der er verificeret hos Resend); uden den bruges Resends testafsender.
+      - name: Sæt mail-secrets
+        run: |
+          if [ -z "$RESEND_API_KEY" ]; then
+            echo "::notice::RESEND_API_KEY er ikke sat som repo-secret. Svar til gæster på åbne begivenheder kan ikke sendes som e-mail, før den findes."
+            exit 0
+          fi
+          supabase secrets set \
+            RESEND_API_KEY="$RESEND_API_KEY" \
+            EMAIL_FROM="$EMAIL_FROM" \
+            --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM || 'Naturklubben <onboarding@resend.dev>' }}
+
+      - name: Deploy event-guest-notifications
+        # Som probation-notifications: Postgres køer kaldet med pg_net og
+        # ansøgningens token, functionen kontrollerer selv token/arrangør/admin.
+        run: supabase functions deploy event-guest-notifications --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
       - name: Deploy report-client-error
         # Fejl kan ske før login eller mens auth initialiseres. Endpointet er
         # derfor offentligt, men håndhæver origin, payload-grænser og rate limit.

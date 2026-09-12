@@ -1,0 +1,158 @@
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { GuestRequestsSection } from './GuestRequestsSection'
+
+const supabaseMocks = vi.hoisted(() => ({
+  from: vi.fn(),
+  rpc: vi.fn(),
+  functions: { invoke: vi.fn() },
+}))
+
+vi.mock('../../lib/supabaseClient', () => ({
+  supabase: supabaseMocks,
+}))
+
+const EVENT_ID = '3f2c1a4e-5b6d-4c7e-8f90-1a2b3c4d5e6f'
+
+const PENDING = {
+  id: 'a1',
+  event_id: EVENT_ID,
+  full_name: 'Gitte Gæst',
+  email: 'gitte@example.com',
+  message: 'Vi er to voksne.',
+  party_size: 2,
+  status: 'pending',
+  created_at: '2030-09-01T10:00:00.000Z',
+  decision_notification_status: null,
+  decision_notification_error: null,
+}
+
+const APPROVED_WITH_FAILED_MAIL = {
+  ...PENDING,
+  id: 'a2',
+  full_name: 'Tobias',
+  email: 'tobias@example.com',
+  message: null,
+  party_size: 1,
+  status: 'approved',
+  decision_notification_status: 'failed',
+  decision_notification_error:
+    'Der er ikke sat en mailudbyder op (RESEND_API_KEY mangler). Giv gæsten besked på anden vis.',
+}
+
+let requests: unknown[]
+
+beforeEach(() => {
+  requests = [PENDING, APPROVED_WITH_FAILED_MAIL]
+  supabaseMocks.rpc.mockResolvedValue({ data: null, error: null })
+  supabaseMocks.functions.invoke.mockResolvedValue({
+    data: { status: 'sent' },
+    error: null,
+  })
+  supabaseMocks.from.mockImplementation((table: string) => {
+    expect(table).toBe('event_guest_requests')
+    return {
+      select: () => ({
+        eq: () => ({
+          order: () => Promise.resolve({ data: requests, error: null }),
+        }),
+      }),
+    }
+  })
+})
+
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
+})
+
+function renderSection(canManage = true) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <GuestRequestsSection eventId={EVENT_ID} canManage={canManage} />
+    </QueryClientProvider>,
+  )
+}
+
+describe('GuestRequestsSection', () => {
+  it('renders nothing for members who cannot manage the event', () => {
+    const { container } = renderSection(false)
+
+    expect(container.innerHTML).toBe('')
+    expect(supabaseMocks.from).not.toHaveBeenCalled()
+  })
+
+  it('shows pending requests with their details and the failed mail state', async () => {
+    renderSection()
+
+    expect(await screen.findByText('Gitte Gæst · 2 personer')).toBeTruthy()
+    expect(screen.getByText('(1 venter)')).toBeTruthy()
+    expect(screen.getByText('Vi er to voksne.')).toBeTruthy()
+    expect(
+      screen
+        .getByRole('link', { name: 'gitte@example.com' })
+        .getAttribute('href'),
+    ).toBe('mailto:gitte@example.com')
+    expect(screen.getByText('Tobias')).toBeTruthy()
+    expect(screen.getByText(/RESEND_API_KEY mangler/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send igen' })).toBeTruthy()
+  })
+
+  it('approves through the RPC and then triggers the e-mail delivery', async () => {
+    renderSection()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Godkend Gitte Gæst' }),
+    )
+
+    await vi.waitFor(() => {
+      expect(supabaseMocks.rpc).toHaveBeenCalledWith(
+        'approve_event_guest_request',
+        { request_id: 'a1' },
+      )
+      expect(supabaseMocks.functions.invoke).toHaveBeenCalledWith(
+        'event-guest-notifications',
+        { body: { requestId: 'a1' } },
+      )
+    })
+  })
+
+  it('rejects through the RPC', async () => {
+    renderSection()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Afvis Gitte Gæst' }),
+    )
+
+    await vi.waitFor(() => {
+      expect(supabaseMocks.rpc).toHaveBeenCalledWith(
+        'reject_event_guest_request',
+        { request_id: 'a1' },
+      )
+    })
+  })
+
+  it('explains a refused decision', async () => {
+    supabaseMocks.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    })
+    renderSection()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Godkend Gitte Gæst' }),
+    )
+
+    expect(
+      (
+        await screen.findByText(
+          'Kun arrangøren eller en admin kan afgøre ansøgningen.',
+        )
+      ).textContent,
+    ).toBeTruthy()
+  })
+})
