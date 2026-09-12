@@ -7,7 +7,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(13);
+select plan(14);
 
 do $$
 begin
@@ -101,13 +101,30 @@ select lives_ok(
   'en admin kan sende en besked i admin-rummet'
 );
 
+-- Konteksten er admin-beskeden og den nabo, der lige blev sendt ovenfor --
+-- og intet fra det fælles rum.
 select is(
   (
     select count(*)::int
     from public.get_chat_message_context('00000000-0000-0000-0000-00000000ad13')
+      as context
+    join public.messages as message on message.id = context.id
+    where message.room = 'admin'
   ),
-  1,
-  'get_chat_message_context finder admin-beskeden for en admin'
+  2,
+  'get_chat_message_context finder admin-beskederne for en admin'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.get_chat_message_context('00000000-0000-0000-0000-00000000ad13')
+      as context
+    join public.messages as message on message.id = context.id
+    where message.room <> 'admin'
+  ),
+  0,
+  'konteksten omkring en admin-besked blander ikke det fælles rum ind'
 );
 
 select is(
