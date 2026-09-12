@@ -15,20 +15,20 @@ begin
     'mette@example.com', false, '00000000-0000-0000-0000-00000000ac12'
   );
   perform tests.create_member(
-    'kim-admin@example.com', true, '00000000-0000-0000-0000-0000000ad12'
+    'kim-admin@example.com', true, '00000000-0000-0000-0000-00000000ad12'
   );
 
   insert into public.messages (id, user_id, content, room)
   values
     (
       '00000000-0000-0000-0000-00000000ac13',
-      '00000000-0000-0000-0000-0000000ad12',
+      '00000000-0000-0000-0000-00000000ad12',
       'Fælles besked',
       'general'
     ),
     (
-      '00000000-0000-0000-0000-0000000ad13',
-      '00000000-0000-0000-0000-0000000ad12',
+      '00000000-0000-0000-0000-00000000ad13',
+      '00000000-0000-0000-0000-00000000ad12',
       'Admin-besked om budgettet',
       'admin'
     );
@@ -57,7 +57,7 @@ select throws_ok(
 select is(
   (
     select count(*)::int
-    from public.get_chat_message_context('00000000-0000-0000-0000-0000000ad13')
+    from public.get_chat_message_context('00000000-0000-0000-0000-00000000ad13')
   ),
   0,
   'get_chat_message_context finder ikke en admin-besked for et almindeligt medlem'
@@ -75,7 +75,7 @@ select is(
 select throws_ok(
   $$insert into public.message_reactions (message_id, user_id, emoji)
     values (
-      '00000000-0000-0000-0000-0000000ad13',
+      '00000000-0000-0000-0000-00000000ad13',
       '00000000-0000-0000-0000-00000000ac12',
       '👍'
     )$$,
@@ -85,7 +85,7 @@ select throws_ok(
 );
 
 -- Kim, en admin
-do $$ begin perform tests.login('00000000-0000-0000-0000-0000000ad12'); end $$;
+do $$ begin perform tests.login('00000000-0000-0000-0000-00000000ad12'); end $$;
 
 select is(
   (select count(*)::int from public.messages),
@@ -96,7 +96,7 @@ select is(
 select lives_ok(
   $$insert into public.messages (user_id, content, room)
     values (
-      '00000000-0000-0000-0000-0000000ad12', 'Endnu en admin-besked', 'admin'
+      '00000000-0000-0000-0000-00000000ad12', 'Endnu en admin-besked', 'admin'
     )$$,
   'en admin kan sende en besked i admin-rummet'
 );
@@ -104,7 +104,7 @@ select lives_ok(
 select is(
   (
     select count(*)::int
-    from public.get_chat_message_context('00000000-0000-0000-0000-0000000ad13')
+    from public.get_chat_message_context('00000000-0000-0000-0000-00000000ad13')
   ),
   1,
   'get_chat_message_context finder admin-beskeden for en admin'
@@ -122,8 +122,8 @@ select is(
 select lives_ok(
   $$insert into public.message_reactions (message_id, user_id, emoji)
     values (
-      '00000000-0000-0000-0000-0000000ad13',
-      '00000000-0000-0000-0000-0000000ad12',
+      '00000000-0000-0000-0000-00000000ad13',
+      '00000000-0000-0000-0000-00000000ad12',
       '👍'
     )$$,
   'en admin kan reagere på en besked i admin-rummet'
@@ -133,7 +133,7 @@ select is(
   (
     select count(*)::int
     from public.message_reactions
-    where message_id = '00000000-0000-0000-0000-0000000ad13'
+    where message_id = '00000000-0000-0000-0000-00000000ad13'
   ),
   1,
   'admin ser sin egen reaktion på admin-beskeden'
@@ -147,7 +147,7 @@ select is(
   (
     select count(*)::int
     from public.message_reactions
-    where message_id = '00000000-0000-0000-0000-0000000ad13'
+    where message_id = '00000000-0000-0000-0000-00000000ad13'
   ),
   0,
   'et almindeligt medlem kan ikke se reaktioner på en besked i admin-rummet'
