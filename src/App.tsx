@@ -78,6 +78,11 @@ const routeElements: Record<AppRoutePath, ReactNode> = {
   '/ny-adgangskode': loadRoute(<ResetPasswordPage />),
   '/kalender': <ProtectedRoute>{loadRoute(<CalendarPage />)}</ProtectedRoute>,
   '/kalender/offentlig': loadRoute(<PublicCalendarPage />),
+  // Dynamiske stier efter deres statiske søskende: RouteNavigation finder
+  // siden ved første match, og /kalender/:eventId matcher også /kalender/offentlig.
+  '/kalender/:eventId': (
+    <ProtectedRoute>{loadRoute(<CalendarPage />)}</ProtectedRoute>
+  ),
   '/billeder': <ProtectedRoute>{loadRoute(<GalleryPage />)}</ProtectedRoute>,
   '/chat': <ProtectedRoute>{loadRoute(<ChatPage />)}</ProtectedRoute>,
   '/naturlog': <ProtectedRoute>{loadRoute(<NaturlogPage />)}</ProtectedRoute>,

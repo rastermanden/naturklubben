@@ -28,6 +28,14 @@ vi.mock('../features/badges/useMemberBadges', () => ({
 vi.mock('../features/members/useMembers', () => ({
   useMembers: () => ({ data: [] }),
 }))
+// Notifikationsvalgene (#216) har deres egne tests og ville også trække
+// react-query og Supabase ind her.
+vi.mock('../features/notifications/NotificationToggle', () => ({
+  NotificationToggle: () => null,
+}))
+vi.mock('../features/notifications/NotificationTypePreferences', () => ({
+  NotificationTypePreferences: () => null,
+}))
 vi.mock('../lib/supabaseClient', () => {
   const profileQuery = {
     select: vi.fn(),
