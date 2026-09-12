@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EventForm } from './EventForm'
+import type { CalendarEvent } from './useEvents'
+import { parseMaxParticipants } from './waitlist'
 
 afterEach(cleanup)
 
@@ -128,5 +130,92 @@ describe('EventForm errors', () => {
     expect(onSubmit).toHaveBeenLastCalledWith(
       expect.objectContaining({ title: 'Åben skovtur', is_public: true }),
     )
+  })
+})
+
+describe('EventForm max participants', () => {
+  function renderForm(onSubmit = vi.fn(), event?: CalendarEvent) {
+    render(
+      <EventForm
+        event={event}
+        submitting={false}
+        error={null}
+        onSubmit={onSubmit}
+        onCancel={() => undefined}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('Titel'), {
+      target: { value: 'Morgentur' },
+    })
+    fireEvent.change(screen.getByLabelText('Starter'), {
+      target: { value: '2026-08-24T10:00' },
+    })
+    return onSubmit
+  }
+
+  it('sends an empty field as no cap', () => {
+    const onSubmit = renderForm()
+    fireEvent.submit(screen.getByLabelText('Starter').closest('form')!)
+
+    expect(onSubmit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ max_participants: null }),
+    )
+  })
+
+  it('sends a whole number as the cap', () => {
+    const onSubmit = renderForm()
+    fireEvent.change(screen.getByLabelText('Max antal deltagere'), {
+      target: { value: '12' },
+    })
+    fireEvent.submit(screen.getByLabelText('Starter').closest('form')!)
+
+    expect(onSubmit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ max_participants: 12 }),
+    )
+  })
+
+  it('rejects zero and links the error to the field', async () => {
+    const onSubmit = renderForm()
+    const max = screen.getByLabelText('Max antal deltagere')
+    fireEvent.change(max, { target: { value: '0' } })
+    fireEvent.submit(max.closest('form')!)
+
+    const error = await screen.findByText(
+      'Antal pladser skal være et helt tal på mindst 1.',
+    )
+    expect(max.getAttribute('aria-invalid')).toBe('true')
+    expect(max.getAttribute('aria-describedby')).toBe(error.id)
+    expect(document.activeElement).toBe(max)
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('shows the existing cap when editing', () => {
+    renderForm(vi.fn(), {
+      id: 'event-1',
+      title: 'Skovtur',
+      description: null,
+      location: null,
+      start_at: '2026-08-24T10:00:00Z',
+      end_at: null,
+      created_by: 'member-id',
+      max_participants: 8,
+    })
+
+    expect(
+      (screen.getByLabelText('Max antal deltagere') as HTMLInputElement).value,
+    ).toBe('8')
+  })
+})
+
+describe('parseMaxParticipants', () => {
+  it('maps empty to unlimited, whole numbers to a cap, and the rest to invalid', () => {
+    expect(parseMaxParticipants('')).toBeNull()
+    expect(parseMaxParticipants('  ')).toBeNull()
+    expect(parseMaxParticipants('1')).toBe(1)
+    expect(parseMaxParticipants(' 25 ')).toBe(25)
+    expect(parseMaxParticipants('0')).toBeUndefined()
+    expect(parseMaxParticipants('-3')).toBeUndefined()
+    expect(parseMaxParticipants('2.5')).toBeUndefined()
+    expect(parseMaxParticipants('abc')).toBeUndefined()
   })
 })

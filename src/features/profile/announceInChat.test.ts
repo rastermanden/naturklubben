@@ -28,10 +28,19 @@ describe('announceInChat', () => {
       user_id: 'member-id',
       content: 'har sat 🇺🇦 ved sit navn',
       message_type: 'action',
+      mentions: [],
     })
     expect(supabaseMocks.functions.invoke).toHaveBeenCalledWith('chat-push', {
       body: { messageId: 'message-1' },
     })
+  })
+
+  it('sender de nævnte med, så de fremhæves og får push', async () => {
+    await announceInChat('member-id', 'noget til @Bo', ['bo-id'])
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ mentions: ['bo-id'] }),
+    )
   })
 
   it('beder ikke om push, når beskeden ikke kunne gemmes', async () => {

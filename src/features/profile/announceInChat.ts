@@ -8,11 +8,24 @@ import { supabase } from '../../lib/supabaseClient'
  *
  * Bedste indsats, ligesom notifikationen efter en almindelig besked: profilen
  * er allerede gemt, så en fejl her må ikke ligne, at gemningen slog fejl.
+ *
+ * `mentions` er id'erne på dem, beskeden nævner med @ -- de bliver fremhævet
+ * i chatten og får push, selv om de har slået almindelige beskeder fra.
+ * Kalenderen bruger det til at nå dem, der har fået en plads fra ventelisten.
  */
-export async function announceInChat(userId: string, content: string) {
+export async function announceInChat(
+  userId: string,
+  content: string,
+  mentions: readonly string[] = [],
+) {
   const { data, error } = await supabase
     .from('messages')
-    .insert({ user_id: userId, content, message_type: 'action' })
+    .insert({
+      user_id: userId,
+      content,
+      message_type: 'action',
+      mentions: [...mentions],
+    })
     .select('id')
     .single()
   if (error) {

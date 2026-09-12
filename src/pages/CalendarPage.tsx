@@ -11,8 +11,10 @@ import {
   type CalendarEvent,
   type EventInput,
 } from '../features/calendar/useEvents'
+import { announcePromotion } from '../features/calendar/announceWaitlist'
 import { useAuth } from '../features/auth/useAuth'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
+import { useProfilesMap } from '../features/chat/useProfilesMap'
 import { useDialogFocus } from '../hooks/useDialogFocus'
 
 // Feed-URL til live iCal-abonnement. Udledes af SUPABASE_URL så der ikke er
@@ -155,7 +157,7 @@ function EventDetails({
           )}
         </dl>
 
-        <AttendanceSection eventId={event.id} userId={userId} />
+        <AttendanceSection event={event} userId={userId} canManage={canEdit} />
 
         <GuestRequestsSection
           eventId={event.id}
@@ -219,6 +221,7 @@ function CalendarPage() {
   const { isAdmin } = useIsAdmin()
   const { eventsQuery, createEvent, updateEvent, deleteEvent } =
     useEvents(userId)
+  const profilesQuery = useProfilesMap()
   // /kalender/<id> -- fra en notifikation (#216) eller et delt link -- åbner
   // begivenheden, så snart listen er hentet. Den er ikke state: at lukke
   // dialogen er at gå tilbage til /kalender, så et tryk på "tilbage" ikke
@@ -295,13 +298,27 @@ function CalendarPage() {
 
   function saveEvent(input: EventInput) {
     setMutationError(null)
+    const editing = editingEvent
     const mutation =
-      editingEvent === 'new'
-        ? createEvent.mutateAsync(input)
-        : updateEvent.mutateAsync({ id: editingEvent!.id, input })
+      editing === 'new' || editing === null
+        ? createEvent.mutateAsync(input).then(() => [] as string[])
+        : updateEvent.mutateAsync({ event: editing, input })
 
     mutation
-      .then(() => closeForm())
+      .then((promoted) => {
+        closeForm()
+        // Et hævet loft gav plads til nogen fra ventelisten -- sig det til
+        // dem i chatten, ligesom når en plads bliver ledig.
+        if (editing && editing !== 'new' && promoted.length > 0) {
+          void announcePromotion(
+            userId,
+            'capRaised',
+            input.title,
+            promoted,
+            profilesQuery.data,
+          )
+        }
+      })
       .catch(() =>
         setMutationError(
           'Begivenheden kunne ikke gemmes. Prøv igen om et øjeblik.',
