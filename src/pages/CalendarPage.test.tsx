@@ -140,12 +140,28 @@ describe('CalendarPage: /kalender/<id>', () => {
     expect(screen.getByTestId('location').textContent).toBe('/kalender')
   })
 
-  it('åbner ingenting for et id, der ikke findes i kalenderen', () => {
+  it('siger til, når begivenheden er forbi eller slettet, og går til /kalender', async () => {
     mocks.eventsQuery.data = [EVENT]
     renderAt('/kalender/00000000-0000-0000-0000-000000000099')
 
+    expect(
+      await screen.findByText('Begivenheden er forbi eller slettet.'),
+    ).toBeTruthy()
+    expect(screen.getByTestId('location').textContent).toBe('/kalender')
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(screen.getByRole('heading', { name: 'Kalender' })).toBeTruthy()
+  })
+
+  it('venter med at dømme, til listen er hentet', () => {
+    mocks.eventsQuery.data = undefined
+    renderAt(`/kalender/${EVENT.id}`)
+
+    expect(
+      screen.queryByText('Begivenheden er forbi eller slettet.'),
+    ).toBeNull()
+    expect(screen.getByTestId('location').textContent).toBe(
+      `/kalender/${EVENT.id}`,
+    )
   })
 
   it('åbner ingenting på /kalender uden id', () => {

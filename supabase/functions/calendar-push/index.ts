@@ -96,14 +96,6 @@ Deno.serve(async (req) => {
 
   const supabase = serviceClient()
 
-  let vapid: VapidDetails
-  try {
-    vapid = await getVapidDetails(supabase)
-  } catch (caught) {
-    console.error('Kunne ikke hente eller oprette VAPID-nøglerne', caught)
-    return respond({ error: 'VAPID-nøglerne kunne ikke hentes' }, 503)
-  }
-
   if (kind === 'event_created') {
     const accessToken = req.headers
       .get('Authorization')
@@ -132,6 +124,14 @@ Deno.serve(async (req) => {
     }
     if (Date.now() - new Date(event.created_at).getTime() > MAX_EVENT_AGE_MS) {
       return respond({ skipped: 'Begivenheden er for gammel', sent: 0 })
+    }
+
+    let vapid: VapidDetails
+    try {
+      vapid = await getVapidDetails(supabase)
+    } catch (caught) {
+      console.error('Kunne ikke hente eller oprette VAPID-nøglerne', caught)
+      return respond({ error: 'VAPID-nøglerne kunne ikke hentes' }, 503)
     }
 
     const { data: creator } = await supabase
@@ -221,6 +221,7 @@ Deno.serve(async (req) => {
       .eq('event_id', event.id)
     if (attendanceError) throw attendanceError
 
+    const vapid = await getVapidDetails(supabase)
     const result = await deliverPush({
       supabase,
       vapid,
