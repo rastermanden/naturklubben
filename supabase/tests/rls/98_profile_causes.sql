@@ -4,7 +4,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(8);
+select plan(9);
 
 do $$
 begin
@@ -30,7 +30,14 @@ do $$ begin perform tests.login('00000000-0000-0000-0000-00000000000a'); end $$;
 select lives_ok(
   $$update public.profiles set causes = '{ukraine,regnbue,vaccine}'
     where id = '00000000-0000-0000-0000-00000000000a'$$,
-  'et medlem kan vælge alle tre mærker'
+  'et medlem kan vælge de tre oprindelige mærker'
+);
+
+select lives_ok(
+  $$update public.profiles set causes = '{trans,klima,biodiversitet,
+    dyrevelfaerd,plantebaseret,fred,bloddonor,organdonor,cykel}'
+    where id = '00000000-0000-0000-0000-00000000000a'$$,
+  'et medlem kan vælge alle de nye mærker'
 );
 
 select lives_ok(

@@ -3,7 +3,8 @@
  *
  * Sættet er lukket og spejler check-constrainten profiles_causes_known --
  * databasen kender kun slugs, tegnet og navnet bor her, så de kan rettes uden
- * en migration.
+ * en migration. Et nyt mærke kræver begge dele: en migration, der udvider
+ * constrainten, og en linje her.
  */
 export interface Cause {
   slug: string
@@ -16,6 +17,15 @@ export const CAUSES: readonly Cause[] = [
   { slug: 'ukraine', emoji: '🇺🇦', label: 'Støtter Ukraine' },
   { slug: 'regnbue', emoji: '🏳️‍🌈', label: 'Regnbueflag' },
   { slug: 'vaccine', emoji: '💉', label: 'Vaccineret' },
+  { slug: 'trans', emoji: '🏳️‍⚧️', label: 'Transflag' },
+  { slug: 'klima', emoji: '🌍', label: 'Klimaet' },
+  { slug: 'biodiversitet', emoji: '🐝', label: 'Biodiversitet' },
+  { slug: 'dyrevelfaerd', emoji: '🐾', label: 'Dyrevelfærd' },
+  { slug: 'plantebaseret', emoji: '🌱', label: 'Spiser plantebaseret' },
+  { slug: 'fred', emoji: '🕊️', label: 'Fred' },
+  { slug: 'bloddonor', emoji: '🩸', label: 'Bloddonor' },
+  { slug: 'organdonor', emoji: '🫀', label: 'Organdonor' },
+  { slug: 'cykel', emoji: '🚲', label: 'Cyklist' },
 ]
 
 const bySlug = new Map(CAUSES.map((cause) => [cause.slug, cause]))
