@@ -864,11 +864,16 @@ ejer kun HTTP-kaldene. Her:
 `pg_net` kender ikke functionens URL, og en cron-kørsel har ingen request at udlede den af.
 `probation_notification_function_url()` løser det ved at læse requestets host-header, når
 ansøgningen oprettes; her gør triggeren `events_remember_notification_url` det samme, når
-en begivenhed oprettes fra appen, og gemmer den i `events.notification_function_url`.
-Triggeren ejer kolonnen -- et medlem kan ikke pege den mod en fremmed host. Uden header
-(pgTAP, psql) gemmes null, og kørslen låner den seneste kendte URL fra en anden
-begivenhed: det er samme host for alle. Findes der slet ingen (en helt ny Preview Branch),
-sendes ingen påmindelser, indtil den første begivenhed er oprettet fra appen.
+en begivenhed oprettes eller redigeres fra appen, og gemmer den i
+`events.notification_function_url`. Triggeren ejer kolonnen -- et medlem kan ikke pege den
+mod en fremmed host, og en begivenhed uden URL får requestets host, næste gang den
+redigeres. Uden header (pgTAP, psql) gemmes null, og kørslen låner den seneste kendte URL
+fra en anden begivenhed eller, findes der ingen, fra en ansøgning om prøvemedlemskab
+(`probation_applications.notification_function_url` med `/calendar-push` i stedet for
+`/probation-notifications`): det er samme host for alle. Derfor får også begivenheder, der
+fandtes i produktion før migrationen, deres påmindelse fra dag ét. Kun på en helt ny
+Preview Branch uden hverken begivenheder eller ansøgninger fra appen sendes ingen
+påmindelser, indtil det første af delene er oprettet.
 
 ## Nyheder om nye funktioner
 
