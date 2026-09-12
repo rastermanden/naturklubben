@@ -10,6 +10,7 @@ import { routeMetadata, type AppRoutePath } from './routeMetadata'
 const AccountDeletedPage = lazy(() => import('./pages/AccountDeletedPage'))
 const ActivitiesPage = lazy(() => import('./pages/ActivitiesPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const AdminChatPage = lazy(() => import('./pages/AdminChatPage'))
 const CalendarPage = lazy(() => import('./pages/CalendarPage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const DataPolicyPage = lazy(() => import('./pages/DataPolicyPage'))
@@ -84,6 +85,11 @@ const routeElements: Record<AppRoutePath, ReactNode> = {
   '/admin': (
     <ProtectedRoute>
       <AdminRoute>{loadRoute(<AdminPage />)}</AdminRoute>
+    </ProtectedRoute>
+  ),
+  '/admin/chat': (
+    <ProtectedRoute>
+      <AdminRoute>{loadRoute(<AdminChatPage />)}</AdminRoute>
     </ProtectedRoute>
   ),
   '/profil': <ProtectedRoute>{loadRoute(<ProfilePage />)}</ProtectedRoute>,

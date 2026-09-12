@@ -163,6 +163,21 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('ChatPage rooms', () => {
+  it('shows the shared chat heading by default', () => {
+    render(<ChatPage />)
+
+    expect(screen.getByRole('heading', { name: 'Chat' })).toBeTruthy()
+  })
+
+  it('shows the admin room heading and description for room="admin"', () => {
+    render(<ChatPage room="admin" />)
+
+    expect(screen.getByRole('heading', { name: 'Admin-chat' })).toBeTruthy()
+    expect(screen.getByText('Kun synlig for administratorer.')).toBeTruthy()
+  })
+})
+
 describe('ChatPage replies', () => {
   it('keeps the page fixed while only the message log scrolls', () => {
     render(<ChatPage />)

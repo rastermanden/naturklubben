@@ -106,6 +106,11 @@ export const routeMetadata = [
     announcement: 'Admin indlæst',
   },
   {
+    path: '/admin/chat',
+    documentTitle: 'Admin-chat | Naturklubben',
+    announcement: 'Admin-chat indlæst',
+  },
+  {
     path: '/profil',
     documentTitle: 'Min profil | Naturklubben',
     announcement: 'Min profil indlæst',

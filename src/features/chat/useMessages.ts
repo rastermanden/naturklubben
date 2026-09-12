@@ -44,10 +44,12 @@ export interface MessageRow {
   reply_to?: ReplyPreview | ReplyPreview[] | null
 }
 
+export type ChatRoom = 'general' | 'admin'
+
 export const MESSAGE_HISTORY_LIMIT = 100
 const SEARCH_RESULT_LIMIT = 20
-const queryKey = ['messages']
-const searchQueryKey = ['message-search']
+const queryKeyFor = (room: ChatRoom) => ['messages', room] as const
+const searchQueryKeyFor = (room: ChatRoom) => ['message-search', room] as const
 // Svarets ophav indlejres med *kolonnenavnet* som hint, ikke med
 // foreign key'ens navn. PostgREST slår ikke en selvrefererende relation op på
 // constraint-navnet: `messages!messages_reply_to_message_id_fkey` svarer
@@ -121,11 +123,13 @@ export function mergeMessagePages(pages: MessagePage[]): Message[] {
 }
 
 async function fetchMessagePage(
+  room: ChatRoom,
   cursor: MessageCursor | undefined,
 ): Promise<MessagePage> {
   let query = supabase
     .from('messages')
     .select(messageFields)
+    .eq('room', room)
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(MESSAGE_HISTORY_LIMIT + 1)
@@ -301,8 +305,9 @@ async function notifyOthers(messageId: string) {
   if (error) console.warn('Notifikationer kunne ikke sendes', error)
 }
 
-export function useMessages() {
+export function useMessages(room: ChatRoom = 'general') {
   const queryClient = useQueryClient()
+  const queryKey = queryKeyFor(room)
   const liveMessages = useRef(new Map<string, Message>())
   const deletedMessageIds = useRef(new Set<string>())
   const wasFetching = useRef(false)
@@ -310,7 +315,7 @@ export function useMessages() {
   const messagesQuery = useInfiniteQuery({
     queryKey,
     initialPageParam: undefined as MessageCursor | undefined,
-    queryFn: ({ pageParam }) => fetchMessagePage(pageParam),
+    queryFn: ({ pageParam }) => fetchMessagePage(room, pageParam),
     getNextPageParam: (lastPage) => {
       const oldest = lastPage.messages.at(-1)
       return lastPage.hasMore && oldest
@@ -352,14 +357,27 @@ export function useMessages() {
       }
       return updated
     })
-  }, [messagesQuery.isFetching, queryClient])
+    // queryKey is derived from room, which the outer effect already depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messagesQuery.isFetching, queryClient, room])
 
   useEffect(() => {
+    // Realtime evaluerer filteret mod den nye række, så INSERT og UPDATE kan
+    // afgrænses til rummet. En DELETE-event filtreres ikke: tabellens
+    // replica identity er kun primærnøglen, så `old` her aldrig ville bære
+    // `room` med -- og i praksis slettes en besked aldrig hårdt (kun via
+    // soft_delete_message's UPDATE, se #107), så denne gren rammes ikke.
+    const roomFilter = `room=eq.${room}`
     const channel = supabase
-      .channel('messages-realtime')
+      .channel(`messages-realtime-${room}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: roomFilter,
+        },
         (payload) => {
           const message = normalizeMessage(payload.new as MessageRow)
           deletedMessageIds.current.delete(message.id)
@@ -382,7 +400,12 @@ export function useMessages() {
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: roomFilter,
+        },
         (payload) => {
           const normalized = normalizeMessage(payload.new as MessageRow)
           const history =
@@ -421,7 +444,7 @@ export function useMessages() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [queryClient])
+  }, [queryClient, queryKey, room])
 
   const sendMessage = useMutation({
     mutationFn: async ({
@@ -442,6 +465,7 @@ export function useMessages() {
         .insert({
           user_id: userId,
           content,
+          room,
           reply_to_message_id: replyToMessageId,
           message_type: messageType,
           mentions,
@@ -496,10 +520,13 @@ export function useMessages() {
   return { messagesQuery, sendMessage, deleteMessage, openMessage }
 }
 
-export function useMessageSearch(searchTerm: string) {
+export function useMessageSearch(
+  searchTerm: string,
+  room: ChatRoom = 'general',
+) {
   const normalizedTerm = searchTerm.trim()
   return useInfiniteQuery({
-    queryKey: [...searchQueryKey, normalizedTerm],
+    queryKey: [...searchQueryKeyFor(room), normalizedTerm],
     enabled: normalizedTerm.length > 0,
     initialPageParam: undefined as MessageCursor | undefined,
     queryFn: async ({ pageParam }) => {
@@ -508,6 +535,7 @@ export function useMessageSearch(searchTerm: string) {
         before_created_at: pageParam?.createdAt ?? null,
         before_id: pageParam?.id ?? null,
         page_size: SEARCH_RESULT_LIMIT + 1,
+        p_room: room,
       })
       if (error) throw error
       const rows = data as MessageRow[]

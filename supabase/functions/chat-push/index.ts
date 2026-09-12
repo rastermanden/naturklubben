@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
 
   const { data: message, error: messageError } = await supabase
     .from('messages')
-    .select('id, user_id, content, created_at, mentions')
+    .select('id, user_id, content, created_at, mentions, room')
     .eq('id', messageId)
     .single()
   if (messageError || !message) {
@@ -178,6 +178,7 @@ Deno.serve(async (req) => {
   }
 
   const preferences = new Map<string, ChatNotificationPreference>()
+  let adminIds: Set<string> | undefined
   for (const row of preferenceRows ?? []) {
     preferences.set(
       row.id as string,
@@ -185,11 +186,30 @@ Deno.serve(async (req) => {
     )
   }
 
+  const room = message.room === 'admin' ? 'admin' : 'general'
+
+  // Admin-rummet (#212) er kun for administratorer -- en abonnent, der ikke
+  // selv er admin, må ikke få en notifikation, der lokker dem ind i et rum,
+  // de alligevel ikke kan læse.
+  if (room === 'admin') {
+    const { data: adminRows, error: adminError } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('id', subscriberIds)
+      .eq('is_admin', true)
+    if (adminError) {
+      return jsonResponse({ error: adminError.message }, corsHeaders, 500)
+    }
+    adminIds = new Set((adminRows ?? []).map((row) => row.id as string))
+  }
+
   const recipients = selectRecipients({
     subscriptions,
     preferences,
     mentionedIds: (message.mentions ?? []) as string[],
     senderId: user.id,
+    room,
+    adminIds,
   })
   if (recipients.length === 0) {
     return jsonResponse({ sent: 0, failed: 0, removed: 0 }, corsHeaders)
@@ -206,6 +226,7 @@ Deno.serve(async (req) => {
           preview,
           messageId: message.id,
           isMentioned,
+          room,
         }),
         vapid,
       )

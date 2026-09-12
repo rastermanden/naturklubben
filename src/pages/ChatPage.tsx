@@ -3,6 +3,7 @@ import { useAuth } from '../features/auth/useAuth'
 import { MessageBubble } from '../features/chat/MessageBubble'
 import { OnlineMembers } from '../features/chat/OnlineMembers'
 import { useMessages, useMessageSearch } from '../features/chat/useMessages'
+import type { ChatRoom } from '../features/chat/useMessages'
 import { useReactions } from '../features/chat/useReactions'
 import {
   groupReactionsByMessage,
@@ -36,16 +37,20 @@ const MAX_MESSAGE_LENGTH = 2000
 const SCROLL_BOTTOM_THRESHOLD = 80
 const SEARCH_DEBOUNCE_MS = 250
 
-function ChatPage() {
+interface ChatPageProps {
+  room?: ChatRoom
+}
+
+function ChatPage({ room = 'general' }: ChatPageProps) {
   const { session } = useAuth()
   const userId = session!.user.id
   const { messagesQuery, sendMessage, deleteMessage, openMessage } =
-    useMessages()
+    useMessages(room)
   const { isAdmin } = useIsAdmin()
   const { isFullscreen, toggleFullscreen } = useFullscreen()
   const { data: profiles, refetch: refetchProfiles } = useProfilesMap()
   const [away, setAway] = useState<AwayState | null>(null)
-  const onlineMembers = useOnlinePresence(userId, away)
+  const onlineMembers = useOnlinePresence(userId, away, room)
   const messages = useMemo(
     () => messagesQuery.data?.messages ?? [],
     [messagesQuery.data?.messages],
@@ -82,7 +87,7 @@ function ChatPage() {
   // Søgefeltet slår op ved hvert tastetryk; uden pausen ville en hel
   // søgestreng koste ét opslag pr. bogstav, hvoraf kun det sidste bruges.
   const debouncedSearchTerm = useDebouncedValue(searchTerm, SEARCH_DEBOUNCE_MS)
-  const searchQuery = useMessageSearch(debouncedSearchTerm)
+  const searchQuery = useMessageSearch(debouncedSearchTerm, room)
   // Mens pausen løber, hører resultaterne på skærmen til en ældre søgestreng.
   const isSearchSettling = searchTerm.trim() !== debouncedSearchTerm.trim()
   const commandHints = useMemo(() => matchSlashCommandHints(draft), [draft])
@@ -458,11 +463,13 @@ function ChatPage() {
         <div className="flex shrink-0 items-start justify-between gap-2">
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-ink-body sm:text-2xl">
-              Chat
+              {room === 'admin' ? 'Admin-chat' : 'Chat'}
             </h1>
             {!isFullscreen && (
               <p className="hidden text-ink-subtle sm:block">
-                Fælles snak for alle medlemmer.
+                {room === 'admin'
+                  ? 'Kun synlig for administratorer.'
+                  : 'Fælles snak for alle medlemmer.'}
               </p>
             )}
           </div>

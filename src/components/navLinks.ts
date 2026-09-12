@@ -18,4 +18,10 @@ export const navLinks: NavLink[] = [
   { to: '/nyheder', label: 'Nyheder', requiresAuth: true },
   { to: '/profil', label: 'Profil', requiresAuth: true },
   { to: '/admin', label: 'Admin', requiresAuth: true, requiresAdmin: true },
+  {
+    to: '/admin/chat',
+    label: 'Admin-chat',
+    requiresAuth: true,
+    requiresAdmin: true,
+  },
 ]

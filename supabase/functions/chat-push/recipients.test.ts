@@ -2,6 +2,8 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  ADMIN_CHAT_TAG,
+  ADMIN_MENTION_TAG,
   chatPushPayload,
   CHAT_TAG,
   MENTION_TAG,
@@ -116,6 +118,33 @@ describe('selectRecipients', () => {
     expect(recipients).toEqual([])
   })
 
+  it('only notifies admins for a message in the admin room', () => {
+    const recipients = selectRecipients({
+      subscriptions,
+      preferences,
+      mentionedIds: [],
+      senderId: 'sender',
+      room: 'admin',
+      adminIds: new Set(['everything']),
+    })
+
+    expect(recipients.map((entry) => entry.subscription.user_id)).toEqual([
+      'everything',
+    ])
+  })
+
+  it('notifies no one in the admin room when no admin ids are given', () => {
+    const recipients = selectRecipients({
+      subscriptions,
+      preferences,
+      mentionedIds: [],
+      senderId: 'sender',
+      room: 'admin',
+    })
+
+    expect(recipients).toEqual([])
+  })
+
   it('sends to every device a member has', () => {
     const recipients = selectRecipients({
       subscriptions: [
@@ -201,5 +230,32 @@ describe('chatPushPayload', () => {
         }),
       ).title,
     ).toBe('Ny besked i Naturklubben')
+  })
+
+  it('uses the admin room tags and path', () => {
+    const ordinary = JSON.parse(
+      chatPushPayload({
+        senderName: 'Martin',
+        preview: 'Referat fra mødet',
+        messageId: 'message-5',
+        isMentioned: false,
+        room: 'admin',
+      }),
+    )
+    expect(ordinary.tag).toBe(ADMIN_CHAT_TAG)
+    expect(ordinary.path).toBe('admin/chat')
+
+    const mention = JSON.parse(
+      chatPushPayload({
+        senderName: 'Martin',
+        preview: 'Hej @Ada',
+        messageId: 'message-6',
+        isMentioned: true,
+        room: 'admin',
+      }),
+    )
+    expect(mention.tag).toBe(ADMIN_MENTION_TAG)
+    expect(mention.tag).not.toBe(MENTION_TAG)
+    expect(mention.tag).not.toBe(CHAT_TAG)
   })
 })
