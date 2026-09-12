@@ -218,7 +218,9 @@ function CalendarPage() {
   // /kalender/<id> -- fra en notifikation (#216) eller et delt link -- åbner
   // begivenheden, så snart listen er hentet. Den er ikke state: at lukke
   // dialogen er at gå tilbage til /kalender, så et tryk på "tilbage" ikke
-  // åbner den igen.
+  // åbner den igen. Navigationen sker først, når dialogen eller formularen
+  // faktisk lukkes: hver navigation starter siden forfra (RouteErrorBoundary),
+  // så en formular, der åbnes i samme åndedrag, ville forsvinde igen.
   const { eventId: routedEventId } = useParams()
   const navigate = useNavigate()
   const routedEvent = routedEventId
@@ -233,10 +235,10 @@ function CalendarPage() {
       ? monthStart(new Date(routedEvent.start_at))
       : monthStart(new Date()))
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
-  const openEvent = selectedEvent ?? routedEvent
   const [editingEvent, setEditingEvent] = useState<
     CalendarEvent | 'new' | null
   >(null)
+  const openEvent = editingEvent ? null : (selectedEvent ?? routedEvent)
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [subscribeOpen, setSubscribeOpen] = useState(false)
 
@@ -267,8 +269,13 @@ function CalendarPage() {
 
   function openForm(event: CalendarEvent | 'new') {
     setMutationError(null)
-    closeDetails()
+    setSelectedEvent(null)
     setEditingEvent(event)
+  }
+
+  function closeForm() {
+    setEditingEvent(null)
+    if (routedEventId) navigate('/kalender', { replace: true })
   }
 
   function saveEvent(input: EventInput) {
@@ -279,7 +286,7 @@ function CalendarPage() {
         : updateEvent.mutateAsync({ id: editingEvent!.id, input })
 
     mutation
-      .then(() => setEditingEvent(null))
+      .then(() => closeForm())
       .catch(() =>
         setMutationError(
           'Begivenheden kunne ikke gemmes. Prøv igen om et øjeblik.',
@@ -510,7 +517,7 @@ function CalendarPage() {
           submitting={createEvent.isPending || updateEvent.isPending}
           error={mutationError}
           onSubmit={saveEvent}
-          onCancel={() => setEditingEvent(null)}
+          onCancel={closeForm}
         />
       )}
     </main>

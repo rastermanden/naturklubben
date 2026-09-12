@@ -4,7 +4,6 @@
 import { strict as assert } from 'node:assert'
 import {
   badgeNominationAdminPayload,
-  badgeNominationNomineePayload,
   eventCreatedPayload,
   eventReminderPayload,
   eventTag,
@@ -119,17 +118,5 @@ Deno.test(
       payload.body,
       'Et medlem har indstillet Et medlem til en badge.',
     )
-  },
-)
-
-Deno.test(
-  'badgeNominationNomineePayload: røber ikke, hvem der indstillede',
-  () => {
-    const payload = badgeNominationNomineePayload(NOMINATION)
-    assert.equal(payload.title, 'Du er indstillet til en badge')
-    assert.doesNotMatch(payload.body, /Ida/)
-    assert.match(payload.body, /Svampekender/)
-    assert.equal(payload.path, 'profil')
-    assert.notEqual(payload.tag, badgeNominationAdminPayload(NOMINATION).tag)
   },
 )

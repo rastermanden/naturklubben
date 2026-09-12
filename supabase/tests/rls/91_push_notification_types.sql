@@ -7,7 +7,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(37);
+select plan(39);
 
 do $$
 begin
@@ -140,6 +140,14 @@ select throws_ok(
   '42501',
   null,
   'et medlem kan ikke sætte påmindelserne i gang'
+);
+
+-- Karen, admin: beskeden om nye indstillinger til godkendelse er hendes.
+do $$ begin perform tests.login('00000000-0000-0000-0000-0000000000f3'); end $$;
+
+select lives_ok(
+  $$select public.set_notification_preference('badge_nomination_review', false)$$,
+  'en admin kan slå besked om nye indstillinger til godkendelse fra'
 );
 
 -- Jens, et andet medlem
@@ -349,6 +357,17 @@ select is_empty(
       array['00000000-0000-0000-0000-000000000099']::uuid[]
     )$$,
   'et medlem, der ikke findes længere, springes over uden fejl'
+);
+
+select throws_ok(
+  $$select * from public.claim_push_deliveries(
+      'waitlist',
+      '00000000-0000-0000-0000-0000000000e1',
+      array['00000000-0000-0000-0000-0000000000f1']::uuid[]
+    )$$,
+  '23514',
+  null,
+  'loggen afviser en type, præferencerne ikke kender -- en stavefejl fejler højt'
 );
 
 select lives_ok(

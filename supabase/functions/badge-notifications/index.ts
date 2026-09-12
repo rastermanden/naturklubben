@@ -2,10 +2,11 @@
 //
 // Push-notifikationer om badges (#159):
 //   kind: 'nominated' -> admins får besked om, at der ligger en ny indstilling
-//                        til godkendelse, og den indstillede får besked om, at
-//                        nogen har indstillet dem (#216). Begge dele kan slås
-//                        fra på profilen, og leveringsloggen sørger for, at et
-//                        gentaget kald ikke sender igen (_shared/pushDelivery.ts).
+//                        til godkendelse. Den indstillede får ingenting: en
+//                        afvist indstilling må ikke være synlig for modtageren
+//                        (se badges-migrationen). Admins kan slå beskeden fra
+//                        på profilen (#216), og leveringsloggen sørger for, at
+//                        et gentaget kald ikke sender igen (_shared/pushDelivery.ts).
 //   kind: 'awarded'   -> det tildelte medlem får besked, og admins får besked
 //                        om, at produktionsuret på de 24 timer er startet.
 //
@@ -20,11 +21,8 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
 import { handleCors } from '../_shared/cors.ts'
-import { addDeliveryResults, deliverPush } from '../_shared/pushDelivery.ts'
-import {
-  badgeNominationAdminPayload,
-  badgeNominationNomineePayload,
-} from '../_shared/pushPayloads.ts'
+import { deliverPush } from '../_shared/pushDelivery.ts'
+import { badgeNominationAdminPayload } from '../_shared/pushPayloads.ts'
 import { getVapidDetails } from '../_shared/vapid.ts'
 import { sendPushNotification, type VapidDetails } from '../_shared/webpush.ts'
 
@@ -112,14 +110,13 @@ Deno.serve(async (req) => {
     const { data: nomination, error: nominationError } = await supabase
       .from('badge_nominations')
       .select(
-        'id, created_at, nominated_by, nominee_id, badges(name), nominee:profiles!badge_nominations_nominee_id_fkey(full_name), nominator:profiles!badge_nominations_nominated_by_fkey(full_name)',
+        'id, created_at, nominated_by, badges(name), nominee:profiles!badge_nominations_nominee_id_fkey(full_name), nominator:profiles!badge_nominations_nominated_by_fkey(full_name)',
       )
       .eq('id', body.nominationId)
       .maybeSingle<{
         id: string
         created_at: string
         nominated_by: string
-        nominee_id: string
         badges: { name: string } | null
         nominee: { full_name: string | null } | null
         nominator: { full_name: string | null } | null
@@ -152,32 +149,20 @@ Deno.serve(async (req) => {
       nominatorName: nomination.nominator?.full_name,
     }
 
-    // Er den indstillede selv admin, får de kun admin-varianten: én
-    // notifikation pr. person om den samme indstilling. Leveringsloggen er pr.
-    // (type, indstilling, medlem), så rækkefølgen her afgør, hvilken af de to
-    // de får.
     const adminIds = (admins ?? [])
       .map((admin) => admin.id as string)
       .filter((id) => id !== user.id)
 
     try {
-      const toAdmins = await deliverPush({
+      const result = await deliverPush({
         supabase,
         vapid,
-        kind: 'badge_nomination',
+        kind: 'badge_nomination_review',
         subjectId: nomination.id,
         userIds: adminIds,
         payload: badgeNominationAdminPayload(summary),
       })
-      const toNominee = await deliverPush({
-        supabase,
-        vapid,
-        kind: 'badge_nomination',
-        subjectId: nomination.id,
-        userIds: [nomination.nominee_id],
-        payload: badgeNominationNomineePayload(summary),
-      })
-      return respond(addDeliveryResults(toAdmins, toNominee))
+      return respond(result)
     } catch (caught) {
       console.error('Notifikationen om indstillingen fejlede', caught)
       return respond({ error: 'Notifikationen kunne ikke sendes' }, 500)
