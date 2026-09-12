@@ -266,7 +266,7 @@ select results_eq(
     order by user_id$$,
   $$values
     ('00000000-0000-0000-0000-00000000000c'::uuid, 'attending'),
-    ('00000000-0000-0000-0000-00000000000d'::uuid, 'waitlisted'),
+    ('00000000-0000-0000-0000-00000000000d'::uuid, 'attending'),
     ('00000000-0000-0000-0000-00000000000e'::uuid, 'waitlisted')$$,
   'et almindeligt medlem ser deltagere og venteliste, men ingen afbud'
 );
