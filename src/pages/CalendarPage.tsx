@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AttendanceSection } from '../features/calendar/AttendanceSection'
 import { EventTasksSection } from '../features/calendar/EventTasksSection'
 import { EventForm } from '../features/calendar/EventForm'
@@ -204,9 +204,24 @@ function CalendarPage() {
   // så en formular, der åbnes i samme åndedrag, ville forsvinde igen.
   const { eventId: routedEventId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const routedEvent = routedEventId
     ? (eventsQuery.data?.find((event) => event.id === routedEventId) ?? null)
     : null
+  // En notifikation, der trykkes på, efter begivenheden er forbi eller
+  // slettet, peger på noget, listen ikke længere har. Så siges det, og URL'en
+  // erstattes med /kalender. Beskeden rejser med i navigationens state, fordi
+  // navigationen starter siden forfra.
+  const routedEventMissing = Boolean(
+    routedEventId && eventsQuery.data && !routedEvent,
+  )
+  useEffect(() => {
+    if (routedEventMissing) {
+      navigate('/kalender', { replace: true, state: { eventMissing: true } })
+    }
+  }, [routedEventMissing, navigate])
+  const eventMissing =
+    (location.state as { eventMissing?: boolean } | null)?.eventMissing === true
   // null = "ikke valgt": den måned, den åbnede begivenhed ligger i, ellers
   // den nuværende.
   const [chosenMonth, setChosenMonth] = useState<Date | null>(null)
@@ -319,6 +334,12 @@ function CalendarPage() {
           </button>
         </div>
       </div>
+
+      {eventMissing && (
+        <p role="status" className="mb-4 text-ink-subtle">
+          Begivenheden er forbi eller slettet.
+        </p>
+      )}
 
       {eventsQuery.isLoading && (
         <p className="py-12 text-center text-ink-subtle">Henter kalender…</p>
