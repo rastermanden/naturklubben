@@ -92,10 +92,25 @@ export function Game2048() {
         <Board2048 state={state} />
 
         {(state.status !== 'running' || celebrating) && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/65 p-4 text-center text-white">
+          // En dialog oven på brættet: så længe den står der, hører tasterne
+          // til den (se `use2048Game`), og et stryg hen over den når ikke
+          // brættet bagved.
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="board-2048-dialog-title"
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/65 p-4 text-center text-white"
+          >
             {state.status === 'idle' && (
               <>
-                <p className="text-xl font-semibold">Klar?</p>
+                <p
+                  id="board-2048-dialog-title"
+                  className="text-xl font-semibold"
+                >
+                  Klar?
+                </p>
                 <p className="max-w-xs text-sm text-white/80">
                   Skub brikkerne, så to ens mødes og bliver til én. Nå 2048 —
                   eller videre.
@@ -104,7 +119,12 @@ export function Game2048() {
             )}
             {state.status === 'running' && celebrating && (
               <>
-                <p className="text-xl font-semibold">Du nåede {WIN_TILE}!</p>
+                <p
+                  id="board-2048-dialog-title"
+                  className="text-xl font-semibold"
+                >
+                  Du nåede {WIN_TILE}!
+                </p>
                 <p className="max-w-xs text-sm text-white/80">
                   Brættet er stadig dit. Spil videre, så længe der er træk.
                 </p>
@@ -112,7 +132,12 @@ export function Game2048() {
             )}
             {state.status === 'over' && (
               <>
-                <p className="text-xl font-semibold">Ikke flere træk</p>
+                <p
+                  id="board-2048-dialog-title"
+                  className="text-xl font-semibold"
+                >
+                  Ikke flere træk
+                </p>
                 <p className="text-sm text-white/80">
                   {formatScore(state.score)} point, største brik {biggest},{' '}
                   {state.moves} træk.

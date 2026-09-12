@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { NewGameScore } from '../types'
+import type { Board } from './engine'
 
 const submit = vi.hoisted(() => ({
   mutate: vi.fn<(result: NewGameScore) => void>(),
@@ -9,6 +10,19 @@ const submit = vi.hoisted(() => ({
   isSuccess: false,
 }))
 
+/** Et bræt at begynde på i stedet for de to tilfældige startbrikker. */
+const opening = vi.hoisted(() => ({ board: null as Board | null }))
+
+vi.mock('./engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./engine')>()
+  return {
+    ...actual,
+    startGame: (...args: Parameters<typeof actual.startGame>) => {
+      const state = actual.startGame(...args)
+      return opening.board ? { ...state, board: opening.board } : state
+    },
+  }
+})
 vi.mock('../useGameScores', () => ({
   useSubmitScore: () => submit,
   usePersonalBest: () => ({ data: null }),
@@ -31,8 +45,11 @@ function tiles(): number[] {
     .map((cell) => Number(cell.getAttribute('data-value')))
 }
 
-function swipe(dx: number, dy: number) {
-  const board = screen.getByTestId('board-2048')
+function swipe(
+  dx: number,
+  dy: number,
+  board: HTMLElement = screen.getByTestId('board-2048'),
+) {
   fireEvent.pointerDown(board, {
     pointerId: 1,
     pointerType: 'touch',
@@ -50,6 +67,7 @@ function swipe(dx: number, dy: number) {
 afterEach(() => {
   cleanup()
   submit.mutate.mockReset()
+  opening.board = null
   vi.restoreAllMocks()
 })
 
@@ -111,6 +129,34 @@ describe('Game2048', () => {
     swipe(5, 8)
 
     expect(stat('Træk')).toBe('0')
+  })
+
+  it('lader ikke brættet ændre sig bag "Du nåede 2048!"', () => {
+    opening.board = [
+      [1024, 1024, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+    ]
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    render(<Game2048 />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start spillet' }))
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(screen.getByText('Du nåede 2048!')).toBeTruthy()
+    const frozen = tiles()
+
+    fireEvent.keyDown(window, { key: 'ArrowDown' })
+    swipe(0, 80, screen.getByRole('dialog'))
+
+    expect(tiles()).toEqual(frozen)
+    expect(stat('Træk')).toBe('1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Spil videre' }))
+    fireEvent.keyDown(window, { key: 'ArrowDown' })
+
+    expect(stat('Træk')).toBe('2')
+    expect(tiles()).not.toEqual(frozen)
   })
 
   it('sender ikke noget resultat, før spillet er slut', () => {
