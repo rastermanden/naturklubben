@@ -841,6 +841,11 @@ afvejning som for nyhederne). Medlemmer uden enhed claimes ikke, så en, der sl�
 notifikationer til senere samme dag, stadig kan få sin påmindelse. Loggen ryddes efter 90
 dage.
 
+Flyttes en begivenhed til en anden dag, glemmer triggeren `events_remember_notification_url`
+påmindelsen om den: `event_reminder`-rækkerne i `push_deliveries` og kørslen i
+`event_reminders` slettes, så vinduet dagen før den nye dato sender forfra til de tilmeldte.
+Et nyt klokkeslæt samme dag rører ikke loggen, og "ny begivenhed" sendes aldrig igen.
+
 Loggen hænger på medlemmet og ikke på abonnementet (i modsætning til
 `feature_announcement_push_deliveries`): "du er tilmeldt en tur i morgen" er én besked til
 én person, uanset hvor mange enheder de har.
