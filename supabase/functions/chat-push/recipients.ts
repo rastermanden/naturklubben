@@ -16,6 +16,8 @@ export const CHAT_NOTIFICATION_PREFERENCES = [
 export type ChatNotificationPreference =
   (typeof CHAT_NOTIFICATION_PREFERENCES)[number]
 
+export type ChatRoom = 'general' | 'admin'
+
 /** Ét fælles chatrum -> ét tag, så ubesvarede beskeder erstatter hinanden. */
 export const CHAT_TAG = 'naturklubben-chat'
 
@@ -25,6 +27,14 @@ export const CHAT_TAG = 'naturklubben-chat'
  * med at kunne skrue ned væk igen.
  */
 export const MENTION_TAG = 'naturklubben-chat-mention'
+
+/**
+ * Admin-rummet (#212) har sine egne tags og sin egen sti: en notifikation
+ * derfra må ikke erstatte -- eller blive erstattet af -- en fra det fælles
+ * rum, og tryk på den skal åbne admin-chatten, ikke den almindelige.
+ */
+export const ADMIN_CHAT_TAG = 'naturklubben-chat-admin'
+export const ADMIN_MENTION_TAG = 'naturklubben-chat-admin-mention'
 
 export interface PushSubscriptionRow {
   id: string
@@ -59,17 +69,23 @@ export function selectRecipients({
   preferences,
   mentionedIds,
   senderId,
+  room = 'general',
+  adminIds,
 }: {
   subscriptions: readonly PushSubscriptionRow[]
   preferences: ReadonlyMap<string, ChatNotificationPreference>
   mentionedIds: readonly string[]
   senderId: string
+  room?: ChatRoom
+  /** Kun nødvendig for admin-rummet -- ignoreres for det fælles rum. */
+  adminIds?: ReadonlySet<string>
 }): ChatPushRecipient[] {
   const mentioned = new Set(mentionedIds)
   const recipients: ChatPushRecipient[] = []
 
   for (const subscription of subscriptions) {
     if (subscription.user_id === senderId) continue
+    if (room === 'admin' && !adminIds?.has(subscription.user_id)) continue
     const isMentioned = mentioned.has(subscription.user_id)
     const preference = preferences.get(subscription.user_id) ?? 'all'
     if (preference === 'none') continue
@@ -85,13 +101,23 @@ export function chatPushPayload({
   preview,
   messageId,
   isMentioned,
+  room = 'general',
 }: {
   senderName: string | null | undefined
   preview: string
   messageId: string
   isMentioned: boolean
+  room?: ChatRoom
 }): string {
   const name = senderName?.trim()
+  const tag =
+    room === 'admin'
+      ? isMentioned
+        ? ADMIN_MENTION_TAG
+        : ADMIN_CHAT_TAG
+      : isMentioned
+        ? MENTION_TAG
+        : CHAT_TAG
   return JSON.stringify({
     title: isMentioned
       ? name
@@ -99,8 +125,8 @@ export function chatPushPayload({
         : 'Du er nævnt i Naturklubben'
       : name || 'Ny besked i Naturklubben',
     body: preview,
-    tag: isMentioned ? MENTION_TAG : CHAT_TAG,
-    path: 'chat',
+    tag,
+    path: room === 'admin' ? 'admin/chat' : 'chat',
     messageId,
   })
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabaseClient'
+import type { ChatRoom } from './useMessages'
 
 export interface AwayState {
   /** Valgfri begrundelse, som de andre online kan se. */
@@ -28,6 +29,7 @@ interface PresencePayload {
 export function useOnlinePresence(
   currentUserId: string,
   away: AwayState | null = null,
+  room: ChatRoom = 'general',
 ): PresenceMember[] {
   const [members, setMembers] = useState<PresenceMember[]>([])
   const channelRef = useRef<RealtimeChannel | null>(null)
@@ -41,7 +43,7 @@ export function useOnlinePresence(
   }, [away])
 
   useEffect(() => {
-    const channel = supabase.channel('chat-presence', {
+    const channel = supabase.channel(`chat-presence-${room}`, {
       config: { presence: { key: currentUserId } },
     })
     channelRef.current = channel
@@ -76,7 +78,7 @@ export function useOnlinePresence(
       isSubscribed.current = false
       supabase.removeChannel(channel)
     }
-  }, [currentUserId])
+  }, [currentUserId, room])
 
   // Skifter væk-status, mens kanalen allerede er oppe, sendes den som en ny
   // track() -- ellers ville de andre først se ændringen ved næste reconnect.
