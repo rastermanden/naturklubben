@@ -19,7 +19,7 @@
 // herind.
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.112.3'
-import type { PushPayload } from './pushPayloads.ts'
+import type { NotificationKind, PushPayload } from './pushPayloads.ts'
 import {
   selectPushRecipients,
   subscriptionsFor,
@@ -53,7 +53,7 @@ export async function deliverPush({
   // deno-lint-ignore no-explicit-any
   supabase: SupabaseClient<any, any, any>
   vapid: VapidDetails
-  kind: string
+  kind: NotificationKind
   subjectId: string
   userIds: readonly string[]
   payload: PushPayload

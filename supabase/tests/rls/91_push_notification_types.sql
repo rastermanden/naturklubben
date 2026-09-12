@@ -7,7 +7,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(39);
+select plan(43);
 
 do $$
 begin
@@ -31,8 +31,61 @@ begin
     'auth'
   );
 
-  -- Triggeren på events udleder functionens URL af requestets host-header,
-  -- præcis som probation_notification_function_url().
+end
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Produktionen, den dag migrationen lander: en kommende begivenhed fandtes
+-- allerede (ingen URL, for triggeren så aldrig et request), ingen begivenhed
+-- er endnu oprettet fra appen, men ansøgningerne om prøvemedlemskab har husket
+-- functions-hosten.
+-- ---------------------------------------------------------------------------
+insert into public.events (id, title, start_at, created_by)
+values (
+  '00000000-0000-0000-0000-0000000000e0',
+  'Tur oprettet før migrationen',
+  now() + interval '2 hours',
+  '00000000-0000-0000-0000-0000000000f1'
+);
+
+insert into public.probation_applications (
+  full_name, email, motivation, notification_function_url
+)
+values (
+  'Ansøger',
+  'ansoeger@example.com',
+  'Vil gerne med',
+  'https://naturklubben.supabase.co/functions/v1/probation-notifications'
+);
+
+select is(
+  (
+    select notification_function_url
+    from public.events
+    where id = '00000000-0000-0000-0000-0000000000e0'
+  ),
+  null,
+  'en begivenhed fra før migrationen har ingen URL'
+);
+
+select is(
+  public.enqueue_event_reminders(),
+  1,
+  'uden nogen begivenhed fra appen lånes hosten fra en ansøgning'
+);
+
+select results_eq(
+  $$select status, attempts
+    from public.event_reminders
+    where event_id = '00000000-0000-0000-0000-0000000000e0'$$,
+  $$values ('sending'::text, 1)$$,
+  'påmindelsen om den gamle begivenhed er sat i kø'
+);
+
+-- Triggeren på events udleder functionens URL af requestets host-header,
+-- præcis som probation_notification_function_url().
+do $$
+begin
   perform set_config(
     'request.headers', '{"host": "naturklubben.supabase.co"}', true
   );
@@ -78,6 +131,21 @@ select is(
   ),
   'https://naturklubben.supabase.co/functions/v1/calendar-push',
   'et medlem kan ikke pege påmindelsen mod en fremmed host'
+);
+
+update public.events
+set title = 'Tur oprettet før migrationen, redigeret',
+    notification_function_url = 'https://evil.example.com/steal'
+where id = '00000000-0000-0000-0000-0000000000e0';
+
+select is(
+  (
+    select notification_function_url
+    from public.events
+    where id = '00000000-0000-0000-0000-0000000000e0'
+  ),
+  'https://naturklubben.supabase.co/functions/v1/calendar-push',
+  'en begivenhed uden URL får requestets host, når den redigeres -- ikke en fremmed'
 );
 
 -- ---------------------------------------------------------------------------

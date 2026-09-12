@@ -170,9 +170,11 @@ grant execute on function public.claim_push_deliveries(text, uuid, uuid[])
 -- pg_net kender ikke functionens URL af sig selv, og en cron-kørsel har ingen
 -- request at udlede den af. probation_notification_function_url() løser det
 -- ved at læse host-headeren i det request, der opretter ansøgningen; her gør
--- en trigger det samme, når en begivenhed oprettes fra appen. Ingen header
--- (pgTAP, psql) giver null -- ikke en fejl -- og cron falder så tilbage til den
--- seneste kendte URL fra en anden begivenhed. Det er samme host for alle.
+-- en trigger det samme, når en begivenhed oprettes eller redigeres fra appen.
+-- Ingen header (pgTAP, psql) giver null -- ikke en fejl -- og cron falder så
+-- tilbage til den seneste kendte URL fra en anden begivenhed eller, findes
+-- der ingen, fra en ansøgning om prøvemedlemskab. Det er samme host for alle,
+-- så også begivenheder, der fandtes før denne migration, får deres påmindelse.
 create function public.push_function_url(function_name text)
 returns text
 language plpgsql
@@ -202,7 +204,9 @@ alter table public.events
   add column notification_function_url text;
 
 -- Kolonnen sættes af triggeren og kun af den: et medlem har update på
--- events, men må ikke kunne pege påmindelsen mod en fremmed host.
+-- events, men må ikke kunne pege påmindelsen mod en fremmed host. En
+-- begivenhed uden URL (oprettet før denne migration eller uden request) får
+-- den, næste gang den redigeres fra appen.
 -- security definer, fordi push_function_url ikke er givet til klientrollerne,
 -- og triggeren ellers ville køre som det medlem, der opretter begivenheden.
 create function public.remember_event_notification_url()
@@ -214,7 +218,10 @@ begin
   if tg_op = 'INSERT' then
     new.notification_function_url := public.push_function_url('calendar-push');
   else
-    new.notification_function_url := old.notification_function_url;
+    new.notification_function_url := coalesce(
+      old.notification_function_url,
+      public.push_function_url('calendar-push')
+    );
   end if;
   return new;
 end;
@@ -268,6 +275,19 @@ begin
   where event.notification_function_url is not null
   order by event.created_at desc
   limit 1;
+
+  if fallback_url is null then
+    select regexp_replace(
+      application.notification_function_url,
+      '/probation-notifications$',
+      '/calendar-push'
+    )
+    into fallback_url
+    from public.probation_applications as application
+    where application.notification_function_url is not null
+    order by application.created_at desc
+    limit 1;
+  end if;
 
   for reminder in
     select

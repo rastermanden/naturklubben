@@ -67,6 +67,13 @@ function dayKey(date: Date) {
   return dayKeyFormatter.format(date)
 }
 
+/** Kalenderdagen efter `key` -- et døgn, ikke 24 timer, så skiftet til
+ * sommertid ikke springer en dag over. */
+function nextDayKey(key: string) {
+  const [year, month, day] = key.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10)
+}
+
 /** "søndag den 14. september kl. 10.00" */
 export function formatEventStart(startAt: string) {
   const start = new Date(startAt)
@@ -83,8 +90,7 @@ export function relativeDay(startAt: string, now: Date): string {
   const startDay = dayKey(start)
   const today = dayKey(now)
   if (startDay === today) return 'i dag'
-  const tomorrow = dayKey(new Date(now.getTime() + 24 * 60 * 60 * 1000))
-  if (startDay === tomorrow) return 'i morgen'
+  if (startDay === nextDayKey(today)) return 'i morgen'
   return dateFormatter.format(start)
 }
 
