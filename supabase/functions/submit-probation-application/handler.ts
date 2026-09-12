@@ -1,9 +1,6 @@
 import { handleCors } from '../_shared/cors.ts'
 import { extractTrustedClientAddress } from '../_shared/clientAddress.ts'
 
-// Genudtrykkes her, fordi handler.test.ts og index.ts importerer den herfra.
-export { extractTrustedClientAddress }
-
 export interface SubmissionRpcArguments {
   applicant_full_name: string
   applicant_email: string

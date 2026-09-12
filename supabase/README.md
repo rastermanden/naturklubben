@@ -628,12 +628,16 @@ også functionen lige efter RPC'en for at vise resultatet med det samme.
 Gæsterne er ikke i appen og kan ikke få svaret som Web Push, så det sendes som e-mail
 gennem Resends HTTP-API (`_shared/email.ts`). Det er den ene undtagelse fra reglen
 om, at intet må kræve et manuelt oprettet secret: `RESEND_API_KEY` skal sættes som
-repo-secret (og `EMAIL_FROM` som repo-variabel med en afsender på et domæne, der er
-verificeret hos Resend). `deploy-functions.yml` skubber dem videre som
-function-secrets, hvis de findes -- samme mønster som de valgfrie VAPID-secrets.
-Uden nøglen deployes alt stadig, men hver afgørelse ender som `failed` med teksten
-"Der er ikke sat en mailudbyder op (RESEND_API_KEY mangler)", som arrangøren ser i
-dialogen og kan reagere på ved at skrive selv (e-mailen står som `mailto:`-link).
+repo-secret **og** `EMAIL_FROM` som repo-variabel med en afsender på et domæne, der er
+verificeret hos Resend (Resends testafsender `onboarding@resend.dev` må kun sende til
+kontoejeren selv og kan derfor ikke bruges til gæster). `deploy-functions.yml` skubber
+dem videre som function-secrets, hvis begge findes -- samme mønster som de valgfrie
+VAPID-secrets. Mangler en af dem, deployes alt stadig, men hver afgørelse ender som
+`failed` med teksten "Der er ikke sat en mailudbyder op (RESEND_API_KEY eller
+EMAIL_FROM mangler)", som arrangøren ser i dialogen og kan reagere på ved at skrive
+selv (e-mailen står som `mailto:`-link). Når opsætningen senere er på plads, sender
+"Send igen" i dialogen svaret uden om afkølingen og loftet på ti automatiske forsøg
+(`claim_event_guest_notification(..., manual => true)`).
 Mailteksten ligger i `_shared/guestDecisionEmail.ts` og testes uden udbyder.
 
 ## Auth-URL'er: hvor links i mails lander

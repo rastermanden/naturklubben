@@ -153,9 +153,11 @@ function EventDetails({
 
         <AttendanceSection eventId={event.id} userId={userId} />
 
-        {event.is_public && (
-          <GuestRequestsSection eventId={event.id} canManage={canEdit} />
-        )}
+        <GuestRequestsSection
+          eventId={event.id}
+          isPublic={event.is_public}
+          canManage={canEdit}
+        />
 
         <EventTasksSection eventId={event.id} userId={userId} />
 

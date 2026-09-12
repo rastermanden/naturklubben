@@ -62,8 +62,6 @@ export function guestDecisionEmail({
         '',
         `Tidspunkt: ${when}${where}${people}`,
         '',
-        'Har du spørgsmål, så svar på denne mail.',
-        '',
         'Venlig hilsen',
         'Naturklubben',
       ].join('\n'),

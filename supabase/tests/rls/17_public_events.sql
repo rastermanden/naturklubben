@@ -6,7 +6,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(30);
+select plan(34);
 
 do $$
 begin
@@ -319,6 +319,52 @@ select throws_ok(
   'P0002',
   null,
   'en afgjort ansøgning kan ikke afgøres igen'
+);
+
+-- ---------------------------------------------------------------------------
+-- Levering: automatiske genforsøg har et loft, arrangørens "Send igen" har ikke
+-- ---------------------------------------------------------------------------
+do $$ begin perform tests.login_service(); end $$;
+
+update public.event_guest_requests
+set decision_notification_status = 'failed',
+    decision_notification_attempts = 10,
+    decision_notification_started_at = now() - interval '1 hour'
+where id = '00000000-0000-0000-0000-0000000000a1';
+
+select is(
+  public.claim_event_guest_notification(
+    '00000000-0000-0000-0000-0000000000a1'
+  ),
+  0,
+  'et automatisk genforsøg stopper ved ti forsøg'
+);
+
+select is(
+  public.claim_event_guest_notification(
+    '00000000-0000-0000-0000-0000000000a1', true
+  ),
+  11,
+  'arrangørens "Send igen" er fritaget fra forsøgsloftet'
+);
+
+select is(
+  public.claim_event_guest_notification(
+    '00000000-0000-0000-0000-0000000000a1', true
+  ),
+  0,
+  'en levering, der er i gang, tages ikke igen -- heller ikke manuelt'
+);
+
+do $$ begin perform tests.login('00000000-0000-0000-0000-00000000000a'); end $$;
+
+select throws_ok(
+  $$select public.claim_event_guest_notification(
+      '00000000-0000-0000-0000-0000000000a1', true
+    )$$,
+  '42501',
+  null,
+  'arrangøren kan ikke tage leveringen uden om Edge Functionen'
 );
 
 -- ---------------------------------------------------------------------------

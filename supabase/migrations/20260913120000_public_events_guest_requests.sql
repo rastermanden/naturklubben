@@ -664,7 +664,12 @@ grant execute on function public.reject_event_guest_request(uuid)
 -- ---------------------------------------------------------------------------
 -- Levering (kun Edge Functionen): claim/complete som probation-notifications
 -- ---------------------------------------------------------------------------
-create or replace function public.claim_event_guest_notification(request_id uuid)
+-- `manual` er arrangørens/adminens eget "Send igen": afkølingen og loftet på
+-- ti forsøg gælder kun de automatiske genforsøg fra pg_net/pg_cron.
+create or replace function public.claim_event_guest_notification(
+  request_id uuid,
+  manual boolean default false
+)
 returns integer
 language plpgsql
 security definer set search_path = public
@@ -688,12 +693,17 @@ begin
       decision_notification_status = 'pending'
       or (
         decision_notification_status = 'failed'
-        and decision_notification_attempts < 10
-        and decision_notification_started_at < now() - interval '1 minute'
+        and (
+          manual
+          or (
+            decision_notification_attempts < 10
+            and decision_notification_started_at < now() - interval '1 minute'
+          )
+        )
       )
       or (
         decision_notification_status = 'sending'
-        and decision_notification_attempts < 10
+        and (manual or decision_notification_attempts < 10)
         and decision_notification_started_at < now() - interval '5 minutes'
       )
     )
@@ -729,11 +739,12 @@ begin
 end;
 $$;
 
-revoke all on function public.claim_event_guest_notification(uuid) from public;
+revoke all on function public.claim_event_guest_notification(uuid, boolean)
+  from public;
 revoke all on function public.complete_event_guest_notification(
   uuid, integer, boolean, text
 ) from public;
-grant execute on function public.claim_event_guest_notification(uuid)
+grant execute on function public.claim_event_guest_notification(uuid, boolean)
   to service_role;
 grant execute on function public.complete_event_guest_notification(
   uuid, integer, boolean, text

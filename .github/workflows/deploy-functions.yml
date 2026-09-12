@@ -128,16 +128,17 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
 
-      # Svaret til gæsten sendes som e-mail gennem Resend. Nøglen er et
-      # valgfrit repo-secret ligesom VAPID-nøglerne: findes den ikke, deployes
-      # functionen stadig, og hver afgørelse ender som "failed" med en tydelig
-      # besked til arrangøren om, at mailudbyderen mangler. EMAIL_FROM er en
-      # repo-variabel (fx "Naturklubben <hej@naturklubben.dk>" på et domæne,
-      # der er verificeret hos Resend); uden den bruges Resends testafsender.
+      # Svaret til gæsten sendes som e-mail gennem Resend. Det kræver både
+      # repo-secret'et RESEND_API_KEY og repo-variablen EMAIL_FROM (fx
+      # "Naturklubben <hej@naturklubben.dk>" på et domæne, der er verificeret
+      # hos Resend -- Resends testafsender kan ikke nå gæster). Begge er
+      # valgfrie ligesom VAPID-nøglerne: mangler en af dem, deployes functionen
+      # stadig, og hver afgørelse ender som "failed" med en tydelig besked til
+      # arrangøren om, at mailudbyderen mangler.
       - name: Sæt mail-secrets
         run: |
-          if [ -z "$RESEND_API_KEY" ]; then
-            echo "::notice::RESEND_API_KEY er ikke sat som repo-secret. Svar til gæster på åbne begivenheder kan ikke sendes som e-mail, før den findes."
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$EMAIL_FROM" ]; then
+            echo "::notice::RESEND_API_KEY (repo-secret) og EMAIL_FROM (repo-variabel) skal begge være sat. Svar til gæster på åbne begivenheder kan ikke sendes som e-mail, før de findes."
             exit 0
           fi
           supabase secrets set \
@@ -148,7 +149,7 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          EMAIL_FROM: ${{ vars.EMAIL_FROM || 'Naturklubben <onboarding@resend.dev>' }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
 
       - name: Deploy event-guest-notifications
         # Som probation-notifications: Postgres køer kaldet med pg_net og

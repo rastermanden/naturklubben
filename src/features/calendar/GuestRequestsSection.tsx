@@ -13,8 +13,20 @@ const requestDateFormatter = new Intl.DateTimeFormat('da-DK', {
 
 interface GuestRequestsSectionProps {
   eventId: string
+  isPublic: boolean
   /** Kun arrangøren og admins kan læse ansøgningerne (RLS). */
   canManage: boolean
+}
+
+function deliveryProblem(delivery: GuestNotificationDelivery | null) {
+  if (!delivery) return null
+  if (delivery.status === 'failed') {
+    return delivery.error ?? 'Mailen kunne ikke sendes.'
+  }
+  if (delivery.skipped && delivery.status !== 'sent') {
+    return delivery.error ?? 'Mailen blev ikke sendt. Prøv igen om lidt.'
+  }
+  return null
 }
 
 function DeliveryStatus({
@@ -62,11 +74,13 @@ function DeliveryStatus({
 /**
  * Arrangørens overblik over gæsteansøgninger på en åben begivenhed (#224):
  * ventende ansøgninger med godkend/afvis, godkendte gæster og status på
- * svaret til hver ansøger. Renderes kun for offentlige begivenheder, og kun
- * arrangør/admin får data tilbage.
+ * svaret til hver ansøger. Ansøgningerne følger ikke med, når arrangøren
+ * lukker begivenheden igen, så sektionen vises også på en privat begivenhed,
+ * så længe der er ansøgninger på den. Kun arrangør/admin får data tilbage.
  */
 export function GuestRequestsSection({
   eventId,
+  isPublic,
   canManage,
 }: GuestRequestsSectionProps) {
   const { requestsQuery, approveRequest, rejectRequest, retryNotification } =
@@ -78,6 +92,8 @@ export function GuestRequestsSection({
   if (!canManage) return null
 
   const requests = requestsQuery.data ?? []
+  if (!isPublic && !requestsQuery.isError && requests.length === 0) return null
+
   const pending = requests.filter((request) => request.status === 'pending')
   const approved = requests.filter((request) => request.status === 'approved')
   const rejected = requests.filter((request) => request.status === 'rejected')
@@ -91,6 +107,17 @@ export function GuestRequestsSection({
       .mutateAsync(request.id)
       .then((delivery) => setLastDelivery(delivery))
       .catch((error) => setDecisionError(toFriendlyGuestDecisionError(error)))
+  }
+
+  function retry(request: EventGuestRequest) {
+    setDecisionError(null)
+    setLastDelivery(null)
+    retryNotification
+      .mutateAsync(request.id)
+      .then((delivery) => setLastDelivery(delivery))
+      .catch(() =>
+        setDecisionError('Mailen kunne ikke sendes. Prøv igen om lidt.'),
+      )
   }
 
   function describe(request: EventGuestRequest) {
@@ -141,9 +168,9 @@ export function GuestRequestsSection({
         </p>
       )}
 
-      {lastDelivery?.status === 'failed' && lastDelivery.error && (
+      {deliveryProblem(lastDelivery) && (
         <p role="alert" className="mt-3 text-sm text-danger">
-          {lastDelivery.error}
+          {deliveryProblem(lastDelivery)}
         </p>
       )}
 
@@ -223,7 +250,7 @@ export function GuestRequestsSection({
                     retryNotification.isPending &&
                     retryNotification.variables === request.id
                   }
-                  onRetry={() => retryNotification.mutate(request.id)}
+                  onRetry={() => retry(request)}
                 />
               </li>
             ))}
@@ -247,7 +274,7 @@ export function GuestRequestsSection({
                     retryNotification.isPending &&
                     retryNotification.variables === request.id
                   }
-                  onRetry={() => retryNotification.mutate(request.id)}
+                  onRetry={() => retry(request)}
                 />
               </li>
             ))}

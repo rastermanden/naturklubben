@@ -3,9 +3,10 @@
 // Appen har ellers ingen mailudbyder: prøvemedlemskaber svares med Web Push
 // (se supabase/README.md, "Hvorfor Web Push og ikke e-mail"). Gæster til en
 // åben begivenhed (#224) er derimod ikke i appen og skal have svaret som mail.
-// Nøglen er et function-secret (RESEND_API_KEY), som deploy-functions.yml
-// sætter fra repo-secrets, hvis de findes. Mangler den, sender vi ikke -- og
-// afgørelsens outbox viser tydeligt hvorfor, så arrangøren kan svare manuelt.
+// Nøglen (RESEND_API_KEY) og afsenderen (EMAIL_FROM, på et domæne verificeret
+// hos Resend) er function-secrets, som deploy-functions.yml sætter fra repoet,
+// hvis begge findes. Mangler en af dem, sender vi ikke -- og afgørelsens
+// outbox viser tydeligt hvorfor, så arrangøren kan svare manuelt.
 
 export interface EmailMessage {
   to: string
@@ -24,20 +25,19 @@ export interface EmailSendResult {
   error?: string
 }
 
-export const DEFAULT_EMAIL_FROM = 'Naturklubben <onboarding@resend.dev>'
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
 /**
- * Læser afsenderopsætningen fra function-secrets. Returnerer null, når der
- * ikke er nogen nøgle -- så kalderen kan melde det som en leveringsfejl i
+ * Læser afsenderopsætningen fra function-secrets. Returnerer null, når nøgle
+ * eller afsender mangler -- så kalderen kan melde det som en leveringsfejl i
  * stedet for at kaste.
  */
 export function emailSenderFromEnv(
   env: { get(name: string): string | undefined } = Deno.env,
 ): EmailSender | null {
   const apiKey = env.get('RESEND_API_KEY')?.trim()
-  if (!apiKey) return null
-  const from = env.get('EMAIL_FROM')?.trim() || DEFAULT_EMAIL_FROM
+  const from = env.get('EMAIL_FROM')?.trim()
+  if (!apiKey || !from) return null
   return { apiKey, from }
 }
 

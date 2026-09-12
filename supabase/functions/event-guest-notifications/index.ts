@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
 
   const { data: claimed, error: claimError } = await supabase.rpc(
     'claim_event_guest_notification',
-    { request_id: requestId },
+    { request_id: requestId, manual: !ownsRequest },
   )
   if (claimError) {
     console.error('Kunne ikke tage svaret til levering', claimError)
@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
     const sender = emailSenderFromEnv()
     if (!sender) {
       const message =
-        'Der er ikke sat en mailudbyder op (RESEND_API_KEY mangler). Giv gæsten besked på anden vis.'
+        'Der er ikke sat en mailudbyder op (RESEND_API_KEY eller EMAIL_FROM mangler). Giv gæsten besked på anden vis.'
       await completeDelivery(supabase, requestId, claimed, false, message)
       return jsonResponse({ status: 'failed', error: message })
     }

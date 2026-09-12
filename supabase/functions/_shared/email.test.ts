@@ -1,19 +1,25 @@
 import { strict as assert } from 'node:assert'
-import { DEFAULT_EMAIL_FROM, emailSenderFromEnv, sendEmail } from './email.ts'
+import { emailSenderFromEnv, sendEmail } from './email.ts'
 
 function envWith(values: Record<string, string | undefined>) {
   return { get: (name: string) => values[name] }
 }
 
 Deno.test(
-  'e-mail: ingen nøgle betyder ingen afsender -- ikke en exception',
+  'e-mail: manglende nøgle eller afsender betyder ingen afsender -- ikke en exception',
   () => {
     assert.equal(emailSenderFromEnv(envWith({})), null)
-    assert.equal(emailSenderFromEnv(envWith({ RESEND_API_KEY: '   ' })), null)
-    assert.deepEqual(emailSenderFromEnv(envWith({ RESEND_API_KEY: 're_x' })), {
-      apiKey: 're_x',
-      from: DEFAULT_EMAIL_FROM,
-    })
+    assert.equal(
+      emailSenderFromEnv(
+        envWith({ RESEND_API_KEY: '   ', EMAIL_FROM: 'Klubben <hej@klub.dk>' }),
+      ),
+      null,
+    )
+    assert.equal(emailSenderFromEnv(envWith({ RESEND_API_KEY: 're_x' })), null)
+    assert.equal(
+      emailSenderFromEnv(envWith({ RESEND_API_KEY: 're_x', EMAIL_FROM: ' ' })),
+      null,
+    )
     assert.deepEqual(
       emailSenderFromEnv(
         envWith({

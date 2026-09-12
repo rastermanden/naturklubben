@@ -67,13 +67,17 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-function renderSection(canManage = true) {
+function renderSection(canManage = true, isPublic = true) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <GuestRequestsSection eventId={EVENT_ID} canManage={canManage} />
+      <GuestRequestsSection
+        eventId={EVENT_ID}
+        isPublic={isPublic}
+        canManage={canManage}
+      />
     </QueryClientProvider>,
   )
 }
@@ -84,6 +88,32 @@ describe('GuestRequestsSection', () => {
 
     expect(container.innerHTML).toBe('')
     expect(supabaseMocks.from).not.toHaveBeenCalled()
+  })
+
+  it('keeps showing requests after the organiser closes the event again', async () => {
+    renderSection(true, false)
+
+    expect(await screen.findByText('Gitte Gæst · 2 personer')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Godkend Gitte Gæst' }),
+    ).toBeTruthy()
+  })
+
+  it('renders nothing for a private event without requests', async () => {
+    requests = []
+    const { container } = renderSection(true, false)
+
+    await vi.waitFor(() => expect(supabaseMocks.from).toHaveBeenCalled())
+    expect(container.innerHTML).toBe('')
+  })
+
+  it('tells the organiser when nobody has applied to a public event', async () => {
+    requests = []
+    renderSection()
+
+    expect(
+      await screen.findByText('Ingen har søgt om at deltage endnu.'),
+    ).toBeTruthy()
   })
 
   it('shows pending requests with their details and the failed mail state', async () => {
@@ -134,6 +164,43 @@ describe('GuestRequestsSection', () => {
         { request_id: 'a1' },
       )
     })
+  })
+
+  it('retries a failed e-mail and shows why it still did not go out', async () => {
+    supabaseMocks.functions.invoke.mockResolvedValue({
+      data: {
+        status: 'failed',
+        error: 'Mailudbyderen svarede 403: Domain not verified',
+      },
+      error: null,
+    })
+    renderSection()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send igen' }))
+
+    await vi.waitFor(() => {
+      expect(supabaseMocks.functions.invoke).toHaveBeenCalledWith(
+        'event-guest-notifications',
+        { body: { requestId: 'a2' } },
+      )
+    })
+    expect(
+      await screen.findByText('Mailudbyderen svarede 403: Domain not verified'),
+    ).toBeTruthy()
+  })
+
+  it('shows a message when the retry was skipped', async () => {
+    supabaseMocks.functions.invoke.mockResolvedValue({
+      data: { status: 'sending', skipped: true },
+      error: null,
+    })
+    renderSection()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send igen' }))
+
+    expect(
+      await screen.findByText('Mailen blev ikke sendt. Prøv igen om lidt.'),
+    ).toBeTruthy()
   })
 
   it('explains a refused decision', async () => {
