@@ -189,7 +189,7 @@ describe('GuestRequestsSection', () => {
     ).toBeTruthy()
   })
 
-  it('shows a message when the retry was skipped', async () => {
+  it('shows no error when another delivery is already in flight', async () => {
     supabaseMocks.functions.invoke.mockResolvedValue({
       data: { status: 'sending', skipped: true },
       error: null,
@@ -198,9 +198,16 @@ describe('GuestRequestsSection', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Send igen' }))
 
+    await vi.waitFor(() => {
+      expect(supabaseMocks.functions.invoke).toHaveBeenCalledWith(
+        'event-guest-notifications',
+        { body: { requestId: 'a2' } },
+      )
+    })
     expect(
-      await screen.findByText('Mailen blev ikke sendt. Prøv igen om lidt.'),
-    ).toBeTruthy()
+      screen.queryByText('Mailen blev ikke sendt. Prøv igen om lidt.'),
+    ).toBeNull()
+    expect(screen.queryByText('Mailen kunne ikke sendes.')).toBeNull()
   })
 
   it('explains a refused decision', async () => {

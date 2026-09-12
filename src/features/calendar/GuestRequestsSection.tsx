@@ -19,14 +19,8 @@ interface GuestRequestsSectionProps {
 }
 
 function deliveryProblem(delivery: GuestNotificationDelivery | null) {
-  if (!delivery) return null
-  if (delivery.status === 'failed') {
-    return delivery.error ?? 'Mailen kunne ikke sendes.'
-  }
-  if (delivery.skipped && delivery.status !== 'sent') {
-    return delivery.error ?? 'Mailen blev ikke sendt. Prøv igen om lidt.'
-  }
-  return null
+  if (delivery?.status !== 'failed') return null
+  return delivery.error ?? 'Mailen kunne ikke sendes.'
 }
 
 function DeliveryStatus({
