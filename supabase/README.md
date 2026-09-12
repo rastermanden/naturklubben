@@ -108,7 +108,8 @@ Supabase CLI'en ikke skal læse den ved deploy.
   kan sende en bruger-JWT. Gateway-verifikation er derfor slået fra. Funktionen bruger
   projektets Publishable key og kan via anon-rollen kun læse den dataminimerede
   `calendar_feed_events`-view med titel, tidspunkt og sted -- aldrig beskrivelse eller
-  andre medlemsdata.
+  andre medlemsdata. Siden #224 indeholder viewet kun begivenheder med `is_public`;
+  se "Offentlig kalender og gæster" nedenfor.
 - `probation-notifications` (#82): leverer Web Push til admins ved nye
   prøvemedlemskabsansøgninger og til ansøgeren ved godkendelse/afvisning. Funktionen
   modtager kun et ansøgnings-id og en tilfældig, servergenereret notification-token
