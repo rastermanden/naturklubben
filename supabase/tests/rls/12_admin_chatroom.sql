@@ -7,7 +7,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(13);
+select plan(14);
 
 do $$
 begin
@@ -15,20 +15,20 @@ begin
     'mette@example.com', false, '00000000-0000-0000-0000-00000000ac12'
   );
   perform tests.create_member(
-    'kim-admin@example.com', true, '00000000-0000-0000-0000-0000000ad12'
+    'kim-admin@example.com', true, '00000000-0000-0000-0000-00000000ad12'
   );
 
   insert into public.messages (id, user_id, content, room)
   values
     (
       '00000000-0000-0000-0000-00000000ac13',
-      '00000000-0000-0000-0000-0000000ad12',
+      '00000000-0000-0000-0000-00000000ad12',
       'Fælles besked',
       'general'
     ),
     (
-      '00000000-0000-0000-0000-0000000ad13',
-      '00000000-0000-0000-0000-0000000ad12',
+      '00000000-0000-0000-0000-00000000ad13',
+      '00000000-0000-0000-0000-00000000ad12',
       'Admin-besked om budgettet',
       'admin'
     );
@@ -57,7 +57,7 @@ select throws_ok(
 select is(
   (
     select count(*)::int
-    from public.get_chat_message_context('00000000-0000-0000-0000-0000000ad13')
+    from public.get_chat_message_context('00000000-0000-0000-0000-00000000ad13')
   ),
   0,
   'get_chat_message_context finder ikke en admin-besked for et almindeligt medlem'
@@ -75,7 +75,7 @@ select is(
 select throws_ok(
   $$insert into public.message_reactions (message_id, user_id, emoji)
     values (
-      '00000000-0000-0000-0000-0000000ad13',
+      '00000000-0000-0000-0000-00000000ad13',
       '00000000-0000-0000-0000-00000000ac12',
       '👍'
     )$$,
@@ -85,7 +85,7 @@ select throws_ok(
 );
 
 -- Kim, en admin
-do $$ begin perform tests.login('00000000-0000-0000-0000-0000000ad12'); end $$;
+do $$ begin perform tests.login('00000000-0000-0000-0000-00000000ad12'); end $$;
 
 select is(
   (select count(*)::int from public.messages),
@@ -96,18 +96,35 @@ select is(
 select lives_ok(
   $$insert into public.messages (user_id, content, room)
     values (
-      '00000000-0000-0000-0000-0000000ad12', 'Endnu en admin-besked', 'admin'
+      '00000000-0000-0000-0000-00000000ad12', 'Endnu en admin-besked', 'admin'
     )$$,
   'en admin kan sende en besked i admin-rummet'
+);
+
+-- Konteksten er admin-beskeden og den nabo, der lige blev sendt ovenfor --
+-- og intet fra det fælles rum.
+select is(
+  (
+    select count(*)::int
+    from public.get_chat_message_context('00000000-0000-0000-0000-00000000ad13')
+      as context
+    join public.messages as message on message.id = context.id
+    where message.room = 'admin'
+  ),
+  2,
+  'get_chat_message_context finder admin-beskederne for en admin'
 );
 
 select is(
   (
     select count(*)::int
-    from public.get_chat_message_context('00000000-0000-0000-0000-0000000ad13')
+    from public.get_chat_message_context('00000000-0000-0000-0000-00000000ad13')
+      as context
+    join public.messages as message on message.id = context.id
+    where message.room <> 'admin'
   ),
-  1,
-  'get_chat_message_context finder admin-beskeden for en admin'
+  0,
+  'konteksten omkring en admin-besked blander ikke det fælles rum ind'
 );
 
 select is(
@@ -122,8 +139,8 @@ select is(
 select lives_ok(
   $$insert into public.message_reactions (message_id, user_id, emoji)
     values (
-      '00000000-0000-0000-0000-0000000ad13',
-      '00000000-0000-0000-0000-0000000ad12',
+      '00000000-0000-0000-0000-00000000ad13',
+      '00000000-0000-0000-0000-00000000ad12',
       '👍'
     )$$,
   'en admin kan reagere på en besked i admin-rummet'
@@ -133,7 +150,7 @@ select is(
   (
     select count(*)::int
     from public.message_reactions
-    where message_id = '00000000-0000-0000-0000-0000000ad13'
+    where message_id = '00000000-0000-0000-0000-00000000ad13'
   ),
   1,
   'admin ser sin egen reaktion på admin-beskeden'
@@ -147,7 +164,7 @@ select is(
   (
     select count(*)::int
     from public.message_reactions
-    where message_id = '00000000-0000-0000-0000-0000000ad13'
+    where message_id = '00000000-0000-0000-0000-00000000ad13'
   ),
   0,
   'et almindeligt medlem kan ikke se reaktioner på en besked i admin-rummet'
