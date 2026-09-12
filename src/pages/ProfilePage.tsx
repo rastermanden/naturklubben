@@ -7,6 +7,8 @@ import {
   useMemberBadges,
 } from '../features/badges/useMemberBadges'
 import { useMembers } from '../features/members/useMembers'
+import { NotificationTypePreferences } from '../features/notifications/NotificationTypePreferences'
+import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { useAuth } from '../features/auth/useAuth'
 import { ChatColorOption } from '../features/chat/ChatColorOption'
 import { profilesMapQueryKey } from '../features/chat/useProfilesMap'
@@ -376,6 +378,28 @@ function ProfilePage() {
           {saving ? 'Gemmer…' : 'Gem profil'}
         </button>
       </form>
+
+      {/* Notifikationerne ud over chatten (#216). Chattens og nyhedernes
+          valg står stadig, hvor de hører til: på /chat og /nyheder. */}
+      <section
+        aria-labelledby="profile-notifications-heading"
+        className="flex flex-col gap-3 rounded-lg border border-line bg-surface-sunken p-4"
+      >
+        <div>
+          <h2
+            id="profile-notifications-heading"
+            className="font-medium text-ink-body"
+          >
+            Notifikationer
+          </h2>
+          <p className="text-sm text-ink-subtle">
+            Valgene er dine egne og følger dig på tværs af telefon og computer.
+            Chattens notifikationer vælger du på chatsiden.
+          </p>
+        </div>
+        <NotificationToggle userId={userId} />
+        <NotificationTypePreferences userId={userId} />
+      </section>
 
       <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface-sunken p-4">
         <div>

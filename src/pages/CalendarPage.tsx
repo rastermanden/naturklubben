@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AttendanceSection } from '../features/calendar/AttendanceSection'
 import { EventTasksSection } from '../features/calendar/EventTasksSection'
 import { EventForm } from '../features/calendar/EventForm'
@@ -39,6 +40,10 @@ const weekDays = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn']
 
 function dateKey(date: Date) {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+}
+
+function monthStart(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
 }
 
 function monthCells(month: Date) {
@@ -191,10 +196,25 @@ function CalendarPage() {
   const { isAdmin } = useIsAdmin()
   const { eventsQuery, createEvent, updateEvent, deleteEvent } =
     useEvents(userId)
-  const [visibleMonth, setVisibleMonth] = useState(
-    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-  )
+  // /kalender/<id> -- fra en notifikation (#216) eller et delt link -- åbner
+  // begivenheden, så snart listen er hentet. Den er ikke state: at lukke
+  // dialogen er at gå tilbage til /kalender, så et tryk på "tilbage" ikke
+  // åbner den igen.
+  const { eventId: routedEventId } = useParams()
+  const navigate = useNavigate()
+  const routedEvent = routedEventId
+    ? (eventsQuery.data?.find((event) => event.id === routedEventId) ?? null)
+    : null
+  // null = "ikke valgt": den måned, den åbnede begivenhed ligger i, ellers
+  // den nuværende.
+  const [chosenMonth, setChosenMonth] = useState<Date | null>(null)
+  const visibleMonth =
+    chosenMonth ??
+    (routedEvent
+      ? monthStart(new Date(routedEvent.start_at))
+      : monthStart(new Date()))
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const openEvent = selectedEvent ?? routedEvent
   const [editingEvent, setEditingEvent] = useState<
     CalendarEvent | 'new' | null
   >(null)
@@ -216,14 +236,19 @@ function CalendarPage() {
   const canGoBack = visibleMonth > currentMonth
 
   function moveMonth(offset: number) {
-    setVisibleMonth(
-      (month) => new Date(month.getFullYear(), month.getMonth() + offset, 1),
+    setChosenMonth(
+      new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + offset, 1),
     )
+  }
+
+  function closeDetails() {
+    setSelectedEvent(null)
+    if (routedEventId) navigate('/kalender', { replace: true })
   }
 
   function openForm(event: CalendarEvent | 'new') {
     setMutationError(null)
-    setSelectedEvent(null)
+    closeDetails()
     setEditingEvent(event)
   }
 
@@ -244,17 +269,14 @@ function CalendarPage() {
   }
 
   function removeSelectedEvent() {
-    if (
-      !selectedEvent ||
-      !window.confirm(`Vil du slette "${selectedEvent.title}"?`)
-    ) {
+    if (!openEvent || !window.confirm(`Vil du slette "${openEvent.title}"?`)) {
       return
     }
 
     setMutationError(null)
     deleteEvent
-      .mutateAsync(selectedEvent.id)
-      .then(() => setSelectedEvent(null))
+      .mutateAsync(openEvent.id)
+      .then(() => closeDetails())
       .catch(() =>
         setMutationError(
           'Begivenheden kunne ikke slettes. Prøv igen om et øjeblik.',
@@ -429,21 +451,21 @@ function CalendarPage() {
         </>
       )}
 
-      {selectedEvent && (
+      {openEvent && (
         <EventDetails
-          event={selectedEvent}
+          event={openEvent}
           userId={userId}
-          canEdit={selectedEvent.created_by === userId || isAdmin}
-          canDelete={selectedEvent.created_by === userId}
+          canEdit={openEvent.created_by === userId || isAdmin}
+          canDelete={openEvent.created_by === userId}
           deleting={deleteEvent.isPending}
           error={mutationError}
-          onClose={() => setSelectedEvent(null)}
-          onEdit={() => openForm(selectedEvent)}
+          onClose={closeDetails}
+          onEdit={() => openForm(openEvent)}
           onDelete={removeSelectedEvent}
           onIcal={() =>
             downloadIcal(
-              [selectedEvent],
-              `${selectedEvent.title.replace(/[/\\:*?"<>|]/g, '-')}.ics`,
+              [openEvent],
+              `${openEvent.title.replace(/[/\\:*?"<>|]/g, '-')}.ics`,
             )
           }
         />

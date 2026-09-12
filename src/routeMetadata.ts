@@ -60,6 +60,12 @@ export const routeMetadata = [
     documentTitle: 'Kalender | Naturklubben',
     announcement: 'Kalender indlæst',
   },
+  // En enkelt begivenhed, åbnet fra en notifikation (#216) eller et delt link.
+  {
+    path: '/kalender/:eventId',
+    documentTitle: 'Kalender | Naturklubben',
+    announcement: 'Kalender indlæst',
+  },
   {
     path: '/billeder',
     documentTitle: 'Billeder | Naturklubben',

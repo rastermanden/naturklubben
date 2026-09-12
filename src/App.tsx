@@ -74,6 +74,9 @@ const routeElements: Record<AppRoutePath, ReactNode> = {
   '/velkommen': loadRoute(<WelcomePage />),
   '/ny-adgangskode': loadRoute(<ResetPasswordPage />),
   '/kalender': <ProtectedRoute>{loadRoute(<CalendarPage />)}</ProtectedRoute>,
+  '/kalender/:eventId': (
+    <ProtectedRoute>{loadRoute(<CalendarPage />)}</ProtectedRoute>
+  ),
   '/billeder': <ProtectedRoute>{loadRoute(<GalleryPage />)}</ProtectedRoute>,
   '/chat': <ProtectedRoute>{loadRoute(<ChatPage />)}</ProtectedRoute>,
   '/naturlog': <ProtectedRoute>{loadRoute(<NaturlogPage />)}</ProtectedRoute>,

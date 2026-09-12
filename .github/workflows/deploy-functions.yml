@@ -82,6 +82,17 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
 
+      # Push om kalenderen (#216). 'event_created' kaldes af opretterens egen
+      # browser med deres access-token, som functionen selv validerer;
+      # 'event_reminder' kaldes fra databasen med pg_net og kørslens token fra
+      # event_reminders -- der er ingen bruger bag det kald, så gateway-JWT er
+      # slået fra, præcis som for probation-notifications.
+      - name: Deploy calendar-push
+        run: supabase functions deploy calendar-push --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
       # Leverer nyhederne om nye funktioner. Kaldes af et medlems egen browser
       # med deres access-token, når appen åbnes efter et deploy -- kaldet
       # bestemmer hverken tekst eller modtagere, dem henter functionen selv fra
