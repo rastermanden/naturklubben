@@ -160,7 +160,8 @@ Supabase CLI'en ikke skal læse den ved deploy.
   `photos-original` og `photos-optimized`, før Auth-brugeren slettes.
 - `export-account` (#129): kræver samme gateway-JWT, server-side tokenvalidering
   og højst fem minutter gamle genlogin som kontosletning. Functionen filtrerer
-  eksplicit profil, egne beskeder, egne billedmetadata og egne tilmeldinger på
+  eksplicit profil, egne beskeder, egne billedmetadata og egne svar på begivenheder
+  (tilmelding, venteliste eller afbud, #222) på
   den validerede brugers id. Billedreferencer får signerede Storage-URL'er med 15
   minutters levetid, og svaret kan downloades som JSON uden andre medlemmers
   private data.
