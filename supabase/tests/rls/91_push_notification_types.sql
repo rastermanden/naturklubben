@@ -7,7 +7,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(43);
+select plan(52);
 
 do $$
 begin
@@ -511,6 +511,126 @@ select is(
   public.enqueue_event_reminders(),
   1,
   'kørslen falder tilbage til den seneste kendte URL'
+);
+
+-- ---------------------------------------------------------------------------
+-- Begivenheden flyttes, efter påmindelsen er sendt
+-- ---------------------------------------------------------------------------
+-- Ida ejer Svampeturen og redigerer den fra appen. Et nyt klokkeslæt samme
+-- dag rører ikke loggen; en anden dag glemmer den, så vinduet dagen før den
+-- nye dato sender forfra.
+do $$ begin perform tests.login('00000000-0000-0000-0000-0000000000f1'); end $$;
+
+update public.events
+set start_at = (
+  (start_at at time zone 'Europe/Copenhagen')::date + time '23:30'
+) at time zone 'Europe/Copenhagen'
+where id = '00000000-0000-0000-0000-0000000000e1';
+
+select is(
+  (
+    select count(*)::int
+    from public.push_deliveries
+    where kind = 'event_reminder'
+      and subject_id = '00000000-0000-0000-0000-0000000000e1'
+  ),
+  3,
+  'et nyt klokkeslæt samme dag beholder leveringsloggen'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.event_reminders
+    where event_id = '00000000-0000-0000-0000-0000000000e1'
+  ),
+  1,
+  'og kørslen'
+);
+
+update public.events
+set start_at = start_at + interval '7 days'
+where id = '00000000-0000-0000-0000-0000000000e1';
+
+select is(
+  (
+    select count(*)::int
+    from public.push_deliveries
+    where kind = 'event_reminder'
+      and subject_id = '00000000-0000-0000-0000-0000000000e1'
+  ),
+  0,
+  'flyttes begivenheden til en anden dag, glemmes påmindelsen'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.event_reminders
+    where event_id = '00000000-0000-0000-0000-0000000000e1'
+  ),
+  0,
+  'og kørslen ryddes'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.push_deliveries
+    where kind = 'event_created'
+      and subject_id = '00000000-0000-0000-0000-0000000000e1'
+  ),
+  1,
+  '"ny begivenhed" om den samme sendes ikke igen'
+);
+
+do $$ begin perform tests.reset_session(); end $$;
+
+select is(
+  public.enqueue_event_reminders(),
+  0,
+  'en uge ude er der intet at sende endnu'
+);
+
+-- Dagen før den nye dato (her: tilbage i vinduet).
+do $$ begin perform tests.login('00000000-0000-0000-0000-0000000000f1'); end $$;
+
+update public.events
+set start_at = now() + interval '2 hours'
+where id = '00000000-0000-0000-0000-0000000000e1';
+
+do $$ begin perform tests.reset_session(); end $$;
+
+select is(
+  public.enqueue_event_reminders(),
+  1,
+  'i vinduet før den nye dato sendes påmindelsen forfra'
+);
+
+select results_eq(
+  $$select status, attempts
+    from public.event_reminders
+    where event_id = '00000000-0000-0000-0000-0000000000e1'$$,
+  $$values ('sending'::text, 1)$$,
+  'som en ny kørsel med første forsøg'
+);
+
+do $$ begin perform tests.login_service(); end $$;
+
+select set_eq(
+  $$select * from public.claim_push_deliveries(
+      'event_reminder',
+      '00000000-0000-0000-0000-0000000000e1',
+      array[
+        '00000000-0000-0000-0000-0000000000f1',
+        '00000000-0000-0000-0000-0000000000f2'
+      ]::uuid[]
+    )$$,
+  array[
+    '00000000-0000-0000-0000-0000000000f1',
+    '00000000-0000-0000-0000-0000000000f2'
+  ]::uuid[],
+  'de tilmeldte får påmindelsen om den nye dato'
 );
 
 select * from finish(true);
