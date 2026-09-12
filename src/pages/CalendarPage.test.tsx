@@ -1,6 +1,13 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { RouteErrorBoundary } from '../components/RouteErrorBoundary'
 import type { CalendarEvent } from '../features/calendar/useEvents'
 
 const EVENT: CalendarEvent = {
@@ -53,12 +60,20 @@ function LocationProbe() {
   return <output data-testid="location">{location.pathname}</output>
 }
 
+// Samme opsætning som App.tsx: hver navigation giver RouteErrorBoundary en ny
+// nøgle, så siden starter forfra. En test uden den ville ikke opdage, at
+// state sat lige før en navigation forsvinder.
 function renderAt(path: string) {
+  const page = (
+    <RouteErrorBoundary>
+      <CalendarPage />
+    </RouteErrorBoundary>
+  )
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/kalender" element={<CalendarPage />} />
-        <Route path="/kalender/:eventId" element={<CalendarPage />} />
+        <Route path="/kalender" element={page} />
+        <Route path="/kalender/:eventId" element={page} />
       </Routes>
       <LocationProbe />
     </MemoryRouter>,
@@ -84,6 +99,38 @@ describe('CalendarPage: /kalender/<id>', () => {
     renderAt(`/kalender/${EVENT.id}`)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Luk' }))
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByTestId('location').textContent).toBe('/kalender')
+  })
+
+  it('"Redigér" fra notifikationen åbner formularen med begivenheden', async () => {
+    mocks.eventsQuery.data = [EVENT]
+    renderAt(`/kalender/${EVENT.id}`)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Redigér' }))
+
+    const form = await screen.findByRole('dialog', {
+      name: 'Redigér begivenhed',
+    })
+    expect(
+      (within(form).getByLabelText('Titel') as HTMLInputElement).value,
+    ).toBe('Svampetur i Rude Skov')
+    expect(screen.getByTestId('location').textContent).toBe(
+      `/kalender/${EVENT.id}`,
+    )
+  })
+
+  it('lukker formularen tilbage til /kalender uden at åbne dialogen igen', async () => {
+    mocks.eventsQuery.data = [EVENT]
+    renderAt(`/kalender/${EVENT.id}`)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Redigér' }))
+    fireEvent.click(
+      within(
+        await screen.findByRole('dialog', { name: 'Redigér begivenhed' }),
+      ).getByRole('button', { name: 'Annuller' }),
+    )
 
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(screen.getByTestId('location').textContent).toBe('/kalender')

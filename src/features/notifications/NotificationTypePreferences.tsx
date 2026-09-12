@@ -1,4 +1,6 @@
+import { useIsAdmin } from '../admin/useIsAdmin'
 import {
+  ADMIN_ONLY_NOTIFICATION_KINDS,
   NOTIFICATION_KINDS,
   NOTIFICATION_KIND_LABELS,
   useNotificationPreferences,
@@ -8,9 +10,11 @@ import {
  * Til/fra for hver af notifikationerne ud over chatten (#216). Hvert valg
  * gemmes med det samme, ligesom chat- og nyhedsvalget -- der er ikke noget
  * "Gem" at glemme. Vises også, når denne browser ikke selv kan tage imod
- * notifikationer: valget gælder medlemmets øvrige enheder.
+ * notifikationer: valget gælder medlemmets øvrige enheder. Typer, kun admins
+ * får, vises kun for admins.
  */
 export function NotificationTypePreferences({ userId }: { userId: string }) {
+  const { isAdmin } = useIsAdmin()
   const {
     preferences,
     isLoading,
@@ -23,12 +27,16 @@ export function NotificationTypePreferences({ userId }: { userId: string }) {
 
   if (isLoading || isError) return null
 
+  const kinds = NOTIFICATION_KINDS.filter(
+    (kind) => isAdmin || !ADMIN_ONLY_NOTIFICATION_KINDS.includes(kind),
+  )
+
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="text-sm font-medium text-ink-body">
         Send mig en notifikation …
       </legend>
-      {NOTIFICATION_KINDS.map((kind) => {
+      {kinds.map((kind) => {
         const id = `notification-preference-${kind}`
         return (
           <div key={kind} className="flex flex-wrap items-center gap-2">
