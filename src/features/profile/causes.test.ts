@@ -2,11 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { CAUSES, isCause, normalizeCauses, selectedCauses } from './causes'
 
 describe('hjertesager', () => {
-  it('kender de tre mærker', () => {
+  it('kender mærkerne', () => {
     expect(CAUSES.map((cause) => cause.slug)).toEqual([
       'ukraine',
       'regnbue',
       'vaccine',
+      'trans',
+      'klima',
+      'biodiversitet',
+      'dyrevelfaerd',
+      'plantebaseret',
+      'fred',
+      'bloddonor',
+      'organdonor',
+      'cykel',
     ])
     expect(isCause('regnbue')).toBe(true)
     expect(isCause('ananas')).toBe(false)
@@ -14,8 +23,10 @@ describe('hjertesager', () => {
 
   it('viser de valgte i listens rækkefølge og springer ukendte over', () => {
     expect(
-      selectedCauses(['vaccine', 'ananas', 'ukraine']).map((c) => c.emoji),
-    ).toEqual(['🇺🇦', '💉'])
+      selectedCauses(['cykel', 'vaccine', 'ananas', 'ukraine']).map(
+        (c) => c.emoji,
+      ),
+    ).toEqual(['🇺🇦', '💉', '🚲'])
     expect(selectedCauses(null)).toEqual([])
   })
 
