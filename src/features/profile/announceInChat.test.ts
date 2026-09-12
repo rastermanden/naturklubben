@@ -21,7 +21,9 @@ describe('announceInChat', () => {
   })
 
   it('lægger en handlingsbesked i chatten og beder om push', async () => {
-    await announceInChat('member-id', 'har sat 🇺🇦 ved sit navn')
+    await expect(
+      announceInChat('member-id', 'har sat 🇺🇦 ved sit navn'),
+    ).resolves.toBe(true)
 
     expect(supabaseMocks.from).toHaveBeenCalledWith('messages')
     expect(insert).toHaveBeenCalledWith({
@@ -47,9 +49,21 @@ describe('announceInChat', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     single.mockResolvedValue({ data: null, error: new Error('nej') })
 
-    await announceInChat('member-id', 'noget')
+    await expect(announceInChat('member-id', 'noget')).resolves.toBe(false)
 
     expect(supabaseMocks.functions.invoke).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('regner beskeden som sendt, selv om push slog fejl', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    supabaseMocks.functions.invoke.mockResolvedValue({
+      error: new Error('nej'),
+    })
+
+    await expect(announceInChat('member-id', 'noget')).resolves.toBe(true)
+
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
   })

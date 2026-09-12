@@ -37,6 +37,27 @@ drop policy if exists "Members can leave their own event attendance"
 revoke insert, update, delete on table public.event_attendance
   from anon, authenticated;
 
+-- Hvem der kommer, og hvem der står i kø, er fælles viden. Et afbud er kun
+-- mellem den, der meldte det, og dem, der planlægger turen: arrangøren og
+-- admins. Andre medlemmer kan hverken se, at nogen har meldt afbud, eller
+-- skelne det fra slet ikke at have svaret.
+drop policy "Authenticated can read event attendance"
+  on public.event_attendance;
+create policy "Authenticated can read event attendance"
+  on public.event_attendance for select
+  to authenticated
+  using (
+    status <> 'declined'
+    or user_id = auth.uid()
+    or public.is_admin()
+    or exists (
+      select 1
+      from public.events as event
+      where event.id = event_attendance.event_id
+        and event.created_by = auth.uid()
+    )
+  );
+
 -- ---------------------------------------------------------------------------
 -- promote_event_waitlist_locked
 -- ---------------------------------------------------------------------------
@@ -185,37 +206,44 @@ begin
     end if;
     new_status := 'declined';
 
-  elsif current_status in ('attending', 'waitlisted') then
-    -- Allerede tilmeldt: pladsen (eller køpladsen) beholdes som den er.
-    new_status := current_status;
-
   else
     -- Ledige pladser tilhører ventelisten, ikke den nyeste tilmelding. Køen
     -- er normalt tom, når der er plads, men et hævet loft eller en slettet
     -- konto kan efterlade ledige pladser med folk i kø.
     promoted := public.promote_event_waitlist_locked(p_event_id);
 
-    select count(*)
-    into taken
-    from public.event_attendance
-    where event_id = p_event_id
-      and status = 'attending';
+    if member_id = any (promoted) then
+      -- Kalderen stod forrest i køen og fik selv en af de ledige pladser.
+      new_status := 'attending';
+      promoted := array_remove(promoted, member_id);
 
-    new_status := case
-      when cap is null or taken < cap then 'attending'
-      else 'waitlisted'
-    end;
+    elsif current_status in ('attending', 'waitlisted') then
+      -- Allerede tilmeldt: pladsen (eller køpladsen) beholdes som den er.
+      new_status := current_status;
 
-    insert into public.event_attendance (event_id, user_id, status)
-    values (p_event_id, member_id, new_status)
-    on conflict (event_id, user_id)
-      do update set status = excluded.status, created_at = now();
+    else
+      select count(*)
+      into taken
+      from public.event_attendance
+      where event_id = p_event_id
+        and status = 'attending';
+
+      new_status := case
+        when cap is null or taken < cap then 'attending'
+        else 'waitlisted'
+      end;
+
+      insert into public.event_attendance (event_id, user_id, status)
+      values (p_event_id, member_id, new_status)
+      on conflict (event_id, user_id)
+        do update set status = excluded.status, created_at = now();
+    end if;
   end if;
 
-  -- Frigav svaret en plads, går den til den forreste på ventelisten.
-  if current_status = 'attending' and new_status is distinct from 'attending' then
-    promoted := public.promote_event_waitlist_locked(p_event_id);
-  end if;
+  -- Ledige pladser -- frigivet af dette svar eller efterladt af noget, der
+  -- aldrig gik gennem RPC'en (en slettet konto) -- går til de forreste på
+  -- ventelisten. Bag låsen er det sikkert at fylde op ved hvert svar.
+  promoted := promoted || public.promote_event_waitlist_locked(p_event_id);
 
   return jsonb_build_object(
     'status', new_status,

@@ -102,7 +102,7 @@ beforeEach(() => {
     data: { status: null, promoted: [] },
     error: null,
   })
-  announceInChat.mockResolvedValue(undefined)
+  announceInChat.mockResolvedValue(true)
 })
 
 afterEach(() => {
@@ -130,11 +130,8 @@ describe('AttendanceSection', () => {
     expect(
       screen.getByRole('button', { name: 'Forlad ventelisten' }),
     ).toBeTruthy()
-    expect(
-      within(screen.getByRole('list', { name: 'Kan ikke' })).getByText(
-        'Erik Eriksen',
-      ),
-    ).toBeTruthy()
+    expect(screen.queryByText('Erik Eriksen')).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Har meldt afbud' })).toBeNull()
   })
 
   it('tilbyder ventelisten, når der er fyldt op, og et afbud', async () => {
@@ -247,5 +244,58 @@ describe('AttendanceSection', () => {
     expect(content).toMatch(
       /^minder om «Skovtur» .*: @Medlem og @Medlem har ikke svaret endnu/,
     )
+  })
+
+  it('viser arrangøren afbuddene i overblikket', async () => {
+    supabaseMocks.rpc.mockResolvedValue({ data: [], error: null })
+    renderSection('alice', true)
+
+    await screen.findByText('(2/2 pladser)')
+    expect(screen.queryByText('Erik Eriksen')).toBeNull()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Hvem mangler at svare?' }),
+    )
+
+    await screen.findByText('Alle har svaret.')
+    expect(
+      within(screen.getByRole('list', { name: 'Har meldt afbud' })).getByText(
+        'Erik Eriksen',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('lader påmindelsen sendes igen, når den ikke kom i chatten', async () => {
+    supabaseMocks.rpc.mockResolvedValue({
+      data: [{ user_id: 'frida' }],
+      error: null,
+    })
+    announceInChat.mockResolvedValueOnce(false)
+    renderSection('alice', true)
+
+    await screen.findByText('(2/2 pladser)')
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Hvem mangler at svare?' }),
+    )
+    await screen.findByText('1 har ikke svaret endnu.')
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Send påmindelse i chatten' }),
+    )
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Påmindelsen kunne ikke sendes',
+    )
+    const retry = screen.getByRole('button', {
+      name: 'Send påmindelse i chatten',
+    }) as HTMLButtonElement
+    expect(retry.disabled).toBe(false)
+
+    fireEvent.click(retry)
+
+    await screen.findByRole('button', {
+      name: 'Påmindelsen er sendt i chatten',
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(announceInChat).toHaveBeenCalledTimes(2)
   })
 })

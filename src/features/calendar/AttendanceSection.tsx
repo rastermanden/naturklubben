@@ -112,30 +112,33 @@ function MemberList({
 }
 
 /**
- * Arrangørens (og admins') liste over dem, der ikke har svaret, med en knap,
- * der minder dem om det i chatten. Databasen afviser alle andre, så listen
- * hentes først, når den foldes ud.
+ * Arrangørens (og admins') overblik over svarene: dem, der har meldt afbud,
+ * og dem, der ikke har svaret, med en knap, der minder de sidste om det i
+ * chatten. Databasen giver kun arrangøren og admins afbuddene og listen over
+ * manglende svar, så listen hentes først, når den foldes ud.
  */
 function MissingResponses({
   event,
   userId,
+  declined,
   profiles,
 }: {
   event: CalendarEvent
   userId: string
+  declined: readonly EventAttendance[]
   profiles: Record<string, ProfileSummary> | undefined
 }) {
   const [open, setOpen] = useState(false)
   const [reminderState, setReminderState] = useState<
-    'idle' | 'sending' | 'sent'
+    'idle' | 'sending' | 'sent' | 'failed'
   >('idle')
   const missingQuery = useMembersWithoutResponse(event.id, open)
   const missing = missingQuery.data ?? []
 
   async function sendReminder() {
     setReminderState('sending')
-    await announceReminder(userId, event, missing, profiles)
-    setReminderState('sent')
+    const sent = await announceReminder(userId, event, missing, profiles)
+    setReminderState(sent ? 'sent' : 'failed')
   }
 
   return (
@@ -186,7 +189,9 @@ function MissingResponses({
               <button
                 type="button"
                 onClick={() => void sendReminder()}
-                disabled={reminderState !== 'idle'}
+                disabled={
+                  reminderState === 'sending' || reminderState === 'sent'
+                }
                 className="mt-3 min-h-11 rounded border border-accent-soft px-4 py-2 text-sm font-medium text-ink-muted hover:bg-surface-sunken disabled:opacity-60"
               >
                 {reminderState === 'sending'
@@ -195,6 +200,28 @@ function MissingResponses({
                     ? 'Påmindelsen er sendt i chatten'
                     : 'Send påmindelse i chatten'}
               </button>
+              {reminderState === 'failed' && (
+                <p role="alert" className="mt-2 text-sm text-danger">
+                  Påmindelsen kunne ikke sendes i chatten. Prøv igen.
+                </p>
+              )}
+            </>
+          )}
+
+          {declined.length > 0 && (
+            <>
+              <h4 className="mt-4 text-sm font-semibold text-ink-body">
+                Har meldt afbud
+                <span className="ml-2 font-normal text-ink-subtle">
+                  ({declined.length})
+                </span>
+              </h4>
+              <MemberList
+                entries={declined}
+                userId={userId}
+                profiles={profiles}
+                label="Har meldt afbud"
+              />
             </>
           )}
         </>
@@ -210,7 +237,7 @@ export function AttendanceSection({
 }: {
   event: CalendarEvent
   userId: string
-  /** Arrangøren og admins: må se, hvem der mangler at svare. */
+  /** Arrangøren og admins: må se afbud og hvem der mangler at svare. */
   canManage: boolean
 }) {
   const { attendanceQuery, respond } = useEventAttendance(
@@ -225,6 +252,7 @@ export function AttendanceSection({
   const attendance = attendanceQuery.data ?? []
   const attending = attendingEntries(attendance)
   const waitlist = waitlistEntries(attendance)
+  // Afbud får kun den, der meldte det, arrangøren og admins fra databasen.
   const declined = declinedEntries(attendance)
   const ownStatus =
     attendance.find((entry) => entry.user_id === userId)?.status ?? null
@@ -388,27 +416,11 @@ export function AttendanceSection({
         </>
       )}
 
-      {declined.length > 0 && (
-        <>
-          <h4 className="mt-4 text-sm font-semibold text-ink-body">
-            Kan ikke
-            <span className="ml-2 font-normal text-ink-subtle">
-              ({declined.length})
-            </span>
-          </h4>
-          <MemberList
-            entries={declined}
-            userId={userId}
-            profiles={profilesQuery.data}
-            label="Kan ikke"
-          />
-        </>
-      )}
-
       {canManage && (
         <MissingResponses
           event={event}
           userId={userId}
+          declined={declined}
           profiles={profilesQuery.data}
         />
       )}

@@ -33,17 +33,31 @@ function joinItems(items: readonly string[]): string {
   return `${items.slice(0, -1).join(', ')} og ${items.at(-1)}`
 }
 
-function mentionList(members: readonly MentionedMember[]) {
-  return members.map((member) => `@${member.name}`)
+/**
+ * Chatten fremhæver højst MENTION_LIMIT mentions pr. besked (og databasen
+ * afviser flere), så de forreste nævnes, og resten tælles.
+ */
+function mentionable(ids: readonly string[]) {
+  const mentionedIds = ids.slice(0, MENTION_LIMIT)
+  return { mentionedIds, othersCount: ids.length - mentionedIds.length }
+}
+
+/** "@A", "@A og @B", "@A, @B og 3 andre" */
+function mentionList(members: readonly MentionedMember[], othersCount = 0) {
+  const items = members.map((member) => `@${member.name}`)
+  if (othersCount > 0) items.push(`${othersCount} andre`)
+  return items
 }
 
 export function promotionAnnouncement(
   cause: PromotionCause,
   eventTitle: string,
   members: readonly MentionedMember[],
+  othersCount = 0,
 ): string {
-  const names = joinItems(mentionList(members))
-  const seat = members.length === 1 ? 'pladsen' : 'plads'
+  const items = mentionList(members, othersCount)
+  const names = joinItems(items)
+  const seat = items.length === 1 ? 'pladsen' : 'plads'
   switch (cause) {
     case 'left':
       return `har meldt afbud til «${eventTitle}», så ${names} har fået ${seat} fra ventelisten`
@@ -67,19 +81,14 @@ export function formatEventStart(startAt: string) {
   return startFormatter.format(new Date(startAt))
 }
 
-/**
- * Påmindelsen til dem, der ikke har svaret. Chatten fremhæver højst
- * MENTION_LIMIT mentions pr. besked, så de øvrige tælles i stedet for at
- * blive nævnt.
- */
+/** Påmindelsen til dem, der ikke har svaret. */
 export function reminderAnnouncement(
   eventTitle: string,
   when: string,
   members: readonly MentionedMember[],
   othersCount: number,
 ): string {
-  const items = mentionList(members)
-  if (othersCount > 0) items.push(`${othersCount} andre`)
+  const items = mentionList(members, othersCount)
   return `minder om «${eventTitle}» ${when}: ${joinItems(items)} har ikke svaret endnu. Meld til eller fra i kalenderen.`
 }
 
@@ -90,15 +99,17 @@ export function announcePromotion(
   promotedIds: readonly string[],
   profiles: Record<string, ProfileSummary> | undefined,
 ) {
-  if (promotedIds.length === 0) return Promise.resolve()
+  if (promotedIds.length === 0) return Promise.resolve(true)
+  const { mentionedIds, othersCount } = mentionable(promotedIds)
   return announceInChat(
     userId,
     promotionAnnouncement(
       cause,
       eventTitle,
-      mentionedMembers(promotedIds, profiles),
+      mentionedMembers(mentionedIds, profiles),
+      othersCount,
     ),
-    promotedIds,
+    mentionedIds,
   )
 }
 
@@ -108,14 +119,14 @@ export function announceReminder(
   memberIds: readonly string[],
   profiles: Record<string, ProfileSummary> | undefined,
 ) {
-  const mentionedIds = memberIds.slice(0, MENTION_LIMIT)
+  const { mentionedIds, othersCount } = mentionable(memberIds)
   return announceInChat(
     userId,
     reminderAnnouncement(
       event.title,
       formatEventStart(event.start_at),
       mentionedMembers(mentionedIds, profiles),
-      memberIds.length - mentionedIds.length,
+      othersCount,
     ),
     mentionedIds,
   )

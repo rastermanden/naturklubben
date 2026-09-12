@@ -31,7 +31,7 @@ const profiles = {
 describe('announceWaitlist', () => {
   beforeEach(() => {
     announceInChat.mockReset()
-    announceInChat.mockResolvedValue(undefined)
+    announceInChat.mockResolvedValue(true)
   })
 
   it('skriver mentions med profilens navn og et fallback uden navn', () => {
@@ -53,6 +53,9 @@ describe('announceWaitlist', () => {
     )
     expect(promotionAnnouncement('joined', 'Skovtur', [carol])).toBe(
       'har tilmeldt sig «Skovtur» – @Carol Hansen har samtidig fået plads fra ventelisten',
+    )
+    expect(promotionAnnouncement('left', 'Skovtur', [carol], 2)).toBe(
+      'har meldt afbud til «Skovtur», så @Carol Hansen og 2 andre har fået plads fra ventelisten',
     )
   })
 
@@ -85,9 +88,40 @@ describe('announceWaitlist', () => {
   })
 
   it('sender ingenting, når ingen rykkede op', async () => {
-    await announcePromotion('bob', 'left', 'Skovtur', [], profiles)
+    await expect(
+      announcePromotion('bob', 'left', 'Skovtur', [], profiles),
+    ).resolves.toBe(true)
 
     expect(announceInChat).not.toHaveBeenCalled()
+  })
+
+  it('melder, om oprykningen kom i chatten', async () => {
+    announceInChat.mockResolvedValueOnce(false)
+
+    await expect(
+      announcePromotion('bob', 'left', 'Skovtur', ['carol'], profiles),
+    ).resolves.toBe(false)
+  })
+
+  it('nævner højst 20 oprykkede og tæller resten', async () => {
+    const promotedIds = Array.from({ length: 22 }, (_, index) => `m${index}`)
+
+    await announcePromotion(
+      'alice',
+      'capRaised',
+      'Skovtur',
+      promotedIds,
+      undefined,
+    )
+
+    const [, content, mentions] = announceInChat.mock.calls[0]
+    expect(mentions).toEqual(promotedIds.slice(0, 20))
+    expect(content).toBe(
+      `har gjort plads til flere på «Skovtur»: ${promotedIds
+        .slice(0, 19)
+        .map(() => '@Medlem')
+        .join(', ')}, @Medlem og 2 andre har fået plads fra ventelisten`,
+    )
   })
 
   it('nævner højst 20 i påmindelsen og tæller resten', async () => {
