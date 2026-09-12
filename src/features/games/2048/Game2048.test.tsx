@@ -90,6 +90,9 @@ describe('Game2048', () => {
   })
 
   it('flytter brikkerne med et stryg over brættet', () => {
+    // Samme faste terning: så står mindst én startbrik over nederste række,
+    // og strøget nedad har altid noget at flytte.
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
     render(<Game2048 />)
     fireEvent.click(screen.getByRole('button', { name: 'Start spillet' }))
 

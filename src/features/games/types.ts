@@ -13,9 +13,9 @@ export interface GameScore {
   game: GameId
   player_id: string
   score: number
-  /** Ryddede rækker i Tetris, antal træk i Kaptajn Kaper og 2048. */
+  /** Ryddede rækker i Tetris, antal træk i Kaptajn Kaper; 0 i 2048. */
   lines: number
-  /** Niveau i Tetris, rang i Kaptajn Kaper, den største briks eksponent i 2048. */
+  /** Niveau i Tetris, rang i Kaptajn Kaper; 1 i 2048. */
   level: number
   duration_seconds: number
   created_at: string
@@ -31,7 +31,9 @@ export interface LeaderboardEntry {
 
 export interface NewGameScore {
   score: number
-  lines: number
-  level: number
+  /** Udelades af spil, hvor kolonnerne ikke betyder noget; databasen sætter
+   *  så sine standardværdier (0 og 1). */
+  lines?: number
+  level?: number
   durationSeconds: number
 }

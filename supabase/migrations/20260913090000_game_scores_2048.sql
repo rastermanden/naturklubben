@@ -2,9 +2,9 @@
 --
 -- `game_scores` bærer flere spil (se 20260906090000_game_scores.sql og
 -- 20260910090000_game_scores_kaper.sql): `game` udvides her, og
--- rimelighedsgrænsen på pointene får en gren for 2048. Kolonnerne genbruges
--- med hver sin betydning -- for 2048 er `lines` antal træk og `level` den
--- største briks eksponent (11 er 2048), mens `duration_seconds` er som altid.
+-- rimelighedsgrænsen på pointene får en gren for 2048. `lines` og `level`
+-- betyder ikke noget for 2048 og bliver stående på deres standardværdier
+-- (0 og 1); kun `score` og `duration_seconds` udfyldes.
 --
 -- Grænsen for 2048 er selvstændig og står ikke i forhold til antallet af
 -- træk: et træk kan lægge op til otte par sammen, og det giver ikke nogen

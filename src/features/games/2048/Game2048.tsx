@@ -4,7 +4,7 @@ import { formatScore } from '../leaderboard'
 import { useSwipeDirection } from '../useSwipeDirection'
 import { usePersonalBest, useSubmitScore } from '../useGameScores'
 import { Board2048 } from './Board2048'
-import { WIN_TILE, highestTile, tileExponent } from './engine'
+import { WIN_TILE, highestTile } from './engine'
 import { use2048Game } from './use2048Game'
 
 function StatTile({ label, value }: { label: string; value: string }) {
@@ -53,21 +53,12 @@ export function Game2048() {
     if (!userId || state.score <= 0) return
     submitScore.mutate({
       score: state.score,
-      lines: state.moves,
-      level: tileExponent(highestTile(state.board)),
       durationSeconds: Math.max(
         0,
         Math.round((Date.now() - controls.startedAt) / 1000),
       ),
     })
-  }, [
-    controls.startedAt,
-    state.board,
-    state.moves,
-    state.score,
-    submitScore,
-    userId,
-  ])
+  }, [controls.startedAt, state.score, submitScore, userId])
 
   // Resultatet sendes af sig selv, når der ikke er flere træk. Et spil, man
   // skal huske at gemme bagefter, er et spil, der ikke kommer på listen.
@@ -84,8 +75,6 @@ export function Game2048() {
     celebrated.current = true
     setCelebrating(true)
   }, [state.status, state.won])
-
-  const playing = state.status === 'running'
 
   return (
     <div className="flex flex-col gap-4">
@@ -188,11 +177,7 @@ export function Game2048() {
           onClick={startGame}
           className="min-h-11 rounded-lg bg-accent px-5 py-2 font-medium text-on-accent"
         >
-          {playing
-            ? 'Nyt spil'
-            : state.status === 'idle'
-              ? 'Start'
-              : 'Nyt spil'}
+          {state.status === 'idle' ? 'Start' : 'Nyt spil'}
         </button>
         {personalBest.data && (
           <p className="text-sm text-ink-subtle">
@@ -214,8 +199,7 @@ export function Game2048() {
         <div className="mt-3 flex flex-col gap-3">
           <p>
             På telefonen: stryg over brættet i den retning, brikkerne skal
-            skubbes. På tastaturet gør piletasterne (eller W, A, S, D) det
-            samme.
+            skubbes. På tastaturet gør piletasterne det samme.
           </p>
           <p>
             Alle brikker glider til den side, du skubber mod. To ens brikker,

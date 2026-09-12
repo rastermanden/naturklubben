@@ -16,15 +16,14 @@ begin
 end
 $$;
 
--- Et helt almindeligt parti: 2048 nået (eksponent 11) efter 940 træk.
+-- Et helt almindeligt parti, som klienten sender det: kun point og tid.
 select lives_ok(
-  $$insert into public.game_scores
-      (game, player_id, score, lines, level, duration_seconds)
-    values ('2048', '00000000-0000-0000-0000-00000000000a', 20512, 940, 11, 720)$$,
+  $$insert into public.game_scores (game, player_id, score, duration_seconds)
+    values ('2048', '00000000-0000-0000-0000-00000000000a', 20512, 720)$$,
   'et resultat fra 2048 kan lægges på listen'
 );
 
--- `lines` og `level` må blive stående på deres standardværdier.
+-- `lines` og `level` bliver stående på deres standardværdier.
 select lives_ok(
   $$insert into public.game_scores (game, player_id, score)
     values ('2048', '00000000-0000-0000-0000-00000000000a', 1234)$$,

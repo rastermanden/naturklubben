@@ -186,15 +186,6 @@ export function highestTile(board: Board): number {
   )
 }
 
-/**
- * Den største briks eksponent: 2 er 1, 2048 er 11. Det er dét, der gemmes i
- * `level` på resultatlisten -- kolonnen kan højst rumme 99, og en brik på
- * 2^99 kommer ingen til at lægge.
- */
-export function tileExponent(value: number): number {
-  return Math.max(1, Math.min(99, Math.round(Math.log2(Math.max(2, value)))))
-}
-
 /** Ingen tomme felter og ingen to ens naboer: så er der ikke flere træk. */
 export function hasMoves(board: Board): boolean {
   return DIRECTIONS.some((direction) => slideBoard(board, direction).moved)
