@@ -76,6 +76,9 @@ describe('Game2048', () => {
     render(<Game2048 />)
 
     expect(screen.getByText('Klar?')).toBeTruthy()
+    // "Klar?" er en opfordring, ikke en dialog: resten af siden -- listen,
+    // knapperne, overskriften -- skal stadig kunne nås.
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(stat('Point')).toBe('0')
     expect(tiles().every((value) => value === 0)).toBe(true)
 

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { useAuth } from '../../auth/useAuth'
 import { formatScore } from '../leaderboard'
 import { useSwipeDirection } from '../useSwipeDirection'
@@ -6,6 +12,10 @@ import { usePersonalBest, useSubmitScore } from '../useGameScores'
 import { Board2048 } from './Board2048'
 import { WIN_TILE, highestTile } from './engine'
 import { use2048Game } from './use2048Game'
+
+function stopPointer(event: ReactPointerEvent<HTMLElement>) {
+  event.stopPropagation()
+}
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
@@ -76,6 +86,21 @@ export function Game2048() {
     setCelebrating(true)
   }, [state.status, state.won])
 
+  // Midt i et spil er lykønskningen en dialog: så længe den står der, hører
+  // tasterne til den (se `use2048Game`), og et stryg hen over den når ikke
+  // brættet bagved. Før og efter spillet er der intet at spærre for, og
+  // "Klar?" og "Ikke flere træk" skal ikke skygge for resten af siden.
+  const winDialog =
+    state.status === 'running' && celebrating
+      ? {
+          role: 'dialog',
+          'aria-modal': true,
+          'aria-labelledby': 'board-2048-win-title',
+          onPointerDown: stopPointer,
+          onPointerUp: stopPointer,
+        }
+      : undefined
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex gap-2">
@@ -92,25 +117,13 @@ export function Game2048() {
         <Board2048 state={state} />
 
         {(state.status !== 'running' || celebrating) && (
-          // En dialog oven på brættet: så længe den står der, hører tasterne
-          // til den (se `use2048Game`), og et stryg hen over den når ikke
-          // brættet bagved.
           <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="board-2048-dialog-title"
-            onPointerDown={(event) => event.stopPropagation()}
-            onPointerUp={(event) => event.stopPropagation()}
+            {...winDialog}
             className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/65 p-4 text-center text-white"
           >
             {state.status === 'idle' && (
               <>
-                <p
-                  id="board-2048-dialog-title"
-                  className="text-xl font-semibold"
-                >
-                  Klar?
-                </p>
+                <p className="text-xl font-semibold">Klar?</p>
                 <p className="max-w-xs text-sm text-white/80">
                   Skub brikkerne, så to ens mødes og bliver til én. Nå 2048 —
                   eller videre.
@@ -119,10 +132,7 @@ export function Game2048() {
             )}
             {state.status === 'running' && celebrating && (
               <>
-                <p
-                  id="board-2048-dialog-title"
-                  className="text-xl font-semibold"
-                >
+                <p id="board-2048-win-title" className="text-xl font-semibold">
                   Du nåede {WIN_TILE}!
                 </p>
                 <p className="max-w-xs text-sm text-white/80">
@@ -132,12 +142,7 @@ export function Game2048() {
             )}
             {state.status === 'over' && (
               <>
-                <p
-                  id="board-2048-dialog-title"
-                  className="text-xl font-semibold"
-                >
-                  Ikke flere træk
-                </p>
+                <p className="text-xl font-semibold">Ikke flere træk</p>
                 <p className="text-sm text-white/80">
                   {formatScore(state.score)} point, største brik {biggest},{' '}
                   {state.moves} træk.
