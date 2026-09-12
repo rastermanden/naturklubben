@@ -13,6 +13,9 @@ import { supabase } from '../../lib/supabaseClient'
  * i chatten og får push, selv om de har slået almindelige beskeder fra.
  * Kalenderen bruger det til at nå dem, der har fået en plads fra ventelisten.
  *
+ * `messageType` er 'action' ("* Navn <content>") medmindre beskeden ikke
+ * handler om afsenderen selv -- så sendes den som almindelig tekst.
+ *
  * Returnerer, om beskeden kom i chatten. Push er stadig bedste indsats: en
  * fejl dér ændrer ikke, at beskeden er sendt.
  */
@@ -20,13 +23,14 @@ export async function announceInChat(
   userId: string,
   content: string,
   mentions: readonly string[] = [],
+  messageType: 'action' | 'text' = 'action',
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from('messages')
     .insert({
       user_id: userId,
       content,
-      message_type: 'action',
+      message_type: messageType,
       mentions: [...mentions],
     })
     .select('id')

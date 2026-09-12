@@ -66,7 +66,22 @@ function repository(overrides: Partial<AccountExportRepository> = {}) {
     },
     getAttendance: async (id) => {
       seenUserIds.push(id)
-      return []
+      return [
+        {
+          event_id: 'event-1',
+          status: 'declined',
+          created_at: '2026-08-02T10:00:00.000Z',
+          event: {
+            id: 'event-1',
+            title: 'Skovtur',
+            description: null,
+            location: null,
+            start_at: '2026-09-20T08:00:00.000Z',
+            end_at: null,
+            created_at: '2026-08-01T10:00:00.000Z',
+          },
+        },
+      ]
     },
     getPhotoDownloadUrls: async () => ({
       original: 'https://storage.test/original?token=short-lived',
@@ -100,6 +115,22 @@ Deno.test(
       body.photos[0].download_urls.original,
       'https://storage.test/original?token=short-lived',
     )
+    assertEquals(body.activity_registrations, [
+      {
+        event_id: 'event-1',
+        status: 'declined',
+        created_at: '2026-08-02T10:00:00.000Z',
+        event: {
+          id: 'event-1',
+          title: 'Skovtur',
+          description: null,
+          location: null,
+          start_at: '2026-09-20T08:00:00.000Z',
+          end_at: null,
+          created_at: '2026-08-01T10:00:00.000Z',
+        },
+      },
+    ])
     assertEquals(body.signed_urls_expire_at, '2026-08-23T18:15:00.000Z')
     assert(response.headers.get('Cache-Control') === 'no-store')
     assert(response.headers.get('Content-Disposition')?.includes('.json'))

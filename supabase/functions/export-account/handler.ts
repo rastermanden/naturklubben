@@ -60,6 +60,8 @@ export interface PhotoDownloadUrls {
 
 export interface AttendanceExport {
   event_id: string
+  /** Svaret, som det blev givet: 'attending', 'waitlisted' eller 'declined'. */
+  status: string
   created_at: string
   event: {
     id: string

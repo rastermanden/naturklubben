@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { useProfilesMap, type ProfileSummary } from '../chat/useProfilesMap'
 import { readableTextColor } from '../../lib/colorContrast'
-import { announcePromotion, announceReminder } from './announceWaitlist'
+import {
+  announcePromotion,
+  announceReminder,
+  promotionCause,
+} from './announceWaitlist'
 import type { CalendarEvent } from './useEvents'
 import {
   useEventAttendance,
@@ -260,14 +264,15 @@ export function AttendanceSection({
   const isFull = !hasFreeSeat(attendance, event.max_participants)
 
   function sendResponse(response: AttendanceResponse) {
+    const previousStatus = ownStatus
     respond.mutate(response, {
       onSuccess: (result) => {
-        // Den, der frigav pladsen, fortæller den næste i køen om den. Bedste
-        // indsats: svaret er gemt, uanset om chatten kan nås.
+        // Den, hvis svar fyldte pladsen, fortæller den næste i køen om den.
+        // Bedste indsats: svaret er gemt, uanset om chatten kan nås.
         if (result.promoted.length > 0) {
           void announcePromotion(
             userId,
-            response === 'attending' ? 'joined' : 'left',
+            promotionCause(previousStatus, result.status),
             event.title,
             result.promoted,
             profilesQuery.data,

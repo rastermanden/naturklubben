@@ -283,8 +283,11 @@ af databasen:
   medlemmer uden svar; alle andre afvises med `42501`. Hvem der kommer, er fælles
   viden -- hvem der har meldt afbud eller _ikke_ har svaret, er kun arrangørens.
   Afbuddene håndhæves i tabellens select-policy, ikke kun i klienten.
-- Besked til de oprykkede går som en handlingsbesked i chatten med dem som `mentions`,
-  sendt af den, hvis svar frigav pladsen (`src/features/calendar/announceWaitlist.ts`).
+- Besked til de oprykkede går i chatten med dem som `mentions`, sendt af den, hvis svar
+  fyldte pladsen (`src/features/calendar/announceWaitlist.ts`): som handlingsbesked, når
+  afsenderen selv gav pladsen fra sig eller hævede loftet, ellers som neutral tekst --
+  pladsen kan være frigivet uden om RPC'en (en slettet konto) og først fyldt af et
+  senere svar.
   Push følger chat-push's mention-regel; en særskilt push afventer #216.
 - `supabase/tests/rls/17_event_waitlist.sql` måler, at loftet håndhæves, at
   tabellen ikke kan skrives uden om RPC'en, at oprykning sker i rækkefølge og kun

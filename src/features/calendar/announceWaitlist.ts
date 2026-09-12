@@ -1,6 +1,7 @@
 import { MENTION_LIMIT } from '../chat/mentions'
 import type { ProfileSummary } from '../chat/useProfilesMap'
 import { announceInChat } from '../profile/announceInChat'
+import type { AttendanceStatus } from './waitlist'
 
 /**
  * Chatbeskederne omkring ventelisten (#222). Samme vej som profilens
@@ -14,7 +15,28 @@ export interface MentionedMember {
   name: string
 }
 
-export type PromotionCause = 'left' | 'capRaised' | 'joined'
+/**
+ * Hvad der gav pladsen: et afbud fra en deltager, et hævet loft -- eller
+ * ingen af delene ('freed'): pladsen var allerede ledig (fx efter en slettet
+ * konto), og svaret fik bare databasen til at fylde den. Kun de to første
+ * handler om afsenderen; den sidste sendes derfor som almindelig tekst.
+ */
+export type PromotionCause = 'left' | 'capRaised' | 'freed'
+
+/** Årsagen ud fra, hvad medlemmets svar faktisk ændrede. */
+export function promotionCause(
+  previousStatus: AttendanceStatus | null,
+  newStatus: AttendanceStatus | null,
+): PromotionCause {
+  return previousStatus === 'attending' && newStatus !== 'attending'
+    ? 'left'
+    : 'freed'
+}
+
+export interface Announcement {
+  content: string
+  messageType: 'action' | 'text'
+}
 
 /** Navnene, mentions skrives med -- teksten skal matche profilens navn. */
 export function mentionedMembers(
@@ -54,17 +76,29 @@ export function promotionAnnouncement(
   eventTitle: string,
   members: readonly MentionedMember[],
   othersCount = 0,
-): string {
+): Announcement {
   const items = mentionList(members, othersCount)
   const names = joinItems(items)
   const seat = items.length === 1 ? 'pladsen' : 'plads'
   switch (cause) {
     case 'left':
-      return `har meldt afbud til «${eventTitle}», så ${names} har fået ${seat} fra ventelisten`
+      return {
+        content: `har meldt afbud til «${eventTitle}», så ${names} har fået ${seat} fra ventelisten`,
+        messageType: 'action',
+      }
     case 'capRaised':
-      return `har gjort plads til flere på «${eventTitle}»: ${names} har fået plads fra ventelisten`
-    case 'joined':
-      return `har tilmeldt sig «${eventTitle}» – ${names} har samtidig fået plads fra ventelisten`
+      return {
+        content: `har gjort plads til flere på «${eventTitle}»: ${names} har fået plads fra ventelisten`,
+        messageType: 'action',
+      }
+    case 'freed':
+      return {
+        content:
+          items.length === 1
+            ? `Der blev en plads ledig til «${eventTitle}», så ${names} har fået pladsen fra ventelisten.`
+            : `Der blev pladser ledige til «${eventTitle}», så ${names} har fået plads fra ventelisten.`,
+        messageType: 'text',
+      }
   }
 }
 
@@ -101,16 +135,13 @@ export function announcePromotion(
 ) {
   if (promotedIds.length === 0) return Promise.resolve(true)
   const { mentionedIds, othersCount } = mentionable(promotedIds)
-  return announceInChat(
-    userId,
-    promotionAnnouncement(
-      cause,
-      eventTitle,
-      mentionedMembers(mentionedIds, profiles),
-      othersCount,
-    ),
-    mentionedIds,
+  const { content, messageType } = promotionAnnouncement(
+    cause,
+    eventTitle,
+    mentionedMembers(mentionedIds, profiles),
+    othersCount,
   )
+  return announceInChat(userId, content, mentionedIds, messageType)
 }
 
 export function announceReminder(

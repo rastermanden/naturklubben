@@ -4,6 +4,7 @@ import {
   announceReminder,
   mentionedMembers,
   promotionAnnouncement,
+  promotionCause,
   reminderAnnouncement,
 } from './announceWaitlist'
 
@@ -42,21 +43,50 @@ describe('announceWaitlist', () => {
     ])
   })
 
+  it('kalder det kun et afbud, når en deltager gav sin plads fra sig', () => {
+    expect(promotionCause('attending', null)).toBe('left')
+    expect(promotionCause('attending', 'declined')).toBe('left')
+    expect(promotionCause('attending', 'attending')).toBe('freed')
+    expect(promotionCause(null, 'declined')).toBe('freed')
+    expect(promotionCause(null, 'waitlisted')).toBe('freed')
+    expect(promotionCause(null, 'attending')).toBe('freed')
+    expect(promotionCause('declined', null)).toBe('freed')
+    expect(promotionCause('waitlisted', 'waitlisted')).toBe('freed')
+  })
+
   it('formulerer oprykningen efter, hvad der gav pladsen', () => {
     const carol = { id: 'carol', name: 'Carol Hansen' }
     const dave = { id: 'dave', name: 'Dave' }
-    expect(promotionAnnouncement('left', 'Skovtur', [carol])).toBe(
-      'har meldt afbud til «Skovtur», så @Carol Hansen har fået pladsen fra ventelisten',
-    )
-    expect(promotionAnnouncement('capRaised', 'Skovtur', [carol, dave])).toBe(
-      'har gjort plads til flere på «Skovtur»: @Carol Hansen og @Dave har fået plads fra ventelisten',
-    )
-    expect(promotionAnnouncement('joined', 'Skovtur', [carol])).toBe(
-      'har tilmeldt sig «Skovtur» – @Carol Hansen har samtidig fået plads fra ventelisten',
-    )
-    expect(promotionAnnouncement('left', 'Skovtur', [carol], 2)).toBe(
+    expect(promotionAnnouncement('left', 'Skovtur', [carol])).toEqual({
+      content:
+        'har meldt afbud til «Skovtur», så @Carol Hansen har fået pladsen fra ventelisten',
+      messageType: 'action',
+    })
+    expect(
+      promotionAnnouncement('capRaised', 'Skovtur', [carol, dave]),
+    ).toEqual({
+      content:
+        'har gjort plads til flere på «Skovtur»: @Carol Hansen og @Dave har fået plads fra ventelisten',
+      messageType: 'action',
+    })
+    expect(promotionAnnouncement('left', 'Skovtur', [carol], 2).content).toBe(
       'har meldt afbud til «Skovtur», så @Carol Hansen og 2 andre har fået plads fra ventelisten',
     )
+  })
+
+  it('sender en ledig plads uden afsender som almindelig tekst', () => {
+    const carol = { id: 'carol', name: 'Carol Hansen' }
+    const dave = { id: 'dave', name: 'Dave' }
+    expect(promotionAnnouncement('freed', 'Skovtur', [carol])).toEqual({
+      content:
+        'Der blev en plads ledig til «Skovtur», så @Carol Hansen har fået pladsen fra ventelisten.',
+      messageType: 'text',
+    })
+    expect(promotionAnnouncement('freed', 'Skovtur', [carol, dave])).toEqual({
+      content:
+        'Der blev pladser ledige til «Skovtur», så @Carol Hansen og @Dave har fået plads fra ventelisten.',
+      messageType: 'text',
+    })
   })
 
   it('nævner dem, der mangler at svare, og tæller resten', () => {
@@ -84,6 +114,18 @@ describe('announceWaitlist', () => {
       'bob',
       'har meldt afbud til «Skovtur», så @Carol Hansen har fået pladsen fra ventelisten',
       ['carol'],
+      'action',
+    )
+  })
+
+  it('nævner de oprykkede også i den neutrale tekstbesked', async () => {
+    await announcePromotion('bob', 'freed', 'Skovtur', ['carol'], profiles)
+
+    expect(announceInChat).toHaveBeenCalledWith(
+      'bob',
+      'Der blev en plads ledig til «Skovtur», så @Carol Hansen har fået pladsen fra ventelisten.',
+      ['carol'],
+      'text',
     )
   })
 
@@ -114,8 +156,9 @@ describe('announceWaitlist', () => {
       undefined,
     )
 
-    const [, content, mentions] = announceInChat.mock.calls[0]
+    const [, content, mentions, messageType] = announceInChat.mock.calls[0]
     expect(mentions).toEqual(promotedIds.slice(0, 20))
+    expect(messageType).toBe('action')
     expect(content).toBe(
       `har gjort plads til flere på «Skovtur»: ${promotedIds
         .slice(0, 19)

@@ -182,6 +182,27 @@ describe('AttendanceSection', () => {
         'bob',
         'har meldt afbud til «Skovtur», så @Carol Hansen har fået pladsen fra ventelisten',
         ['carol'],
+        'action',
+      ),
+    )
+  })
+
+  it('kalder det ikke et afbud, når et andet svar fyldte en ledig plads', async () => {
+    supabaseMocks.rpc.mockResolvedValue({
+      data: { status: 'declined', promoted: ['carol'] },
+      error: null,
+    })
+    renderSection('frida')
+
+    await screen.findByText('(2/2 pladser)')
+    fireEvent.click(screen.getByRole('button', { name: 'Kan ikke' }))
+
+    await waitFor(() =>
+      expect(announceInChat).toHaveBeenCalledWith(
+        'frida',
+        'Der blev en plads ledig til «Skovtur», så @Carol Hansen har fået pladsen fra ventelisten.',
+        ['carol'],
+        'text',
       ),
     )
   })

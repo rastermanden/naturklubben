@@ -37,6 +37,14 @@ describe('announceInChat', () => {
     })
   })
 
+  it('kan sende beskeden som almindelig tekst', async () => {
+    await announceInChat('member-id', 'Der blev en plads ledig.', [], 'text')
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ message_type: 'text' }),
+    )
+  })
+
   it('sender de nævnte med, så de fremhæves og får push', async () => {
     await announceInChat('member-id', 'noget til @Bo', ['bo-id'])
 
