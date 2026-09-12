@@ -42,6 +42,17 @@ Deno.test('relativeDay: dagsgrænsen følger dansk tid, ikke UTC', () => {
   assert.equal(relativeDay(EVENT.start_at, now), 'i morgen')
 })
 
+Deno.test('relativeDay: "i morgen" hen over skiftet til sommertid', () => {
+  // 23:30 den 28. marts 2026 (CET); 24 timer senere er det den 30. (CEST).
+  const now = new Date('2026-03-28T22:30:00.000Z')
+  assert.equal(relativeDay('2026-03-29T09:00:00.000Z', now), 'i morgen')
+})
+
+Deno.test('relativeDay: "i morgen" hen over et månedsskifte', () => {
+  const now = new Date('2026-09-30T15:00:00.000Z')
+  assert.equal(relativeDay('2026-10-01T08:00:00.000Z', now), 'i morgen')
+})
+
 Deno.test('relativeDay: længere ude gives datoen', () => {
   const now = new Date('2026-09-10T10:00:00.000Z')
   assert.match(relativeDay(EVENT.start_at, now), /14\. september/)
