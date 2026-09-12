@@ -207,6 +207,13 @@ alter table public.events
 -- events, men må ikke kunne pege påmindelsen mod en fremmed host. En
 -- begivenhed uden URL (oprettet før denne migration eller uden request) får
 -- den, næste gang den redigeres fra appen.
+--
+-- Flyttes begivenheden til en anden dag, glemmes påmindelsen: loggen i
+-- push_deliveries og kørslen i event_reminders (oprettet nedenfor)
+-- ryddes, så vinduet dagen før den nye dato sender forfra. Ellers ville den,
+-- der fik "i morgen" om den gamle dato, aldrig høre om den nye. Et nyt
+-- klokkeslæt samme dag rører ikke loggen.
+--
 -- security definer, fordi push_function_url ikke er givet til klientrollerne,
 -- og triggeren ellers ville køre som det medlem, der opretter begivenheden.
 create function public.remember_event_notification_url()
@@ -222,6 +229,14 @@ begin
       old.notification_function_url,
       public.push_function_url('calendar-push')
     );
+
+    if (new.start_at at time zone 'Europe/Copenhagen')::date
+      is distinct from (old.start_at at time zone 'Europe/Copenhagen')::date
+    then
+      delete from public.push_deliveries
+      where kind = 'event_reminder' and subject_id = old.id;
+      delete from public.event_reminders where event_id = old.id;
+    end if;
   end if;
   return new;
 end;
