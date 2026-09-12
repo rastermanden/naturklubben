@@ -91,6 +91,11 @@ export const routeMetadata = [
     announcement: 'Kaptajn Kaper i Kattegat indlæst',
   },
   {
+    path: '/spil/2048',
+    documentTitle: '2048 | Naturklubben',
+    announcement: '2048 indlæst',
+  },
+  {
     path: '/medlemmer',
     documentTitle: 'Medlemmer | Naturklubben',
     announcement: 'Medlemmer indlæst',

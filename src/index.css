@@ -64,6 +64,26 @@
   --color-media-backdrop: #052e16;
 }
 
+/* 2048: en ny brik vokser frem, og to brikker, der lægges sammen, bumper.
+   Nøglerne giver `animate-tile-appear` og `animate-tile-pop`. */
+@theme {
+  --animate-tile-appear: tile-appear 160ms ease-out;
+  --animate-tile-pop: tile-pop 180ms ease-out;
+
+  @keyframes tile-appear {
+    from {
+      transform: scale(0.4);
+      opacity: 0;
+    }
+  }
+
+  @keyframes tile-pop {
+    50% {
+      transform: scale(1.15);
+    }
+  }
+}
+
 /* Mørk tilstand.
 
    Der er kun ét selektor-tilfælde, fordi `data-theme` altid er *afgjort* --

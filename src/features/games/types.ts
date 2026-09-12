@@ -1,6 +1,6 @@
 /** Spil, der kan lægge resultater på klubbens liste. Skal matche
  *  `game_scores_game_known` i databasen. */
-export type GameId = 'tetris' | 'kaper'
+export type GameId = 'tetris' | 'kaper' | '2048'
 
 export interface GamePlayer {
   id: string
@@ -13,8 +13,9 @@ export interface GameScore {
   game: GameId
   player_id: string
   score: number
-  /** Ryddede rækker i Tetris, antal træk i Kaptajn Kaper. */
+  /** Ryddede rækker i Tetris, antal træk i Kaptajn Kaper og 2048. */
   lines: number
+  /** Niveau i Tetris, rang i Kaptajn Kaper, den største briks eksponent i 2048. */
   level: number
   duration_seconds: number
   created_at: string

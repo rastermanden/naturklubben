@@ -43,6 +43,17 @@ export const games: readonly GameDefinition[] = [
     describeScore: (score) =>
       `${score.lines} træk · ${rankName(score.level)} · ${formatDuration(score.duration_seconds)}`,
   },
+  {
+    id: '2048',
+    title: '2048',
+    tagline:
+      'Skub brikkerne sammen, to ens bliver til én -- og se, om du kan nå 2048. Eller længere.',
+    path: '/spil/2048',
+    symbol: '🔢',
+    // `level` er den største briks eksponent: 11 er 2048.
+    describeScore: (score) =>
+      `største brik ${2 ** score.level} · ${score.lines} træk · ${formatDuration(score.duration_seconds)}`,
+  },
 ]
 
 export function gameById(id: GameId): GameDefinition {
