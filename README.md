@@ -2,7 +2,8 @@
 
 [![Deploy to GitHub Pages](https://github.com/rastermanden/naturklubben/actions/workflows/deploy.yml/badge.svg)](https://github.com/rastermanden/naturklubben/actions/workflows/deploy.yml)
 
-Medlemsapp for Naturklubben — hero-forside, aktivitetsside, og bag login: kalender,
+Medlemsapp for Naturklubben — hero-forside, aktivitetsside, offentlig kalender med de
+begivenheder, arrangøren har åbnet for ikke-medlemmer (#224), og bag login: kalender,
 billedgalleri og gruppechat. Se GitHub-issue #1 for den fulde plan og `CLAUDE.md` for
 projektets udviklingskonventioner.
 
