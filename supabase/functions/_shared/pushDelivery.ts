@@ -14,7 +14,9 @@
 // to gange. Prisen er, at et push, der fejler hos push-tjenesten, ikke
 // forsøges igen; hellere en notifikation, der mangler, end den samme to gange.
 //
-// Næste type (#222, ventelisten) skal kun bygge sin payload og kalde herind.
+// Næste type (#222, ventelisten) bygger sin payload, udvider kind-constrainten
+// på notification_preferences og push_deliveries i sin egen migration og kalder
+// herind.
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.112.3'
 import type { PushPayload } from './pushPayloads.ts'
@@ -38,19 +40,6 @@ export interface DeliveryResult {
 
 export function emptyDeliveryResult(): DeliveryResult {
   return { sent: 0, failed: 0, removed: 0, skipped: 0 }
-}
-
-export function addDeliveryResults(
-  ...results: readonly DeliveryResult[]
-): DeliveryResult {
-  const total = emptyDeliveryResult()
-  for (const result of results) {
-    total.sent += result.sent
-    total.failed += result.failed
-    total.removed += result.removed
-    total.skipped += result.skipped
-  }
-  return total
 }
 
 export async function deliverPush({

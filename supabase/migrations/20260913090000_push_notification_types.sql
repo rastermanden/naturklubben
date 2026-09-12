@@ -1,14 +1,18 @@
 -- Push-notifikationer ud over chatten (#216): ny begivenhed i kalenderen,
--- påmindelse dagen før en begivenhed, man er tilmeldt, og en ny indstilling
--- til en badge -- hver med sit eget til/fra på profilen.
+-- påmindelse dagen før en begivenhed, man er tilmeldt, og -- for admins -- en
+-- ny indstilling til en badge, der skal godkendes. Hver med sit eget til/fra
+-- på profilen. Den indstillede får ingen besked: en afvist indstilling må ikke
+-- være synlig for modtageren (se badges-migrationen).
 --
 -- Tre ting lægges til:
 --
 --   1. notification_preferences: medlemmets valg pr. type. Skrives kun gennem
 --      set_notification_preference, så en klient aldrig kan sætte et valg for
---      nogen anden. Ingen række betyder "ja tak" -- de tre typer er slået til
---      for alle, også dem der var medlem før denne migration, præcis som
---      feature_notifications_enabled har default true.
+--      nogen anden. Ingen række betyder "ja tak" -- typerne er slået til for
+--      alle, også dem der var medlem før denne migration, præcis som
+--      feature_notifications_enabled har default true. badge_nomination_review
+--      sendes kun til admins; et almindeligt medlem kan gemme valget, men får
+--      alligevel aldrig den type.
 --   2. push_deliveries: en holdbar log over, hvem der har fået hvilken
 --      notifikation om hvad. claim_push_deliveries tager modtagerne atomisk
 --      *før* der sendes, så to samtidige kald -- eller en planlagt kørsel, der
@@ -24,7 +28,9 @@
 create table public.notification_preferences (
   user_id uuid not null references public.profiles (id) on delete cascade,
   kind text not null
-    check (kind in ('event_created', 'event_reminder', 'badge_nomination')),
+    check (
+      kind in ('event_created', 'event_reminder', 'badge_nomination_review')
+    ),
   enabled boolean not null,
   updated_at timestamptz not null default now(),
   primary key (user_id, kind)
@@ -63,7 +69,9 @@ begin
     raise exception 'Not authenticated' using errcode = '42501';
   end if;
   if p_kind is null
-    or p_kind not in ('event_created', 'event_reminder', 'badge_nomination')
+    or p_kind not in (
+      'event_created', 'event_reminder', 'badge_nomination_review'
+    )
   then
     raise exception 'Unknown notification kind' using errcode = '22023';
   end if;
@@ -93,11 +101,15 @@ grant execute on function public.set_notification_preference(text, boolean)
 -- uuid -- begivenheden, indstillingen -- så en planlagt kørsel, der finder den
 -- samme begivenhed igen næste time, ikke kan sende igen.
 --
--- kind er med vilje ikke låst til de tre typer ovenfor: næste type (#222,
--- ventelisten) skal kunne bruge samme log uden at rive constrainten op.
+-- kind er låst til de samme typer som notification_preferences, så en
+-- stavefejl i et deliverPush-kald fejler højt i stedet for stille at starte
+-- en ny, ufiltreret logserie. Næste type (#222, ventelisten) udvider begge
+-- constraints i sin egen migration.
 create table public.push_deliveries (
   kind text not null
-    check (char_length(kind) between 1 and 64 and kind ~ '^[a-z_]+$'),
+    check (
+      kind in ('event_created', 'event_reminder', 'badge_nomination_review')
+    ),
   subject_id uuid not null,
   user_id uuid not null references public.profiles (id) on delete cascade,
   sent_at timestamptz not null default now(),
@@ -408,7 +420,7 @@ insert into public.feature_announcements (slug, title, body, path)
 values (
   'push-kalender-og-maerker',
   'Få besked om nye ture og badges',
-  'Appen kan nu sende dig en notifikation, når der kommer en ny begivenhed i kalenderen, dagen før en tur du er tilmeldt, og når du bliver indstillet til en badge. Vælg selv hvilke på din profil under "Notifikationer".',
+  'Appen kan nu sende dig en notifikation, når der kommer en ny begivenhed i kalenderen, og dagen før en tur du er tilmeldt. Vælg selv hvilke på din profil under "Notifikationer".',
   'profil'
 )
 on conflict (slug) do nothing;

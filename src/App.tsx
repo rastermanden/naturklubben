@@ -1,10 +1,10 @@
 import { lazy, Suspense, type ReactNode } from 'react'
-import { Route, Routes, useLocation } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import HeroPage from './pages/HeroPage'
 import { AdminRoute } from './features/admin/AdminRoute'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
 import { Layout } from './components/Layout'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import { routeMetadata, type AppRoutePath } from './routeMetadata'
 
 const AccountDeletedPage = lazy(() => import('./pages/AccountDeletedPage'))
@@ -46,20 +46,6 @@ function RouteLoadingFallback() {
 
 function loadRoute(element: ReactNode) {
   return <Suspense fallback={<RouteLoadingFallback />}>{element}</Suspense>
-}
-
-function RouteErrorBoundary({ children }: { children: ReactNode }) {
-  const location = useLocation()
-
-  return (
-    <ErrorBoundary
-      key={location.key}
-      variant="route"
-      reportSource="react-route"
-    >
-      {children}
-    </ErrorBoundary>
-  )
 }
 
 const routeElements: Record<AppRoutePath, ReactNode> = {

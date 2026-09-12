@@ -7,10 +7,16 @@ const supabaseMocks = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(),
 }))
+const adminMock = vi.hoisted(() => ({ isAdmin: false }))
 
 vi.mock('../../lib/supabaseClient', () => ({
   supabase: supabaseMocks,
 }))
+vi.mock('../admin/useIsAdmin', () => ({
+  useIsAdmin: () => ({ isAdmin: adminMock.isAdmin, loading: false }),
+}))
+
+const REVIEW_LABEL = 'Når et medlem indstilles til en badge, der skal godkendes'
 
 function mockPreferenceRows(rows: { kind: string; enabled: boolean }[]) {
   supabaseMocks.from.mockImplementation(() => ({
@@ -32,6 +38,7 @@ function renderPreferences() {
 }
 
 beforeEach(() => {
+  adminMock.isAdmin = false
   supabaseMocks.rpc.mockResolvedValue({ data: null, error: null })
 })
 
@@ -41,7 +48,7 @@ afterEach(() => {
 })
 
 describe('NotificationTypePreferences', () => {
-  it('viser de tre typer slået til, når medlemmet ikke har valgt noget', async () => {
+  it('viser kalendertyperne slået til, når medlemmet ikke har valgt noget', async () => {
     mockPreferenceRows([])
     renderPreferences()
 
@@ -56,23 +63,34 @@ describe('NotificationTypePreferences', () => {
         ) as HTMLInputElement
       ).checked,
     ).toBe(true)
-    expect(
-      (
-        screen.getByLabelText(
-          'Når jeg bliver indstillet til en badge',
-        ) as HTMLInputElement
-      ).checked,
-    ).toBe(true)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+  })
+
+  it('viser ikke admin-valget for et almindeligt medlem', async () => {
+    mockPreferenceRows([])
+    renderPreferences()
+
+    await screen.findByLabelText('Dagen før en begivenhed, jeg er tilmeldt')
+    expect(screen.queryByLabelText(REVIEW_LABEL)).toBeNull()
+  })
+
+  it('viser admin-valget for en admin, slået til som standard', async () => {
+    adminMock.isAdmin = true
+    mockPreferenceRows([])
+    renderPreferences()
+
+    const review = await screen.findByLabelText(REVIEW_LABEL)
+    expect((review as HTMLInputElement).checked).toBe(true)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
   })
 
   it('viser et gemt fravalg', async () => {
-    mockPreferenceRows([{ kind: 'badge_nomination', enabled: false }])
+    adminMock.isAdmin = true
+    mockPreferenceRows([{ kind: 'badge_nomination_review', enabled: false }])
     renderPreferences()
 
-    const nomination = await screen.findByLabelText(
-      'Når jeg bliver indstillet til en badge',
-    )
-    expect((nomination as HTMLInputElement).checked).toBe(false)
+    const review = await screen.findByLabelText(REVIEW_LABEL)
+    expect((review as HTMLInputElement).checked).toBe(false)
     expect(
       (
         screen.getByLabelText(
@@ -112,7 +130,9 @@ describe('NotificationTypePreferences', () => {
     renderPreferences()
 
     fireEvent.click(
-      await screen.findByLabelText('Når jeg bliver indstillet til en badge'),
+      await screen.findByLabelText(
+        'Når der kommer en ny begivenhed i kalenderen',
+      ),
     )
 
     expect(await screen.findByRole('alert')).toHaveProperty(

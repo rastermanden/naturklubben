@@ -16,7 +16,7 @@ export interface PushSubscriptionRow {
  * De medlemmer, der både vil have typen og har mindst én enhed at sende til.
  *
  * Et medlem uden en gemt præference behandles som "ja tak": tabellen har
- * ingen række, før man selv har rørt valget, og de tre typer er slået til
+ * ingen række, før man selv har rørt valget, og typerne er slået til
  * for alle fra start. Medlemmer uden abonnement udelades *før* claim'en i
  * leveringsloggen -- ellers ville en, der slår notifikationer til om
  * eftermiddagen, stå som "har fået" en påmindelse, der aldrig blev sendt.

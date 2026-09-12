@@ -1,5 +1,5 @@
 // Teksterne i push-notifikationerne ud over chatten (#216): ny begivenhed,
-// påmindelse dagen før og en ny indstilling til en badge.
+// påmindelse dagen før og en ny indstilling til en badge, der skal godkendes.
 //
 // Ren logik uden Deno- eller npm-afhængigheder, så den kan testes med
 // `deno test` på linje med de øvrige hjælpere i _shared/. Payloaden er den
@@ -10,7 +10,7 @@
 export const NOTIFICATION_KINDS = [
   'event_created',
   'event_reminder',
-  'badge_nomination',
+  'badge_nomination_review',
 ] as const
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
@@ -155,9 +155,8 @@ function displayName(name: string | null | undefined) {
 
 /**
  * Admins får at vide, hvem der indstillede hvem -- de skal tage stilling. Den
- * indstillede får kun at vide, at nogen har indstillet dem: hvem det var,
- * afsløres først, når badgen er tildelt (se BadgeShowcase), så en afvist
- * indstilling ikke hænger på nogen.
+ * indstillede får ingen besked: de hører først om det, når badgen er tildelt
+ * (se BadgeShowcase), så en afvist indstilling ikke hænger på nogen.
  */
 export function badgeNominationAdminPayload(
   nomination: BadgeNominationSummary,
@@ -168,17 +167,5 @@ export function badgeNominationAdminPayload(
     body: `${displayName(nomination.nominatorName)} har indstillet ${displayName(nomination.nomineeName)} til ${badgeName}.`,
     tag: 'naturklubben-badge-nomination',
     path: 'admin?sektion=badges',
-  }
-}
-
-export function badgeNominationNomineePayload(
-  nomination: BadgeNominationSummary,
-): PushPayload {
-  const badgeName = nomination.badgeName?.trim() || 'en badge'
-  return {
-    title: 'Du er indstillet til en badge',
-    body: `Et medlem har indstillet dig til ${badgeName}. Administratorerne kigger på det.`,
-    tag: `naturklubben-badge-nominee-${nomination.id}`,
-    path: 'profil',
   }
 }
