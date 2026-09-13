@@ -840,7 +840,7 @@ Push-infrastrukturen fra chatten (`push_subscriptions`, VAPID-nøglerne, service
 | Type                      | Hvem                                | Udløses af                                        | Åbner                   |
 | ------------------------- | ----------------------------------- | ------------------------------------------------- | ----------------------- |
 | `event_created`           | Alle andre medlemmer end opretteren | Opretterens klient kalder `calendar-push`         | `/kalender/<id>`        |
-| `event_reminder`          | De tilmeldte                        | pg_cron hvert kvarter, fra kl. 17 dagen før       | `/kalender/<id>`        |
+| `event_reminder`          | De tilmeldte (`attending`)          | pg_cron hvert kvarter, fra kl. 17 dagen før       | `/kalender/<id>`        |
 | `badge_nomination_review` | Admins                              | Indstillerens klient kalder `badge-notifications` | `/admin?sektion=badges` |
 
 Den indstillede får ingen besked om en ny indstilling: badge-modellen holder
@@ -899,8 +899,9 @@ ejer kun HTTP-kaldene. Her:
 2. For hver begivenhed i vinduet tager kørslen en række i `event_reminders`
    (`sending`, forsøg +1) og POSTer `{ kind, eventId, token }` til `calendar-push` med
    `pg_net`.
-3. Functionen bekræfter tokenet med `claim_event_reminder`, finder de tilmeldte, sender
-   gennem `deliverPush` og melder tilbage med `complete_event_reminder`.
+3. Functionen bekræfter tokenet med `claim_event_reminder`, finder de tilmeldte (kun
+   `status = 'attending'` -- hverken afbud eller ventelisten, #222), sender gennem
+   `deliverPush` og melder tilbage med `complete_event_reminder`.
 4. Efter en vellykket kørsel kigges der forbi igen hver time, så en, der først tilmelder
    sig om aftenen, også får sin påmindelse -- loggen holder de andre fri. Fejl og kørsler,
    der gik i stå, forsøges igen efter et kvarter; vinduet begrænser antallet af forsøg.
