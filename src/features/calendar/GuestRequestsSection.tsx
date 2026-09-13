@@ -1,10 +1,7 @@
 import { useState } from 'react'
 import { toFriendlyGuestDecisionError } from './guestRequestErrors'
-import {
-  useEventGuestRequests,
-  type EventGuestRequest,
-  type GuestNotificationDelivery,
-} from './useEventGuests'
+import { guestReplyMailto, type GuestReplyEvent } from './guestReplyMailto'
+import { useEventGuestRequests, type EventGuestRequest } from './useEventGuests'
 
 const requestDateFormatter = new Intl.DateTimeFormat('da-DK', {
   day: 'numeric',
@@ -16,72 +13,56 @@ interface GuestRequestsSectionProps {
   isPublic: boolean
   /** Kun arrangøren og admins kan læse ansøgningerne (RLS). */
   canManage: boolean
+  /** Titel, sted og tidspunkt til "Skriv til gæsten"-kladden (#239). */
+  event: GuestReplyEvent
 }
 
-function deliveryProblem(delivery: GuestNotificationDelivery | null) {
-  if (delivery?.status !== 'failed') return null
-  return delivery.error ?? 'Mailen kunne ikke sendes.'
-}
-
-function DeliveryStatus({
+/**
+ * "Skriv til gæsten": åbner en mailto: med emne og en klar dansk kladde,
+ * godkendt eller afvist, med begivenhedens titel og tidspunkt indsat.
+ * Arrangøren retter til og sender selv fra sin egen mailklient (#239) --
+ * der er ingen automatisk levering eller leveringsstatus at vise.
+ */
+function WriteToGuestLink({
   request,
-  onRetry,
-  retrying,
+  event,
 }: {
   request: EventGuestRequest
-  onRetry: () => void
-  retrying: boolean
+  event: GuestReplyEvent
 }) {
-  switch (request.decision_notification_status) {
-    case 'sent':
-      return (
-        <span className="text-xs text-ink-subtle">Svar sendt på e-mail</span>
-      )
-    case 'pending':
-    case 'sending':
-      return (
-        <span role="status" className="text-xs text-ink-subtle">
-          Sender svar på e-mail…
-        </span>
-      )
-    case 'failed':
-      return (
-        <span className="flex flex-wrap items-center gap-2 text-xs">
-          <span role="alert" className="text-danger">
-            {request.decision_notification_error ?? 'Mailen kunne ikke sendes.'}
-          </span>
-          <button
-            type="button"
-            onClick={onRetry}
-            disabled={retrying}
-            className="underline disabled:opacity-60"
-          >
-            {retrying ? 'Sender…' : 'Send igen'}
-          </button>
-        </span>
-      )
-    default:
-      return null
+  if (request.status !== 'approved' && request.status !== 'rejected') {
+    return null
   }
+  const href = guestReplyMailto({
+    status: request.status,
+    fullName: request.full_name,
+    email: request.email,
+    event,
+  })
+  return (
+    <a href={href} className="text-xs underline">
+      Skriv til gæsten
+    </a>
+  )
 }
 
 /**
  * Arrangørens overblik over gæsteansøgninger på en åben begivenhed (#224):
- * ventende ansøgninger med godkend/afvis, godkendte gæster og status på
- * svaret til hver ansøger. Ansøgningerne følger ikke med, når arrangøren
- * lukker begivenheden igen, så sektionen vises også på en privat begivenhed,
- * så længe der er ansøgninger på den. Kun arrangør/admin får data tilbage.
+ * ventende ansøgninger med godkend/afvis, godkendte gæster og afviste
+ * ansøgere, hver med en "Skriv til gæsten"-knap. Ansøgningerne følger ikke
+ * med, når arrangøren lukker begivenheden igen, så sektionen vises også på
+ * en privat begivenhed, så længe der er ansøgninger på den. Kun
+ * arrangør/admin får data tilbage.
  */
 export function GuestRequestsSection({
   eventId,
   isPublic,
   canManage,
+  event,
 }: GuestRequestsSectionProps) {
-  const { requestsQuery, approveRequest, rejectRequest, retryNotification } =
+  const { requestsQuery, approveRequest, rejectRequest } =
     useEventGuestRequests(eventId, canManage)
   const [decisionError, setDecisionError] = useState<string | null>(null)
-  const [lastDelivery, setLastDelivery] =
-    useState<GuestNotificationDelivery | null>(null)
 
   if (!canManage) return null
 
@@ -95,23 +76,10 @@ export function GuestRequestsSection({
 
   function decide(request: EventGuestRequest, decision: 'approve' | 'reject') {
     setDecisionError(null)
-    setLastDelivery(null)
     const mutation = decision === 'approve' ? approveRequest : rejectRequest
     mutation
       .mutateAsync(request.id)
-      .then((delivery) => setLastDelivery(delivery))
       .catch((error) => setDecisionError(toFriendlyGuestDecisionError(error)))
-  }
-
-  function retry(request: EventGuestRequest) {
-    setDecisionError(null)
-    setLastDelivery(null)
-    retryNotification
-      .mutateAsync(request.id)
-      .then((delivery) => setLastDelivery(delivery))
-      .catch(() =>
-        setDecisionError('Mailen kunne ikke sendes. Prøv igen om lidt.'),
-      )
   }
 
   function describe(request: EventGuestRequest) {
@@ -159,18 +127,6 @@ export function GuestRequestsSection({
       {decisionError && (
         <p role="alert" className="mt-3 text-sm text-danger">
           {decisionError}
-        </p>
-      )}
-
-      {deliveryProblem(lastDelivery) && (
-        <p role="alert" className="mt-3 text-sm text-danger">
-          {deliveryProblem(lastDelivery)}
-        </p>
-      )}
-
-      {lastDelivery?.notice && (
-        <p role="status" className="mt-3 text-sm text-ink-subtle">
-          {lastDelivery.notice}
         </p>
       )}
 
@@ -244,14 +200,7 @@ export function GuestRequestsSection({
                 className="flex flex-wrap items-center justify-between gap-2 text-sm text-ink"
               >
                 <span>{describe(request)}</span>
-                <DeliveryStatus
-                  request={request}
-                  retrying={
-                    retryNotification.isPending &&
-                    retryNotification.variables === request.id
-                  }
-                  onRetry={() => retry(request)}
-                />
+                <WriteToGuestLink request={request} event={event} />
               </li>
             ))}
           </ul>
@@ -268,14 +217,7 @@ export function GuestRequestsSection({
                 className="flex flex-wrap items-center justify-between gap-2 text-sm text-ink-muted"
               >
                 <span>{describe(request)}</span>
-                <DeliveryStatus
-                  request={request}
-                  retrying={
-                    retryNotification.isPending &&
-                    retryNotification.variables === request.id
-                  }
-                  onRetry={() => retry(request)}
-                />
+                <WriteToGuestLink request={request} event={event} />
               </li>
             ))}
           </ul>

@@ -1,7 +1,7 @@
 -- record_tournament_match_result skal afvise kampe, der ikke kan afgøres:
 -- en kamp, der allerede har et resultat, en bye (som afgøres automatisk), og
 -- en kamp, hvor den ene plads stadig er tom. Se
--- 20260913160000_tournament_record_guards.sql for hvorfor -- kort fortalt
+-- 20260913155500_tournament_record_guards.sql for hvorfor -- kort fortalt
 -- kunne man før "vinde" over en tom plads, og en dobbelt-indtastning fejlede
 -- på en unique-nøgle med en besked, brugeren ikke kunne bruge til noget.
 begin;

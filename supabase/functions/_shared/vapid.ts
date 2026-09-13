@@ -10,7 +10,7 @@
 // Nummer 2 findes, fordi nummer 1 kræver, at et menneske opretter et repo-secret
 // i GitHubs dashboard -- og projektets kerneprincip er, at alt ud over
 // engangsopsætningen i #2/#3 skal kunne ske ved at skrive kode og pushe (se
-// CLAUDE.md). Uden nøgler svarede functionen 503, og der var ingen vej frem fra
+// AGENTS.md). Uden nøgler svarede functionen 503, og der var ingen vej frem fra
 // selve appen. Nu konfigurerer serveren sig selv første gang, nogen slår
 // notifikationer til.
 //

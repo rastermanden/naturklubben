@@ -9,9 +9,12 @@ import { toGuestRequestError } from './guestRequestErrors'
 // - `event_guest_requests`: kun arrangøren og admins ser selve ansøgningerne
 //   (RLS); afgørelser går gennem security definer-RPC'er.
 // - `submit-event-guest-request`: den offentlige formular uden login.
+//
+// Svaret til ansøgeren sendes ikke længere automatisk (#239): arrangøren
+// skriver selv via en mailto:-knap i `GuestRequestsSection`, se
+// `guestReplyMailto.ts`.
 
 export type GuestRequestStatus = 'pending' | 'approved' | 'rejected'
-export type GuestNotificationStatus = 'pending' | 'sending' | 'sent' | 'failed'
 
 export interface EventGuestRequest {
   id: string
@@ -22,8 +25,6 @@ export interface EventGuestRequest {
   party_size: number
   status: GuestRequestStatus
   created_at: string
-  decision_notification_status: GuestNotificationStatus | null
-  decision_notification_error: string | null
 }
 
 export interface GuestRequestInput {
@@ -34,17 +35,9 @@ export interface GuestRequestInput {
   partySize: number
 }
 
-export interface GuestNotificationDelivery {
-  status: GuestNotificationStatus
-  skipped?: boolean
-  error?: string
-  notice?: string
-}
-
 const guestRequestFields =
-  'id, event_id, full_name, email, message, party_size, status, created_at, decision_notification_status, decision_notification_error'
+  'id, event_id, full_name, email, message, party_size, status, created_at'
 const submissionFunction = 'submit-event-guest-request'
-const notificationFunction = 'event-guest-notifications'
 
 export function guestCountQueryKey(eventId: string) {
   return ['event-guest-count', eventId] as const
@@ -82,23 +75,10 @@ async function fetchGuestRequests(
   return data
 }
 
-async function deliverDecision(
-  requestId: string,
-): Promise<GuestNotificationDelivery> {
-  const { data, error } =
-    await supabase.functions.invoke<GuestNotificationDelivery>(
-      notificationFunction,
-      { body: { requestId } },
-    )
-  if (error) throw error
-  if (!data?.status) throw new Error('Serveren svarede uden leveringsstatus.')
-  return data
-}
-
 async function decideRequest(
   requestId: string,
   decision: 'approve' | 'reject',
-): Promise<GuestNotificationDelivery> {
+): Promise<void> {
   const { error } = await supabase.rpc(
     decision === 'approve'
       ? 'approve_event_guest_request'
@@ -106,23 +86,6 @@ async function decideRequest(
     { request_id: requestId },
   )
   if (error) throw error
-
-  // Databasen har allerede køet mailen via pg_net; kaldet her viser blot
-  // resultatet med det samme. Claim-RPC'en gør de to kald idempotente, og
-  // når kaldet herfra ikke når frem, leverer pg_net/pg_cron stadig svaret.
-  try {
-    return await deliverDecision(requestId)
-  } catch (notificationError) {
-    console.error(
-      'Afgørelsen blev gemt, men leveringsstatus kunne ikke hentes',
-      notificationError,
-    )
-    return {
-      status: 'pending',
-      notice:
-        'Afgørelsen er gemt. Svaret sendes automatisk – se status ved gæsten.',
-    }
-  }
 }
 
 /** Arrangørens/adminens liste over ansøgninger på én begivenhed. */
@@ -143,14 +106,6 @@ export function useEventGuestRequests(eventId: string, enabled: boolean) {
     queryKey,
     enabled,
     queryFn: () => fetchGuestRequests(eventId),
-    refetchInterval: (query) =>
-      query.state.data?.some(
-        (request) =>
-          request.decision_notification_status === 'pending' ||
-          request.decision_notification_status === 'sending',
-      )
-        ? 3000
-        : false,
   })
 
   const approveRequest = useMutation({
@@ -163,12 +118,7 @@ export function useEventGuestRequests(eventId: string, enabled: boolean) {
     onSettled: invalidate,
   })
 
-  const retryNotification = useMutation({
-    mutationFn: (requestId: string) => deliverDecision(requestId),
-    onSettled: invalidate,
-  })
-
-  return { requestsQuery, approveRequest, rejectRequest, retryNotification }
+  return { requestsQuery, approveRequest, rejectRequest }
 }
 
 /** Den offentlige formular: sender ansøgningen gennem Edge Functionen. */

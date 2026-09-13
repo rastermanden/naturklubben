@@ -11,7 +11,10 @@ import {
   type CalendarEvent,
   type EventInput,
 } from '../features/calendar/useEvents'
-import { announcePromotion } from '../features/calendar/announceWaitlist'
+import {
+  announcePromotion,
+  notifyPromotedMembers,
+} from '../features/calendar/announceWaitlist'
 import { useAuth } from '../features/auth/useAuth'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
@@ -163,6 +166,7 @@ function EventDetails({
           eventId={event.id}
           isPublic={event.is_public}
           canManage={canEdit}
+          event={event}
         />
 
         <EventTasksSection eventId={event.id} userId={userId} />
@@ -317,6 +321,7 @@ function CalendarPage() {
             promoted,
             profilesQuery.data,
           )
+          void notifyPromotedMembers(editing.id, promoted)
         }
       })
       .catch(() =>
