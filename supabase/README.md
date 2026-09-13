@@ -672,17 +672,10 @@ en "Skriv til gæsten"-knap med det samme.
 
 ### Svaret til ansøgeren (#239)
 
-Gæsterne er ikke i appen og kan ikke få svaret som Web Push. Frem til #239 sendte en
-Edge Function (`event-guest-notifications`) svaret som e-mail gennem Resends HTTP-API;
-kaptajnen ville ikke have den afhængighed med ("tror ikke jeg vil have denne feature
-med resend"), så den er fjernet igen -- functionen, de delte mailhjælpere
-(`_shared/email.ts`, `_shared/guestDecisionEmail.ts`) og deres tests, migrationens
-`pg_net`-kald, `claim_/complete_event_guest_notification`,
-`retry-event-guest-notifications`-jobbet og delivery-kolonnerne på
-`event_guest_requests` er alle væk (se migrationen
-`20260914090000_remove_guest_email_notifications.sql`).
+Gæsterne er ikke i appen og kan ikke få svaret som Web Push. En tidligere
+automatisk mail-udsendelse blev fjernet i #239.
 
-I stedet viser `GuestRequestsSection` ansøgerens e-mail og en "Skriv til
+`GuestRequestsSection` viser ansøgerens e-mail og en "Skriv til
 gæsten"-knap. Den åbner et `mailto:`-link med emne og en klar dansk kladde --
 godkendt eller afvist, med begivenhedens titel og tidspunkt indsat -- som
 arrangøren kan rette til og sende fra sin egen mailklient. Der er ingen
