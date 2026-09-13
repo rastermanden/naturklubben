@@ -186,15 +186,18 @@ create policy "Members can delete tournament games"
 
 -- Platformen giver ikke længere API-rollerne adgang til nye tabeller via
 -- default-privilegier (se 20260911120000_explicit_api_grants.sql) -- hver ny
--- tabel skal skrive sine egne grants.
+-- tabel skal skrive sine egne grants. anon får tabelrettighederne på linje
+-- med fx events/activities, selvom ingen policy peger på anon: uden grant
+-- fejler et anonymt kald hårdt ("permission denied"), i stedet for at RLS'en
+-- stille filtrerer alt væk (0 rækker), som resten af appen forventer.
 grant select, insert, update, delete
-  on table public.tournaments to authenticated;
+  on table public.tournaments to anon, authenticated, service_role;
 grant select, insert, update, delete
-  on table public.tournament_participants to authenticated;
+  on table public.tournament_participants to anon, authenticated, service_role;
 grant select, insert, update, delete
-  on table public.tournament_matches to authenticated;
+  on table public.tournament_matches to anon, authenticated, service_role;
 grant select, insert, update, delete
-  on table public.tournament_games to authenticated;
+  on table public.tournament_games to anon, authenticated, service_role;
 
 insert into public.feature_announcements (slug, title, body, path)
 values (
