@@ -60,7 +60,7 @@ describe('PollCard', () => {
 
     expect(
       screen
-        .getByRole('button', { name: /Fjern din stemme på Skoven/ })
+        .getByRole('button', { name: /Du har stemt på Skoven/ })
         .getAttribute('aria-pressed'),
     ).toBe('true')
     expect(

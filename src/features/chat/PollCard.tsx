@@ -32,7 +32,7 @@ export function PollCard({
               onClick={() => onVote(option.id)}
               disabled={poll.closed || isVoting}
               aria-pressed={option.votedByMe}
-              aria-label={`${option.votedByMe ? 'Fjern din stemme på' : 'Stem på'} ${option.label}: ${option.count} ${option.count === 1 ? 'stemme' : 'stemmer'}, ${option.percentage} procent`}
+              aria-label={`${option.votedByMe ? 'Du har stemt på' : 'Stem på'} ${option.label}: ${option.count} ${option.count === 1 ? 'stemme' : 'stemmer'}, ${option.percentage} procent`}
               className={`relative flex min-h-11 w-full items-center overflow-hidden rounded-lg border bg-surface/60 px-3 py-2 text-left disabled:opacity-75 ${
                 option.votedByMe
                   ? 'border-2 border-accent font-semibold'
