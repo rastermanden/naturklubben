@@ -16,16 +16,38 @@ interface RoundPlan {
  * `knownId` er sat, hvis identiteten allerede er kendt (fx en bye-vinder) --
  * ellers afhænger den af en kamp, der endnu ikke er spillet. `proven`
  * fortæller, om deltageren allerede har vundet en rigtig kamp for at nå
- * hertil: kun det gør dem kvalificeret til at få endnu en bye, se
- * `buildRound` nedenfor. `sourceRound`/`sourceIndex` peger på den kamp, der
- * frembragte denne deltager -- bruges til at sætte dens `nextMatch*`-felter,
- * når vi finder ud af, hvor deltageren skal hen.
+ * hertil: kun det gør dem kvalificeret til at få endnu en bye. `byes` er,
+ * hvor mange byes den, der ender på pladsen, i værste fald allerede har
+ * fået -- en rigtig kamps vinder arver det højeste tal fra de to, der
+ * spiller om pladsen, for vi ved jo ikke, hvem der vinder.
+ * `sourceRound`/`sourceIndex` peger på den kamp, der frembragte denne
+ * deltager -- bruges til at sætte dens `nextMatch*`-felter, når vi finder
+ * ud af, hvor deltageren skal hen.
  */
 interface EntrantToken {
   knownId: string | null
   proven: boolean
+  byes: number
   sourceRound: number
   sourceIndex: number
+}
+
+/**
+ * Hvem skal have denne rundes bye? Kun en deltager, der allerede har vundet
+ * en rigtig kamp (`proven`) -- ellers kunne nogen nå finalen uden at have
+ * spillet. Blandt dem vælges den med færrest byes, så de ikke hober sig op
+ * hos den samme: med 11 deltagere er der 2 byes, og uden dette hensyn kunne
+ * begge to lande på samme deltager, mens 10 andre fik ingen. Findes ingen
+ * bevist deltager (bør ikke kunne ske, se planRounds), falder valget tilbage
+ * til den første fremfor at fejle.
+ */
+function pickByeIndex(entrants: EntrantToken[]): number {
+  let best = -1
+  for (let i = 0; i < entrants.length; i++) {
+    if (!entrants[i].proven) continue
+    if (best === -1 || entrants[i].byes < entrants[best].byes) best = i
+  }
+  return best === -1 ? 0 : best
 }
 
 function defaultShuffle<T>(items: T[]): T[] {
@@ -73,11 +95,11 @@ function planRounds(participantCount: number): RoundPlan[] {
  * (er entrants(r) ulige), men den skal ALDRIG gives til en deltager, der
  * ikke selv har vundet en rigtig kamp endnu -- ellers ville den samme
  * deltager kunne gå direkte til finalen uden at spille en eneste kamp.
- * `buildRound` foretrækker derfor altid en deltager, der allerede er
- * "bevist" (proven), til den næste bye, og tvinger en endnu ubevist
- * bye-vinder ind i en rigtig kamp i stedet. Kan en bye-plads' eneste
- * fødekamp ikke afgøres her (den afhænger af en kamp, der endnu ikke er
- * spillet), oprettes den som en tom kamp med `bye: true` og afgøres
+ * `pickByeIndex` vælger derfor altid en deltager, der allerede er "bevist"
+ * (proven) og har fået færrest byes, og tvinger en endnu ubevist bye-vinder
+ * ind i en rigtig kamp i stedet. Kan en bye-plads' eneste fødekamp ikke
+ * afgøres her (den afhænger af en kamp, der endnu ikke er spillet),
+ * oprettes den som en tom kamp med `bye: true` og afgøres
  * automatisk, når dens ene plads bliver udfyldt -- se den tilsvarende
  * kaskade i record_tournament_match_result
  * (20260913140000_tournament_bracket_byes.sql).
@@ -147,6 +169,7 @@ export function generateSingleEliminationBracket(
     entrants.push({
       knownId: byeId,
       proven: false,
+      byes: 1,
       sourceRound: 1,
       sourceIndex: matchIndex,
     })
@@ -168,6 +191,7 @@ export function generateSingleEliminationBracket(
     entrants.push({
       knownId: null,
       proven: true,
+      byes: 0,
       sourceRound: 1,
       sourceIndex: matchIndex,
     })
@@ -178,16 +202,10 @@ export function generateSingleEliminationBracket(
   for (let round = 2; round <= totalRounds; round++) {
     const plan = rounds[round - 1]
 
-    // Foretrækker en deltager, der allerede har vundet en rigtig kamp, til
-    // denne rundes bye -- kun der er ingen risiko for, at nogen når finalen
-    // uden nogensinde at have spillet. Findes der ingen (bør ikke kunne ske
-    // i praksis, se planRounds), falder den tilbage til den første deltager
-    // fremfor at fejle.
     let byeToken: EntrantToken | null = null
     let paired = entrants
     if (plan.hasBye) {
-      const index = entrants.findIndex((entrant) => entrant.proven)
-      const chosenIndex = index === -1 ? 0 : index
+      const chosenIndex = pickByeIndex(entrants)
       byeToken = entrants[chosenIndex]
       paired = entrants.filter((_, i) => i !== chosenIndex)
     }
@@ -215,6 +233,9 @@ export function generateSingleEliminationBracket(
       nextEntrants.push({
         knownId: null,
         proven: true,
+        // Vi ved ikke, hvem af de to der vinder -- regn med den, der
+        // allerede har fået flest byes.
+        byes: Math.max(a.byes, b.byes),
         sourceRound: round,
         sourceIndex: index,
       })
@@ -239,6 +260,7 @@ export function generateSingleEliminationBracket(
       nextEntrants.push({
         knownId: resolved,
         proven: byeToken.proven,
+        byes: byeToken.byes + 1,
         sourceRound: round,
         sourceIndex: index,
       })

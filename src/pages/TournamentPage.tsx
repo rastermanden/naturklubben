@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMembers } from '../features/members/useMembers'
 import { BracketView } from '../features/tournament/BracketView'
+import { messageForMember } from '../features/tournament/errors'
 import { MatchCard } from '../features/tournament/MatchCard'
 import {
   computeStandings,
@@ -112,8 +113,10 @@ function TournamentDetail({
     recordMatchResult.mutate(
       { matchId, gameWinnerIds },
       {
-        onError: () =>
-          setResultError('Resultatet kunne ikke gemmes. Prøv igen.'),
+        onError: (error) =>
+          setResultError(
+            messageForMember(error, 'Resultatet kunne ikke gemmes. Prøv igen.'),
+          ),
       },
     )
   }
@@ -121,8 +124,13 @@ function TournamentDetail({
   function handleUndo(matchId: string) {
     setResultError(null)
     undoMatchResult.mutate(matchId, {
-      onError: () =>
-        setResultError('Resultatet kunne ikke fortrydes. Prøv igen.'),
+      onError: (error) =>
+        setResultError(
+          messageForMember(
+            error,
+            'Resultatet kunne ikke fortrydes. Prøv igen.',
+          ),
+        ),
     })
   }
 
