@@ -7,7 +7,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(27);
+select plan(29);
 
 do $$
 begin
@@ -297,6 +297,28 @@ select lives_ok(
   ),
   'en admin kan stemme i admin-rummets afstemning'
 );
+
+select lives_ok(
+  format(
+    $$select public.close_poll('%s'::uuid)$$, current_setting('tests.admin_poll_id')
+  ),
+  'en admin kan lukke admin-rummets afstemning'
+);
+
+-- Et almindeligt medlem kan ikke lukke en admin-rums-afstemning, selv en
+-- allerede lukket -- synligheden skal tjekkes før no-op'en, ikke efter.
+do $$ begin perform tests.login('00000000-0000-0000-0000-00000000000c'); end $$;
+
+select throws_ok(
+  format(
+    $$select public.close_poll('%s'::uuid)$$, current_setting('tests.admin_poll_id')
+  ),
+  '42501',
+  null,
+  'et almindeligt medlem kan ikke lukke en allerede lukket afstemning i admin-rummet'
+);
+
+do $$ begin perform tests.login('00000000-0000-0000-0000-00000000000d'); end $$;
 
 -- En admin kan også lukke en andens afstemning i det fælles rum
 do $$

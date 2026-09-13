@@ -324,6 +324,7 @@ as $$
 declare
   actor_id uuid := auth.uid();
   target_poll public.polls%rowtype;
+  can_read boolean;
 begin
   if actor_id is null then
     raise exception using
@@ -343,8 +344,18 @@ begin
       message = 'poll_close_not_found';
   end if;
 
-  if target_poll.closed_at is not null then
-    return;
+  select exists (
+    select 1
+    from public.messages as message
+    where message.id = target_poll.message_id
+      and (message.room = 'general' or public.is_admin())
+  )
+  into can_read;
+
+  if not can_read then
+    raise exception using
+      errcode = '42501',
+      message = 'poll_close_not_authorized';
   end if;
 
   if target_poll.created_by is distinct from actor_id
@@ -352,6 +363,10 @@ begin
     raise exception using
       errcode = '42501',
       message = 'poll_close_not_authorized';
+  end if;
+
+  if target_poll.closed_at is not null then
+    return;
   end if;
 
   update public.polls

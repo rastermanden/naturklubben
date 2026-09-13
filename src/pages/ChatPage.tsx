@@ -341,6 +341,7 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
     // en tidligere besked stadig er undervejs.
     const command = parseChatCommand(rawContent)
     if (command && command.kind === 'poll') {
+      if (sendMessage.isPending || createPoll.isPending) return
       setDraft('')
       setSendError(null)
       void sendPoll(rawContent, command.question, command.options)
