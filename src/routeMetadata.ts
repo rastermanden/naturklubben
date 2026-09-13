@@ -109,6 +109,11 @@ export const routeMetadata = [
     announcement: '2048 indlæst',
   },
   {
+    path: '/spil/naturquiz',
+    documentTitle: 'Naturquiz | Naturklubben',
+    announcement: 'Naturquiz indlæst',
+  },
+  {
     path: '/aktiviteter/btg-turnering',
     documentTitle: 'BTG turnering | Naturklubben',
     announcement: 'BTG turnering indlæst',

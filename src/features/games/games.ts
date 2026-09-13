@@ -53,6 +53,16 @@ export const games: readonly GameDefinition[] = [
     symbol: '🔢',
     describeScore: (score) => formatDuration(score.duration_seconds),
   },
+  {
+    id: 'naturquiz',
+    title: 'Naturquiz',
+    tagline:
+      'Genkend fuglen, planten eller sporet på billedet -- ti spørgsmål, point for fart og streak.',
+    path: '/spil/naturquiz',
+    symbol: '🌿',
+    describeScore: (score) =>
+      `${score.lines}/10 rigtige · ${formatDuration(score.duration_seconds)}`,
+  },
 ]
 
 export function gameById(id: GameId): GameDefinition {
