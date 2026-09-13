@@ -289,8 +289,8 @@ af databasen:
   afsenderen selv gav pladsen fra sig eller hævede loftet, ellers som neutral tekst --
   pladsen kan være frigivet uden om RPC'en (en slettet konto) og først fyldt af et
   senere svar.
-  Push følger chat-push's mention-regel (se "Mentions og hvor meget der sendes"); der
-  er ingen særskilt push-type for ventelisten.
+  Push følger chat-push's mention-regel (se "Mentions og hvor meget der sendes"); en
+  særskilt push-type for oprykning er opfølgningen #236.
 - `supabase/tests/rls/17_event_waitlist.sql` måler, at loftet håndhæves, at
   tabellen ikke kan skrives uden om RPC'en, at oprykning sker i rækkefølge og kun
   fylder de ledige pladser (også dem, en slettet konto efterlader), og at afbud og
@@ -848,7 +848,7 @@ indstillinger skjult for modtageren, indtil badgen er tildelt (ellers ville en a
 indstilling være synlig), og tildelingen har sin egen push i `badge-notifications`.
 
 `chat-push` er uændret. De nye typer deler én vej, `_shared/pushDelivery.ts`, og næste
-type (#222, ventelisten) føjer sit navn til `NOTIFICATION_KINDS` i `_shared/pushKinds.ts`
+type (#236, oprykning fra ventelisten) føjer sit navn til `NOTIFICATION_KINDS` i `_shared/pushKinds.ts`
 (listen deles med frontendens indstillinger), bygger sin payload
 (`_shared/pushPayloads.ts`), udvider `kind`-constrainten på `notification_preferences` og
 `push_deliveries` i sin egen migration og kalder `deliverPush`.
