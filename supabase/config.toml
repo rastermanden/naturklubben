@@ -38,3 +38,10 @@ verify_jwt = true
 [functions.badge-notifications]
 enabled = true
 verify_jwt = true
+
+# Push ud over chatten (#216). Functionen tjekker selv medlemmets bearer-token
+# (event_created) og kørslens token mod event_reminders (event_reminder), så
+# gateway-JWT'en er slået fra -- som i deploy-functions.yml (--no-verify-jwt).
+[functions.calendar-push]
+enabled = true
+verify_jwt = false
