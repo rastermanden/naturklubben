@@ -172,9 +172,8 @@ grant execute on function public.claim_push_deliveries(text, uuid, uuid[])
 -- ved at læse host-headeren i det request, der opretter ansøgningen; her gør
 -- en trigger det samme, når en begivenhed oprettes eller redigeres fra appen.
 -- Ingen header (pgTAP, psql) giver null -- ikke en fejl -- og cron falder så
--- tilbage til den seneste kendte URL fra en anden begivenhed eller, findes
--- der ingen, fra en ansøgning om prøvemedlemskab. Det er samme host for alle,
--- så også begivenheder, der fandtes før denne migration, får deres påmindelse.
+-- tilbage til den seneste kendte URL fra en anden begivenhed: det er samme
+-- host for alle.
 create function public.push_function_url(function_name text)
 returns text
 language plpgsql
@@ -203,10 +202,29 @@ revoke all on function public.push_function_url(text) from public;
 alter table public.events
   add column notification_function_url text;
 
+-- Begivenhederne fra før denne migration har aldrig set et request. De får
+-- hosten én gang her, fra den seneste ansøgning om prøvemedlemskab, der
+-- huskede den -- samme host, blot en anden function -- så de også får deres
+-- påmindelse fra dag ét. Kører før triggeren nedenfor, som ellers ville
+-- overskrive værdien med null, fordi en migration heller ikke har et request.
+update public.events
+set notification_function_url = (
+  select regexp_replace(
+    application.notification_function_url,
+    '/probation-notifications$',
+    '/calendar-push'
+  )
+  from public.probation_applications as application
+  where application.notification_function_url is not null
+  order by application.created_at desc
+  limit 1
+)
+where notification_function_url is null;
+
 -- Kolonnen sættes af triggeren og kun af den: et medlem har update på
 -- events, men må ikke kunne pege påmindelsen mod en fremmed host. En
--- begivenhed uden URL (oprettet før denne migration eller uden request) får
--- den, næste gang den redigeres fra appen.
+-- begivenhed uden URL (oprettet uden request) får den, næste gang den
+-- redigeres fra appen.
 --
 -- Flyttes begivenheden til en anden dag, glemmes påmindelsen: loggen i
 -- push_deliveries og kørslen i event_reminders (oprettet nedenfor)
@@ -290,19 +308,6 @@ begin
   where event.notification_function_url is not null
   order by event.created_at desc
   limit 1;
-
-  if fallback_url is null then
-    select regexp_replace(
-      application.notification_function_url,
-      '/probation-notifications$',
-      '/calendar-push'
-    )
-    into fallback_url
-    from public.probation_applications as application
-    where application.notification_function_url is not null
-    order by application.created_at desc
-    limit 1;
-  end if;
 
   for reminder in
     select

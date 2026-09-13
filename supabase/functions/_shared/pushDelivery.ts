@@ -19,7 +19,8 @@
 // herind.
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.112.3'
-import type { NotificationKind, PushPayload } from './pushPayloads.ts'
+import type { NotificationKind } from './pushKinds.ts'
+import type { PushPayload } from './pushPayloads.ts'
 import {
   parseClaimedUserIds,
   selectPushRecipients,

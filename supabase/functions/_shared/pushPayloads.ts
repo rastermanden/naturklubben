@@ -6,15 +6,6 @@
 // JSON, service workeren (src/sw.ts) pakker ud: title, body, tag og den sti i
 // appen, et tryk på notifikationen skal åbne.
 
-/** Typerne, et medlem kan slå til og fra -- samme navne som i databasen. */
-export const NOTIFICATION_KINDS = [
-  'event_created',
-  'event_reminder',
-  'badge_nomination_review',
-] as const
-
-export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
-
 export interface PushPayload {
   title: string
   body: string
