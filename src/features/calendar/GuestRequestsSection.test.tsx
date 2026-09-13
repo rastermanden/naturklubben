@@ -171,7 +171,12 @@ describe('GuestRequestsSection', () => {
 
   it('shows a rejected reply mailto with the neutral wording', async () => {
     requests = [
-      { ...APPROVED, id: 'a3', full_name: 'Rejected Person', status: 'rejected' },
+      {
+        ...APPROVED,
+        id: 'a3',
+        full_name: 'Rejected Person',
+        status: 'rejected',
+      },
     ]
     renderSection()
 

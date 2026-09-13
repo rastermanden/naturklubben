@@ -116,8 +116,9 @@ describe('PublicCalendarPage', () => {
       await screen.findByRole('heading', { name: 'Ansøgning modtaget' }),
     ).toBeTruthy()
     expect(
-      screen.getByRole('heading', { name: 'Ansøgning modtaget' }).closest('div')!
-        .textContent,
+      screen
+        .getByRole('heading', { name: 'Ansøgning modtaget' })
+        .closest('div')!.textContent,
     ).toMatch(/du hører fra en arrangør pr\. e-mail/i)
     expect(supabaseMocks.functions.invoke).toHaveBeenCalledWith(
       'submit-event-guest-request',

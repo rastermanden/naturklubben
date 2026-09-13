@@ -87,8 +87,8 @@ export function GuestRequestForm({ event, onClose }: GuestRequestFormProps) {
               Ansøgning modtaget
             </h2>
             <p className="text-ink-muted">
-              Tak! Arrangøren ser på din ansøgning til “{event.title}”. Du
-              hører fra en arrangør pr. e-mail.
+              Tak! Arrangøren ser på din ansøgning til “{event.title}”. Du hører
+              fra en arrangør pr. e-mail.
             </p>
             <div className="flex justify-end">
               <button

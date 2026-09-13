@@ -91,15 +91,15 @@ function DataPolicyPage() {
             Folk uden for klubben kan søge om at deltage i en begivenhed, som
             arrangøren har åbnet for ikke-medlemmer. Navn, e-mail, antal
             personer og en eventuel besked bruges kun til at behandle
-            ansøgningen, og oplysningerne kan kun ses af begivenhedens
-            arrangør og klubbens administratorer. Arrangøren svarer selv fra
-            sin egen mailklient -- der sendes ingen automatisk mail. Andre
-            medlemmer ser kun antallet af godkendte gæster. Alle ansøgninger til
-            en begivenhed -- godkendte, afviste og ubesvarede -- slettes
-            automatisk 30 dage efter, at begivenheden er afholdt. Slettes
-            begivenheden, slettes ansøgningerne med det samme. Spam-beskyttelsen
-            gemmer, som for prøvemedlemskaber, kun HMAC-hashes af e-mail- og
-            netværkssignaler og sletter dem efter 25 timer.
+            ansøgningen, og oplysningerne kan kun ses af begivenhedens arrangør
+            og klubbens administratorer. Arrangøren svarer selv fra sin egen
+            mailklient -- der sendes ingen automatisk mail. Andre medlemmer ser
+            kun antallet af godkendte gæster. Alle ansøgninger til en begivenhed
+            -- godkendte, afviste og ubesvarede -- slettes automatisk 30 dage
+            efter, at begivenheden er afholdt. Slettes begivenheden, slettes
+            ansøgningerne med det samme. Spam-beskyttelsen gemmer, som for
+            prøvemedlemskaber, kun HMAC-hashes af e-mail- og netværkssignaler og
+            sletter dem efter 25 timer.
           </p>
         </section>
 
