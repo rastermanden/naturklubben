@@ -39,6 +39,23 @@ async function fetchUpcomingEvents(): Promise<CalendarEvent[]> {
   return data
 }
 
+/**
+ * Beder calendar-push give de andre medlemmer besked om den nye begivenhed
+ * (#216). Samme mønster som chat-push efter en besked: begivenheden er
+ * allerede gemt og vist, så en fejl her må ikke vælte oprettelsen -- de andre
+ * går bare glip af *notifikationen*, ikke af begivenheden.
+ *
+ * Kun id'et sendes med; functionen slår selv begivenheden op, nægter at sende
+ * for en, kalderen ikke selv har oprettet, og sorterer dem fra, der har slået
+ * typen fra.
+ */
+async function notifyOthers(eventId: string) {
+  const { error } = await supabase.functions.invoke('calendar-push', {
+    body: { kind: 'event_created', eventId },
+  })
+  if (error) console.warn('Notifikationer kunne ikke sendes', error)
+}
+
 export function useEvents(userId: string) {
   const queryClient = useQueryClient()
   const queryKey = ['events', 'upcoming']
@@ -50,12 +67,20 @@ export function useEvents(userId: string) {
 
   const createEvent = useMutation({
     mutationFn: async (input: EventInput) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('events')
         .insert({ ...input, created_by: userId })
+        .select('id')
+        .single()
       if (error) throw error
+      return data.id as string
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: (eventId) => {
+      // Ikke afventet: formularen skal lukke, når begivenheden er gemt -- ikke
+      // når push-tjenesterne har svaret.
+      void notifyOthers(eventId)
+      return queryClient.invalidateQueries({ queryKey })
+    },
   })
 
   const updateEvent = useMutation({

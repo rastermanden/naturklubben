@@ -65,6 +65,14 @@ export const routeMetadata = [
     documentTitle: 'Åbne ture | Naturklubben',
     announcement: 'Åbne ture indlæst',
   },
+  // En enkelt begivenhed, åbnet fra en notifikation (#216) eller et delt link.
+  // Dynamiske stier efter deres statiske søskende: RouteNavigation finder
+  // siden ved første match, og denne matcher også /kalender/offentlig.
+  {
+    path: '/kalender/:eventId',
+    documentTitle: 'Kalender | Naturklubben',
+    announcement: 'Kalender indlæst',
+  },
   {
     path: '/billeder',
     documentTitle: 'Billeder | Naturklubben',

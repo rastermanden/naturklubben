@@ -74,6 +74,18 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
   ikke-interaktivt med `SUPABASE_ACCESS_TOKEN` som repo-secret. Dette kører i GitHub's
   cloud-runners ved push til `main` — ikke lokalt — og kræver derfor ikke, at et menneske
   sidder med CLI'en eller er logget ind interaktivt.
+- **Push-notifikationer ud over chatten** (ny begivenhed, påmindelse dagen før, og
+  til admins: indstilling til en badge, der skal godkendes) går gennem
+  `supabase/functions/_shared/pushDelivery.ts`: præferencer pr. type, leveringslog
+  (ingen får det samme to gange) og afsendelse ét sted. En ny type føjer sit navn til
+  `_shared/pushKinds.ts`, bygger sin payload i `_shared/pushPayloads.ts`, udvider
+  `kind`-constrainten på både
+  `notification_preferences` og `push_deliveries` i sin egen migration og kalder
+  `deliverPush` -- rør ikke `chat-push`, den har sin egen model. Den indstillede får
+  ingen besked om en indstilling; badge-modellen skjuler den, indtil badgen er tildelt.
+  Planlagte kørsler (påmindelsen) bruger pg_cron + pg_net som
+  `probation-notifications`, ikke en GitHub Actions-schedule. Se `supabase/README.md`,
+  "Notifikationer ud over chatten".
 
 ## Client (frontend) & PR-previews
 

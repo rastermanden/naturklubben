@@ -1,10 +1,10 @@
 import { lazy, Suspense, type ReactNode } from 'react'
-import { Route, Routes, useLocation } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import HeroPage from './pages/HeroPage'
 import { AdminRoute } from './features/admin/AdminRoute'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
 import { Layout } from './components/Layout'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import { routeMetadata, type AppRoutePath } from './routeMetadata'
 
 const AccountDeletedPage = lazy(() => import('./pages/AccountDeletedPage'))
@@ -51,20 +51,6 @@ function loadRoute(element: ReactNode) {
   return <Suspense fallback={<RouteLoadingFallback />}>{element}</Suspense>
 }
 
-function RouteErrorBoundary({ children }: { children: ReactNode }) {
-  const location = useLocation()
-
-  return (
-    <ErrorBoundary
-      key={location.key}
-      variant="route"
-      reportSource="react-route"
-    >
-      {children}
-    </ErrorBoundary>
-  )
-}
-
 const routeElements: Record<AppRoutePath, ReactNode> = {
   '/': <HeroPage />,
   '/aktiviteter': loadRoute(<ActivitiesPage />),
@@ -78,6 +64,11 @@ const routeElements: Record<AppRoutePath, ReactNode> = {
   '/ny-adgangskode': loadRoute(<ResetPasswordPage />),
   '/kalender': <ProtectedRoute>{loadRoute(<CalendarPage />)}</ProtectedRoute>,
   '/kalender/offentlig': loadRoute(<PublicCalendarPage />),
+  // Dynamiske stier efter deres statiske søskende: RouteNavigation finder
+  // siden ved første match, og /kalender/:eventId matcher også /kalender/offentlig.
+  '/kalender/:eventId': (
+    <ProtectedRoute>{loadRoute(<CalendarPage />)}</ProtectedRoute>
+  ),
   '/billeder': <ProtectedRoute>{loadRoute(<GalleryPage />)}</ProtectedRoute>,
   '/chat': <ProtectedRoute>{loadRoute(<ChatPage />)}</ProtectedRoute>,
   '/naturlog': <ProtectedRoute>{loadRoute(<NaturlogPage />)}</ProtectedRoute>,

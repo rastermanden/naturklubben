@@ -66,8 +66,9 @@ man kan se på selve appen, at man ikke er på produktionssitet.
 Bekræftelses- og nulstillingsmails fra Supabase lander på `/velkommen` og
 `/ny-adgangskode` i appen. GitHub Pages har ingen SPA-fallback, så buildet udgiver en
 `404.html`, der sender vilkårlige stier videre til `index.html` med sti, query og
-fragment i behold. Hvilke URL'er Supabase overhovedet må sende folk hen til, styres af
-`.github/workflows/sync-auth-config.yml` -- se `supabase/README.md`.
+fragment i behold. Push-notifikationer om kalenderen åbner på samme måde
+`/kalender/<id>` direkte. Hvilke URL'er Supabase overhovedet må sende folk hen til, styres
+af `.github/workflows/sync-auth-config.yml` -- se `supabase/README.md`.
 
 ## Dokumentation
 
