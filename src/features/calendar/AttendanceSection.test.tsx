@@ -29,6 +29,7 @@ const EVENT: CalendarEvent = {
   start_at: '2026-09-20T08:00:00Z',
   end_at: null,
   created_by: 'alice',
+  is_public: false,
   max_participants: 2,
 }
 

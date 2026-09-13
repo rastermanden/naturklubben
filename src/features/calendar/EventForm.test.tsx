@@ -198,6 +198,7 @@ describe('EventForm max participants', () => {
       start_at: '2026-08-24T10:00:00Z',
       end_at: null,
       created_by: 'member-id',
+      is_public: false,
       max_participants: 8,
     })
 
