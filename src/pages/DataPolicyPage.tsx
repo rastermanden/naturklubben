@@ -60,7 +60,10 @@ function DataPolicyPage() {
             Browserens push-endpoint og krypteringsnøgler gemmes kun for at
             levere valgte notifikationer. De slettes, når du slår funktionen
             fra, når push-tjenesten melder abonnementet udløbet, eller når
-            kontoen slettes.
+            kontoen slettes. Dine valg pr. notifikationstype gemmes på din
+            profil, og en log over, hvilke notifikationer du har fået, gemmes i
+            90 dage, så du ikke får den samme to gange. Begge slettes ved
+            kontosletning.
           </p>
         </section>
 
