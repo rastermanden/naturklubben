@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { generateSingleEliminationBracket } from './bracket'
+import type { GeneratedMatch } from './types'
 
 const identityShuffle = <T>(items: T[]) => items
 
@@ -8,6 +9,54 @@ function participants(count: number) {
     id: `p${index + 1}`,
     seed: index + 1,
   }))
+}
+
+/**
+ * Spiller en bracket igennem og returnerer antal byes pr. deltager.
+ * `outcome` er en bitmaske: bit nr. k afgør, hvem der vinder den k'te
+ * rigtige kamp, så en løkke over alle værdier dækker alle tænkelige
+ * resultater.
+ */
+function playthrough(
+  bracket: GeneratedMatch[],
+  outcome: number,
+): Map<string, number> {
+  const byKey = new Map(
+    bracket.map((match) => [
+      `${match.round}:${match.matchIndex}`,
+      { ...match },
+    ]),
+  )
+  const inOrder = [...byKey.values()].sort(
+    (a, b) => a.round - b.round || a.matchIndex - b.matchIndex,
+  )
+  const byes = new Map<string, number>()
+  let realMatchNumber = 0
+
+  for (const match of inOrder) {
+    if (match.bye) {
+      const sitter = match.participant1Id ?? match.participant2Id
+      if (!sitter) throw new Error('en bye uden deltager blev aldrig udfyldt')
+      byes.set(sitter, (byes.get(sitter) ?? 0) + 1)
+      match.winnerId = sitter
+    } else {
+      if (!match.participant1Id || !match.participant2Id) {
+        throw new Error(
+          `rigtig kamp uden to deltagere: runde ${match.round}, kamp ${match.matchIndex}`,
+        )
+      }
+      const takeSecond = (outcome >> realMatchNumber) & 1
+      realMatchNumber++
+      match.winnerId = takeSecond ? match.participant2Id : match.participant1Id
+    }
+
+    if (match.nextMatchRound === null || match.nextMatchIndex === null) continue
+    const next = byKey.get(`${match.nextMatchRound}:${match.nextMatchIndex}`)!
+    if (match.nextMatchSlot === 1) next.participant1Id = match.winnerId
+    else next.participant2Id = match.winnerId
+  }
+
+  return byes
 }
 
 describe('generateSingleEliminationBracket', () => {
@@ -137,6 +186,36 @@ describe('generateSingleEliminationBracket', () => {
         // Den næste kamp, byens vinder rykker videre til, må ikke selv være
         // en anden automatisk afgjort bye for den samme deltager.
         expect(next.bye && next.status === 'completed').toBe(false)
+      }
+    }
+  })
+
+  it('giver ingen deltager mere end én bye, uanset hvordan kampene falder ud', () => {
+    // Spiller hver eneste mulige kombination af resultater igennem og tæller
+    // byes pr. deltager. Én bye er en fair håndsrækning til et skævt
+    // deltagerantal -- to til den samme, mens andre får ingen, er ikke.
+    //
+    // Appen tillader højst 8 deltagere (TournamentSetupForm), men vi går til
+    // 16: det er dér, valget af bye-modtager reelt bliver svært, og uden
+    // hensynet til, hvem der allerede har fået en (se pickByeIndex), lander
+    // fx begge byes ved 11 deltagere på den samme. 17 er det første antal,
+    // hvor en anden bye ikke kan undgås -- 4 byes fordelt på 5 runder levner
+    // ikke plads til andet -- så grænsen går her.
+    for (let n = 2; n <= 16; n++) {
+      const bracket = generateSingleEliminationBracket(
+        participants(n),
+        identityShuffle,
+      )
+      const realMatchCount = bracket.filter((m) => !m.bye).length
+
+      for (let outcome = 0; outcome < 2 ** realMatchCount; outcome++) {
+        const byes = playthrough(bracket, outcome)
+        for (const [participantId, count] of byes) {
+          expect(
+            count,
+            `${n} deltagere, resultat-kombination ${outcome}: ${participantId} fik ${count} byes`,
+          ).toBeLessThanOrEqual(1)
+        }
       }
     }
   })
