@@ -5,10 +5,10 @@ export interface BracketParticipant {
   seed: number
 }
 
-function nextPowerOfTwo(n: number): number {
-  let size = 1
-  while (size < n) size *= 2
-  return size
+interface RoundPlan {
+  round: number
+  matches: number
+  hasBye: boolean
 }
 
 function defaultShuffle<T>(items: T[]): T[] {
@@ -21,15 +21,47 @@ function defaultShuffle<T>(items: T[]): T[] {
 }
 
 /**
- * Genererer en single elimination-bracket. Er antallet af deltagere ikke en
- * potens af to, lodtrækkes der ("lod ... bye i runde 1", jf. #229): de
- * deltagere, en fuld bracket ville have haft modstandere til, trækkes til at
- * gå direkte videre i runde 1 -- byes forekommer kun der, aldrig i senere
- * runder, fordi antallet af videre-rykkede (byes + kampvindere) altid
- * lander på en potens af to.
+ * Planlægger antal kampe pr. runde ud fra `matches(r) = ceil(entrants(r) / 2)`
+ * -- de vindere (inkl. en evt. bye), der rykker videre, bliver entrants(r+1).
+ * Er entrants(r) ulige, er der plads til præcis én bye i runde r, aldrig
+ * flere. Sammenlignet med at polstre op til nærmeste potens af to og samle
+ * alle byes i runde 1 (den gamle model) spreder det byes ud over hele
+ * turneringen: 5 deltagere giver fx 1 bye i runde 1 og 1 i runde 2, i stedet
+ * for 3 byes, alle i runde 1.
+ */
+function planRounds(participantCount: number): RoundPlan[] {
+  const rounds: RoundPlan[] = []
+  let entrants = participantCount
+  let round = 1
+  while (entrants > 1) {
+    const matches = Math.ceil(entrants / 2)
+    rounds.push({ round, matches, hasBye: entrants % 2 === 1 })
+    entrants = matches
+    round += 1
+  }
+  return rounds
+}
+
+/**
+ * Genererer en single elimination-bracket. `shuffle` kan overstyres i tests
+ * for et deterministisk resultat; appen bruger standard-Fisher-Yates.
  *
- * `shuffle` kan overstyres i tests for et deterministisk resultat; appen
- * bruger standard-Fisher-Yates.
+ * En bye i runde 1 -- den eneste runde, hvor vi kender de rigtige deltagere
+ * ved oprettelsen -- afgøres med det samme (`status: 'completed'`), og dens
+ * vinder fylder direkte den plads, vedkommende skal stå på i næste runde. Er
+ * den plads *selv* en bye (fordi den udelukkende fødes af denne ene kamp),
+ * afgøres den også med det samme, og sådan fortsætter det, så langt kæden af
+ * på-hinanden-følgende byes rækker.
+ *
+ * En bye, hvis eneste plads endnu ikke er kendt her -- fordi den afhænger af
+ * en kamp, der endnu ikke er spillet -- kan ikke afgøres ved oprettelsen. Den
+ * oprettes i stedet som en almindelig, tom kamp med `bye: true` og bliver
+ * afgjort automatisk, i det øjeblik dens ene mulige plads bliver udfyldt --
+ * se den tilsvarende kaskade i record_tournament_match_result
+ * (20260913140000_tournament_bracket_byes.sql). Bye-pladsen ligger altid
+ * sidst i runden (`matches - 1`): det er det, der får næste rundes egen bye
+ * til at falde naturligt på det sidste indeks der også, fordi den
+ * udelukkende fødes af rundens sidste kampindeks.
  */
 export function generateSingleEliminationBracket(
   participants: BracketParticipant[],
@@ -39,104 +71,114 @@ export function generateSingleEliminationBracket(
     throw new Error('En bracket kræver mindst 2 deltagere')
   }
 
-  const bracketSize = nextPowerOfTwo(participants.length)
-  const totalRounds = Math.log2(bracketSize)
-  const numByes = bracketSize - participants.length
+  const rounds = planRounds(participants.length)
+  const totalRounds = rounds.length
+  const matches: GeneratedMatch[] = []
+  const knownSlots = new Map<string, string>()
 
-  const shuffledIds = shuffle(participants.map((participant) => participant.id))
-  const byeIds = shuffledIds.slice(0, numByes)
-  const pairedIds = shuffledIds.slice(numByes)
-
-  // Hvilke af runde 1's kampe er byes? Fordelt på tværs af runde 2's kampe
-  // fremfor stablet i de første indeks -- ellers ville to byes ofte lande i
-  // samme runde 2-kamp og møde hinanden i stedet for en rigtig modstander,
-  // selvom der var plads til at sprede dem. Er der flere byes end runde
-  // 2-kampe, fordeler pigeonhole-princippet uundgåeligt mere end én bye på
-  // nogle af dem -- så tæt på jævnt som muligt.
-  const matchesInRound1 = bracketSize / 2
-  const round2Buckets = Math.max(Math.floor(matchesInRound1 / 2), 1)
-  const byeMatchIndexes = new Set<number>()
-  for (let i = 0; i < numByes; i++) {
-    const bucket = i % round2Buckets
-    const occurrenceInBucket = Math.floor(i / round2Buckets)
-    byeMatchIndexes.add(bucket * 2 + occurrenceInBucket)
-  }
-
-  function linkToNextRound(index: number) {
-    if (totalRounds <= 1) {
+  function linkToNextRound(round: number, index: number) {
+    if (round >= totalRounds) {
       return { nextMatchRound: null, nextMatchIndex: null, nextMatchSlot: null }
     }
     return {
-      nextMatchRound: 2,
+      nextMatchRound: round + 1,
       nextMatchIndex: Math.floor(index / 2),
       nextMatchSlot: (index % 2 === 0 ? 1 : 2) as 1 | 2,
     }
   }
 
-  const matches: GeneratedMatch[] = []
-  let byeCursor = 0
-  let pairCursor = 0
+  function recordKnownWinner(
+    link: ReturnType<typeof linkToNextRound>,
+    winnerId: string,
+  ) {
+    if (
+      link.nextMatchRound !== null &&
+      link.nextMatchIndex !== null &&
+      link.nextMatchSlot !== null
+    ) {
+      knownSlots.set(
+        `${link.nextMatchRound}:${link.nextMatchIndex}:${link.nextMatchSlot}`,
+        winnerId,
+      )
+    }
+  }
 
-  for (let matchIndex = 0; matchIndex < matchesInRound1; matchIndex++) {
-    if (byeMatchIndexes.has(matchIndex)) {
-      const byeId = byeIds[byeCursor++]
+  // Runde 1: de eneste kampe, hvor vi allerede kender de rigtige deltagere.
+  const round1 = rounds[0]
+  const shuffledIds = shuffle(participants.map((participant) => participant.id))
+  const byeId = round1.hasBye ? shuffledIds[shuffledIds.length - 1] : null
+  const pairedIds = round1.hasBye ? shuffledIds.slice(0, -1) : shuffledIds
+
+  let pairCursor = 0
+  for (let index = 0; index < round1.matches; index++) {
+    const isByeSlot = round1.hasBye && index === round1.matches - 1
+    const link = linkToNextRound(1, index)
+
+    if (isByeSlot && byeId) {
       matches.push({
         round: 1,
-        matchIndex,
+        matchIndex: index,
         participant1Id: byeId,
         participant2Id: null,
         winnerId: byeId,
         status: 'completed',
-        ...linkToNextRound(matchIndex),
+        bye: true,
+        ...link,
       })
+      recordKnownWinner(link, byeId)
     } else {
       const participant1Id = pairedIds[pairCursor++]
       const participant2Id = pairedIds[pairCursor++]
       matches.push({
         round: 1,
-        matchIndex,
+        matchIndex: index,
         participant1Id,
         participant2Id,
         winnerId: null,
         status: 'pending',
-        ...linkToNextRound(matchIndex),
+        bye: false,
+        ...link,
       })
     }
   }
 
-  // Byes er allerede afgjort -- deres vinder fylder direkte den plads,
-  // vedkommende skal stå på i runde 2.
-  const knownSlots = new Map<string, string>()
-  for (const match of matches) {
-    if (
-      match.winnerId &&
-      match.nextMatchRound !== null &&
-      match.nextMatchIndex !== null &&
-      match.nextMatchSlot !== null
-    ) {
-      knownSlots.set(
-        `${match.nextMatchRound}:${match.nextMatchIndex}:${match.nextMatchSlot}`,
-        match.winnerId,
-      )
-    }
-  }
+  // Runde 2 og frem: en plads kommer enten fra en allerede kendt bye-vinder
+  // (knownSlots, fra en tidligere runde i denne kæde) eller venter på en
+  // rigtig kamp i runden før. Er en bye-kamps ene plads allerede kendt her,
+  // er kampen selv afgjort med det samme, og dens vinder skal gives videre
+  // til den næste runde igen -- muligvis flere gange i træk.
+  for (let r = 1; r < totalRounds; r++) {
+    const plan = rounds[r]
+    for (let index = 0; index < plan.matches; index++) {
+      const isByeSlot = plan.hasBye && index === plan.matches - 1
+      const link = linkToNextRound(plan.round, index)
+      const participant1Id = knownSlots.get(`${plan.round}:${index}:1`) ?? null
+      const participant2Id = knownSlots.get(`${plan.round}:${index}:2`) ?? null
 
-  for (let round = 2; round <= totalRounds; round++) {
-    const matchesInRound = bracketSize / 2 ** round
-    const isFinal = round === totalRounds
-
-    for (let index = 0; index < matchesInRound; index++) {
-      matches.push({
-        round,
-        matchIndex: index,
-        participant1Id: knownSlots.get(`${round}:${index}:1`) ?? null,
-        participant2Id: knownSlots.get(`${round}:${index}:2`) ?? null,
-        winnerId: null,
-        status: 'pending',
-        nextMatchRound: isFinal ? null : round + 1,
-        nextMatchIndex: isFinal ? null : Math.floor(index / 2),
-        nextMatchSlot: isFinal ? null : ((index % 2 === 0 ? 1 : 2) as 1 | 2),
-      })
+      if (isByeSlot && participant1Id) {
+        matches.push({
+          round: plan.round,
+          matchIndex: index,
+          participant1Id,
+          participant2Id: null,
+          winnerId: participant1Id,
+          status: 'completed',
+          bye: true,
+          ...link,
+        })
+        recordKnownWinner(link, participant1Id)
+      } else {
+        matches.push({
+          round: plan.round,
+          matchIndex: index,
+          participant1Id,
+          participant2Id,
+          winnerId: null,
+          status: 'pending',
+          bye: isByeSlot,
+          ...link,
+        })
+      }
     }
   }
 

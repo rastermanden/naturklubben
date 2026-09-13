@@ -58,6 +58,7 @@ function toMatchRows(generated: GeneratedMatch[]) {
       status: match.status,
       next_match_id: nextMatchId,
       next_match_slot: match.nextMatchSlot,
+      bye: match.bye,
     }
   })
 }

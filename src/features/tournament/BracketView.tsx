@@ -46,7 +46,10 @@ export function BracketView({ matches, nameFor }: BracketViewProps) {
                         match.winner_id !== null &&
                         match.winner_id === match.participant1_id
                       }
-                      isBye={match.status === 'completed'}
+                      // Første plads i en bye-kamp er altid udfyldt med det
+                      // samme (bracket.ts) eller venter på en rigtig
+                      // kampvinder -- aldrig selve bye-pladsen.
+                      isBye={false}
                       nameFor={nameFor}
                     />
                     <div className="my-1 border-t border-line-soft" />
@@ -56,7 +59,7 @@ export function BracketView({ matches, nameFor }: BracketViewProps) {
                         match.winner_id !== null &&
                         match.winner_id === match.participant2_id
                       }
-                      isBye={match.status === 'completed'}
+                      isBye={match.bye}
                       nameFor={nameFor}
                     />
                   </div>
@@ -78,8 +81,8 @@ function ParticipantRow({
 }: {
   participantId: string | null
   isWinner: boolean
-  /** Kampen er allerede afgjort -- en tom plads her er en bye, ikke en
-   * modstander, der endnu mangler. */
+  /** Denne plads bliver aldrig udfyldt -- en tom plads her er en bye, ikke
+   * en modstander, der endnu mangler. */
   isBye: boolean
   nameFor: (participantId: string) => string
 }) {

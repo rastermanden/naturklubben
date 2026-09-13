@@ -37,7 +37,7 @@ async function fetchTournamentDetail(
       supabase
         .from('tournament_matches')
         .select(
-          'id, tournament_id, round, match_index, participant1_id, participant2_id, winner_id, status, next_match_id, next_match_slot',
+          'id, tournament_id, round, match_index, participant1_id, participant2_id, winner_id, status, next_match_id, next_match_slot, bye',
         )
         .eq('tournament_id', tournamentId)
         .order('round')

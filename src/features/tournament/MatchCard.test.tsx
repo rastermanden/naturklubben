@@ -21,6 +21,7 @@ function pendingMatch(
     status: 'pending',
     next_match_id: null,
     next_match_slot: null,
+    bye: false,
     ...overrides,
   }
 }
