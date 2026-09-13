@@ -10,7 +10,7 @@ const POLL_COMMAND_PATTERN = /^\/afstemning(?:[ \t]+([\s\S]+))?$/i
 
 const SHRUG = '¯\\_(ツ)_/¯'
 
-// Samme grænser som migrationen 20260913170000_chat_polls.sql håndhæver i
+// Samme grænser som migrationen 20260913180000_chat_polls.sql håndhæver i
 // databasen (polls.question og poll_options.label) -- parseren skal afvise
 // en for lang afstemning med en venlig besked, før den overhovedet når
 // create_poll og rammer et check-constraint-brud.

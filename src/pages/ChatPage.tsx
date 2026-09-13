@@ -298,7 +298,7 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
 
   // "/afstemning" sender selve spørgsmålet som en helt almindelig besked --
   // afstemningen er ikke andet end en besked, den hænger på (se
-  // 20260913170000_chat_polls.sql) -- og kalder derefter create_poll med
+  // 20260913180000_chat_polls.sql) -- og kalder derefter create_poll med
   // besked-id'et og svarene. Fejler create_poll, efter beskeden allerede er
   // sendt, står spørgsmålet tilbage som en almindelig tekstbesked uden
   // afstemningskort; det er sjældent nok til ikke at kræve en oprydning her.
