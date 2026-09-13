@@ -99,5 +99,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Ingen migrations deler versionsnummer
+        # Ekstra vagt lige her, før kæden afspilles: to migrations med samme
+        # 14-cifrede versionsprefix får kun den ene anvendt af Supabase
+        # (skete for 20260913160000_event_waitlist.sql vs.
+        # 20260913160000_tournament_record_guards.sql). Fanger det, selvom
+        # lint-and-typecheck-jobbets tilsvarende tjek af en eller anden grund
+        # skulle blive omgået eller ændret.
+        run: |
+          dupes=$(ls supabase/migrations/*.sql | xargs -n1 basename | cut -c1-14 | sort | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "::error::Flere migrations deler 14-cifret versionsprefix: $dupes"
+            exit 1
+          fi
+
       - name: Afspil migrationer og kør pgTAP-tests
         run: supabase/tests/run.sh
