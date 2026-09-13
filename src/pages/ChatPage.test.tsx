@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   castVoteMutate: vi.fn(),
   closePollMutate: vi.fn(),
   sendMutateAsync: vi.fn(),
+  sendIsPending: false,
   searchPages: undefined as
     { messages: Message[]; hasMore: boolean }[] | undefined,
   profiles: {
@@ -68,7 +69,7 @@ vi.mock('../features/chat/useMessages', () => ({
     sendMessage: {
       mutate: mocks.mutate,
       mutateAsync: mocks.sendMutateAsync,
-      isPending: false,
+      isPending: mocks.sendIsPending,
     },
     deleteMessage: {
       mutate: mocks.deleteMutate,
@@ -153,6 +154,7 @@ beforeEach(() => {
   mocks.closePollMutate.mockReset()
   mocks.sendMutateAsync.mockReset()
   mocks.sendMutateAsync.mockResolvedValue({ id: 'message-99' })
+  mocks.sendIsPending = false
   mocks.deleteMutate.mockReset()
   mocks.isAdmin = false
   mocks.mutateAsync.mockReset()
@@ -478,6 +480,27 @@ describe('ChatPage /afstemning', () => {
         options: ['Skoven', 'Stranden'],
       })
     })
+  })
+
+  it('does not clear the draft or create the poll while a previous send is still pending', () => {
+    mocks.sendIsPending = true
+    render(<ChatPage />)
+
+    const textbox = screen.getByRole('textbox', { name: 'Skriv en besked' })
+    fireEvent.change(textbox, {
+      target: {
+        value: '/afstemning Hvor skal vi hen? | Skoven | Stranden',
+      },
+    })
+    // Enter-tasten kalder sendCurrentDraft() ubetinget, uafhængigt af at
+    // Send-knappen er disabled mens en tidligere besked er undervejs.
+    fireEvent.keyDown(textbox, { key: 'Enter' })
+
+    expect((textbox as HTMLTextAreaElement).value).toBe(
+      '/afstemning Hvor skal vi hen? | Skoven | Stranden',
+    )
+    expect(mocks.sendMutateAsync).not.toHaveBeenCalled()
+    expect(mocks.createPollMutateAsync).not.toHaveBeenCalled()
   })
 
   it('shows a friendly notice instead of sending anything for invalid input', () => {
