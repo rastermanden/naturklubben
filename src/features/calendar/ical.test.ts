@@ -10,6 +10,7 @@ const event: CalendarEvent = {
   start_at: '2026-09-05T18:30:00+02:00',
   end_at: '2026-09-05T20:00:00+02:00',
   created_by: 'member-id',
+  is_public: false,
 }
 
 afterEach(() => {

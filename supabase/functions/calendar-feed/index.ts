@@ -1,12 +1,14 @@
 // Edge Function: calendar-feed
 //
-// Offentligt iCal-abonnementsendpoint — returnerer alle kommende begivenheder
-// i Naturklubben som en RFC 5545-kompatibel .ics-strøm.
+// Offentligt iCal-abonnementsendpoint — returnerer klubbens kommende
+// *offentlige* begivenheder (events.is_public, #224) som en RFC 5545-kompatibel
+// .ics-strøm. Private begivenheder er ikke med: anon-rollens RLS-policy på
+// events slipper kun offentlige rækker igennem, og calendar_feed_events
+// filtrerer selv på is_public (#118).
 //
 // Kalender-apps (Google Kalender, Apple Kalender, Outlook m.fl.) kan
 // abonnere på URL'en og henter automatisk et opdateret feed med jævne
-// mellemrum. Endpointet kræver ingen autentificering, men læser kun
-// begivenheder som er offentlige via RLS (anon-rollen).
+// mellemrum. Endpointet kræver ingen autentificering.
 //
 // GET /functions/v1/calendar-feed  -> text/calendar
 
@@ -55,7 +57,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // The publishable key assumes the anon role. That role can only read the
-    // deliberately data-minimized view, not the member-only events table.
+    // deliberately data-minimized view of public events, never the members'
+    // private events or any organiser data.
     const supabase = createClient(supabaseUrl, publishableKey)
 
     const startOfToday = new Date()

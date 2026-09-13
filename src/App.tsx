@@ -24,6 +24,7 @@ const ProbationApplicationPage = lazy(
   () => import('./pages/ProbationApplicationPage'),
 )
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const PublicCalendarPage = lazy(() => import('./pages/PublicCalendarPage'))
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
 const GamesPage = lazy(() => import('./pages/GamesPage'))
 const TetrisPage = lazy(() => import('./pages/TetrisPage'))
@@ -75,6 +76,7 @@ const routeElements: Record<AppRoutePath, ReactNode> = {
   '/velkommen': loadRoute(<WelcomePage />),
   '/ny-adgangskode': loadRoute(<ResetPasswordPage />),
   '/kalender': <ProtectedRoute>{loadRoute(<CalendarPage />)}</ProtectedRoute>,
+  '/kalender/offentlig': loadRoute(<PublicCalendarPage />),
   '/billeder': <ProtectedRoute>{loadRoute(<GalleryPage />)}</ProtectedRoute>,
   '/chat': <ProtectedRoute>{loadRoute(<ChatPage />)}</ProtectedRoute>,
   '/naturlog': <ProtectedRoute>{loadRoute(<NaturlogPage />)}</ProtectedRoute>,

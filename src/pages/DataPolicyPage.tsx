@@ -82,6 +82,25 @@ function DataPolicyPage() {
 
         <section>
           <h2 className="text-xl font-semibold text-ink-body">
+            Ansøgninger om at deltage i åbne begivenheder
+          </h2>
+          <p className="mt-2">
+            Folk uden for klubben kan søge om at deltage i en begivenhed, som
+            arrangøren har åbnet for ikke-medlemmer. Navn, e-mail, antal
+            personer og en eventuel besked bruges kun til at behandle
+            ansøgningen og sende svaret som e-mail, og oplysningerne kan kun ses
+            af begivenhedens arrangør og klubbens administratorer. Andre
+            medlemmer ser kun antallet af godkendte gæster. Alle ansøgninger til
+            en begivenhed -- godkendte, afviste og ubesvarede -- slettes
+            automatisk 30 dage efter, at begivenheden er afholdt. Slettes
+            begivenheden, slettes ansøgningerne med det samme. Spam-beskyttelsen
+            gemmer, som for prøvemedlemskaber, kun HMAC-hashes af e-mail- og
+            netværkssignaler og sletter dem efter 25 timer.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold text-ink-body">
             Inaktive konti
           </h2>
           <p className="mt-2">

@@ -1,6 +1,7 @@
 import { useProfilesMap } from '../chat/useProfilesMap'
 import { readableTextColor } from '../../lib/colorContrast'
 import { useEventAttendance } from './useEventAttendance'
+import { useEventGuestCount } from './useEventGuests'
 
 function ParticipantAvatar({
   name,
@@ -50,6 +51,9 @@ export function AttendanceSection({
   const { attendanceQuery, joinAttendance, leaveAttendance } =
     useEventAttendance(eventId, userId)
   const profilesQuery = useProfilesMap()
+  // Godkendte gæster fra den offentlige kalender (#224) tæller med som
+  // deltagere, men vises kun som et tal -- hvem de er, ser kun arrangøren.
+  const guestCount = useEventGuestCount(eventId).data ?? 0
   const attendance = attendanceQuery.data ?? []
   const isAttending = attendance.some((entry) => entry.user_id === userId)
   const attendancePending =
@@ -71,7 +75,8 @@ export function AttendanceSection({
           Deltagere
           {!attendanceQuery.isLoading && (
             <span className="ml-2 font-normal text-ink-subtle">
-              ({attendance.length})
+              ({attendance.length}
+              {guestCount > 0 && ` + gæster: ${guestCount}`})
             </span>
           )}
         </h3>

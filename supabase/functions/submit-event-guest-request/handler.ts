@@ -1,45 +1,51 @@
+// Offentlig indsendelse af en gæsteansøgning til en åben begivenhed (#224).
+// Samme grænse som submit-probation-application: kun Cloudflares
+// CF-Connecting-IP som netværkssignal, HMAC-hashede rate-limit-signaler, og
+// et svar, der ikke røber, om e-mailen allerede har søgt.
+
 import { handleCors } from '../_shared/cors.ts'
 import { extractTrustedClientAddress } from '../_shared/clientAddress.ts'
 
-export interface SubmissionRpcArguments {
-  applicant_full_name: string
-  applicant_email: string
-  applicant_motivation: string
-  push_endpoint: string
-  push_p256dh: string
-  push_auth: string
+export interface GuestRequestRpcArguments {
+  target_event_id: string
+  guest_full_name: string
+  guest_email: string
+  guest_message: string | null
+  guest_party_size: number
   exact_ip_hash: string
   client_network_hash: string
   normalized_email_hash: string
 }
 
-export interface SubmissionRpcResult {
-  submission_outcome: 'accepted' | 'rate_limited'
+export interface GuestRequestRpcResult {
+  submission_outcome: 'accepted' | 'rate_limited' | 'event_unavailable'
   retry_after_seconds: number | null
 }
 
-interface SubmissionDependencies {
+interface GuestRequestDependencies {
   secret: string
-  submit: (arguments_: SubmissionRpcArguments) => Promise<SubmissionRpcResult>
+  submit: (
+    arguments_: GuestRequestRpcArguments,
+  ) => Promise<GuestRequestRpcResult>
   sleep?: (milliseconds: number) => Promise<void>
   random?: () => number
   reportError?: (requestId: string, category: string) => void
 }
 
-interface ValidatedSubmission {
+export interface ValidatedGuestRequest {
+  eventId: string
   fullName: string
   email: string
-  motivation: string
-  subscription: {
-    endpoint: string
-    p256dh: string
-    auth: string
-  }
+  message: string | null
+  partySize: number
 }
 
 const MAX_BODY_BYTES = 16_384
 const MIN_ACCEPTED_RESPONSE_MS = 400
 const ACCEPTED_RESPONSE_JITTER_MS = 100
+export const MAX_PARTY_SIZE = 20
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const encoder = new TextEncoder()
 
 function jsonResponse(
@@ -56,10 +62,7 @@ function jsonResponse(
   headers.set('Content-Type', 'application/json')
   headers.set('X-Request-Id', requestId)
 
-  return new Response(JSON.stringify(body), {
-    status,
-    headers,
-  })
+  return new Response(JSON.stringify(body), { status, headers })
 }
 
 export async function hmacSignal(
@@ -77,7 +80,7 @@ export async function hmacSignal(
   const digest = await crypto.subtle.sign(
     'HMAC',
     key,
-    encoder.encode(`probation-rate-limit-v1\0${domain}\0${value}`),
+    encoder.encode(`event-guest-rate-limit-v1\0${domain}\0${value}`),
   )
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, '0'))
@@ -88,75 +91,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function allowedPushEndpoint(value: string) {
-  try {
-    const url = new URL(value)
-    if (
-      url.protocol !== 'https:' ||
-      url.port !== '' ||
-      url.username !== '' ||
-      url.password !== ''
-    ) {
-      return false
-    }
-    return (
-      url.hostname === 'fcm.googleapis.com' ||
-      url.hostname === 'updates.push.services.mozilla.com' ||
-      url.hostname === 'push.services.mozilla.com' ||
-      url.hostname === 'web.push.apple.com' ||
-      /^[a-z0-9-]+[.]notify[.]windows[.]com$/.test(url.hostname)
-    )
-  } catch {
-    return false
-  }
-}
+export function validateGuestRequest(
+  value: unknown,
+): ValidatedGuestRequest | null {
+  if (!isRecord(value)) return null
 
-function validateSubmission(value: unknown): ValidatedSubmission | null {
-  if (!isRecord(value) || !isRecord(value.subscription)) return null
-
+  const eventId =
+    typeof value.eventId === 'string' ? value.eventId.trim().toLowerCase() : ''
   const fullName =
     typeof value.fullName === 'string' ? value.fullName.trim() : ''
   const email =
     typeof value.email === 'string' ? value.email.trim().toLowerCase() : ''
-  const motivation =
-    typeof value.motivation === 'string' ? value.motivation.trim() : ''
-  const endpoint =
-    typeof value.subscription.endpoint === 'string'
-      ? value.subscription.endpoint.trim()
-      : ''
-  const p256dh =
-    typeof value.subscription.p256dh === 'string'
-      ? value.subscription.p256dh.trim()
-      : ''
-  const auth =
-    typeof value.subscription.auth === 'string'
-      ? value.subscription.auth.trim()
-      : ''
+  const message = typeof value.message === 'string' ? value.message.trim() : ''
+  const partySize =
+    typeof value.partySize === 'number'
+      ? value.partySize
+      : value.partySize === undefined
+        ? 1
+        : Number.NaN
 
   if (
+    !UUID_PATTERN.test(eventId) ||
     fullName.length === 0 ||
     fullName.length > 200 ||
     email.length === 0 ||
     email.length > 320 ||
     !/^[^\s@]+@[^\s@]+[.][^\s@]+$/.test(email) ||
-    motivation.length === 0 ||
-    motivation.length > 5000 ||
-    endpoint.length === 0 ||
-    endpoint.length > 2048 ||
-    !allowedPushEndpoint(endpoint) ||
-    p256dh.length === 0 ||
-    p256dh.length > 256 ||
-    auth.length === 0 ||
-    auth.length > 256
+    message.length > 2000 ||
+    !Number.isInteger(partySize) ||
+    partySize < 1 ||
+    partySize > MAX_PARTY_SIZE
   ) {
     return null
   }
 
   return {
+    eventId,
     fullName,
     email,
-    motivation,
-    subscription: { endpoint, p256dh, auth },
+    message: message.length > 0 ? message : null,
+    partySize,
   }
 }
 
@@ -170,20 +144,20 @@ async function parseRequestBody(request: Request) {
   if (encoder.encode(text).byteLength > MAX_BODY_BYTES) return null
 
   try {
-    return validateSubmission(JSON.parse(text))
+    return validateGuestRequest(JSON.parse(text))
   } catch {
     return null
   }
 }
 
-export function createSubmissionHandler({
+export function createGuestRequestHandler({
   secret,
   submit,
   sleep = (milliseconds) =>
     new Promise((resolve) => setTimeout(resolve, milliseconds)),
   random = Math.random,
   reportError = () => undefined,
-}: SubmissionDependencies) {
+}: GuestRequestDependencies) {
   return async (request: Request) => {
     const requestId = crypto.randomUUID()
     const cors = handleCors(request, {
@@ -200,9 +174,7 @@ export function createSubmissionHandler({
         405,
         requestId,
         corsHeaders,
-        {
-          Allow: 'POST, OPTIONS',
-        },
+        { Allow: 'POST, OPTIONS' },
       )
     }
 
@@ -217,7 +189,7 @@ export function createSubmissionHandler({
       )
     }
 
-    let submission: ValidatedSubmission | null
+    let submission: ValidatedGuestRequest | null
     try {
       submission = await parseRequestBody(request)
     } catch {
@@ -240,12 +212,11 @@ export function createSubmissionHandler({
         hmacSignal(secret, 'email', submission.email),
       ])
       const result = await submit({
-        applicant_full_name: submission.fullName,
-        applicant_email: submission.email,
-        applicant_motivation: submission.motivation,
-        push_endpoint: submission.subscription.endpoint,
-        push_p256dh: submission.subscription.p256dh,
-        push_auth: submission.subscription.auth,
+        target_event_id: submission.eventId,
+        guest_full_name: submission.fullName,
+        guest_email: submission.email,
+        guest_message: submission.message,
+        guest_party_size: submission.partySize,
         exact_ip_hash: exactIpHash,
         client_network_hash: networkHash,
         normalized_email_hash: emailHash,
@@ -264,13 +235,23 @@ export function createSubmissionHandler({
           { 'Retry-After': String(retryAfter) },
         )
       }
+      if (result.submission_outcome === 'event_unavailable') {
+        // Begivenheden findes ikke, er privat eller er overstået. Svaret
+        // skelner ikke -- for en udenforstående er den bare ikke åben.
+        return jsonResponse(
+          { code: 'event_unavailable' },
+          404,
+          requestId,
+          corsHeaders,
+        )
+      }
       if (result.submission_outcome !== 'accepted') {
         throw new Error('unexpected_submission_outcome')
       }
 
-      // A real insert and an allowed/pending no-op intentionally share status,
-      // body and response-time class to avoid turning the form into an e-mail
-      // membership oracle.
+      // En reel oprettelse og en allerede åben ansøgning fra samme e-mail
+      // deler status, body og svartidsklasse, så formularen ikke kan bruges
+      // til at finde ud af, hvem der har søgt.
       const targetDuration =
         MIN_ACCEPTED_RESPONSE_MS +
         Math.floor(random() * ACCEPTED_RESPONSE_JITTER_MS)

@@ -9,6 +9,8 @@ export interface CalendarEvent {
   start_at: string
   end_at: string | null
   created_by: string | null
+  /** Åben for ikke-medlemmer: vises på den offentlige kalender (#224). */
+  is_public: boolean
 }
 
 export interface EventInput {
@@ -17,10 +19,11 @@ export interface EventInput {
   location: string | null
   start_at: string
   end_at: string | null
+  is_public: boolean
 }
 
 const eventFields =
-  'id, title, description, location, start_at, end_at, created_by'
+  'id, title, description, location, start_at, end_at, created_by, is_public'
 
 async function fetchUpcomingEvents(): Promise<CalendarEvent[]> {
   const startOfToday = new Date()
