@@ -74,7 +74,7 @@ $$;
 
 -- record_tournament_match_result skal måle kampen efter dens egen `best_of`:
 -- bedst af tre afgøres ved 2 spilsejre, bedst af fem ved 3. Rækkefølgen af
--- tjekkene er den samme som før (se 20260913160000): det, der er galt med
+-- tjekkene er den samme som før (se 20260913155500): det, der er galt med
 -- selve indtastningen, kommer før kampens tilstand -- men antallet af
 -- nødvendige sejre skal slås op på kampen først, så beskeden kan nævne det
 -- rigtige tal.
