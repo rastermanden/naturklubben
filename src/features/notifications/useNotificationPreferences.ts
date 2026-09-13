@@ -1,5 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
+import {
+  NOTIFICATION_KINDS,
+  type NotificationKind,
+} from '../../../supabase/functions/_shared/pushKinds.ts'
 
 /**
  * Notifikationerne ud over chatten (#216): ny begivenhed, påmindelse dagen
@@ -13,13 +17,7 @@ import { supabase } from '../../lib/supabaseClient'
  * sætte et valg for nogen anden, og filtreringen sker på serveren -- en klient
  * kan ikke undlade at modtage en notifikation, den allerede har fået.
  */
-export const NOTIFICATION_KINDS = [
-  'event_created',
-  'event_reminder',
-  'badge_nomination_review',
-] as const
-
-export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
+export { NOTIFICATION_KINDS, type NotificationKind }
 
 export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   event_created: 'Når der kommer en ny begivenhed i kalenderen',

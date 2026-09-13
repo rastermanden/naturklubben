@@ -749,9 +749,10 @@ indstillinger skjult for modtageren, indtil badgen er tildelt (ellers ville en a
 indstilling være synlig), og tildelingen har sin egen push i `badge-notifications`.
 
 `chat-push` er uændret. De nye typer deler én vej, `_shared/pushDelivery.ts`, og næste
-type (#222, ventelisten) bygger sin payload (`_shared/pushPayloads.ts`), udvider
-`kind`-constrainten på `notification_preferences` og `push_deliveries` i sin egen
-migration og kalder `deliverPush`.
+type (#222, ventelisten) føjer sit navn til `NOTIFICATION_KINDS` i `_shared/pushKinds.ts`
+(listen deles med frontendens indstillinger), bygger sin payload
+(`_shared/pushPayloads.ts`), udvider `kind`-constrainten på `notification_preferences` og
+`push_deliveries` i sin egen migration og kalder `deliverPush`.
 
 ### Til og fra pr. type
 
@@ -810,12 +811,12 @@ en begivenhed oprettes eller redigeres fra appen, og gemmer den i
 `events.notification_function_url`. Triggeren ejer kolonnen -- et medlem kan ikke pege den
 mod en fremmed host, og en begivenhed uden URL får requestets host, næste gang den
 redigeres. Uden header (pgTAP, psql) gemmes null, og kørslen låner den seneste kendte URL
-fra en anden begivenhed eller, findes der ingen, fra en ansøgning om prøvemedlemskab
+fra en anden begivenhed: det er samme host for alle. Begivenhederne fra før migrationen
+fik deres URL én gang, i selve migrationen, fra den seneste ansøgning om prøvemedlemskab
 (`probation_applications.notification_function_url` med `/calendar-push` i stedet for
-`/probation-notifications`): det er samme host for alle. Derfor får også begivenheder, der
-fandtes i produktion før migrationen, deres påmindelse fra dag ét. Kun på en helt ny
-Preview Branch uden hverken begivenheder eller ansøgninger fra appen sendes ingen
-påmindelser, indtil det første af delene er oprettet.
+`/probation-notifications`), så også de får deres påmindelse fra dag ét. Kun på en helt
+ny Preview Branch uden nogen begivenhed fra appen sendes ingen påmindelser, indtil den
+første er oprettet.
 
 ## Nyheder om nye funktioner
 

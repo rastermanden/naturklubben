@@ -77,8 +77,9 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
 - **Push-notifikationer ud over chatten** (ny begivenhed, påmindelse dagen før, og
   til admins: indstilling til en badge, der skal godkendes) går gennem
   `supabase/functions/_shared/pushDelivery.ts`: præferencer pr. type, leveringslog
-  (ingen får det samme to gange) og afsendelse ét sted. En ny type bygger sin payload i
-  `_shared/pushPayloads.ts`, udvider `kind`-constrainten på både
+  (ingen får det samme to gange) og afsendelse ét sted. En ny type føjer sit navn til
+  `_shared/pushKinds.ts`, bygger sin payload i `_shared/pushPayloads.ts`, udvider
+  `kind`-constrainten på både
   `notification_preferences` og `push_deliveries` i sin egen migration og kalder
   `deliverPush` -- rør ikke `chat-push`, den har sin egen model. Den indstillede får
   ingen besked om en indstilling; badge-modellen skjuler den, indtil badgen er tildelt.

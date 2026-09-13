@@ -35,27 +35,18 @@ end
 $$;
 
 -- ---------------------------------------------------------------------------
--- Produktionen, den dag migrationen lander: en kommende begivenhed fandtes
--- allerede (ingen URL, for triggeren så aldrig et request), ingen begivenhed
--- er endnu oprettet fra appen, men ansøgningerne om prøvemedlemskab har husket
--- functions-hosten.
+-- En database, hvor ingen begivenhed endnu er oprettet fra appen (en ny
+-- Preview Branch): en kommende begivenhed findes, men uden URL, for triggeren
+-- så aldrig et request. Så er hosten ukendt, og kørslen lader den ligge --
+-- den fejler ikke. (Begivenhederne fra før migrationen i produktion fik deres
+-- URL af migrationens engangsopdatering, som en tom CI-database ikke kan se.)
 -- ---------------------------------------------------------------------------
 insert into public.events (id, title, start_at, created_by)
 values (
   '00000000-0000-0000-0000-0000000000e0',
-  'Tur oprettet før migrationen',
+  'Tur oprettet uden request',
   now() + interval '2 hours',
   '00000000-0000-0000-0000-0000000000f1'
-);
-
-insert into public.probation_applications (
-  full_name, email, motivation, notification_function_url
-)
-values (
-  'Ansøger',
-  'ansoeger@example.com',
-  'Vil gerne med',
-  'https://naturklubben.supabase.co/functions/v1/probation-notifications'
 );
 
 select is(
@@ -65,21 +56,23 @@ select is(
     where id = '00000000-0000-0000-0000-0000000000e0'
   ),
   null,
-  'en begivenhed fra før migrationen har ingen URL'
+  'en begivenhed oprettet uden request har ingen URL'
 );
 
 select is(
   public.enqueue_event_reminders(),
-  1,
-  'uden nogen begivenhed fra appen lånes hosten fra en ansøgning'
+  0,
+  'uden nogen begivenhed fra appen er hosten ukendt -- intet sættes i kø'
 );
 
-select results_eq(
-  $$select status, attempts
+select is(
+  (
+    select count(*)::int
     from public.event_reminders
-    where event_id = '00000000-0000-0000-0000-0000000000e0'$$,
-  $$values ('sending'::text, 1)$$,
-  'påmindelsen om den gamle begivenhed er sat i kø'
+    where event_id = '00000000-0000-0000-0000-0000000000e0'
+  ),
+  0,
+  'og der oprettes ingen kørsel for den'
 );
 
 -- Triggeren på events udleder functionens URL af requestets host-header,
@@ -134,7 +127,7 @@ select is(
 );
 
 update public.events
-set title = 'Tur oprettet før migrationen, redigeret',
+set title = 'Tur oprettet uden request, redigeret',
     notification_function_url = 'https://evil.example.com/steal'
 where id = '00000000-0000-0000-0000-0000000000e0';
 
@@ -295,8 +288,8 @@ values (
 
 select is(
   public.enqueue_event_reminders(),
-  1,
-  'kun begivenheden inden for vinduet sættes i kø -- ikke den om en uge'
+  2,
+  'begivenhederne inden for vinduet sættes i kø -- ikke den om en uge'
 );
 
 select results_eq(

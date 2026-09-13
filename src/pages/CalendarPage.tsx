@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AttendanceSection } from '../features/calendar/AttendanceSection'
 import { EventTasksSection } from '../features/calendar/EventTasksSection'
 import { EventForm } from '../features/calendar/EventForm'
@@ -190,6 +190,10 @@ function EventDetails({
   )
 }
 
+// Beskeden til den næste visning af /kalender: sat før navigationen, taget
+// én gang af den side, der starter forfra.
+let pendingEventMissingNotice = false
+
 function CalendarPage() {
   const { session } = useAuth()
   const userId = session!.user.id
@@ -204,24 +208,20 @@ function CalendarPage() {
   // så en formular, der åbnes i samme åndedrag, ville forsvinde igen.
   const { eventId: routedEventId } = useParams()
   const navigate = useNavigate()
-  const location = useLocation()
   const routedEvent = routedEventId
     ? (eventsQuery.data?.find((event) => event.id === routedEventId) ?? null)
     : null
   // En notifikation, der trykkes på, efter begivenheden er forbi eller
   // slettet, peger på noget, listen ikke længere har. Så siges det, og URL'en
-  // erstattes med /kalender. Beskeden rejser med i navigationens state, fordi
-  // navigationen starter siden forfra.
+  // erstattes med /kalender.
   const routedEventMissing = Boolean(
     routedEventId && eventsQuery.data && !routedEvent,
   )
+  const [eventMissing] = useState(() => pendingEventMissingNotice)
   useEffect(() => {
-    if (routedEventMissing) {
-      navigate('/kalender', { replace: true, state: { eventMissing: true } })
-    }
+    pendingEventMissingNotice = routedEventMissing
+    if (routedEventMissing) navigate('/kalender', { replace: true })
   }, [routedEventMissing, navigate])
-  const eventMissing =
-    (location.state as { eventMissing?: boolean } | null)?.eventMissing === true
   // null = "ikke valgt": den måned, den åbnede begivenhed ligger i, ellers
   // den nuværende.
   const [chosenMonth, setChosenMonth] = useState<Date | null>(null)

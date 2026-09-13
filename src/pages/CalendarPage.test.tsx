@@ -6,7 +6,13 @@ import {
   within,
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary'
 import type { CalendarEvent } from '../features/calendar/useEvents'
 
@@ -57,7 +63,18 @@ import CalendarPage from './CalendarPage'
 
 function LocationProbe() {
   const location = useLocation()
-  return <output data-testid="location">{location.pathname}</output>
+  const navigate = useNavigate()
+  return (
+    <>
+      <output data-testid="location">{location.pathname}</output>
+      <button type="button" onClick={() => navigate('/chat')}>
+        Gå til chat
+      </button>
+      <button type="button" onClick={() => navigate(-1)}>
+        Tilbage
+      </button>
+    </>
+  )
 }
 
 // Samme opsætning som App.tsx: hver navigation giver RouteErrorBoundary en ny
@@ -74,6 +91,7 @@ function renderAt(path: string) {
       <Routes>
         <Route path="/kalender" element={page} />
         <Route path="/kalender/:eventId" element={page} />
+        <Route path="/chat" element={<h1>Chat</h1>} />
       </Routes>
       <LocationProbe />
     </MemoryRouter>,
@@ -146,6 +164,22 @@ describe('CalendarPage: /kalender/<id>', () => {
     expect(screen.getByTestId('location').textContent).toBe('/kalender')
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(screen.getByRole('heading', { name: 'Kalender' })).toBeTruthy()
+  })
+
+  it('siger det kun én gang -- ikke igen efter "tilbage"', async () => {
+    mocks.eventsQuery.data = [EVENT]
+    renderAt('/kalender/00000000-0000-0000-0000-000000000099')
+    await screen.findByText('Begivenheden er forbi eller slettet.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gå til chat' }))
+    expect(screen.getByRole('heading', { name: 'Chat' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Tilbage' }))
+
+    expect(screen.getByRole('heading', { name: 'Kalender' })).toBeTruthy()
+    expect(screen.getByTestId('location').textContent).toBe('/kalender')
+    expect(
+      screen.queryByText('Begivenheden er forbi eller slettet.'),
+    ).toBeNull()
   })
 
   it('venter med at dømme, til listen er hentet', () => {
