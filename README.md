@@ -4,7 +4,7 @@
 
 Medlemsapp for Naturklubben — hero-forside, aktivitetsside, offentlig kalender med de
 begivenheder, arrangøren har åbnet for ikke-medlemmer (#224), og bag login: kalender,
-billedgalleri og gruppechat. Se GitHub-issue #1 for den fulde plan og `CLAUDE.md` for
+billedgalleri og gruppechat. Se GitHub-issue #1 for den fulde plan og `AGENTS.md` for
 projektets udviklingskonventioner.
 
 ## Teknologi
@@ -17,7 +17,7 @@ Realtime, Edge Functions).
 
 ```bash
 npm install
-cp .env.example .env.local   # udfyld med værdier fra Supabase, se CLAUDE.md/issue #2
+cp .env.example .env.local   # udfyld med værdier fra Supabase, se AGENTS.md/issue #2
 npm run dev
 ```
 
@@ -75,7 +75,7 @@ af `.github/workflows/sync-auth-config.yml` -- se `supabase/README.md`.
 - [`docs/kodegennemgang-2026-08-23.md`](docs/kodegennemgang-2026-08-23.md) — gennemgang af
   hele appen: arkitektur, styrker, fund og roadmap. Fundene er oprettet som issues med
   labels `blocker`, `risiko`, `friktion` og `finish`.
-- `CLAUDE.md` — projektets udviklingskonventioner.
+- `AGENTS.md` — projektets udviklingskonventioner.
 - `supabase/README.md` — backend-opsætning, nøgler og auth-URL'er.
 
 ## Mappestruktur
@@ -88,6 +88,6 @@ src/
   lib/         # supabaseClient.ts, queryClient.ts
   hooks/       # delte React hooks
 supabase/
-  migrations/  # SQL-migrations — deployes automatisk ved merge til main, se CLAUDE.md
-  functions/   # Edge Functions — deployes via GitHub Actions, se CLAUDE.md
+  migrations/  # SQL-migrations — deployes automatisk ved merge til main, se AGENTS.md
+  functions/   # Edge Functions — deployes via GitHub Actions, se AGENTS.md
 ```

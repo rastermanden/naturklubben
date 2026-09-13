@@ -1,6 +1,6 @@
 # Supabase
 
-Se `CLAUDE.md` i repo-roden for de overordnede spilleregler: migrations skrives og
+Se `AGENTS.md` i repo-roden for de overordnede spilleregler: migrations skrives og
 committes som SQL-filer her, valideres via Supabase Preview Branching på PR'en, og
 deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 
@@ -295,7 +295,7 @@ af databasen:
 
 ## Migrations
 
-Filnavngivning: `<timestamp>_<beskrivelse>.sql` i `supabase/migrations/`. Se `CLAUDE.md`
+Filnavngivning: `<timestamp>_<beskrivelse>.sql` i `supabase/migrations/`. Se `AGENTS.md`
 for hele arbejdsgangen (skriv → commit → PR → Preview Branch-validering → merge →
 automatisk produktionsdeploy).
 
@@ -407,7 +407,7 @@ glemmer en af delene, fejler dér.
 
 **Normalt gør du ingenting.** Du pusher, og `database`-jobbet kører hele kæden på
 PR'en -- bootstrap, alle migrationer i navnerækkefølge, pgTAP. Det tager under et
-minut. Der er bevidst **ingen lokal opsætning**: kerneprincippet i `CLAUDE.md` er, at
+minut. Der er bevidst **ingen lokal opsætning**: kerneprincippet i `AGENTS.md` er, at
 en bidragyder hverken skal have Docker eller en database installeret.
 
 Har du brug for at gentage kørslen mod en konkret database -- fx PR'ens egen Supabase
@@ -790,7 +790,7 @@ konfigurerer i praksis serveren.
 
 Det er bevidst: at oprette et repo-secret er et manuelt dashboard-trin, og projektets
 kerneprincip er, at alt ud over engangsopsætningen i #2/#3 skal kunne ske ved at skrive
-kode og pushe (se `CLAUDE.md`). Tidligere svarede functionen 503, og appen sagde "Push-
+kode og pushe (se `AGENTS.md`). Tidligere svarede functionen 503, og appen sagde "Push-
 notifikationer er ikke konfigureret på serveren endnu" -- uden nogen vej frem, der ikke gik
 gennem et dashboard.
 
@@ -914,7 +914,7 @@ første er oprettet.
 
 Medlemmerne skal kunne se, at appen har fået noget nyt, uden at nogen fortæller dem det
 mundtligt. En nyhed er derfor **kode**: hver funktion tager sin egen række med i den
-migration, den alligevel har (skabelonen står i `CLAUDE.md`).
+migration, den alligevel har (skabelonen står i `AGENTS.md`).
 
 Flowet, ende til ende:
 
