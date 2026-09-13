@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth'
 import { useMembers } from '../features/members/useMembers'
 import { BracketView } from '../features/tournament/BracketView'
@@ -333,9 +334,15 @@ function TournamentPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
+      <Link to="/aktiviteter" className="text-sm text-accent-soft underline">
+        ← Aktiviteter
+      </Link>
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-ink-body">Turnering</h1>
+          <h1 className="text-2xl font-semibold text-ink-body">
+            BTG turnering
+          </h1>
           <p className="text-ink-subtle">
             Hold styr på kampe, resultater og stilling til klubbens turneringer.
           </p>

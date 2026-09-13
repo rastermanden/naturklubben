@@ -87,7 +87,7 @@ const routeElements: Record<AppRoutePath, ReactNode> = {
   '/spil/2048': (
     <ProtectedRoute>{loadRoute(<TwentyFortyEightPage />)}</ProtectedRoute>
   ),
-  '/turnering': (
+  '/aktiviteter/btg-turnering': (
     <ProtectedRoute>{loadRoute(<TournamentPage />)}</ProtectedRoute>
   ),
   '/medlemmer': <ProtectedRoute>{loadRoute(<MembersPage />)}</ProtectedRoute>,
