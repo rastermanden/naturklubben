@@ -1,8 +1,7 @@
--- #239: fjerner e-mail-svaret til gæster på åbne begivenheder (#224/PR #226).
--- Kaptajnen ville ikke have Resend med i produktet -- arrangøren svarer nu
--- selv fra sin egen mailklient (option B). `GuestRequestsSection` viser
--- gæstens e-mail og en "Skriv til gæsten"-knap, der åbner en `mailto:` med et
--- klart svar, godkendt eller afvist.
+-- Fjerner den automatiske e-mail-udsendelse til gæster (#239); arrangøren
+-- svarer selv via mailto. `GuestRequestsSection` viser gæstens e-mail og en
+-- "Skriv til gæsten"-knap, der åbner en `mailto:` med et klart svar, godkendt
+-- eller afvist.
 --
 -- Det fjerner behovet for hele outbox'en: `claim_/complete_event_guest_notification`,
 -- `retry_event_guest_notifications` (og dens `pg_cron`-job), `pg_net`-kaldet i

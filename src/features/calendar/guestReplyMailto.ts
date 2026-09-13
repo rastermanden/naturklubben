@@ -1,8 +1,6 @@
-// Teksten i "Skriv til gæsten"-knappen (#239): en ready-to-send mailto: med
-// emne og en dansk kladde, som arrangøren kan rette til og sende fra sin egen
-// mailklient. Erstatter det tidligere automatiske e-mail-svar via Resend
-// (#224/PR #226) -- kaptajnen ville ikke have den afhængighed med, se
-// supabase/README.md, "Svaret til ansøgeren (#239)".
+// Teksten i "Skriv til gæsten"-knappen: en ready-to-send mailto: med emne og
+// en dansk kladde, som arrangøren kan rette til og sende fra sin egen
+// mailklient. Se supabase/README.md, "Svaret til ansøgeren (#239)".
 
 export interface GuestReplyEvent {
   title: string
