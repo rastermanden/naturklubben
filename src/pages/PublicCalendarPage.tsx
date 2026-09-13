@@ -93,7 +93,8 @@ function PublicCalendarPage() {
         </h1>
         <p className="mt-2 text-ink-muted">
           Her er de af Naturklubbens begivenheder, hvor du er velkommen, selv om
-          du ikke er medlem. Søg om at deltage, så svarer arrangøren på e-mail.
+          du ikke er medlem. Søg om at deltage -- du hører fra en arrangør pr.
+          e-mail.
         </p>
         {session ? (
           <p className="mt-2 text-sm text-ink-subtle">

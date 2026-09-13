@@ -163,6 +163,7 @@ function EventDetails({
           eventId={event.id}
           isPublic={event.is_public}
           canManage={canEdit}
+          event={event}
         />
 
         <EventTasksSection eventId={event.id} userId={userId} />

@@ -87,8 +87,8 @@ export function GuestRequestForm({ event, onClose }: GuestRequestFormProps) {
               Ansøgning modtaget
             </h2>
             <p className="text-ink-muted">
-              Tak! Arrangøren ser på din ansøgning til “{event.title}”, og du
-              får svar på e-mail.
+              Tak! Arrangøren ser på din ansøgning til “{event.title}”. Du
+              hører fra en arrangør pr. e-mail.
             </p>
             <div className="flex justify-end">
               <button
@@ -111,7 +111,7 @@ export function GuestRequestForm({ event, onClose }: GuestRequestFormProps) {
             </h2>
             <p className="mt-1 mb-5 text-sm text-ink-muted">
               {event.title}. Arrangøren godkender eller afviser ansøgningen, og
-              du får svar på e-mail.
+              du hører fra en arrangør pr. e-mail.
             </p>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">

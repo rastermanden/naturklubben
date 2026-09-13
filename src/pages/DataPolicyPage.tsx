@@ -91,8 +91,9 @@ function DataPolicyPage() {
             Folk uden for klubben kan søge om at deltage i en begivenhed, som
             arrangøren har åbnet for ikke-medlemmer. Navn, e-mail, antal
             personer og en eventuel besked bruges kun til at behandle
-            ansøgningen og sende svaret som e-mail, og oplysningerne kan kun ses
-            af begivenhedens arrangør og klubbens administratorer. Andre
+            ansøgningen, og oplysningerne kan kun ses af begivenhedens
+            arrangør og klubbens administratorer. Arrangøren svarer selv fra
+            sin egen mailklient -- der sendes ingen automatisk mail. Andre
             medlemmer ser kun antallet af godkendte gæster. Alle ansøgninger til
             en begivenhed -- godkendte, afviste og ubesvarede -- slettes
             automatisk 30 dage efter, at begivenheden er afholdt. Slettes

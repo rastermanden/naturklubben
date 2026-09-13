@@ -8,13 +8,10 @@ verify_jwt = false
 enabled = true
 verify_jwt = false
 
-# Offentlig kalender (#224): gæsteformularen har ingen bruger-JWT, og svaret
-# til gæsten udløses af pg_net/pg_cron med ansøgningens eget token.
+# Offentlig kalender (#224): gæsteformularen har ingen bruger-JWT. Svaret til
+# gæsten sendes ikke længere som e-mail (#239) -- arrangøren svarer selv fra
+# sin egen mailklient via en mailto:-knap i UI'et.
 [functions.submit-event-guest-request]
-enabled = true
-verify_jwt = false
-
-[functions.event-guest-notifications]
 enabled = true
 verify_jwt = false
 
