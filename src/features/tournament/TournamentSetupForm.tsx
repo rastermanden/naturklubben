@@ -67,30 +67,40 @@ export function TournamentSetupForm({
         </legend>
         <div className="grid gap-2 sm:grid-cols-2">
           <label
-            className={`min-h-11 rounded-lg border px-3 py-2 ${format === 'round_robin' ? 'border-accent-soft bg-surface-sunken' : 'border-line-soft'}`}
+            className={`rounded-lg border px-3 py-2 ${format === 'round_robin' ? 'border-accent-soft bg-surface-sunken' : 'border-line-soft'}`}
           >
-            <input
-              type="radio"
-              name="format"
-              value="round_robin"
-              checked={format === 'round_robin'}
-              onChange={() => setFormat('round_robin')}
-              className="mr-2"
-            />
-            Alle-mod-alle
+            <span className="flex min-h-11 items-center">
+              <input
+                type="radio"
+                name="format"
+                value="round_robin"
+                checked={format === 'round_robin'}
+                onChange={() => setFormat('round_robin')}
+                className="mr-2"
+              />
+              Alle-mod-alle
+            </span>
+            <p className="pl-5 text-sm text-ink-subtle">
+              Alle møder alle én gang. Den med flest sejre vinder.
+            </p>
           </label>
           <label
-            className={`min-h-11 rounded-lg border px-3 py-2 ${format === 'single_elimination' ? 'border-accent-soft bg-surface-sunken' : 'border-line-soft'}`}
+            className={`rounded-lg border px-3 py-2 ${format === 'single_elimination' ? 'border-accent-soft bg-surface-sunken' : 'border-line-soft'}`}
           >
-            <input
-              type="radio"
-              name="format"
-              value="single_elimination"
-              checked={format === 'single_elimination'}
-              onChange={() => setFormat('single_elimination')}
-              className="mr-2"
-            />
-            Udslagsrunder
+            <span className="flex min-h-11 items-center">
+              <input
+                type="radio"
+                name="format"
+                value="single_elimination"
+                checked={format === 'single_elimination'}
+                onChange={() => setFormat('single_elimination')}
+                className="mr-2"
+              />
+              Udslagsrunder
+            </span>
+            <p className="pl-5 text-sm text-ink-subtle">
+              Taber du en kamp, er du ude. Sidste mand tilbage vinder.
+            </p>
           </label>
         </div>
       </fieldset>
