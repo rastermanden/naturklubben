@@ -62,6 +62,7 @@ function toMatchRows(generated: GeneratedMatch[]) {
       next_match_id: nextMatchId,
       next_match_slot: match.nextMatchSlot,
       bye: match.bye,
+      best_of: match.bestOf,
     }
   })
 }

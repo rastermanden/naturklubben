@@ -4,6 +4,8 @@ import { useMembers } from '../features/members/useMembers'
 import { BracketView } from '../features/tournament/BracketView'
 import { messageForMember } from '../features/tournament/errors'
 import { MatchCard } from '../features/tournament/MatchCard'
+import { PinkShorts } from '../features/tournament/PinkShorts'
+import { rulesSummary } from '../features/tournament/rules'
 import {
   computeStandings,
   rankStandings,
@@ -214,6 +216,13 @@ function TournamentDetail({
         </p>
       </div>
 
+      <div className="rounded-xl border border-line-soft bg-surface-sunken p-4">
+        <h2 className="text-sm font-medium text-ink-body">Regler</h2>
+        <p className="mt-1 text-sm text-ink-subtle">
+          {rulesSummary(tournament.format)}
+        </p>
+      </div>
+
       {resultError && (
         <p role="alert" className="text-sm text-danger">
           {resultError}
@@ -268,9 +277,7 @@ function WinnerBanner({ names }: { names: string[] }) {
       role="status"
       className="rounded-xl border border-accent-soft bg-surface-raised p-6 text-center"
     >
-      <p aria-hidden="true" className="text-3xl">
-        🏆
-      </p>
+      <PinkShorts className="mx-auto h-12 w-auto" />
       <p className="mt-2 text-lg font-semibold text-ink-body">{text}</p>
     </div>
   )
@@ -532,9 +539,7 @@ function TournamentPage() {
                   </span>
                 </span>
                 {tournament.status === 'completed' && (
-                  <span aria-hidden="true" className="text-xl">
-                    🏆
-                  </span>
+                  <PinkShorts className="h-6 w-auto shrink-0" />
                 )}
               </button>
             </li>

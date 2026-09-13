@@ -1,3 +1,4 @@
+import { PinkShorts } from './PinkShorts'
 import type { Standing } from './roundRobin'
 
 interface StandingsTableProps {
@@ -40,9 +41,7 @@ export function StandingsTable({
                 <td className="px-3 py-2 text-ink">
                   {nameFor(standing.participantId)}
                   {isLeader && (
-                    <span aria-hidden="true" className="ml-2">
-                      🏆
-                    </span>
+                    <PinkShorts className="ml-2 inline-block h-4 w-auto align-text-bottom" />
                   )}
                 </td>
                 <td className="px-3 py-2 text-center">{standing.played}</td>

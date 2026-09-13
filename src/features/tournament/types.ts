@@ -31,6 +31,8 @@ export interface TournamentMatch {
   next_match_slot: 1 | 2 | null
   /** Kampens anden plads bliver aldrig udfyldt -- se bracket.ts. */
   bye: boolean
+  /** Antal spil, kampen højst går over: 3 for de fleste, 5 for finalen. */
+  best_of: number
 }
 
 export interface TournamentGame {
@@ -59,4 +61,6 @@ export interface GeneratedMatch {
   nextMatchSlot: 1 | 2 | null
   /** Kampens anden plads bliver aldrig udfyldt -- se bracket.ts. */
   bye: boolean
+  /** Antal spil, kampen højst går over: 3 for de fleste, 5 for finalen. */
+  bestOf: number
 }

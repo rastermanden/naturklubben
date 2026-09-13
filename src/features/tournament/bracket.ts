@@ -1,3 +1,4 @@
+import { BEST_OF_DEFAULT, BEST_OF_FINAL } from './rules'
 import type { GeneratedMatch } from './types'
 
 export interface BracketParticipant {
@@ -124,6 +125,12 @@ export function generateSingleEliminationBracket(
     return row
   }
 
+  /** Finalen spilles bedst af fem, alle andre kampe bedst af tre. Ved kun 2
+   * deltagere er runde 1 finalen. */
+  function bestOfForRound(round: number) {
+    return round === totalRounds ? BEST_OF_FINAL : BEST_OF_DEFAULT
+  }
+
   function linkFrom(
     token: EntrantToken,
     toRound: number,
@@ -162,6 +169,7 @@ export function generateSingleEliminationBracket(
       winnerId: byeId,
       status: 'completed',
       bye: true,
+      bestOf: BEST_OF_DEFAULT,
       nextMatchRound: null,
       nextMatchIndex: null,
       nextMatchSlot: null,
@@ -184,6 +192,7 @@ export function generateSingleEliminationBracket(
       winnerId: null,
       status: 'pending',
       bye: false,
+      bestOf: bestOfForRound(1),
       nextMatchRound: null,
       nextMatchIndex: null,
       nextMatchSlot: null,
@@ -224,6 +233,7 @@ export function generateSingleEliminationBracket(
         winnerId: null,
         status: 'pending',
         bye: false,
+        bestOf: bestOfForRound(round),
         nextMatchRound: null,
         nextMatchIndex: null,
         nextMatchSlot: null,
@@ -252,6 +262,7 @@ export function generateSingleEliminationBracket(
         winnerId: resolved,
         status: resolved ? 'completed' : 'pending',
         bye: true,
+        bestOf: BEST_OF_DEFAULT,
         nextMatchRound: null,
         nextMatchIndex: null,
         nextMatchSlot: null,
