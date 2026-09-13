@@ -13,7 +13,8 @@ export interface GameDefinition {
   /**
    * Linjen under navnet på resultatlisten. Kolonnerne i `game_scores` er de
    * samme for alle spil, men de betyder noget forskelligt: `lines` er rækker i
-   * Tetris og træk i Kaptajn Kaper, og niveauet dér er en rang.
+   * Tetris og træk i Kaptajn Kaper, og niveauet dér er en rang. 2048 bruger
+   * kun `score` og `duration_seconds`.
    */
   describeScore: (score: GameScore) => string
 }
@@ -42,6 +43,15 @@ export const games: readonly GameDefinition[] = [
     symbol: '⛵',
     describeScore: (score) =>
       `${score.lines} træk · ${rankName(score.level)} · ${formatDuration(score.duration_seconds)}`,
+  },
+  {
+    id: '2048',
+    title: '2048',
+    tagline:
+      'Skub brikkerne sammen, to ens bliver til én -- og se, om du kan nå 2048. Eller længere.',
+    path: '/spil/2048',
+    symbol: '🔢',
+    describeScore: (score) => formatDuration(score.duration_seconds),
   },
 ]
 
