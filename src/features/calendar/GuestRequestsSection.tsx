@@ -168,6 +168,12 @@ export function GuestRequestsSection({
         </p>
       )}
 
+      {lastDelivery?.notice && (
+        <p role="status" className="mt-3 text-sm text-ink-subtle">
+          {lastDelivery.notice}
+        </p>
+      )}
+
       {requestsQuery.data && requests.length === 0 && (
         <p className="mt-3 text-sm text-ink-subtle">
           Ingen har søgt om at deltage endnu.

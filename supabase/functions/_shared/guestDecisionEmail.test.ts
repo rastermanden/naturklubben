@@ -47,7 +47,11 @@ Deno.test('gæstesvar: afvisning er venlig og uden sted/antal', () => {
   })
 
   assert.equal(mail.subject, 'Svar på din ansøgning til "Åben skovtur"')
-  assert.match(mail.text, /desværre/)
+  assert.match(
+    mail.text,
+    /Vi kan desværre ikke tage imod din ansøgning denne gang\./,
+  )
+  assert.doesNotMatch(mail.text, /flere deltagere/)
   assert.doesNotMatch(mail.text, /Sted:/)
   assert.doesNotMatch(mail.text, /Antal personer/)
 })

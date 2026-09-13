@@ -73,7 +73,7 @@ export function guestDecisionEmail({
     text: [
       `Hej ${firstName}`,
       '',
-      `Tak for din interesse i "${event.title}" (${when}). Vi kan desværre ikke tage imod flere deltagere denne gang.`,
+      `Tak for din interesse i "${event.title}" (${when}). Vi kan desværre ikke tage imod din ansøgning denne gang.`,
       '',
       'Du er velkommen til at søge igen til en anden af klubbens åbne ture.',
       '',

@@ -38,6 +38,7 @@ export interface GuestNotificationDelivery {
   status: GuestNotificationStatus
   skipped?: boolean
   error?: string
+  notice?: string
 }
 
 const guestRequestFields =
@@ -107,17 +108,19 @@ async function decideRequest(
   if (error) throw error
 
   // Databasen har allerede køet mailen via pg_net; kaldet her viser blot
-  // resultatet med det samme. Claim-RPC'en gør de to kald idempotente.
+  // resultatet med det samme. Claim-RPC'en gør de to kald idempotente, og
+  // når kaldet herfra ikke når frem, leverer pg_net/pg_cron stadig svaret.
   try {
     return await deliverDecision(requestId)
   } catch (notificationError) {
     console.error(
-      'Afgørelsen blev gemt, men mailen til gæsten fejlede',
+      'Afgørelsen blev gemt, men leveringsstatus kunne ikke hentes',
       notificationError,
     )
     return {
-      status: 'failed',
-      error: 'Afgørelsen er gemt, men mailen kunne ikke sendes. Prøv igen.',
+      status: 'pending',
+      notice:
+        'Afgørelsen er gemt. Svaret sendes automatisk – se status ved gæsten.',
     }
   }
 }

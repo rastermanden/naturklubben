@@ -151,6 +151,26 @@ describe('GuestRequestsSection', () => {
     })
   })
 
+  it('does not report a failure when only the status call after a decision fails', async () => {
+    supabaseMocks.functions.invoke.mockResolvedValue({
+      data: null,
+      error: new Error('Failed to send a request to the Edge Function'),
+    })
+    renderSection()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Godkend Gitte Gæst' }),
+    )
+
+    const notice = await screen.findByText(
+      'Afgørelsen er gemt. Svaret sendes automatisk – se status ved gæsten.',
+    )
+    expect(notice.getAttribute('role')).toBe('status')
+    expect(
+      screen.queryByText(/Afgørelsen er gemt, men mailen kunne ikke sendes/),
+    ).toBeNull()
+  })
+
   it('rejects through the RPC', async () => {
     renderSection()
 
