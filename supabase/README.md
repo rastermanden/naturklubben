@@ -289,7 +289,8 @@ af databasen:
   afsenderen selv gav pladsen fra sig eller hævede loftet, ellers som neutral tekst --
   pladsen kan være frigivet uden om RPC'en (en slettet konto) og først fyldt af et
   senere svar.
-  Push følger chat-push's mention-regel; en særskilt push afventer #216.
+  Push følger chat-push's mention-regel (se "Mentions og hvor meget der sendes"); der
+  er ingen særskilt push-type for ventelisten.
 - `supabase/tests/rls/17_event_waitlist.sql` måler, at loftet håndhæves, at
   tabellen ikke kan skrives uden om RPC'en, at oprykning sker i rækkefølge og kun
   fylder de ledige pladser (også dem, en slettet konto efterlader), og at afbud og
