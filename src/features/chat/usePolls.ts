@@ -46,6 +46,35 @@ function normalizePollRow(row: PollRow): Poll {
   }
 }
 
+// create_poll (se migrationen 20260913180000_chat_polls.sql) bygger selv sit
+// jsonb-svar og navngiver felterne 'options'/'votes' -- ikke
+// poll_options/poll_votes, som kun er navnet på PostgREST's indlejrede
+// relationer i fetchPolls' select() ovenfor. To forskellige svarformer, to
+// mapninger; normalizePollRow ovenfor passer ikke på dette svar.
+interface CreatedPollRow {
+  id: string
+  message_id: string
+  question: string
+  created_by: string | null
+  closed_at: string | null
+  closed_by: string | null
+  options: PollOption[]
+  votes: PollVote[]
+}
+
+function normalizeCreatedPoll(row: CreatedPollRow): Poll {
+  return {
+    id: row.id,
+    message_id: row.message_id,
+    question: row.question,
+    created_by: row.created_by,
+    closed_at: row.closed_at,
+    closed_by: row.closed_by,
+    options: row.options,
+    votes: row.votes,
+  }
+}
+
 async function fetchPolls(messageIds: string[]): Promise<Poll[]> {
   if (messageIds.length === 0) return []
   const { data, error } = await supabase
@@ -156,7 +185,7 @@ export function usePolls(messages: Message[], currentUserId: string) {
         p_options: options,
       })
       if (error) throw error
-      return normalizePollRow(data as PollRow)
+      return normalizeCreatedPoll(data as CreatedPollRow)
     },
     // Opretteren skal se sin egen afstemning med det samme, ikke først når
     // Realtime-invalideringen (se ovenfor) har hentet vinduet forfra.
