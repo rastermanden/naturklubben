@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
+import type { ProfileSummary } from '../chat/useProfilesMap'
+import { announcePromotion, promotionCause } from './announceWaitlist'
 import {
   expectedResponseStatus,
   type AttendanceEntry,
@@ -75,12 +77,20 @@ export function applyOptimisticResponse(
   ]
 }
 
+/**
+ * Deltagerlisten og medlemmets svar. Rykker svaret nogen op fra ventelisten,
+ * fortæller mutationen dem det i chatten -- fra mutationens egen onSuccess,
+ * ikke fra kaldet, så beskeden også sendes, hvis dialogen lukkes, mens svaret
+ * gemmes. Bedste indsats: svaret er gemt, uanset om chatten kan nås.
+ */
 export function useEventAttendance(
-  eventId: string,
+  event: { id: string; title: string; max_participants: number | null },
   userId: string,
-  maxParticipants: number | null,
+  profiles: Record<string, ProfileSummary> | undefined,
 ) {
   const queryClient = useQueryClient()
+  const eventId = event.id
+  const maxParticipants = event.max_participants
   const queryKey = attendanceQueryKey(eventId)
 
   const attendanceQuery = useQuery({
@@ -114,6 +124,19 @@ export function useEventAttendance(
       )
 
       return { previous }
+    },
+    onSuccess: (result, _response, context) => {
+      if (result.promoted.length === 0) return
+      const previousStatus =
+        context?.previous.find((entry) => entry.user_id === userId)?.status ??
+        null
+      void announcePromotion(
+        userId,
+        promotionCause(previousStatus, result.status),
+        event.title,
+        result.promoted,
+        profiles,
+      )
     },
     onError: (_error, _variables, context) => {
       queryClient.setQueryData(queryKey, context?.previous)

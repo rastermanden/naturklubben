@@ -152,6 +152,47 @@ describe('AttendanceSection', () => {
     )
   })
 
+  it('lader en deltager vælge mellem at framelde sig og at melde afbud', async () => {
+    renderSection('bob')
+
+    await screen.findByText('(2/2 pladser)')
+    fireEvent.click(screen.getByRole('button', { name: 'Kan ikke' }))
+
+    await waitFor(() =>
+      expect(supabaseMocks.rpc).toHaveBeenCalledWith('respond_to_event', {
+        p_event_id: 'event-1',
+        p_response: 'declined',
+      }),
+    )
+
+    await screen.findByRole('button', { name: 'Frameld' })
+    fireEvent.click(screen.getByRole('button', { name: 'Frameld' }))
+
+    await waitFor(() =>
+      expect(supabaseMocks.rpc).toHaveBeenLastCalledWith('respond_to_event', {
+        p_event_id: 'event-1',
+        p_response: 'none',
+      }),
+    )
+  })
+
+  it('lader en på ventelisten melde afbud i stedet for bare at forlade køen', async () => {
+    renderSection('dave')
+
+    await screen.findByText('(2/2 pladser)')
+    expect(
+      screen.getByRole('button', { name: 'Forlad ventelisten' }),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Kan ikke' }))
+
+    await waitFor(() =>
+      expect(supabaseMocks.rpc).toHaveBeenCalledWith('respond_to_event', {
+        p_event_id: 'event-1',
+        p_response: 'declined',
+      }),
+    )
+  })
+
   it('viser afbuddet og lader det fortryde', async () => {
     mockTables([entry('alice', 'attending', 0), entry('frida', 'declined', 1)])
     renderSection('frida')
@@ -176,6 +217,31 @@ describe('AttendanceSection', () => {
 
     await screen.findByText('(2/2 pladser)')
     fireEvent.click(screen.getByRole('button', { name: 'Frameld' }))
+
+    await waitFor(() =>
+      expect(announceInChat).toHaveBeenCalledWith(
+        'bob',
+        'har meldt afbud til «Skovtur», så @Carol Hansen har fået pladsen fra ventelisten',
+        ['carol'],
+        'action',
+      ),
+    )
+  })
+
+  it('fortæller den oprykkede det, selv om dialogen lukkes, mens svaret gemmes', async () => {
+    let finishRpc!: (value: unknown) => void
+    supabaseMocks.rpc.mockReturnValue(
+      new Promise((resolve) => {
+        finishRpc = resolve
+      }),
+    )
+    const { unmount } = renderSection('bob')
+
+    await screen.findByText('(2/2 pladser)')
+    fireEvent.click(screen.getByRole('button', { name: 'Frameld' }))
+    await screen.findByRole('button', { name: 'Gemmer…' })
+    unmount()
+    finishRpc({ data: { status: null, promoted: ['carol'] }, error: null })
 
     await waitFor(() =>
       expect(announceInChat).toHaveBeenCalledWith(

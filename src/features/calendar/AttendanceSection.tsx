@@ -1,16 +1,11 @@
 import { useState } from 'react'
 import { useProfilesMap, type ProfileSummary } from '../chat/useProfilesMap'
 import { readableTextColor } from '../../lib/colorContrast'
-import {
-  announcePromotion,
-  announceReminder,
-  promotionCause,
-} from './announceWaitlist'
+import { announceReminder } from './announceWaitlist'
 import type { CalendarEvent } from './useEvents'
 import {
   useEventAttendance,
   useMembersWithoutResponse,
-  type AttendanceResponse,
   type EventAttendance,
 } from './useEventAttendance'
 import { useEventGuestCount } from './useEventGuests'
@@ -244,12 +239,12 @@ export function AttendanceSection({
   /** Arrangøren og admins: må se afbud og hvem der mangler at svare. */
   canManage: boolean
 }) {
-  const { attendanceQuery, respond } = useEventAttendance(
-    event.id,
-    userId,
-    event.max_participants,
-  )
   const profilesQuery = useProfilesMap()
+  const { attendanceQuery, respond } = useEventAttendance(
+    event,
+    userId,
+    profilesQuery.data,
+  )
   // Godkendte gæster fra den offentlige kalender (#224) tæller med som
   // deltagere, men vises kun som et tal -- hvem de er, ser kun arrangøren.
   const guestCount = useEventGuestCount(event.id).data ?? 0
@@ -262,25 +257,6 @@ export function AttendanceSection({
     attendance.find((entry) => entry.user_id === userId)?.status ?? null
   const ownPosition = waitlistPosition(attendance, userId)
   const isFull = !hasFreeSeat(attendance, event.max_participants)
-
-  function sendResponse(response: AttendanceResponse) {
-    const previousStatus = ownStatus
-    respond.mutate(response, {
-      onSuccess: (result) => {
-        // Den, hvis svar fyldte pladsen, fortæller den næste i køen om den.
-        // Bedste indsats: svaret er gemt, uanset om chatten kan nås.
-        if (result.promoted.length > 0) {
-          void announcePromotion(
-            userId,
-            promotionCause(previousStatus, result.status),
-            event.title,
-            result.promoted,
-            profilesQuery.data,
-          )
-        }
-      },
-    })
-  }
 
   const primaryLabel = respond.isPending
     ? 'Gemmer…'
@@ -305,22 +281,20 @@ export function AttendanceSection({
           )}
         </h3>
         <div className="flex flex-wrap gap-2">
-          {ownStatus !== 'attending' && ownStatus !== 'waitlisted' && (
-            <button
-              type="button"
-              onClick={() =>
-                sendResponse(ownStatus === 'declined' ? 'none' : 'declined')
-              }
-              disabled={attendanceQuery.isLoading || respond.isPending}
-              className="min-h-11 rounded border border-accent-soft px-4 py-2 font-medium text-ink-muted hover:bg-surface-sunken disabled:opacity-60"
-            >
-              {ownStatus === 'declined' ? 'Fortryd afbud' : 'Kan ikke'}
-            </button>
-          )}
           <button
             type="button"
             onClick={() =>
-              sendResponse(
+              respond.mutate(ownStatus === 'declined' ? 'none' : 'declined')
+            }
+            disabled={attendanceQuery.isLoading || respond.isPending}
+            className="min-h-11 rounded border border-accent-soft px-4 py-2 font-medium text-ink-muted hover:bg-surface-sunken disabled:opacity-60"
+          >
+            {ownStatus === 'declined' ? 'Fortryd afbud' : 'Kan ikke'}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              respond.mutate(
                 ownStatus === 'attending' || ownStatus === 'waitlisted'
                   ? 'none'
                   : 'attending',
