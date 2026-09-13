@@ -21,6 +21,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.112.3'
 import type { NotificationKind, PushPayload } from './pushPayloads.ts'
 import {
+  parseClaimedUserIds,
   selectPushRecipients,
   subscriptionsFor,
   type PushSubscriptionRow,
@@ -94,11 +95,7 @@ export async function deliverPush({
     { p_kind: kind, p_subject_id: subjectId, p_user_ids: recipients },
   )
   if (claimError) throw claimError
-  const claimed = ((claimedRows ?? []) as unknown[]).map((row) =>
-    // PostgREST leverer `setof uuid` som en liste af strenge; er det en
-    // objektform, tages første værdi.
-    typeof row === 'string' ? row : String(Object.values(row as object)[0]),
-  )
+  const claimed = parseClaimedUserIds(claimedRows ?? [])
 
   const targets = subscriptionsFor(claimed, subscriptions)
   const body = JSON.stringify(payload)

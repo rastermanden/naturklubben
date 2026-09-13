@@ -51,3 +51,25 @@ export function subscriptionsFor(
   const claimed = new Set(claimedUserIds)
   return subscriptions.filter((row) => claimed.has(row.user_id))
 }
+
+/**
+ * Medlemmerne, claim_push_deliveries gav os. PostgREST leverer en
+ * `returns setof uuid` som en liste af strenge -- alt andet er en fejl, der
+ * skal standse sendingen: rækkerne i loggen er allerede skrevet, så en
+ * fejllæsning her ville stå som "leveret" uden at nogen fik noget.
+ */
+export function parseClaimedUserIds(data: unknown): string[] {
+  if (!Array.isArray(data)) {
+    throw new Error(
+      `claim_push_deliveries svarede ikke med en liste: ${JSON.stringify(data)}`,
+    )
+  }
+  return data.map((row) => {
+    if (typeof row !== 'string') {
+      throw new Error(
+        `claim_push_deliveries svarede med andet end uuid-strenge: ${JSON.stringify(row)}`,
+      )
+    }
+    return row
+  })
+}

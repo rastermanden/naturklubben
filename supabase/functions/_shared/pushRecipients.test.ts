@@ -2,7 +2,11 @@
 // `deno test --config supabase/deno.json supabase/functions/_shared/*.test.ts`.
 
 import { strict as assert } from 'node:assert'
-import { selectPushRecipients, subscriptionsFor } from './pushRecipients.ts'
+import {
+  parseClaimedUserIds,
+  selectPushRecipients,
+  subscriptionsFor,
+} from './pushRecipients.ts'
 
 function subscription(id: string, userId: string) {
   return {
@@ -81,4 +85,18 @@ Deno.test('subscriptionsFor: alle enheder for netop de claimede', () => {
 
 Deno.test('subscriptionsFor: ingen claimede, ingen enheder', () => {
   assert.deepEqual(subscriptionsFor([], SUBSCRIPTIONS), [])
+})
+
+Deno.test('parseClaimedUserIds: PostgREST-listen af uuid-strenge', () => {
+  assert.deepEqual(parseClaimedUserIds([IDA, JENS]), [IDA, JENS])
+  assert.deepEqual(parseClaimedUserIds([]), [])
+})
+
+Deno.test('parseClaimedUserIds: en anden form standser sendingen', () => {
+  assert.throws(
+    () => parseClaimedUserIds([{ claim_push_deliveries: IDA }]),
+    /uuid-strenge/,
+  )
+  assert.throws(() => parseClaimedUserIds({ user_id: IDA }), /liste/)
+  assert.throws(() => parseClaimedUserIds(null), /liste/)
 })
