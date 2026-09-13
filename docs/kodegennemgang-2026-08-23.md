@@ -34,7 +34,7 @@ Pages. Backenden er Supabase: Postgres med row level security som eneste
 autorisationslag, Auth, Storage i tre buckets, Realtime til chat og galleri, og seks
 Deno-baserede Edge Functions. Der findes ingen egen server.
 
-Hele udviklingsmodellen hviler på ét princip fra `CLAUDE.md`: intet trin må kræve en
+Hele udviklingsmodellen hviler på ét princip fra `AGENTS.md`: intet trin må kræve en
 lokal Docker-stak eller en manuelt kørt deploy-kommando. Alt sker ved at skrive kode,
 committe og åbne en PR. Det princip er faktisk holdt hele vejen igennem — og det er
 også dét, der forklarer de fleste af fundene længere nede.

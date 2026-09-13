@@ -1,6 +1,6 @@
 # Supabase
 
-Se `CLAUDE.md` i repo-roden for de overordnede spilleregler: migrations skrives og
+Se `AGENTS.md` i repo-roden for de overordnede spilleregler: migrations skrives og
 committes som SQL-filer her, valideres via Supabase Preview Branching på PR'en, og
 deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 
@@ -12,7 +12,7 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 | `activities`                               | Offentligt indhold om klubbens aktiviteter (#10).                                                                                                                                                                                                                                                                                                 | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                                                                                                                                                                                        |
 | `events`                                   | Kalenderbegivenheder (#11) med valgfrit pladsloft `max_participants` (#222). Opretterreferencen nulstilles ved kontosletning, så fælles historik bevares anonymt. `is_public` (#224) åbner begivenheden for ikke-medlemmer. `notification_function_url` sættes af en trigger ud fra requestets host og bruges af påmindelsen dagen før (#216).    | Autentificerede kan læse/oprette; ejer og admins kan opdatere, ejer og admins kan slette. Anon ser kun rækker med `is_public` og kun titel, beskrivelse, tid og sted via kolonnegrants -- aldrig `created_by`. `calendar_feed_events` og `public_events` er de to anon-views.                               |
 | `event_attendance`                         | Medlemmernes svar på en begivenhed: `attending`, `waitlisted` eller `declined` (#222). Ventelisten står i `created_at`-rækkefølge.                                                                                                                                                                                                                | Alle medlemmer kan læse tilmeldinger og venteliste; et afbud ser kun den, der meldte det, arrangøren og admins. INSERT/UPDATE/DELETE er revoked -- kun `respond_to_event` og `promote_event_waitlist` skriver, bag en advisory lock pr. begivenhed, så loftet ikke kan omgås.                               |
-| `event_guest_requests`                     | Ansøgninger fra ikke-medlemmer om at deltage i en åben begivenhed (#224): navn, e-mail, evt. besked, antal personer, status og outboxen for svaret pr. mail. Delvist unikt indeks: én åben (pending/godkendt) ansøgning pr. e-mail pr. begivenhed.                                                                                                | Kun begivenhedens arrangør (`created_by`) og admins kan læse (`can_manage_event_guests`). Ingen klientskrivning: oprettes af `submit_event_guest_request_limited` (service_role), afgøres af `approve_/reject_event_guest_request`. `event_guest_counts` giver alle medlemmer antallet af godkendte gæster. |
+| `event_guest_requests`                     | Ansøgninger fra ikke-medlemmer om at deltage i en åben begivenhed (#224): navn, e-mail, evt. besked, antal personer og status. Delvist unikt indeks: én åben (pending/godkendt) ansøgning pr. e-mail pr. begivenhed. Arrangøren svarer selv via en `mailto:`-knap i UI'et (#239), ikke automatisk.                                                | Kun begivenhedens arrangør (`created_by`) og admins kan læse (`can_manage_event_guests`). Ingen klientskrivning: oprettes af `submit_event_guest_request_limited` (service_role), afgøres af `approve_/reject_event_guest_request`. `event_guest_counts` giver alle medlemmer antallet af godkendte gæster. |
 | `photos`                                   | Metadata og vedvarende optimeringsstatus for uploadede billeder -- selve filerne ligger i Storage (#12/#89).                                                                                                                                                                                                                                      | Autentificerede kan læse. Oprettelse/genforsøg går gennem `upsert_photo_upload`; direkte INSERT/UPDATE/DELETE er revoked, så klienten ikke kan skrive serverejede status/outputfelter eller omgå sikker sletning.                                                                                           |
 | `messages`                                 | Gruppechat, ét fælles rum (#14), med valgfri svarreference (#84) og `mentions` med de nævntes bruger-id'er (#179). Afsenderreferencen nulstilles ved kontosletning. Del af `supabase_realtime`.                                                                                                                                                   | Kun autentificerede kan læse/skrive; afsender kan slette egne, og admins kan slette alle. `mentions` skrives kun i afsenderens eget insert -- UPDATE er revoked, så ingen kan nævne nogen på en andens besked.                                                                                              |
 | `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` og af de øvrige push-functioner (se "Notifikationer ud over chatten").                                                                                                                                                                                            | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                                                                                                                                                                                 |
@@ -126,12 +126,9 @@ Supabase CLI'en ikke skal læse den ved deploy.
   IP-normalisering i `_shared/clientAddress.ts`, egne HMAC-domæner, service-role-only RPC
   `submit_event_guest_request_limited` med de samme rate-limit-grænser -- plus svaret
   `event_unavailable` (404), når begivenheden ikke er offentlig eller er overstået. En
-  allerede åben ansøgning fra samme e-mail får samme 202 som en ny.
-- `event-guest-notifications` (#224): sender svaret på en gæsteansøgning som e-mail.
-  Kaldes af Postgres (pg_net efter `approve_/reject_event_guest_request`, pg_cron ved
-  genforsøg) med ansøgningens token, eller af arrangøren/en admin med eget access-token.
-  Claim/complete-RPC'erne og outbox-felterne er de samme som for
-  probation-notifications. Se "Offentlig kalender" nedenfor om mailudbyderen.
+  allerede åben ansøgning fra samme e-mail får samme 202 som en ny. Svaret til gæsten
+  sendes ikke af en Edge Function (#239): arrangøren skriver selv fra sin egen mailklient,
+  se "Offentlig kalender og gæster" nedenfor.
 - `submit-probation-application` (#87): eneste offentlige indgang til nye
   prøvemedlemskabsansøgninger. Functionen validerer input, bruger Cloudflares
   platform-satte `CF-Connecting-IP`, HMAC-hasher misbrugssignaler og kalder en
@@ -299,7 +296,7 @@ af databasen:
 
 ## Migrations
 
-Filnavngivning: `<timestamp>_<beskrivelse>.sql` i `supabase/migrations/`. Se `CLAUDE.md`
+Filnavngivning: `<timestamp>_<beskrivelse>.sql` i `supabase/migrations/`. Se `AGENTS.md`
 for hele arbejdsgangen (skriv → commit → PR → Preview Branch-validering → merge →
 automatisk produktionsdeploy).
 
@@ -411,7 +408,7 @@ glemmer en af delene, fejler dér.
 
 **Normalt gør du ingenting.** Du pusher, og `database`-jobbet kører hele kæden på
 PR'en -- bootstrap, alle migrationer i navnerækkefølge, pgTAP. Det tager under et
-minut. Der er bevidst **ingen lokal opsætning**: kerneprincippet i `CLAUDE.md` er, at
+minut. Der er bevidst **ingen lokal opsætning**: kerneprincippet i `AGENTS.md` er, at
 en bidragyder hverken skal have Docker eller en database installeret.
 
 Har du brug for at gentage kørslen mod en konkret database -- fx PR'ens egen Supabase
@@ -670,28 +667,21 @@ gør tre ting:
    `is_admin()` eller `events.created_by = auth.uid()`. Alle andre medlemmer ser kun
    "gæster: n" (summen af `party_size` for godkendte) fra viewet `event_guest_counts`.
 
-Afgørelsen sætter `decision_notification_status = 'pending'` og køer et `pg_net`-kald
-til `event-guest-notifications` med ansøgningens `notification_token` -- præcis som
-probation-notifications, inklusive `claim_/complete_event_guest_notification`,
-forsøgstæller og `retry-event-guest-notifications` hvert femte minut. Klienten kalder
-også functionen lige efter RPC'en for at vise resultatet med det samme.
+Afgørelsen sætter `status` og `reviewed_at`/`reviewed_by`. Der er ingen automatisk
+levering til ansøgeren (#239 fjernede den, se nedenfor) -- klienten viser i stedet
+en "Skriv til gæsten"-knap med det samme.
 
-### Mailudbyderen
+### Svaret til ansøgeren (#239)
 
-Gæsterne er ikke i appen og kan ikke få svaret som Web Push, så det sendes som e-mail
-gennem Resends HTTP-API (`_shared/email.ts`). Det er den ene undtagelse fra reglen
-om, at intet må kræve et manuelt oprettet secret: `RESEND_API_KEY` skal sættes som
-repo-secret **og** `EMAIL_FROM` som repo-variabel med en afsender på et domæne, der er
-verificeret hos Resend (Resends testafsender `onboarding@resend.dev` må kun sende til
-kontoejeren selv og kan derfor ikke bruges til gæster). `deploy-functions.yml` skubber
-dem videre som function-secrets, hvis begge findes -- samme mønster som de valgfrie
-VAPID-secrets. Mangler en af dem, deployes alt stadig, men hver afgørelse ender som
-`failed` med teksten "Der er ikke sat en mailudbyder op (RESEND_API_KEY eller
-EMAIL_FROM mangler)", som arrangøren ser i dialogen og kan reagere på ved at skrive
-selv (e-mailen står som `mailto:`-link). Når opsætningen senere er på plads, sender
-"Send igen" i dialogen svaret uden om afkølingen og loftet på ti automatiske forsøg
-(`claim_event_guest_notification(..., manual => true)`).
-Mailteksten ligger i `_shared/guestDecisionEmail.ts` og testes uden udbyder.
+Gæsterne er ikke i appen og kan ikke få svaret som Web Push. En tidligere
+automatisk mail-udsendelse blev fjernet i #239.
+
+`GuestRequestsSection` viser ansøgerens e-mail og en "Skriv til
+gæsten"-knap. Den åbner et `mailto:`-link med emne og en klar dansk kladde --
+godkendt eller afvist, med begivenhedens titel og tidspunkt indsat -- som
+arrangøren kan rette til og sende fra sin egen mailklient. Der er ingen
+leveringsstatus at vise eller genforsøge; kladden er bygget lokalt i klienten
+(`guestReplyMailto.ts`) og kræver ikke et kald til Supabase.
 
 ## Auth-URL'er: hvor links i mails lander
 
@@ -801,7 +791,7 @@ konfigurerer i praksis serveren.
 
 Det er bevidst: at oprette et repo-secret er et manuelt dashboard-trin, og projektets
 kerneprincip er, at alt ud over engangsopsætningen i #2/#3 skal kunne ske ved at skrive
-kode og pushe (se `CLAUDE.md`). Tidligere svarede functionen 503, og appen sagde "Push-
+kode og pushe (se `AGENTS.md`). Tidligere svarede functionen 503, og appen sagde "Push-
 notifikationer er ikke konfigureret på serveren endnu" -- uden nogen vej frem, der ikke gik
 gennem et dashboard.
 
@@ -933,7 +923,7 @@ første er oprettet.
 
 Medlemmerne skal kunne se, at appen har fået noget nyt, uden at nogen fortæller dem det
 mundtligt. En nyhed er derfor **kode**: hver funktion tager sin egen række med i den
-migration, den alligevel har (skabelonen står i `CLAUDE.md`).
+migration, den alligevel har (skabelonen står i `AGENTS.md`).
 
 Flowet, ende til ende:
 

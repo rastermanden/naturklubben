@@ -1,23 +1,19 @@
-// Teksten i svaret til en gæst, der har søgt om at deltage i en åben
-// begivenhed (#224). Ren funktion, så den kan testes uden en mailudbyder.
+// Teksten i "Skriv til gæsten"-knappen: en ready-to-send mailto: med emne og
+// en dansk kladde, som arrangøren kan rette til og sende fra sin egen
+// mailklient. Se supabase/README.md, "Svaret til ansøgeren (#239)".
 
-export interface GuestDecisionEvent {
+export interface GuestReplyEvent {
   title: string
   location: string | null
   start_at: string
   end_at: string | null
 }
 
-export interface GuestDecisionInput {
+export interface GuestReplyInput {
   status: 'approved' | 'rejected'
   fullName: string
-  partySize: number
-  event: GuestDecisionEvent
-}
-
-export interface GuestDecisionEmail {
-  subject: string
-  text: string
+  email: string
+  event: GuestReplyEvent
 }
 
 const dateFormatter = new Intl.DateTimeFormat('da-DK', {
@@ -33,7 +29,7 @@ const timeFormatter = new Intl.DateTimeFormat('da-DK', {
   timeZone: 'Europe/Copenhagen',
 })
 
-export function formatEventTime(event: GuestDecisionEvent) {
+export function formatGuestEventTime(event: GuestReplyEvent) {
   const start = new Date(event.start_at)
   const end = event.end_at ? new Date(event.end_at) : null
   let text = `${dateFormatter.format(start)} kl. ${timeFormatter.format(start)}`
@@ -41,44 +37,54 @@ export function formatEventTime(event: GuestDecisionEvent) {
   return text
 }
 
-export function guestDecisionEmail({
+export interface GuestReplyDraft {
+  subject: string
+  body: string
+}
+
+export function guestReplyDraft({
   status,
   fullName,
-  partySize,
   event,
-}: GuestDecisionInput): GuestDecisionEmail {
+}: GuestReplyInput): GuestReplyDraft {
   const firstName = fullName.trim().split(/\s+/)[0] || 'du'
-  const when = formatEventTime(event)
+  const when = formatGuestEventTime(event)
   const where = event.location ? `\nSted: ${event.location}` : ''
-  const people = partySize > 1 ? `\nAntal personer: ${partySize}` : ''
 
   if (status === 'approved') {
     return {
       subject: `Du er velkommen til "${event.title}"`,
-      text: [
+      body: [
         `Hej ${firstName}`,
         '',
-        `Din ansøgning om at deltage i "${event.title}" er godkendt. Vi glæder os til at se dig.`,
+        `Du er velkommen til at deltage i "${event.title}". Vi glæder os til at se dig.`,
         '',
-        `Tidspunkt: ${when}${where}${people}`,
-        '',
-        'Venlig hilsen',
-        'Naturklubben',
+        `Tidspunkt: ${when}${where}`,
       ].join('\n'),
     }
   }
 
   return {
     subject: `Svar på din ansøgning til "${event.title}"`,
-    text: [
+    body: [
       `Hej ${firstName}`,
       '',
       `Tak for din interesse i "${event.title}" (${when}). Vi kan desværre ikke tage imod din ansøgning denne gang.`,
       '',
       'Du er velkommen til at søge igen til en anden af klubbens åbne ture.',
-      '',
-      'Venlig hilsen',
-      'Naturklubben',
     ].join('\n'),
   }
+}
+
+/** Bygger selve `mailto:`-linket, klar til `<a href>`. */
+export function guestReplyMailto(input: GuestReplyInput): string {
+  const draft = guestReplyDraft(input)
+  const params = new URLSearchParams({
+    subject: draft.subject,
+    body: draft.body,
+  })
+  // URLSearchParams koder mellemrum som "+"; mailto:-klienter forventer %20.
+  return `mailto:${encodeURIComponent(input.email)}?${params
+    .toString()
+    .replace(/\+/g, '%20')}`
 }

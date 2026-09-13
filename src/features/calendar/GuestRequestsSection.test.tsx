@@ -6,7 +6,6 @@ import { GuestRequestsSection } from './GuestRequestsSection'
 const supabaseMocks = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(),
-  functions: { invoke: vi.fn() },
 }))
 
 vi.mock('../../lib/supabaseClient', () => ({
@@ -14,6 +13,13 @@ vi.mock('../../lib/supabaseClient', () => ({
 }))
 
 const EVENT_ID = '3f2c1a4e-5b6d-4c7e-8f90-1a2b3c4d5e6f'
+
+const EVENT = {
+  title: 'Åben skovtur',
+  location: 'Dyrehaven',
+  start_at: '2030-09-10T09:00:00.000Z',
+  end_at: '2030-09-10T11:00:00.000Z',
+}
 
 const PENDING = {
   id: 'a1',
@@ -24,11 +30,9 @@ const PENDING = {
   party_size: 2,
   status: 'pending',
   created_at: '2030-09-01T10:00:00.000Z',
-  decision_notification_status: null,
-  decision_notification_error: null,
 }
 
-const APPROVED_WITH_FAILED_MAIL = {
+const APPROVED = {
   ...PENDING,
   id: 'a2',
   full_name: 'Tobias',
@@ -36,20 +40,13 @@ const APPROVED_WITH_FAILED_MAIL = {
   message: null,
   party_size: 1,
   status: 'approved',
-  decision_notification_status: 'failed',
-  decision_notification_error:
-    'Der er ikke sat en mailudbyder op (RESEND_API_KEY mangler). Giv gæsten besked på anden vis.',
 }
 
 let requests: unknown[]
 
 beforeEach(() => {
-  requests = [PENDING, APPROVED_WITH_FAILED_MAIL]
+  requests = [PENDING, APPROVED]
   supabaseMocks.rpc.mockResolvedValue({ data: null, error: null })
-  supabaseMocks.functions.invoke.mockResolvedValue({
-    data: { status: 'sent' },
-    error: null,
-  })
   supabaseMocks.from.mockImplementation((table: string) => {
     expect(table).toBe('event_guest_requests')
     return {
@@ -77,6 +74,7 @@ function renderSection(canManage = true, isPublic = true) {
         eventId={EVENT_ID}
         isPublic={isPublic}
         canManage={canManage}
+        event={EVENT}
       />
     </QueryClientProvider>,
   )
@@ -116,7 +114,7 @@ describe('GuestRequestsSection', () => {
     ).toBeTruthy()
   })
 
-  it('shows pending requests with their details and the failed mail state', async () => {
+  it('shows pending requests with their e-mail and details', async () => {
     renderSection()
 
     expect(await screen.findByText('Gitte Gæst · 2 personer')).toBeTruthy()
@@ -128,11 +126,9 @@ describe('GuestRequestsSection', () => {
         .getAttribute('href'),
     ).toBe('mailto:gitte@example.com')
     expect(screen.getByText('Tobias')).toBeTruthy()
-    expect(screen.getByText(/RESEND_API_KEY mangler/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Send igen' })).toBeTruthy()
   })
 
-  it('approves through the RPC and then triggers the e-mail delivery', async () => {
+  it('approves through the RPC', async () => {
     renderSection()
 
     fireEvent.click(
@@ -144,31 +140,7 @@ describe('GuestRequestsSection', () => {
         'approve_event_guest_request',
         { request_id: 'a1' },
       )
-      expect(supabaseMocks.functions.invoke).toHaveBeenCalledWith(
-        'event-guest-notifications',
-        { body: { requestId: 'a1' } },
-      )
     })
-  })
-
-  it('does not report a failure when only the status call after a decision fails', async () => {
-    supabaseMocks.functions.invoke.mockResolvedValue({
-      data: null,
-      error: new Error('Failed to send a request to the Edge Function'),
-    })
-    renderSection()
-
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Godkend Gitte Gæst' }),
-    )
-
-    const notice = await screen.findByText(
-      'Afgørelsen er gemt. Svaret sendes automatisk – se status ved gæsten.',
-    )
-    expect(notice.getAttribute('role')).toBe('status')
-    expect(
-      screen.queryByText(/Afgørelsen er gemt, men mailen kunne ikke sendes/),
-    ).toBeNull()
   })
 
   it('rejects through the RPC', async () => {
@@ -186,48 +158,34 @@ describe('GuestRequestsSection', () => {
     })
   })
 
-  it('retries a failed e-mail and shows why it still did not go out', async () => {
-    supabaseMocks.functions.invoke.mockResolvedValue({
-      data: {
-        status: 'failed',
-        error: 'Mailudbyderen svarede 403: Domain not verified',
-      },
-      error: null,
-    })
+  it('shows a "Skriv til gæsten" mailto link for an approved guest', async () => {
     renderSection()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Send igen' }))
+    const link = await screen.findByRole('link', { name: 'Skriv til gæsten' })
+    const href = decodeURIComponent(link.getAttribute('href') ?? '')
 
-    await vi.waitFor(() => {
-      expect(supabaseMocks.functions.invoke).toHaveBeenCalledWith(
-        'event-guest-notifications',
-        { body: { requestId: 'a2' } },
-      )
-    })
-    expect(
-      await screen.findByText('Mailudbyderen svarede 403: Domain not verified'),
-    ).toBeTruthy()
+    expect(href.startsWith('mailto:tobias@example.com?')).toBe(true)
+    expect(href).toContain('subject=Du er velkommen til "Åben skovtur"')
+    expect(href).toContain('Sted: Dyrehaven')
   })
 
-  it('shows no error when another delivery is already in flight', async () => {
-    supabaseMocks.functions.invoke.mockResolvedValue({
-      data: { status: 'sending', skipped: true },
-      error: null,
-    })
+  it('shows a rejected reply mailto with the neutral wording', async () => {
+    requests = [
+      {
+        ...APPROVED,
+        id: 'a3',
+        full_name: 'Rejected Person',
+        status: 'rejected',
+      },
+    ]
     renderSection()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Send igen' }))
+    const link = await screen.findByRole('link', { name: 'Skriv til gæsten' })
+    const href = decodeURIComponent(link.getAttribute('href') ?? '')
 
-    await vi.waitFor(() => {
-      expect(supabaseMocks.functions.invoke).toHaveBeenCalledWith(
-        'event-guest-notifications',
-        { body: { requestId: 'a2' } },
-      )
-    })
-    expect(
-      screen.queryByText('Mailen blev ikke sendt. Prøv igen om lidt.'),
-    ).toBeNull()
-    expect(screen.queryByText('Mailen kunne ikke sendes.')).toBeNull()
+    expect(href).toContain(
+      'Vi kan desværre ikke tage imod din ansøgning denne gang.',
+    )
   })
 
   it('explains a refused decision', async () => {

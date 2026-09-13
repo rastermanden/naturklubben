@@ -6,7 +6,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(34);
+select plan(29);
 
 do $$
 begin
@@ -39,12 +39,6 @@ begin
       '00000000-0000-0000-0000-00000000000a',
       false
     );
-
-  -- event_guest_notification_function_url() udleder værten af requestens
-  -- headers, som Edge Functionens PostgREST-kald sætter.
-  perform set_config(
-    'request.headers', '{"host": "naturklubben.supabase.co"}', true
-  );
 end
 $$;
 
@@ -268,13 +262,6 @@ select results_eq(
   'arrangøren kan læse ansøgningerne på sin begivenhed'
 );
 
-select throws_ok(
-  $$select notification_token from public.event_guest_requests$$,
-  '42501',
-  null,
-  'arrangøren kan ikke læse leveringstoken'
-);
-
 select lives_ok(
   $$select public.approve_event_guest_request(
       '00000000-0000-0000-0000-0000000000a1'
@@ -283,11 +270,11 @@ select lives_ok(
 );
 
 select results_eq(
-  $$select status, decision_notification_status
+  $$select status
     from public.event_guest_requests
     where email = 'gitte@example.com'::citext$$,
-  $$values ('approved', 'pending')$$,
-  'godkendelsen sætter status og køer svaret til ansøgeren'
+  $$values ('approved')$$,
+  'godkendelsen sætter status'
 );
 
 -- Alle medlemmer ser antallet af godkendte gæster, ikke hvem de er.
@@ -322,62 +309,16 @@ select throws_ok(
 );
 
 -- ---------------------------------------------------------------------------
--- Levering: automatiske genforsøg har et loft, arrangørens "Send igen" har ikke
--- ---------------------------------------------------------------------------
-do $$ begin perform tests.login_service(); end $$;
-
-update public.event_guest_requests
-set decision_notification_status = 'failed',
-    decision_notification_attempts = 10,
-    decision_notification_started_at = now() - interval '1 hour'
-where id = '00000000-0000-0000-0000-0000000000a1';
-
-select is(
-  public.claim_event_guest_notification(
-    '00000000-0000-0000-0000-0000000000a1'
-  ),
-  0,
-  'et automatisk genforsøg stopper ved ti forsøg'
-);
-
-select is(
-  public.claim_event_guest_notification(
-    '00000000-0000-0000-0000-0000000000a1', true
-  ),
-  11,
-  'arrangørens "Send igen" er fritaget fra forsøgsloftet'
-);
-
-select is(
-  public.claim_event_guest_notification(
-    '00000000-0000-0000-0000-0000000000a1', true
-  ),
-  0,
-  'en levering, der er i gang, tages ikke igen -- heller ikke manuelt'
-);
-
-do $$ begin perform tests.login('00000000-0000-0000-0000-00000000000a'); end $$;
-
-select throws_ok(
-  $$select public.claim_event_guest_notification(
-      '00000000-0000-0000-0000-0000000000a1', true
-    )$$,
-  '42501',
-  null,
-  'arrangøren kan ikke tage leveringen uden om Edge Functionen'
-);
-
--- ---------------------------------------------------------------------------
 -- Dataopbevaring og den unikke ansøgning pr. e-mail
 -- ---------------------------------------------------------------------------
 do $$ begin perform tests.reset_session(); end $$;
 
 select throws_ok(
   $$insert into public.event_guest_requests
-      (event_id, full_name, email, notification_function_url)
+      (event_id, full_name, email)
     values (
       '00000000-0000-0000-0000-0000000000e1', 'Gitte igen',
-      'gitte@example.com', 'https://naturklubben.supabase.co/functions/v1/event-guest-notifications'
+      'gitte@example.com'
     )$$,
   '23505',
   null,
