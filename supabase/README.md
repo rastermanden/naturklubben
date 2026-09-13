@@ -30,7 +30,7 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 | `member_badges`                            | De tildelte badges. `nominated_by`/`reason` kopieres med, så vitrinen kan vise dem uden at åbne indstillingerne for alle.                                                                                                                                                                                                                         | Alle medlemmer kan læse. Ingen klientskrivning -- tildeling sker kun i `vote_on_badge_nomination`.                                                                                                                                                                                                          |
 | `badge_productions`                        | Produktionsopgaven på det fysiske badge, med `due_at` = tildeling + 24 timer.                                                                                                                                                                                                                                                                     | Kun admins kan læse. Skrivning gennem `claim_badge_production`/`complete_badge_production`.                                                                                                                                                                                                                 |
 | `game_scores`                              | Resultater fra spil-sektionen (#202), ét spil pr. række: `tetris`, `kaper` og `2048`. `game` afgrænser listen, og et check-constraint pr. spil holder point op mod `lines` (rækker i Tetris, træk i Kaptajn Kaper) eller mod et fast loft (2048, hvor `lines`/`level` står på deres standardværdier), så et umuligt tal ikke kan lande på listen. | Alle medlemmer kan læse -- resultatlisten er hele pointen. Man kan kun indsætte sit eget resultat, UPDATE er revoked (et resultat rettes ikke bagefter), og både spilleren selv og admins kan slette.                                                                                                       |
-| `notification_preferences`                 | Medlemmets til/fra pr. notifikationstype ud over chatten (#216): `event_created`, `event_reminder`, `badge_nomination_review` (kun admins får den). Ingen række betyder ja tak.                                                                                                                                                                   | Medlemmet kan læse sine egne rækker; skrivning kun gennem `set_notification_preference`.                                                                                                                                                                                                                    |
+| `notification_preferences`                 | Medlemmets til/fra pr. notifikationstype ud over chatten (#216): `event_created`, `event_reminder`, `waitlist_promoted` (#236) og `badge_nomination_review` (kun admins får den). Ingen række betyder ja tak.                                                                                                                                     | Medlemmet kan læse sine egne rækker; skrivning kun gennem `set_notification_preference`.                                                                                                                                                                                                                    |
 | `push_deliveries`                          | Leveringslog pr. (type, emne, medlem) for notifikationerne ud over chatten. `claim_push_deliveries` tager modtagerne, før der sendes, så ingen får det samme to gange. `kind` er låst til de samme typer som `notification_preferences`.                                                                                                          | Ingen policies og ingen grants til klientroller -- kun Edge Functionens Secret key.                                                                                                                                                                                                                         |
 | `event_reminders`                          | Outbox for påmindelsen dagen før en begivenhed: kørslens status, forsøg og det token, pg_net sender med til `calendar-push`.                                                                                                                                                                                                                      | Ingen policies og ingen grants til klientroller -- kun Edge Functionens Secret key.                                                                                                                                                                                                                         |
 | `private.probation_submission_attempts`    | Kortlivede HMAC-hashes til server-side rate limiting; indeholder aldrig rå IP, subnet eller e-mail.                                                                                                                                                                                                                                               | `private` eksponeres ikke gennem Data API'et; ingen grants til `anon`/`authenticated`.                                                                                                                                                                                                                      |
@@ -189,13 +189,14 @@ Supabase CLI'en ikke skal læse den ved deploy.
   indstilling går gennem `_shared/pushDelivery.ts` som `badge_nomination_review` (#216),
   så en admins fravalg respekteres, og et gentaget kald ikke sender igen; se
   "Notifikationer ud over chatten".
-- `calendar-push` (#216): push om kalenderen. `event_created` kaldes af opretterens egen
-  klient lige efter indsættelsen og giver alle andre medlemmer besked; `event_reminder`
+- `calendar-push` (#216, #236): push om kalenderen. `event_created` kaldes af opretterens
+  egen klient lige efter indsættelsen og giver alle andre medlemmer besked; `event_reminder`
   kaldes fra databasen (pg_cron + pg_net, `enqueue_event_reminders`) med kørslens token
-  fra `event_reminders` og minder de tilmeldte om begivenheden dagen før. Deployes med
-  `--no-verify-jwt`, fordi der ingen bruger er bag cron-kaldet; `event_created` validerer
-  selv bearer-tokenet, og `event_reminder` kræver kørslens token. Se "Notifikationer ud
-  over chatten".
+  fra `event_reminders` og minder de tilmeldte om begivenheden dagen før; `waitlist_promoted`
+  kaldes af klienten, hvis handling gav en plads, lige efter `respond_to_event`/
+  `promote_event_waitlist`. Deployes med `--no-verify-jwt`, fordi der ingen bruger er bag
+  cron-kaldet; `event_created` og `waitlist_promoted` validerer selv bearer-tokenet, og
+  `event_reminder` kræver kørslens token. Se "Notifikationer ud over chatten".
 - `feature-announcements` (#184): sender push om nye funktioner i appen. Nyhederne selv
   oprettes af migrationer i `feature_announcements`; functionen er kun leveringen. Den
   tager intet fra kalderen -- hverken tekst eller modtagere -- og hver nyhed sendes kun
@@ -835,23 +836,31 @@ genabonnere med en ny nøgle, så klienten smider det gamle abonnement væk før
 ## Notifikationer ud over chatten
 
 Push-infrastrukturen fra chatten (`push_subscriptions`, VAPID-nøglerne, service workerens
-`push`-handler) bruges også til tre ting, der får medlemmer tilbage i appen (#216):
+`push`-handler) bruges også til fire ting, der får medlemmer tilbage i appen (#216, #236):
 
-| Type                      | Hvem                                | Udløses af                                        | Åbner                   |
-| ------------------------- | ----------------------------------- | ------------------------------------------------- | ----------------------- |
-| `event_created`           | Alle andre medlemmer end opretteren | Opretterens klient kalder `calendar-push`         | `/kalender/<id>`        |
-| `event_reminder`          | De tilmeldte (`attending`)          | pg_cron hvert kvarter, fra kl. 17 dagen før       | `/kalender/<id>`        |
-| `badge_nomination_review` | Admins                              | Indstillerens klient kalder `badge-notifications` | `/admin?sektion=badges` |
+| Type                      | Hvem                                  | Udløses af                                                                                                         | Åbner                   |
+| ------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| `event_created`           | Alle andre medlemmer end opretteren   | Opretterens klient kalder `calendar-push`                                                                          | `/kalender/<id>`        |
+| `event_reminder`          | De tilmeldte (`attending`)            | pg_cron hvert kvarter, fra kl. 17 dagen før                                                                        | `/kalender/<id>`        |
+| `waitlist_promoted`       | De(n), der rykkede op fra ventelisten | Klienten, hvis handling gav pladsen, kalder `calendar-push` lige efter `respond_to_event`/`promote_event_waitlist` | `/kalender/<id>`        |
+| `badge_nomination_review` | Admins                                | Indstillerens klient kalder `badge-notifications`                                                                  | `/admin?sektion=badges` |
 
 Den indstillede får ingen besked om en ny indstilling: badge-modellen holder
 indstillinger skjult for modtageren, indtil badgen er tildelt (ellers ville en afvist
 indstilling være synlig), og tildelingen har sin egen push i `badge-notifications`.
 
-`chat-push` er uændret. De nye typer deler én vej, `_shared/pushDelivery.ts`, og næste
-type (#236, oprykning fra ventelisten) føjer sit navn til `NOTIFICATION_KINDS` i `_shared/pushKinds.ts`
-(listen deles med frontendens indstillinger), bygger sin payload
-(`_shared/pushPayloads.ts`), udvider `kind`-constrainten på `notification_preferences` og
-`push_deliveries` i sin egen migration og kalder `deliverPush`.
+`chat-push` er uændret. De nye typer deler én vej, `_shared/pushDelivery.ts`. `waitlist_promoted`
+(#236) fulgte samme opskrift som de tre første: sit navn i `NOTIFICATION_KINDS`
+(`_shared/pushKinds.ts`, delt med frontendens indstillinger), sin payload i
+`_shared/pushPayloads.ts`, `kind`-constrainten udvidet på `notification_preferences` og
+`push_deliveries` i sin egen migration, og et kald til `deliverPush`. Klienten sender kun
+`eventId` og de id'er, RPC'en selv gav den tilbage -- `calendar-push` stoler ikke på den
+liste blindt, men snævrer den ind til dem, der reelt sidder på en `attending`-plads til
+begivenheden lige nu (`_shared/waitlistPromotionRecipients.ts`), og nægter at sende, hvis
+kalderen ikke selv har noget med begivenheden at gøre (arrangør, admin, eller selv svaret
+på den). Leveringsloggens nøgle er (`waitlist_promoted`, begivenheden, medlemmet), så et
+medlem højst får én push om én begivenhed, uanset hvor mange gange de cykler ind og ud af
+ventelisten til den.
 
 ### Til og fra pr. type
 
@@ -859,9 +868,9 @@ type (#236, oprykning fra ventelisten) føjer sit navn til `NOTIFICATION_KINDS` 
 `set_notification_preference(kind, enabled)`, som sætter `auth.uid()` som ejer. Ingen række
 er et ja: typerne er slået til for alle -- også dem, der var medlem før -- ligesom
 `feature_notifications_enabled` har default `true`. UI'et står på `/profil` under
-"Notifikationer"; almindelige medlemmer ser kun `event_created` og `event_reminder`,
-admins også `badge_nomination_review`. Chattens og nyhedernes valg står stadig på `/chat`
-og `/nyheder`.
+"Notifikationer"; almindelige medlemmer ser `event_created`, `event_reminder` og
+`waitlist_promoted`, admins også `badge_nomination_review`. Chattens og nyhedernes valg
+står stadig på `/chat` og `/nyheder`.
 
 Filtreringen sker i functionen, ikke i klienten: en klient kan ikke undlade at modtage en
 notifikation, den allerede har fået.

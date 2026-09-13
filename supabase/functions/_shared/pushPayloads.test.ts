@@ -9,6 +9,7 @@ import {
   eventTag,
   formatEventStart,
   relativeDay,
+  waitlistPromotedPayload,
 } from './pushPayloads.ts'
 
 const EVENT = {
@@ -100,6 +101,39 @@ Deno.test('eventReminderPayload: deler tag med "ny begivenhed"', () => {
   const created = eventCreatedPayload({ event: EVENT, creatorName: null })
   const reminder = eventReminderPayload({ event: EVENT })
   assert.equal(created.tag, reminder.tag)
+})
+
+Deno.test(
+  'waitlistPromotedPayload: tid og sted, samme tag og sti som resten af begivenheden',
+  () => {
+    const payload = waitlistPromotedPayload({ event: EVENT })
+    assert.equal(payload.title, 'Du har fået en plads: Svampetur i Rude Skov')
+    assert.match(
+      payload.body,
+      /^Der blev en plads ledig, så du er nu tilmeldt mandag/,
+    )
+    assert.match(payload.body, /P-pladsen ved Rudersdal\.$/)
+    assert.equal(payload.tag, eventTag(EVENT.id))
+    assert.equal(payload.path, `kalender/${EVENT.id}`)
+
+    const created = eventCreatedPayload({ event: EVENT, creatorName: null })
+    assert.equal(payload.tag, created.tag)
+  },
+)
+
+Deno.test('waitlistPromotedPayload: uden sted', () => {
+  const payload = waitlistPromotedPayload({
+    event: { ...EVENT, location: null },
+  })
+  assert.doesNotMatch(payload.body, /P-pladsen/)
+  assert.doesNotMatch(payload.body, /·\s*$/)
+})
+
+Deno.test('waitlistPromotedPayload: en lang titel forkortes', () => {
+  const payload = waitlistPromotedPayload({
+    event: { ...EVENT, title: 'x'.repeat(200) },
+  })
+  assert.equal(payload.title, `Du har fået en plads: ${'x'.repeat(79)}…`)
 })
 
 const NOMINATION = {

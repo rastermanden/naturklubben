@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
 import type { ProfileSummary } from '../chat/useProfilesMap'
-import { announcePromotion, promotionCause } from './announceWaitlist'
+import {
+  announcePromotion,
+  notifyPromotedMembers,
+  promotionCause,
+} from './announceWaitlist'
 import {
   expectedResponseStatus,
   type AttendanceEntry,
@@ -137,6 +141,7 @@ export function useEventAttendance(
         result.promoted,
         profiles,
       )
+      void notifyPromotedMembers(eventId, result.promoted)
     },
     onError: (_error, _variables, context) => {
       queryClient.setQueryData(queryKey, context?.previous)
