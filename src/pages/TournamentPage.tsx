@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { useAuth } from '../features/auth/useAuth'
+import { Link } from 'react-router-dom'
 import { useMembers } from '../features/members/useMembers'
 import { BracketView } from '../features/tournament/BracketView'
 import { MatchCard } from '../features/tournament/MatchCard'
 import {
   computeStandings,
   rankStandings,
+  sharedLeaders,
   type Standing,
   type StandingsMatch,
 } from '../features/tournament/roundRobin'
@@ -32,6 +33,28 @@ const dateFormatter = new Intl.DateTimeFormat('da-DK', {
   year: 'numeric',
 })
 
+function joinNames(names: string[]) {
+  if (names.length <= 1) return names.join('')
+  return `${names.slice(0, -1).join(', ')} og ${names.at(-1)}`
+}
+
+/**
+ * Kan resultatet trygt fortrydes? En bye har intet resultat at fortryde, og
+ * er vinderen allerede rykket videre til en kamp, der selv er afgjort, ville
+ * en fortrydelse trække tæppet væk under det resultat.
+ */
+function canUndoMatch(
+  match: TournamentMatch,
+  matchesById: Map<string, TournamentMatch>,
+): boolean {
+  if (match.status !== 'completed' || match.participant2_id === null) {
+    return false
+  }
+  if (!match.next_match_id) return true
+  const nextMatch = matchesById.get(match.next_match_id)
+  return !nextMatch || nextMatch.status !== 'completed'
+}
+
 function TournamentDetail({
   tournamentId,
   onBack,
@@ -43,7 +66,8 @@ function TournamentDetail({
   onDeleted: () => void
   deleteTournament: ReturnType<typeof useTournaments>['deleteTournament']
 }) {
-  const { tournamentQuery, recordMatchResult } = useTournament(tournamentId)
+  const { tournamentQuery, recordMatchResult, undoMatchResult } =
+    useTournament(tournamentId)
   const [resultError, setResultError] = useState<string | null>(null)
 
   if (tournamentQuery.isLoading) {
@@ -69,6 +93,7 @@ function TournamentDetail({
   }
 
   const { tournament, participants, matches, games } = tournamentQuery.data
+  const matchesById = new Map(matches.map((match) => [match.id, match]))
   const nameFor = (participantId: string) =>
     participants.find((p) => p.id === participantId)?.display_name ??
     'Ukendt deltager'
@@ -82,6 +107,25 @@ function TournamentDetail({
           setResultError('Resultatet kunne ikke gemmes. Prøv igen.'),
       },
     )
+  }
+
+  function handleUndo(matchId: string) {
+    setResultError(null)
+    undoMatchResult.mutate(matchId, {
+      onError: () =>
+        setResultError('Resultatet kunne ikke fortrydes. Prøv igen.'),
+    })
+  }
+
+  function isRecording(matchId: string) {
+    return (
+      recordMatchResult.isPending &&
+      recordMatchResult.variables?.matchId === matchId
+    )
+  }
+
+  function isUndoing(matchId: string) {
+    return undoMatchResult.isPending && undoMatchResult.variables === matchId
   }
 
   function handleReset() {
@@ -118,9 +162,11 @@ function TournamentDetail({
     ),
     standingsMatches,
   )
-  const roundRobinWinnerName = rankedStandings[0]
-    ? nameFor(rankedStandings[0].participantId)
-    : null
+  const leaders = sharedLeaders(rankedStandings, standingsMatches)
+  const leaderIds = new Set(leaders.map((leader) => leader.participantId))
+  const roundRobinWinnerNames = leaders.map((leader) =>
+    nameFor(leader.participantId),
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -160,25 +206,33 @@ function TournamentDetail({
       {tournament.format === 'round_robin' ? (
         <RoundRobinDetail
           standings={rankedStandings}
+          leaderIds={isComplete ? leaderIds : new Set()}
           matches={matches}
+          matchesById={matchesById}
           nameFor={nameFor}
-          isComplete={isComplete}
           onRecordResult={handleRecordResult}
-          submitting={recordMatchResult.isPending}
+          isRecording={isRecording}
+          onUndo={handleUndo}
+          isUndoing={isUndoing}
         />
       ) : (
         <SingleEliminationDetail
           matches={matches}
+          matchesById={matchesById}
           nameFor={nameFor}
           isComplete={isComplete}
           onRecordResult={handleRecordResult}
-          submitting={recordMatchResult.isPending}
+          isRecording={isRecording}
+          onUndo={handleUndo}
+          isUndoing={isUndoing}
         />
       )}
 
       {isComplete &&
         tournament.format === 'round_robin' &&
-        roundRobinWinnerName && <WinnerBanner name={roundRobinWinnerName} />}
+        roundRobinWinnerNames.length > 0 && (
+          <WinnerBanner names={roundRobinWinnerNames} />
+        )}
       {isComplete && tournament.format === 'single_elimination' && (
         <FinalWinnerBanner matches={matches} nameFor={nameFor} />
       )}
@@ -186,7 +240,12 @@ function TournamentDetail({
   )
 }
 
-function WinnerBanner({ name }: { name: string }) {
+function WinnerBanner({ names }: { names: string[] }) {
+  const text =
+    names.length === 1
+      ? `${names[0]} vandt turneringen!`
+      : `Delt førsteplads: ${joinNames(names)}!`
+
   return (
     <div
       role="status"
@@ -195,9 +254,7 @@ function WinnerBanner({ name }: { name: string }) {
       <p aria-hidden="true" className="text-3xl">
         🏆
       </p>
-      <p className="mt-2 text-lg font-semibold text-ink-body">
-        {name} vandt turneringen!
-      </p>
+      <p className="mt-2 text-lg font-semibold text-ink-body">{text}</p>
     </div>
   )
 }
@@ -214,30 +271,36 @@ function FinalWinnerBanner({
     (match) => match.round === maxRound && match.status === 'completed',
   )
   if (!final?.winner_id) return null
-  return <WinnerBanner name={nameFor(final.winner_id)} />
+  return <WinnerBanner names={[nameFor(final.winner_id)]} />
 }
 
 function RoundRobinDetail({
   standings,
+  leaderIds,
   matches,
+  matchesById,
   nameFor,
-  isComplete,
   onRecordResult,
-  submitting,
+  isRecording,
+  onUndo,
+  isUndoing,
 }: {
   standings: Standing[]
+  leaderIds: ReadonlySet<string>
   matches: TournamentMatch[]
+  matchesById: Map<string, TournamentMatch>
   nameFor: (participantId: string) => string
-  isComplete: boolean
   onRecordResult: (matchId: string, gameWinnerIds: string[]) => void
-  submitting: boolean
+  isRecording: (matchId: string) => boolean
+  onUndo: (matchId: string) => void
+  isUndoing: (matchId: string) => boolean
 }) {
   return (
     <>
       <StandingsTable
         standings={standings}
         nameFor={nameFor}
-        showLeader={isComplete}
+        leaderIds={leaderIds}
       />
 
       <div className="flex flex-col gap-3">
@@ -250,7 +313,10 @@ function RoundRobinDetail({
             onRecordResult={(gameWinnerIds) =>
               onRecordResult(match.id, gameWinnerIds)
             }
-            submitting={submitting}
+            submitting={isRecording(match.id)}
+            canUndo={canUndoMatch(match, matchesById)}
+            onUndo={() => onUndo(match.id)}
+            undoing={isUndoing(match.id)}
           />
         ))}
       </div>
@@ -260,22 +326,31 @@ function RoundRobinDetail({
 
 function SingleEliminationDetail({
   matches,
+  matchesById,
   nameFor,
   isComplete,
   onRecordResult,
-  submitting,
+  isRecording,
+  onUndo,
+  isUndoing,
 }: {
   matches: TournamentMatch[]
+  matchesById: Map<string, TournamentMatch>
   nameFor: (participantId: string) => string
   isComplete: boolean
   onRecordResult: (matchId: string, gameWinnerIds: string[]) => void
-  submitting: boolean
+  isRecording: (matchId: string) => boolean
+  onUndo: (matchId: string) => void
+  isUndoing: (matchId: string) => boolean
 }) {
   const playableMatches = matches.filter(
     (match) =>
       match.status === 'pending' &&
       match.participant1_id !== null &&
       match.participant2_id !== null,
+  )
+  const undoableMatches = matches.filter((match) =>
+    canUndoMatch(match, matchesById),
   )
 
   return (
@@ -297,7 +372,32 @@ function SingleEliminationDetail({
               onRecordResult={(gameWinnerIds) =>
                 onRecordResult(match.id, gameWinnerIds)
               }
-              submitting={submitting}
+              submitting={isRecording(match.id)}
+              canUndo={false}
+              onUndo={() => onUndo(match.id)}
+              undoing={isUndoing(match.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {undoableMatches.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-medium text-ink-body">
+            Seneste resultater
+          </h2>
+          {undoableMatches.map((match) => (
+            <MatchCard
+              key={match.id}
+              match={match}
+              nameFor={nameFor}
+              onRecordResult={(gameWinnerIds) =>
+                onRecordResult(match.id, gameWinnerIds)
+              }
+              submitting={isRecording(match.id)}
+              canUndo
+              onUndo={() => onUndo(match.id)}
+              undoing={isUndoing(match.id)}
             />
           ))}
         </div>
@@ -307,11 +407,9 @@ function SingleEliminationDetail({
 }
 
 function TournamentPage() {
-  const { session } = useAuth()
-  const userId = session!.user.id
   const membersQuery = useMembers()
   const { tournamentsQuery, createTournament, deleteTournament } =
-    useTournaments(userId)
+    useTournaments()
   const [selectedTournamentId, setSelectedTournamentId] = useState<
     string | null
   >(null)
@@ -333,9 +431,15 @@ function TournamentPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
+      <Link to="/aktiviteter" className="text-sm text-accent-soft underline">
+        ← Aktiviteter
+      </Link>
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-ink-body">Turnering</h1>
+          <h1 className="text-2xl font-semibold text-ink-body">
+            BTG turnering
+          </h1>
           <p className="text-ink-subtle">
             Hold styr på kampe, resultater og stilling til klubbens turneringer.
           </p>

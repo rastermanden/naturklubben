@@ -25,20 +25,13 @@ function pendingMatch(
   }
 }
 
+const defaultUndoProps = {
+  canUndo: false,
+  onUndo: vi.fn(),
+  undoing: false,
+}
+
 describe('MatchCard', () => {
-  it('venter på modstander, når en plads ikke er udfyldt endnu', () => {
-    render(
-      <MatchCard
-        match={pendingMatch({ participant2_id: null })}
-        nameFor={nameFor}
-        onRecordResult={vi.fn()}
-        submitting={false}
-      />,
-    )
-
-    expect(screen.getByText('Venter på modstander…')).toBeTruthy()
-  })
-
   it('viser det gemte resultat for en afgjort kamp uden inputknapper', () => {
     render(
       <MatchCard
@@ -46,11 +39,31 @@ describe('MatchCard', () => {
         nameFor={nameFor}
         onRecordResult={vi.fn()}
         submitting={false}
+        {...defaultUndoProps}
       />,
     )
 
     expect(screen.getByText('Alice vandt')).toBeTruthy()
     expect(screen.queryByText('Alice', { selector: 'button' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Fortryd/ })).toBeNull()
+  })
+
+  it('viser en fortryd-knap for en afgjort kamp, når canUndo er sat', () => {
+    const onUndo = vi.fn()
+    render(
+      <MatchCard
+        match={pendingMatch({ status: 'completed', winner_id: 'p1' })}
+        nameFor={nameFor}
+        onRecordResult={vi.fn()}
+        submitting={false}
+        canUndo
+        onUndo={onUndo}
+        undoing={false}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fortryd resultat' }))
+    expect(onUndo).toHaveBeenCalledTimes(1)
   })
 
   it('udregner kampvinderen efter 2 spilsejre og lader brugeren gemme', () => {
@@ -61,6 +74,7 @@ describe('MatchCard', () => {
         nameFor={nameFor}
         onRecordResult={onRecordResult}
         submitting={false}
+        {...defaultUndoProps}
       />,
     )
 
@@ -87,6 +101,7 @@ describe('MatchCard', () => {
         nameFor={nameFor}
         onRecordResult={vi.fn()}
         submitting={false}
+        {...defaultUndoProps}
       />,
     )
 

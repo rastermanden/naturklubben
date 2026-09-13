@@ -65,47 +65,6 @@ async function fetchTournamentDetail(
   }
 }
 
-async function roundRobinIsComplete(tournamentId: string) {
-  const { count, error } = await supabase
-    .from('tournament_matches')
-    .select('id', { count: 'exact', head: true })
-    .eq('tournament_id', tournamentId)
-    .eq('status', 'pending')
-  if (error) throw error
-  return (count ?? 0) === 0
-}
-
-async function maybeCompleteTournament(
-  tournamentId: string,
-  wasFinalBracketMatch: boolean,
-) {
-  const { data: tournament, error } = await supabase
-    .from('tournaments')
-    .select('format')
-    .eq('id', tournamentId)
-    .single()
-  if (error) throw error
-
-  const isDone =
-    tournament.format === 'single_elimination'
-      ? wasFinalBracketMatch
-      : await roundRobinIsComplete(tournamentId)
-
-  if (!isDone) return
-  const { error: completeError } = await supabase
-    .from('tournaments')
-    .update({ status: 'completed' })
-    .eq('id', tournamentId)
-  if (completeError) throw completeError
-}
-
-/** Enkeltspilsvindere i rækkefølge (spil 1, spil 2, evt. spil 3). */
-function matchWinnerFromGames(gameWinnerIds: string[]) {
-  const wins = new Map<string, number>()
-  for (const id of gameWinnerIds) wins.set(id, (wins.get(id) ?? 0) + 1)
-  return [...wins.entries()].find(([, count]) => count >= 2)?.[0] ?? null
-}
-
 export function useTournament(tournamentId: string) {
   const queryClient = useQueryClient()
   const queryKey = tournamentQueryKey(tournamentId)
@@ -115,6 +74,14 @@ export function useTournament(tournamentId: string) {
     queryFn: () => fetchTournamentDetail(tournamentId),
   })
 
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey })
+    queryClient.invalidateQueries({ queryKey: tournamentsQueryKey })
+  }
+
+  // Udregner kampvinderen, gemmer resultatet, rykker vinderen videre til
+  // næste bracket-kamp og markerer turneringen afsluttet, når den er det --
+  // alt i ét atomisk RPC-kald, se 20260913130000_tournament_rpcs.sql.
   const recordMatchResult = useMutation({
     mutationFn: async ({
       matchId,
@@ -123,50 +90,26 @@ export function useTournament(tournamentId: string) {
       matchId: string
       gameWinnerIds: string[]
     }) => {
-      const winnerId = matchWinnerFromGames(gameWinnerIds)
-      if (!winnerId) {
-        throw new Error('Kampen kan ikke afgøres uden en vinder af 2 spil')
-      }
-
-      const { error: gamesError } = await supabase
-        .from('tournament_games')
-        .insert(
-          gameWinnerIds.map((gameWinnerId, index) => ({
-            match_id: matchId,
-            game_number: index + 1,
-            winner_id: gameWinnerId,
-          })),
-        )
-      if (gamesError) throw gamesError
-
-      const { data: match, error: matchError } = await supabase
-        .from('tournament_matches')
-        .update({ status: 'completed', winner_id: winnerId })
-        .eq('id', matchId)
-        .select('tournament_id, next_match_id, next_match_slot')
-        .single()
-      if (matchError) throw matchError
-
-      if (match.next_match_id && match.next_match_slot) {
-        const slotColumn =
-          match.next_match_slot === 1 ? 'participant1_id' : 'participant2_id'
-        const { error: advanceError } = await supabase
-          .from('tournament_matches')
-          .update({ [slotColumn]: winnerId })
-          .eq('id', match.next_match_id)
-        if (advanceError) throw advanceError
-      }
-
-      await maybeCompleteTournament(
-        match.tournament_id,
-        match.next_match_id === null,
-      )
+      const { error } = await supabase.rpc('record_tournament_match_result', {
+        p_match_id: matchId,
+        p_game_winner_ids: gameWinnerIds,
+      })
+      if (error) throw error
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey })
-      queryClient.invalidateQueries({ queryKey: tournamentsQueryKey })
-    },
+    onSuccess: invalidate,
   })
 
-  return { tournamentQuery, recordMatchResult }
+  // Fortryder en afgjort kamp. RPC'en selv afviser det, hvis det ikke er
+  // trygt (en bye, eller en efterfølgende kamp, der allerede er afgjort).
+  const undoMatchResult = useMutation({
+    mutationFn: async (matchId: string) => {
+      const { error } = await supabase.rpc('undo_tournament_match_result', {
+        p_match_id: matchId,
+      })
+      if (error) throw error
+    },
+    onSuccess: invalidate,
+  })
+
+  return { tournamentQuery, recordMatchResult, undoMatchResult }
 }

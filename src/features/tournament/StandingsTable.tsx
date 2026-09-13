@@ -3,13 +3,15 @@ import type { Standing } from './roundRobin'
 interface StandingsTableProps {
   standings: Standing[]
   nameFor: (participantId: string) => string
-  showLeader: boolean
+  /** Deltagere i førstepladsen -- mere end én ved uafgjort. Tom, mens
+   * turneringen stadig er i gang. */
+  leaderIds: ReadonlySet<string>
 }
 
 export function StandingsTable({
   standings,
   nameFor,
-  showLeader,
+  leaderIds,
 }: StandingsTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-line-soft bg-surface">
@@ -26,7 +28,7 @@ export function StandingsTable({
         </thead>
         <tbody>
           {standings.map((standing, index) => {
-            const isLeader = showLeader && index === 0
+            const isLeader = leaderIds.has(standing.participantId)
             return (
               <tr
                 key={standing.participantId}

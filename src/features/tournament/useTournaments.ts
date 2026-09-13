@@ -31,7 +31,7 @@ interface CreateTournamentInput {
  * sit eget uuid med det samme, så `next_match_id` kan pege direkte på den
  * kamp, der endnu ikke er indsat.
  */
-function toMatchRows(tournamentId: string, generated: GeneratedMatch[]) {
+function toMatchRows(generated: GeneratedMatch[]) {
   const idByRoundAndIndex = new Map<string, string>()
   for (const match of generated) {
     idByRoundAndIndex.set(
@@ -50,7 +50,6 @@ function toMatchRows(tournamentId: string, generated: GeneratedMatch[]) {
 
     return {
       id: idByRoundAndIndex.get(`${match.round}:${match.matchIndex}`)!,
-      tournament_id: tournamentId,
       round: match.round,
       match_index: match.matchIndex,
       participant1_id: match.participant1Id,
@@ -63,7 +62,7 @@ function toMatchRows(tournamentId: string, generated: GeneratedMatch[]) {
   })
 }
 
-export function useTournaments(userId: string) {
+export function useTournaments() {
   const queryClient = useQueryClient()
 
   const tournamentsQuery = useQuery({
@@ -73,24 +72,12 @@ export function useTournaments(userId: string) {
 
   const createTournament = useMutation({
     mutationFn: async ({ format, participants }: CreateTournamentInput) => {
-      const { data: tournament, error: tournamentError } = await supabase
-        .from('tournaments')
-        .insert({ format, status: 'in_progress', created_by: userId })
-        .select('id')
-        .single()
-      if (tournamentError) throw tournamentError
-
       const participantRows = participants.map((participant, index) => ({
         id: crypto.randomUUID(),
-        tournament_id: tournament.id,
         user_id: participant.userId,
         display_name: participant.displayName,
         seed: index + 1,
       }))
-      const { error: participantsError } = await supabase
-        .from('tournament_participants')
-        .insert(participantRows)
-      if (participantsError) throw participantsError
 
       const generatedMatches =
         format === 'round_robin'
@@ -101,12 +88,20 @@ export function useTournaments(userId: string) {
                 seed: index + 1,
               })),
             )
-      const { error: matchesError } = await supabase
-        .from('tournament_matches')
-        .insert(toMatchRows(tournament.id, generatedMatches))
-      if (matchesError) throw matchesError
 
-      return tournament.id as string
+      // Opretter turneringen, dens deltagere og hele kampplanen i ét
+      // atomisk kald -- et fejlet skridt kan ellers efterlade en halv,
+      // uspilbar turnering uden nogen vej til at rette den op.
+      const { data, error } = await supabase.rpc(
+        'create_tournament_with_matches',
+        {
+          p_format: format,
+          p_participants: participantRows,
+          p_matches: toMatchRows(generatedMatches),
+        },
+      )
+      if (error) throw error
+      return data as string
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: tournamentsQueryKey }),

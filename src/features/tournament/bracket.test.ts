@@ -104,6 +104,27 @@ describe('generateSingleEliminationBracket', () => {
     expect(matches.filter((m) => m.round === 3)).toHaveLength(1)
   })
 
+  it('spreder byes på tværs af runde 2, så de ikke møder hinanden unødigt', () => {
+    // 6 deltagere -> bracket-størrelse 8 -> 2 byes og 2 runde 2-kampe: der
+    // er plads til én bye pr. runde 2-kamp, så ingen af dem skal ende med
+    // begge byes (og dermed en kamp, der reelt allerede er spillet færdigt,
+    // før nogen har rørt en bold).
+    const matches = generateSingleEliminationBracket(
+      participants(6),
+      identityShuffle,
+    )
+    const round1 = matches.filter((m) => m.round === 1)
+    const round2 = matches.filter((m) => m.round === 2)
+
+    expect(round1.filter((m) => m.participant2Id === null)).toHaveLength(2)
+    expect(round2).toHaveLength(2)
+    // Var begge byes i samme runde 2-kamp, ville den kamp allerede have
+    // begge deltagere kendt med det samme -- det må ikke ske her.
+    expect(round2.every((m) => !(m.participant1Id && m.participant2Id))).toBe(
+      true,
+    )
+  })
+
   it('inkluderer alle deltagere præcis én gang i runde 1', () => {
     const all = participants(6)
     const matches = generateSingleEliminationBracket(all, identityShuffle)
