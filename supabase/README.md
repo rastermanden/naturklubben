@@ -856,8 +856,10 @@ Loggen hænger på medlemmet og ikke på abonnementet (i modsætning til
 `probation-notifications` viste mønstret: databasen ejer status og genforsøg, functionen
 ejer kun HTTP-kaldene. Her:
 
-1. `pg_cron` kører `enqueue_event_reminders()` hvert kvarter. Vinduet åbner kl. 17
-   (Europe/Copenhagen) dagen før og lukker, når begivenheden begynder.
+1. `pg_cron` kører `enqueue_event_reminders()` hvert kvarter. Vinduet er fra kl. 17
+   (Europe/Copenhagen) dagen før til midnat; en, der først tilmelder sig på selve dagen,
+   får ingen påmindelse. Kørslens ur er et argument (`p_now`, standard `now()`), så
+   pgTAP kan sætte klokken fast i stedet for at afhænge af, hvornår CI kører.
 2. For hver begivenhed i vinduet tager kørslen en række i `event_reminders`
    (`sending`, forsøg +1) og POSTer `{ kind, eventId, token }` til `calendar-push` med
    `pg_net`.

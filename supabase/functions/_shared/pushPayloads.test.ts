@@ -31,9 +31,9 @@ Deno.test('relativeDay: "i morgen" set fra aftenen før', () => {
   assert.equal(relativeDay(EVENT.start_at, now), 'i morgen')
 })
 
-Deno.test('relativeDay: "i dag" set fra samme morgen', () => {
+Deno.test('relativeDay: samme dag gives datoen, ikke "i dag"', () => {
   const now = new Date('2026-09-14T05:00:00.000Z') // 07:00 dansk tid
-  assert.equal(relativeDay(EVENT.start_at, now), 'i dag')
+  assert.match(relativeDay(EVENT.start_at, now), /14\. september/)
 })
 
 Deno.test('relativeDay: dagsgrænsen følger dansk tid, ikke UTC', () => {

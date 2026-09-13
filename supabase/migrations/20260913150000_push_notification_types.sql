@@ -284,19 +284,23 @@ revoke all on table public.event_reminders from anon, authenticated;
 grant select, insert, update, delete on table public.event_reminders
   to service_role;
 
--- Sender påmindelsen ud. Vinduet åbner kl. 17 dagen før og lukker, når
--- begivenheden begynder. Efter en vellykket kørsel kigges der forbi igen hver
--- time, så en, der først tilmelder sig om aftenen, også får sin påmindelse --
--- leveringsloggen sørger for, at de andre ikke får den igen. Fejl og kørsler,
--- der gik i stå, forsøges igen efter et kvarter, og vinduet begrænser
--- antallet af forsøg af sig selv.
-create function public.enqueue_event_reminders()
+-- Sender påmindelsen ud. Vinduet er fra kl. 17 dagen før til midnat; en,
+-- der først tilmelder sig på selve dagen, får ingen påmindelse. Efter en
+-- vellykket kørsel kigges der forbi igen hver time, så en, der først
+-- tilmelder sig om aftenen, også får sin påmindelse -- leveringsloggen
+-- sørger for, at de andre ikke får den igen. Fejl og kørsler, der gik i stå,
+-- forsøges igen efter et kvarter, og vinduet begrænser antallet af forsøg af
+-- sig selv. Kørslens ur er et argument, så vinduet kan testes på en fast
+-- klokke; pg_cron kalder uden argument.
+create function public.enqueue_event_reminders(
+  p_now timestamptz default now()
+)
 returns integer
 language plpgsql
 security definer set search_path = public
 as $$
 declare
-  local_now timestamp := now() at time zone 'Europe/Copenhagen';
+  local_now timestamp := p_now at time zone 'Europe/Copenhagen';
   fallback_url text;
   reminder record;
   run public.event_reminders%rowtype;
@@ -315,22 +319,19 @@ begin
       coalesce(event.notification_function_url, fallback_url) as function_url
     from public.events as event
     left join public.event_reminders as existing on existing.event_id = event.id
-    where event.start_at > now()
+    where event.start_at > p_now
       and (event.start_at at time zone 'Europe/Copenhagen')::date
-        <= local_now::date + 1
-      and (
-        (event.start_at at time zone 'Europe/Copenhagen')::date = local_now::date
-        or local_now::time >= time '17:00'
-      )
+        = local_now::date + 1
+      and local_now::time >= time '17:00'
       and (
         existing.event_id is null
         or (
           existing.status = 'sent'
-          and existing.started_at < now() - interval '1 hour'
+          and existing.started_at < p_now - interval '1 hour'
         )
         or (
           existing.status in ('failed', 'sending')
-          and existing.started_at < now() - interval '15 minutes'
+          and existing.started_at < p_now - interval '15 minutes'
         )
       )
     order by event.start_at
@@ -342,11 +343,11 @@ begin
     end if;
 
     insert into public.event_reminders (event_id, status, attempts, started_at)
-    values (reminder.id, 'sending', 1, now())
+    values (reminder.id, 'sending', 1, p_now)
     on conflict (event_id) do update
       set status = 'sending',
           attempts = event_reminders.attempts + 1,
-          started_at = now(),
+          started_at = p_now,
           error = null
     returning * into run;
 
@@ -366,13 +367,13 @@ begin
   -- Loggen behøver kun at huske, så længe et emne kan dukke op igen. En
   -- begivenhed er forbi, og en indstilling er afgjort, længe før 90 dage.
   delete from public.push_deliveries
-  where sent_at < now() - interval '90 days';
+  where sent_at < p_now - interval '90 days';
 
   return enqueued;
 end;
 $$;
 
-revoke all on function public.enqueue_event_reminders() from public;
+revoke all on function public.enqueue_event_reminders(timestamptz) from public;
 
 -- Functionens to RPC'er: tag kørslen (bekræfter token og at kørslen faktisk
 -- er i gang) og meld resultatet tilbage. Samme forsøgsnummer-fence som

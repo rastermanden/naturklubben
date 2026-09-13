@@ -7,7 +7,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(52);
+select plan(54);
 
 do $$
 begin
@@ -34,6 +34,20 @@ begin
 end
 $$;
 
+-- Tidspunkter i dansk tid, relativt til i dag, så testen giver det samme
+-- uanset hvornår CI kører: kørslens ur sættes til kl. 18 i dag, og
+-- begivenhederne "i morgen" ligger så inde i vinduet (kl. 17 dagen før til
+-- midnat).
+create function pg_temp.dk(p_days_ahead integer, p_time time)
+returns timestamptz
+language sql
+stable
+as $$
+  select (
+    (now() at time zone 'Europe/Copenhagen')::date + p_days_ahead + p_time
+  ) at time zone 'Europe/Copenhagen'
+$$;
+
 -- ---------------------------------------------------------------------------
 -- En database, hvor ingen begivenhed endnu er oprettet fra appen (en ny
 -- Preview Branch): en kommende begivenhed findes, men uden URL, for triggeren
@@ -45,7 +59,7 @@ insert into public.events (id, title, start_at, created_by)
 values (
   '00000000-0000-0000-0000-0000000000e0',
   'Tur oprettet uden request',
-  now() + interval '2 hours',
+  pg_temp.dk(1, '10:00'),
   '00000000-0000-0000-0000-0000000000f1'
 );
 
@@ -60,7 +74,7 @@ select is(
 );
 
 select is(
-  public.enqueue_event_reminders(),
+  public.enqueue_event_reminders(pg_temp.dk(0, '18:00')),
   0,
   'uden nogen begivenhed fra appen er hosten ukendt -- intet sættes i kø'
 );
@@ -85,20 +99,19 @@ begin
 end
 $$;
 
--- Ida opretter to begivenheder fra appen: én om et par timer (inden for
--- påmindelsesvinduet uanset hvornår testen kører) og én om en uge.
+-- Ida opretter to begivenheder fra appen: én i morgen og én om en uge.
 do $$ begin perform tests.login('00000000-0000-0000-0000-0000000000f1'); end $$;
 
 insert into public.events (id, title, start_at, created_by)
 values (
   '00000000-0000-0000-0000-0000000000e1',
   'Svampetur',
-  now() + interval '2 hours',
+  pg_temp.dk(1, '10:00'),
   '00000000-0000-0000-0000-0000000000f1'
 ), (
   '00000000-0000-0000-0000-0000000000e2',
   'Fugletur om en uge',
-  now() + interval '7 days',
+  pg_temp.dk(7, '10:00'),
   '00000000-0000-0000-0000-0000000000f1'
 );
 
@@ -287,9 +300,15 @@ values (
 );
 
 select is(
-  public.enqueue_event_reminders(),
+  public.enqueue_event_reminders(pg_temp.dk(0, '16:45')),
+  0,
+  'før kl. 17 dagen før er vinduet ikke åbnet endnu'
+);
+
+select is(
+  public.enqueue_event_reminders(pg_temp.dk(0, '18:00')),
   2,
-  'begivenhederne inden for vinduet sættes i kø -- ikke den om en uge'
+  'fra kl. 17 dagen før sættes begivenhederne i morgen i kø -- ikke den om en uge'
 );
 
 select results_eq(
@@ -311,9 +330,15 @@ select is(
 );
 
 select is(
-  public.enqueue_event_reminders(),
+  public.enqueue_event_reminders(pg_temp.dk(0, '18:00')),
   0,
   'en kørsel, der lige er startet, sættes ikke i kø igen'
+);
+
+select is(
+  public.enqueue_event_reminders(pg_temp.dk(1, '08:00')),
+  0,
+  'på selve dagen er vinduet lukket -- en, der tilmelder sig samme morgen, får ingen påmindelse'
 );
 
 select is(
@@ -450,7 +475,7 @@ select results_eq(
 do $$ begin perform tests.reset_session(); end $$;
 
 select is(
-  public.enqueue_event_reminders(),
+  public.enqueue_event_reminders(pg_temp.dk(0, '18:00')),
   0,
   'en påmindelse, der lige er sendt, gentages ikke med det samme'
 );
@@ -458,11 +483,11 @@ select is(
 -- En time senere: kørslen gentages, så en, der har tilmeldt sig i mellemtiden,
 -- også får sin påmindelse. Loggen ovenfor holder de andre fri.
 update public.event_reminders
-set started_at = now() - interval '2 hours'
+set started_at = pg_temp.dk(0, '18:00') - interval '2 hours'
 where event_id = '00000000-0000-0000-0000-0000000000e1';
 
 select is(
-  public.enqueue_event_reminders(),
+  public.enqueue_event_reminders(pg_temp.dk(0, '18:00')),
   1,
   'efter en time kigges der forbi igen'
 );
@@ -484,7 +509,7 @@ begin
   values (
     '00000000-0000-0000-0000-0000000000e3',
     'Aftentur uden request',
-    now() + interval '3 hours',
+    pg_temp.dk(1, '19:00'),
     '00000000-0000-0000-0000-0000000000f1'
   );
 end
@@ -501,7 +526,7 @@ select is(
 );
 
 select is(
-  public.enqueue_event_reminders(),
+  public.enqueue_event_reminders(pg_temp.dk(0, '18:00')),
   1,
   'kørslen falder tilbage til den seneste kendte URL'
 );
@@ -586,7 +611,7 @@ select is(
 );
 
 select is(
-  public.enqueue_event_reminders(),
+  public.enqueue_event_reminders(pg_temp.dk(0, '18:00')),
   0,
   'en uge ude er der intet at sende endnu'
 );
@@ -595,13 +620,13 @@ select is(
 do $$ begin perform tests.login('00000000-0000-0000-0000-0000000000f1'); end $$;
 
 update public.events
-set start_at = now() + interval '2 hours'
+set start_at = pg_temp.dk(1, '10:00')
 where id = '00000000-0000-0000-0000-0000000000e1';
 
 do $$ begin perform tests.reset_session(); end $$;
 
 select is(
-  public.enqueue_event_reminders(),
+  public.enqueue_event_reminders(pg_temp.dk(0, '18:00')),
   1,
   'i vinduet før den nye dato sendes påmindelsen forfra'
 );

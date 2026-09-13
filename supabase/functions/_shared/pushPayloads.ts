@@ -72,16 +72,12 @@ export function formatEventStart(startAt: string) {
 }
 
 /**
- * "i dag", "i morgen" eller datoen, set fra `now` i klubbens tidszone.
- * Påmindelsen går normalt ud dagen før, men kan også ramme en, der først
- * tilmelder sig samme morgen -- så skal der ikke stå "i morgen".
+ * "i morgen" eller datoen, set fra `now` i klubbens tidszone. Påmindelsen
+ * går ud dagen før; skulle den nå frem senere, står datoen der i stedet.
  */
 export function relativeDay(startAt: string, now: Date): string {
   const start = new Date(startAt)
-  const startDay = dayKey(start)
-  const today = dayKey(now)
-  if (startDay === today) return 'i dag'
-  if (startDay === nextDayKey(today)) return 'i morgen'
+  if (dayKey(start) === nextDayKey(dayKey(now))) return 'i morgen'
   return dateFormatter.format(start)
 }
 
