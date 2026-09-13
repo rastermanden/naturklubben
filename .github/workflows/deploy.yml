@@ -61,4 +61,4 @@ jobs:
           clean: false
           force: false
           attempt-limit: 5
-          commit-message: "deploy: ${{ github.sha }}"
+          commit-message: 'deploy: ${{ github.sha }}'
