@@ -101,6 +101,11 @@ export const routeMetadata = [
     announcement: '2048 indlæst',
   },
   {
+    path: '/turnering',
+    documentTitle: 'Turnering | Naturklubben',
+    announcement: 'Turnering indlæst',
+  },
+  {
     path: '/medlemmer',
     documentTitle: 'Medlemmer | Naturklubben',
     announcement: 'Medlemmer indlæst',
