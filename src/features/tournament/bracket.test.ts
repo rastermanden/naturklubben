@@ -74,42 +74,101 @@ describe('generateSingleEliminationBracket', () => {
     expect(round2).toHaveLength(2)
     expect(round3).toHaveLength(1)
 
-    const round1Byes = round1.filter((m) => m.bye)
-    expect(round1Byes).toHaveLength(1)
-    expect(round1Byes[0]).toMatchObject({
+    const round1Bye = round1.find((m) => m.bye)!
+    expect(round1Bye).toMatchObject({
       participant2Id: null,
       status: 'completed',
     })
-    expect(round1Byes[0].winnerId).toBe(round1Byes[0].participant1Id)
+    expect(round1Bye.winnerId).toBe(round1Bye.participant1Id)
 
-    // Runde 2's bye fødes udelukkende af runde 1's bye, hvis vinder allerede
-    // er kendt -- den afgøres derfor også med det samme ved oprettelsen.
-    const round2Byes = round2.filter((m) => m.bye)
-    expect(round2Byes).toHaveLength(1)
-    expect(round2Byes[0]).toMatchObject({
+    // Runde 1-byens vinder skal spille en RIGTIG kamp i runde 2 -- aldrig
+    // gives endnu en bye, før vedkommende selv har vundet en rigtig kamp.
+    // Ellers kunne den samme deltager nå finalen uden at have spillet en
+    // eneste kamp (den fejl, denne test dækker).
+    const byeWinnersRound2Match = round2.find(
+      (m) =>
+        m.participant1Id === round1Bye.winnerId ||
+        m.participant2Id === round1Bye.winnerId,
+    )!
+    expect(byeWinnersRound2Match.bye).toBe(false)
+    expect(byeWinnersRound2Match.status).toBe('pending')
+
+    // Runde 2's bye går i stedet til en runde-1-vinder, der allerede har
+    // bevist sig -- og kan (endnu) ikke afgøres, da den kamp ikke er spillet.
+    const round2Bye = round2.find((m) => m.bye)!
+    expect(round2Bye).toMatchObject({
+      participant1Id: null,
       participant2Id: null,
-      status: 'completed',
+      status: 'pending',
     })
-    expect(round2Byes[0].participant1Id).toBe(round1Byes[0].winnerId)
-    expect(round2Byes[0].winnerId).toBe(round1Byes[0].winnerId)
+    expect(round2Bye.matchIndex).not.toBe(byeWinnersRound2Match.matchIndex)
 
-    // Den anden runde-2-kamp er en rigtig, endnu uafgjort kamp mellem to
-    // runde-1-vindere.
-    const round2RealMatches = round2.filter((m) => !m.bye)
-    expect(round2RealMatches).toHaveLength(1)
-    expect(round2RealMatches[0]).toMatchObject({
+    // Finalen er aldrig en bye, og kender ikke nogen af deltagerne endnu --
+    // begge afhænger af runde 2's kampe.
+    expect(round3[0]).toMatchObject({
+      bye: false,
       status: 'pending',
       participant1Id: null,
       participant2Id: null,
     })
+  })
 
-    // Finalen er aldrig en bye -- men kender allerede den ene deltager
-    // (bye-kæden), mens den anden venter på runde 2's rigtige kamp.
-    expect(round3[0].bye).toBe(false)
-    expect(round3[0].status).toBe('pending')
-    expect(
-      [round3[0].participant1Id, round3[0].participant2Id].filter(Boolean),
-    ).toEqual([round2Byes[0].winnerId])
+  it('giver aldrig en deltager to byes i træk, heller ikke i en større bracket', () => {
+    // Jo flere deltagere, jo flere runder kan have en bye (fx 3 for 9
+    // deltagere) -- ingen af dem må nogensinde gå til den samme deltager,
+    // før vedkommende har spillet en rigtig kamp imellem.
+    for (const n of [5, 9, 13, 17]) {
+      const matches = generateSingleEliminationBracket(
+        participants(n),
+        identityShuffle,
+      )
+      const byMatchIndex = new Map(
+        matches.map((m) => [`${m.round}:${m.matchIndex}`, m]),
+      )
+
+      for (const match of matches) {
+        if (!match.bye || match.status !== 'completed') continue
+        if (match.nextMatchRound === null || match.nextMatchIndex === null) {
+          continue
+        }
+        const next = byMatchIndex.get(
+          `${match.nextMatchRound}:${match.nextMatchIndex}`,
+        )!
+        // Den næste kamp, byens vinder rykker videre til, må ikke selv være
+        // en anden automatisk afgjort bye for den samme deltager.
+        expect(next.bye && next.status === 'completed').toBe(false)
+      }
+    }
+  })
+
+  it('lader turneringens opretter vælge, hvem der sidder over i runde 1', () => {
+    const matches = generateSingleEliminationBracket(
+      participants(5),
+      identityShuffle,
+      'p3',
+    )
+    const round1Bye = matches.find((m) => m.round === 1 && m.bye)
+    expect(round1Bye?.participant1Id).toBe('p3')
+  })
+
+  it('ignorerer et ugyldigt eller irrelevant valg af hvem der sidder over', () => {
+    // Lige antal deltagere -> ingen bye overhovedet, uanset hvad der bedes om.
+    const evenMatches = generateSingleEliminationBracket(
+      participants(4),
+      identityShuffle,
+      'p1',
+    )
+    expect(evenMatches.some((m) => m.bye)).toBe(false)
+
+    // Et id, der ikke er blandt deltagerne, falder tilbage til den normale
+    // (tilfældige) udvælgelse i stedet for at fejle.
+    const matches = generateSingleEliminationBracket(
+      participants(5),
+      identityShuffle,
+      'does-not-exist',
+    )
+    const round1Bye = matches.find((m) => m.round === 1 && m.bye)
+    expect(round1Bye?.participant1Id).toBe('p5')
   })
 
   it('giver ingen byes ved 7 deltagere ud over runde 1', () => {

@@ -24,6 +24,9 @@ export interface NewTournamentParticipant {
 interface CreateTournamentInput {
   format: TournamentFormat
   participants: NewTournamentParticipant[]
+  /** Kun relevant ved single_elimination og et ulige deltagerantal: hvem der
+   * skal sidde over i runde 1, i stedet for at det trækkes tilfældigt. */
+  byeParticipantUserId?: string
 }
 
 /**
@@ -72,13 +75,21 @@ export function useTournaments() {
   })
 
   const createTournament = useMutation({
-    mutationFn: async ({ format, participants }: CreateTournamentInput) => {
+    mutationFn: async ({
+      format,
+      participants,
+      byeParticipantUserId,
+    }: CreateTournamentInput) => {
       const participantRows = participants.map((participant, index) => ({
         id: crypto.randomUUID(),
         user_id: participant.userId,
         display_name: participant.displayName,
         seed: index + 1,
       }))
+      const preferredByeId = byeParticipantUserId
+        ? participantRows.find((row) => row.user_id === byeParticipantUserId)
+            ?.id
+        : undefined
 
       const generatedMatches =
         format === 'round_robin'
@@ -88,6 +99,8 @@ export function useTournaments() {
                 id: row.id,
                 seed: index + 1,
               })),
+              undefined,
+              preferredByeId,
             )
 
       // Opretter turneringen, dens deltagere og hele kampplanen i ét

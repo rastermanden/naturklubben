@@ -14,6 +14,7 @@ interface TournamentSetupFormProps {
   onSubmit: (input: {
     format: TournamentFormat
     participants: NewTournamentParticipant[]
+    byeParticipantUserId?: string
   }) => void
 }
 
@@ -25,7 +26,11 @@ export function TournamentSetupForm({
 }: TournamentSetupFormProps) {
   const [format, setFormat] = useState<TournamentFormat>('round_robin')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [byeUserId, setByeUserId] = useState<string | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
+
+  const needsByeChoice =
+    format === 'single_elimination' && selectedIds.length % 2 === 1
 
   function toggleParticipant(memberId: string) {
     setSelectedIds((current) =>
@@ -33,6 +38,7 @@ export function TournamentSetupForm({
         ? current.filter((id) => id !== memberId)
         : [...current, memberId],
     )
+    setByeUserId(null)
   }
 
   function handleSubmit(event: FormEvent) {
@@ -53,7 +59,11 @@ export function TournamentSetupForm({
         displayName: member.full_name?.trim() || 'Unavngivet medlem',
       }
     })
-    onSubmit({ format, participants })
+    onSubmit({
+      format,
+      participants,
+      byeParticipantUserId: needsByeChoice && byeUserId ? byeUserId : undefined,
+    })
   }
 
   return (
@@ -75,7 +85,10 @@ export function TournamentSetupForm({
                 name="format"
                 value="round_robin"
                 checked={format === 'round_robin'}
-                onChange={() => setFormat('round_robin')}
+                onChange={() => {
+                  setFormat('round_robin')
+                  setByeUserId(null)
+                }}
                 className="mr-2"
               />
               Alle-mod-alle
@@ -93,7 +106,10 @@ export function TournamentSetupForm({
                 name="format"
                 value="single_elimination"
                 checked={format === 'single_elimination'}
-                onChange={() => setFormat('single_elimination')}
+                onChange={() => {
+                  setFormat('single_elimination')
+                  setByeUserId(null)
+                }}
                 className="mr-2"
               />
               Udslagsrunder
@@ -111,6 +127,33 @@ export function TournamentSetupForm({
         onToggle={toggleParticipant}
         maxParticipants={MAX_PARTICIPANTS}
       />
+
+      {needsByeChoice && (
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-ink-body">
+            Hvem sidder over i runde 1?
+          </span>
+          <select
+            value={byeUserId ?? ''}
+            onChange={(event) => setByeUserId(event.target.value || null)}
+            className="min-h-11 rounded-lg border border-line-strong bg-surface px-3 py-2"
+          >
+            <option value="">Tilfældig</option>
+            {selectedIds.map((id) => {
+              const member = members.find((m) => m.id === id)
+              return (
+                <option key={id} value={id}>
+                  {member?.full_name?.trim() || 'Unavngivet medlem'}
+                </option>
+              )
+            })}
+          </select>
+          <span className="text-sm text-ink-subtle">
+            Ulige antal deltagere -- én af dem går videre uden at spille i runde
+            1.
+          </span>
+        </label>
+      )}
 
       {(validationError || error) && (
         <p role="alert" className="text-sm text-danger">
