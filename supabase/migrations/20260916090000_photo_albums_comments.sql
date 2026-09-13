@@ -55,7 +55,7 @@ left join public.events e on e.id = albums.event_id
 left join covers on covers.event_id is not distinct from albums.event_id;
 
 revoke all on public.gallery_albums from public, anon, authenticated;
-grant select on public.gallery_albums to authenticated;
+grant select on public.gallery_albums to authenticated, service_role;
 
 comment on view public.gallery_albums is
   'One row per photo album (grouped by event_id, NULL = "Uden begivenhed") with its cover, count and event date -- powers the gallery album grid (#218).';
@@ -111,7 +111,7 @@ from public.photo_comments
 group by photo_id;
 
 revoke all on public.photo_comment_counts from public, anon, authenticated;
-grant select on public.photo_comment_counts to authenticated;
+grant select on public.photo_comment_counts to authenticated, service_role;
 
 comment on view public.photo_comment_counts is
   'Comment counts per photo, for the gallery thumbnail badge (#218).';
