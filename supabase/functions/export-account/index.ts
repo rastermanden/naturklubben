@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
         const { data, error } = await supabase
           .from('event_attendance')
           .select(
-            'event_id, created_at, event:events(id, title, description, location, start_at, end_at, created_at)',
+            'event_id, status, created_at, event:events(id, title, description, location, start_at, end_at, created_at)',
           )
           .eq('user_id', userId)
           .order('created_at', { ascending: true })

@@ -10,7 +10,8 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `profiles`                                 | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag, en kortvarig serverstyret slettereservation, `chat_notification_preference` (#179) og `feature_notifications_enabled` (#184).                                                                                                            | Alle autentificerede kan læse; ejeren kan kun opdatere profilfelter uden en aktiv slettereservation. `is_admin` ændres via `set_admin_role()`.                                                                                                                                                              |
 | `activities`                               | Offentligt indhold om klubbens aktiviteter (#10).                                                                                                                                                                                                                                                                                                 | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                                                                                                                                                                                        |
-| `events`                                   | Kalenderbegivenheder (#11). Opretterreferencen nulstilles ved kontosletning, så fælles historik bevares anonymt. `is_public` (#224) åbner begivenheden for ikke-medlemmer. `notification_function_url` sættes af en trigger ud fra requestets host og bruges af påmindelsen dagen før (#216).                                                     | Autentificerede kan læse/oprette; ejer og admins kan opdatere, ejer og admins kan slette. Anon ser kun rækker med `is_public` og kun titel, beskrivelse, tid og sted via kolonnegrants -- aldrig `created_by`. `calendar_feed_events` og `public_events` er de to anon-views.                               |
+| `events`                                   | Kalenderbegivenheder (#11) med valgfrit pladsloft `max_participants` (#222). Opretterreferencen nulstilles ved kontosletning, så fælles historik bevares anonymt. `is_public` (#224) åbner begivenheden for ikke-medlemmer. `notification_function_url` sættes af en trigger ud fra requestets host og bruges af påmindelsen dagen før (#216).    | Autentificerede kan læse/oprette; ejer og admins kan opdatere, ejer og admins kan slette. Anon ser kun rækker med `is_public` og kun titel, beskrivelse, tid og sted via kolonnegrants -- aldrig `created_by`. `calendar_feed_events` og `public_events` er de to anon-views.                               |
+| `event_attendance`                         | Medlemmernes svar på en begivenhed: `attending`, `waitlisted` eller `declined` (#222). Ventelisten står i `created_at`-rækkefølge.                                                                                                                                                                                                                | Alle medlemmer kan læse tilmeldinger og venteliste; et afbud ser kun den, der meldte det, arrangøren og admins. INSERT/UPDATE/DELETE er revoked -- kun `respond_to_event` og `promote_event_waitlist` skriver, bag en advisory lock pr. begivenhed, så loftet ikke kan omgås.                               |
 | `event_guest_requests`                     | Ansøgninger fra ikke-medlemmer om at deltage i en åben begivenhed (#224): navn, e-mail, evt. besked, antal personer, status og outboxen for svaret pr. mail. Delvist unikt indeks: én åben (pending/godkendt) ansøgning pr. e-mail pr. begivenhed.                                                                                                | Kun begivenhedens arrangør (`created_by`) og admins kan læse (`can_manage_event_guests`). Ingen klientskrivning: oprettes af `submit_event_guest_request_limited` (service_role), afgøres af `approve_/reject_event_guest_request`. `event_guest_counts` giver alle medlemmer antallet af godkendte gæster. |
 | `photos`                                   | Metadata og vedvarende optimeringsstatus for uploadede billeder -- selve filerne ligger i Storage (#12/#89).                                                                                                                                                                                                                                      | Autentificerede kan læse. Oprettelse/genforsøg går gennem `upsert_photo_upload`; direkte INSERT/UPDATE/DELETE er revoked, så klienten ikke kan skrive serverejede status/outputfelter eller omgå sikker sletning.                                                                                           |
 | `messages`                                 | Gruppechat, ét fælles rum (#14), med valgfri svarreference (#84) og `mentions` med de nævntes bruger-id'er (#179). Afsenderreferencen nulstilles ved kontosletning. Del af `supabase_realtime`.                                                                                                                                                   | Kun autentificerede kan læse/skrive; afsender kan slette egne, og admins kan slette alle. `mentions` skrives kun i afsenderens eget insert -- UPDATE er revoked, så ingen kan nævne nogen på en andens besked.                                                                                              |
@@ -159,7 +160,8 @@ Supabase CLI'en ikke skal læse den ved deploy.
   `photos-original` og `photos-optimized`, før Auth-brugeren slettes.
 - `export-account` (#129): kræver samme gateway-JWT, server-side tokenvalidering
   og højst fem minutter gamle genlogin som kontosletning. Functionen filtrerer
-  eksplicit profil, egne beskeder, egne billedmetadata og egne tilmeldinger på
+  eksplicit profil, egne beskeder, egne billedmetadata og egne svar på begivenheder
+  (tilmelding, venteliste eller afbud, #222) på
   den validerede brugers id. Billedreferencer får signerede Storage-URL'er med 15
   minutters levetid, og svaret kan downloades som JSON uden andre medlemmers
   private data.
@@ -259,6 +261,40 @@ skal godkende, før en badge tildeles (#159).
   ikke kan tildele sig selv en badge, at én admin ikke er nok, at indstilleren ikke kan
   være den ene af de to, at en admin ikke kan stemme to gange, og at et almindeligt
   medlem hverken kan uploade i `badge-images` eller se produktionslisten.
+
+## Pladsloft og venteliste
+
+En begivenhed kan have et `max_participants` (#222). Alt om, hvem der har en plads, ejes
+af databasen:
+
+- `respond_to_event(p_event_id, p_response)` er den eneste vej til at svare
+  (`attending`, `declined` eller `none` for at trække svaret tilbage). Den tager en
+  advisory lock pr. begivenhed, tæller deltagerne bag låsen og afgør, om en tilmelding
+  får en plads eller lander på ventelisten. Frigiver et svar en plads, rykker den
+  forreste på ventelisten op i samme transaktion, og RPC'en returnerer
+  `{status, promoted}`, så klienten kan sige det i chatten. To samtidige afbud kan
+  derfor ikke rykke to medlemmer op til den samme plads.
+- Ledige pladser tilhører ventelisten: en ny tilmelding fylder først køen op, før den
+  selv får en plads, og hvert svar -- uanset hvem der svarer, og hvad -- fylder de
+  ledige pladser, før det returnerer. Så efterlader et hævet loft eller en slettet
+  konto højst ledige pladser med folk i kø, indtil nogen svarer på begivenheden.
+- `promote_event_waitlist(p_event_id)` er til arrangøren og admins efter et hævet loft;
+  den returnerer de oprykkede.
+- `event_members_without_response(p_event_id)` giver arrangøren og admins listen over
+  medlemmer uden svar; alle andre afvises med `42501`. Hvem der kommer, er fælles
+  viden -- hvem der har meldt afbud eller _ikke_ har svaret, er kun arrangørens.
+  Afbuddene håndhæves i tabellens select-policy, ikke kun i klienten.
+- Besked til de oprykkede går i chatten med dem som `mentions`, sendt af den, hvis svar
+  fyldte pladsen (`src/features/calendar/announceWaitlist.ts`): som handlingsbesked, når
+  afsenderen selv gav pladsen fra sig eller hævede loftet, ellers som neutral tekst --
+  pladsen kan være frigivet uden om RPC'en (en slettet konto) og først fyldt af et
+  senere svar.
+  Push følger chat-push's mention-regel (se "Mentions og hvor meget der sendes"); en
+  særskilt push-type for oprykning er opfølgningen #236.
+- `supabase/tests/rls/17_event_waitlist.sql` måler, at loftet håndhæves, at
+  tabellen ikke kan skrives uden om RPC'en, at oprykning sker i rækkefølge og kun
+  fylder de ledige pladser (også dem, en slettet konto efterlader), og at afbud og
+  listen over manglende svar er lukket for andre.
 
 ## Migrations
 
@@ -804,7 +840,7 @@ Push-infrastrukturen fra chatten (`push_subscriptions`, VAPID-nøglerne, service
 | Type                      | Hvem                                | Udløses af                                        | Åbner                   |
 | ------------------------- | ----------------------------------- | ------------------------------------------------- | ----------------------- |
 | `event_created`           | Alle andre medlemmer end opretteren | Opretterens klient kalder `calendar-push`         | `/kalender/<id>`        |
-| `event_reminder`          | De tilmeldte                        | pg_cron hvert kvarter, fra kl. 17 dagen før       | `/kalender/<id>`        |
+| `event_reminder`          | De tilmeldte (`attending`)          | pg_cron hvert kvarter, fra kl. 17 dagen før       | `/kalender/<id>`        |
 | `badge_nomination_review` | Admins                              | Indstillerens klient kalder `badge-notifications` | `/admin?sektion=badges` |
 
 Den indstillede får ingen besked om en ny indstilling: badge-modellen holder
@@ -812,7 +848,7 @@ indstillinger skjult for modtageren, indtil badgen er tildelt (ellers ville en a
 indstilling være synlig), og tildelingen har sin egen push i `badge-notifications`.
 
 `chat-push` er uændret. De nye typer deler én vej, `_shared/pushDelivery.ts`, og næste
-type (#222, ventelisten) føjer sit navn til `NOTIFICATION_KINDS` i `_shared/pushKinds.ts`
+type (#236, oprykning fra ventelisten) føjer sit navn til `NOTIFICATION_KINDS` i `_shared/pushKinds.ts`
 (listen deles med frontendens indstillinger), bygger sin payload
 (`_shared/pushPayloads.ts`), udvider `kind`-constrainten på `notification_preferences` og
 `push_deliveries` i sin egen migration og kalder `deliverPush`.
@@ -863,8 +899,9 @@ ejer kun HTTP-kaldene. Her:
 2. For hver begivenhed i vinduet tager kørslen en række i `event_reminders`
    (`sending`, forsøg +1) og POSTer `{ kind, eventId, token }` til `calendar-push` med
    `pg_net`.
-3. Functionen bekræfter tokenet med `claim_event_reminder`, finder de tilmeldte, sender
-   gennem `deliverPush` og melder tilbage med `complete_event_reminder`.
+3. Functionen bekræfter tokenet med `claim_event_reminder`, finder de tilmeldte (kun
+   `status = 'attending'` -- hverken afbud eller ventelisten, #222), sender gennem
+   `deliverPush` og melder tilbage med `complete_event_reminder`.
 4. Efter en vellykket kørsel kigges der forbi igen hver time, så en, der først tilmelder
    sig om aftenen, også får sin påmindelse -- loggen holder de andre fri. Fejl og kørsler,
    der gik i stå, forsøges igen efter et kvarter; vinduet begrænser antallet af forsøg.

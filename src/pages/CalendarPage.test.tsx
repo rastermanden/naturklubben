@@ -25,6 +25,7 @@ const EVENT: CalendarEvent = {
   end_at: null,
   created_by: 'member-id',
   is_public: false,
+  max_participants: null,
 }
 
 const mocks = vi.hoisted(() => ({
@@ -61,6 +62,14 @@ vi.mock('../features/calendar/EventTasksSection', () => ({
 }))
 vi.mock('../features/calendar/GuestRequestsSection', () => ({
   GuestRequestsSection: () => null,
+}))
+// Oprykningen fra ventelisten (#222) meldes i chatten via Supabase; her
+// gemmes ingen begivenhed, så den kaldes aldrig.
+vi.mock('../features/calendar/announceWaitlist', () => ({
+  announcePromotion: vi.fn(),
+}))
+vi.mock('../features/chat/useProfilesMap', () => ({
+  useProfilesMap: () => ({ data: undefined }),
 }))
 
 import CalendarPage from './CalendarPage'

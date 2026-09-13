@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { useErrorFocus } from '../../hooks/useErrorFocus'
 import type { CalendarEvent, EventInput } from './useEvents'
+import { parseMaxParticipants } from './waitlist'
 
 interface EventFormProps {
   event?: CalendarEvent
@@ -31,10 +32,16 @@ export function EventForm({
   const [startAt, setStartAt] = useState(toLocalDateTime(event?.start_at))
   const [endAt, setEndAt] = useState(toLocalDateTime(event?.end_at))
   const [isPublic, setIsPublic] = useState(event?.is_public ?? false)
+  const [maxParticipants, setMaxParticipants] = useState(
+    event?.max_participants?.toString() ?? '',
+  )
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [invalidField, setInvalidField] = useState<'end' | 'max' | null>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const endInputRef = useRef<HTMLInputElement>(null)
+  const maxInputRef = useRef<HTMLInputElement>(null)
   const focusEndError = useErrorFocus(endInputRef)
+  const focusMaxError = useErrorFocus(maxInputRef)
   const dialogRef = useDialogFocus<HTMLDivElement>({
     onClose: onCancel,
     initialFocusRef: titleInputRef,
@@ -43,10 +50,20 @@ export function EventForm({
   function handleSubmit(formEvent: FormEvent) {
     formEvent.preventDefault()
     setValidationError(null)
+    setInvalidField(null)
 
     if (endAt && new Date(endAt) < new Date(startAt)) {
       setValidationError('Sluttidspunktet må ikke være før starttidspunktet.')
+      setInvalidField('end')
       focusEndError()
+      return
+    }
+
+    const parsedMax = parseMaxParticipants(maxParticipants)
+    if (parsedMax === undefined) {
+      setValidationError('Antal pladser skal være et helt tal på mindst 1.')
+      setInvalidField('max')
+      focusMaxError()
       return
     }
 
@@ -57,6 +74,7 @@ export function EventForm({
       start_at: new Date(startAt).toISOString(),
       end_at: endAt ? new Date(endAt).toISOString() : null,
       is_public: isPublic,
+      max_participants: parsedMax,
     })
   }
 
@@ -139,13 +157,46 @@ export function EventForm({
                 min={startAt}
                 value={endAt}
                 onChange={(changeEvent) => setEndAt(changeEvent.target.value)}
-                aria-invalid={validationError ? true : undefined}
+                aria-invalid={invalidField === 'end' ? true : undefined}
                 aria-describedby={
-                  validationError ? 'event-form-error' : undefined
+                  invalidField === 'end' ? 'event-form-error' : undefined
                 }
                 className={inputClass}
               />
             </label>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1 text-sm text-ink-body">
+              Max antal deltagere
+              <input
+                id="event-max-participants"
+                ref={maxInputRef}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                placeholder="Ubegrænset"
+                value={maxParticipants}
+                onChange={(changeEvent) =>
+                  setMaxParticipants(changeEvent.target.value)
+                }
+                aria-invalid={invalidField === 'max' ? true : undefined}
+                aria-describedby={
+                  invalidField === 'max'
+                    ? 'event-form-error'
+                    : 'event-max-participants-hint'
+                }
+                className={inputClass}
+              />
+            </label>
+            <p
+              id="event-max-participants-hint"
+              className="text-xs text-ink-subtle"
+            >
+              Tomt betyder ubegrænset. Er der fyldt op, kommer nye tilmeldinger
+              på venteliste.
+            </p>
           </div>
 
           <label className="flex items-start gap-3 text-sm text-ink-body">

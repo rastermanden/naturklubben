@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
+import { capRaised } from './waitlist'
 
 export interface CalendarEvent {
   id: string
@@ -11,6 +12,8 @@ export interface CalendarEvent {
   created_by: string | null
   /** Åben for ikke-medlemmer: vises på den offentlige kalender (#224). */
   is_public: boolean
+  /** Pladsloft; null er ubegrænset. */
+  max_participants: number | null
 }
 
 export interface EventInput {
@@ -20,10 +23,11 @@ export interface EventInput {
   start_at: string
   end_at: string | null
   is_public: boolean
+  max_participants: number | null
 }
 
 const eventFields =
-  'id, title, description, location, start_at, end_at, created_by, is_public'
+  'id, title, description, location, start_at, end_at, created_by, is_public, max_participants'
 
 async function fetchUpcomingEvents(): Promise<CalendarEvent[]> {
   const startOfToday = new Date()
@@ -84,11 +88,44 @@ export function useEvents(userId: string) {
   })
 
   const updateEvent = useMutation({
-    mutationFn: async ({ id, input }: { id: string; input: EventInput }) => {
-      const { error } = await supabase.from('events').update(input).eq('id', id)
+    /**
+     * Returnerer dem, der rykkede op fra ventelisten, fordi loftet blev hævet
+     * eller fjernet -- så siden kan fortælle dem det i chatten. Oprykningen
+     * sker i databasen bag samme lås som tilmeldingerne.
+     */
+    mutationFn: async ({
+      event,
+      input,
+    }: {
+      event: CalendarEvent
+      input: EventInput
+    }): Promise<string[]> => {
+      const { error } = await supabase
+        .from('events')
+        .update(input)
+        .eq('id', event.id)
       if (error) throw error
+      if (!capRaised(event.max_participants, input.max_participants)) {
+        return []
+      }
+      const { data, error: promoteError } = await supabase.rpc(
+        'promote_event_waitlist',
+        { p_event_id: event.id },
+      )
+      // Begivenheden er gemt; en fejl her må ikke ligne, at den ikke blev det.
+      // Pladserne fyldes alligevel ved næste svar på begivenheden.
+      if (promoteError) {
+        console.warn('Ventelisten kunne ikke rykkes op', promoteError)
+        return []
+      }
+      return (data as string[] | null) ?? []
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: (_promoted, { event }) => {
+      void queryClient.invalidateQueries({ queryKey })
+      void queryClient.invalidateQueries({
+        queryKey: ['event-attendance', event.id],
+      })
+    },
   })
 
   const deleteEvent = useMutation({

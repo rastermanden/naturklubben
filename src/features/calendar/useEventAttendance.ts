@@ -1,13 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
+import type { ProfileSummary } from '../chat/useProfilesMap'
+import { announcePromotion, promotionCause } from './announceWaitlist'
+import {
+  expectedResponseStatus,
+  type AttendanceEntry,
+  type AttendanceStatus,
+} from './waitlist'
 
-export interface EventAttendance {
+export interface EventAttendance extends AttendanceEntry {
   event_id: string
-  user_id: string
-  created_at: string
 }
 
-const attendanceFields = 'event_id, user_id, created_at'
+/** Det, man kan svare: tilmelding, afbud, eller trække svaret tilbage. */
+export type AttendanceResponse = 'attending' | 'declined' | 'none'
+
+export interface RespondResult {
+  status: AttendanceStatus | null
+  /** Dem, svaret rykkede op fra ventelisten, i rækkefølge. */
+  promoted: string[]
+}
+
+const attendanceFields = 'event_id, user_id, status, created_at'
 
 function attendanceQueryKey(eventId: string) {
   return ['event-attendance', eventId] as const
@@ -26,8 +40,57 @@ async function fetchEventAttendance(
   return data
 }
 
-export function useEventAttendance(eventId: string, userId: string) {
+/**
+ * Det svar, listen viser, mens databasen arbejder. Pladsen afgøres bag en lås
+ * i respond_to_event; her gættes det samme ud fra den liste, klienten har, og
+ * onSettled henter facit.
+ */
+export function applyOptimisticResponse(
+  previous: readonly EventAttendance[],
+  eventId: string,
+  userId: string,
+  response: AttendanceResponse,
+  maxParticipants: number | null,
+): EventAttendance[] {
+  const own = previous.find((entry) => entry.user_id === userId)
+  const others = previous.filter((entry) => entry.user_id !== userId)
+  if (response === 'none') return others
+  if (
+    response === 'attending' &&
+    own &&
+    (own.status === 'attending' || own.status === 'waitlisted')
+  ) {
+    return [...previous]
+  }
+  const status =
+    response === 'declined'
+      ? 'declined'
+      : expectedResponseStatus(others, maxParticipants)
+  return [
+    ...others,
+    {
+      event_id: eventId,
+      user_id: userId,
+      status,
+      created_at: new Date().toISOString(),
+    },
+  ]
+}
+
+/**
+ * Deltagerlisten og medlemmets svar. Rykker svaret nogen op fra ventelisten,
+ * fortæller mutationen dem det i chatten -- fra mutationens egen onSuccess,
+ * ikke fra kaldet, så beskeden også sendes, hvis dialogen lukkes, mens svaret
+ * gemmes. Bedste indsats: svaret er gemt, uanset om chatten kan nås.
+ */
+export function useEventAttendance(
+  event: { id: string; title: string; max_participants: number | null },
+  userId: string,
+  profiles: Record<string, ProfileSummary> | undefined,
+) {
   const queryClient = useQueryClient()
+  const eventId = event.id
+  const maxParticipants = event.max_participants
   const queryKey = attendanceQueryKey(eventId)
 
   const attendanceQuery = useQuery({
@@ -35,55 +98,45 @@ export function useEventAttendance(eventId: string, userId: string) {
     queryFn: () => fetchEventAttendance(eventId),
   })
 
-  const joinAttendance = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from('event_attendance')
-        .insert({ event_id: eventId, user_id: userId })
+  const respond = useMutation({
+    mutationFn: async (response: AttendanceResponse) => {
+      const { data, error } = await supabase.rpc('respond_to_event', {
+        p_event_id: eventId,
+        p_response: response,
+      })
       if (error) throw error
+      return data as RespondResult
     },
-    onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey })
-      const previous =
-        queryClient.getQueryData<EventAttendance[]>(queryKey) ?? []
-
-      queryClient.setQueryData<EventAttendance[]>(queryKey, [
-        ...previous,
-        {
-          event_id: eventId,
-          user_id: userId,
-          created_at: new Date().toISOString(),
-        },
-      ])
-
-      return { previous }
-    },
-    onError: (_error, _variables, context) => {
-      queryClient.setQueryData(queryKey, context?.previous)
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey }),
-  })
-
-  const leaveAttendance = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from('event_attendance')
-        .delete()
-        .eq('event_id', eventId)
-        .eq('user_id', userId)
-      if (error) throw error
-    },
-    onMutate: async () => {
+    onMutate: async (response) => {
       await queryClient.cancelQueries({ queryKey })
       const previous =
         queryClient.getQueryData<EventAttendance[]>(queryKey) ?? []
 
       queryClient.setQueryData<EventAttendance[]>(
         queryKey,
-        previous.filter((attendance) => attendance.user_id !== userId),
+        applyOptimisticResponse(
+          previous,
+          eventId,
+          userId,
+          response,
+          maxParticipants,
+        ),
       )
 
       return { previous }
+    },
+    onSuccess: (result, _response, context) => {
+      if (result.promoted.length === 0) return
+      const previousStatus =
+        context?.previous.find((entry) => entry.user_id === userId)?.status ??
+        null
+      void announcePromotion(
+        userId,
+        promotionCause(previousStatus, result.status),
+        event.title,
+        result.promoted,
+        profiles,
+      )
     },
     onError: (_error, _variables, context) => {
       queryClient.setQueryData(queryKey, context?.previous)
@@ -91,5 +144,24 @@ export function useEventAttendance(eventId: string, userId: string) {
     onSettled: () => queryClient.invalidateQueries({ queryKey }),
   })
 
-  return { attendanceQuery, joinAttendance, leaveAttendance }
+  return { attendanceQuery, respond }
+}
+
+/**
+ * Medlemmerne uden svar på begivenheden. RPC'en afviser alle andre end
+ * arrangøren og admins, så den hentes først, når listen faktisk foldes ud.
+ */
+export function useMembersWithoutResponse(eventId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['event-members-without-response', eventId] as const,
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase.rpc(
+        'event_members_without_response',
+        { p_event_id: eventId },
+      )
+      if (error) throw error
+      return (data as { user_id: string }[]).map((row) => row.user_id)
+    },
+    enabled,
+  })
 }

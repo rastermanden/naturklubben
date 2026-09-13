@@ -21,6 +21,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
 import { handleCors } from '../_shared/cors.ts'
+import { loadEventReminderRecipients } from '../_shared/eventReminderRecipients.ts'
 import { deliverPush } from '../_shared/pushDelivery.ts'
 import {
   eventCreatedPayload,
@@ -215,11 +216,7 @@ Deno.serve(async (req) => {
       return respond({ status: 'sent', skipped: 'Begivenheden er begyndt' })
     }
 
-    const { data: attendance, error: attendanceError } = await supabase
-      .from('event_attendance')
-      .select('user_id')
-      .eq('event_id', event.id)
-    if (attendanceError) throw attendanceError
+    const userIds = await loadEventReminderRecipients(supabase, event.id)
 
     const vapid = await getVapidDetails(supabase)
     const result = await deliverPush({
@@ -227,7 +224,7 @@ Deno.serve(async (req) => {
       vapid,
       kind,
       subjectId: event.id,
-      userIds: (attendance ?? []).map((row) => row.user_id as string),
+      userIds,
       payload: eventReminderPayload({ event }),
     })
 
