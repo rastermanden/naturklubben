@@ -40,10 +40,25 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
-      # Deployer til roden af gh-pages-branchen. keep_files: true bevarer
+      # Deployer til roden af gh-pages-branchen. clean: false bevarer
       # pr-preview/pr-<nr>/-undermapperne, som pr-preview.yml pusher til samme branch.
-      - uses: peaceiris/actions-gh-pages@v4
+      #
+      # gh-pages har to skrivere, og de rammer hinanden ved hver eneste merge:
+      # når en PR merges, starter dette job og pr-preview.yml's oprydning
+      # ("Remove preview for PR <nr>") i samme sekund. De kan ikke deles om en
+      # concurrency-gruppe -- en fælles gruppe ville lade et nyt preview
+      # annullere en ventende produktions-deploy, og GitHub holder kun én
+      # ventende kørsel pr. gruppe. Derfor skal et afvist push i stedet hentes
+      # ind og prøves igen: denne action fetcher og rebaser ved afvisning
+      # (op til `attempt-limit` forsøg), så længe `force` er slået fra.
+      # Uden det taber den ene part stille sit build -- sådan forsvandt
+      # deployet af 48b1396, hvor appen blev bygget færdig og så smidt væk.
+      - uses: JamesIves/github-pages-deploy-action@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          keep_files: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: dist
+          clean: false
+          force: false
+          attempt-limit: 5
+          commit-message: "deploy: ${{ github.sha }}"
