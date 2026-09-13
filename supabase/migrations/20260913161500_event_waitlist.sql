@@ -13,19 +13,19 @@
 -- samtidige tilmeldinger ikke begge kan læse "én ledig plads".
 
 alter table public.events
-  add column max_participants integer
+  add column if not exists max_participants integer
   constraint events_max_participants_positive
     check (max_participants is null or max_participants > 0);
 
 -- Et svar er ét af tre. Rækkerne fra før er alle tilmeldinger.
 alter table public.event_attendance
-  add column status text not null default 'attending'
+  add column if not exists status text not null default 'attending'
   constraint event_attendance_status_known
     check (status in ('attending', 'waitlisted', 'declined'));
 
 -- Ventelisten rykkes i tilmeldingsrækkefølge; user_id bryder et (usandsynligt)
 -- sammenfald i created_at, så rækkefølgen er entydig.
-create index event_attendance_waitlist_idx
+create index if not exists event_attendance_waitlist_idx
   on public.event_attendance (event_id, created_at, user_id)
   where status = 'waitlisted';
 
