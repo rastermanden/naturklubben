@@ -5,9 +5,11 @@ import type { Photo } from './types'
 export function PhotoThumbnail({
   photo,
   onClick,
+  commentCount = 0,
 }: {
   photo: Photo
   onClick: () => void
+  commentCount?: number
 }) {
   const { url, isLoading, error, refetch } = useDisplayUrl(photo, 'thumbnail')
   const statusLabel = optimizationStatusLabel(photo)
@@ -60,6 +62,25 @@ export function PhotoThumbnail({
           }`}
         >
           {statusLabel}
+        </span>
+      )}
+      {commentCount > 0 && (
+        <span
+          aria-label={
+            commentCount === 1 ? '1 kommentar' : `${commentCount} kommentarer`
+          }
+          className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white"
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M4 4h16v12H7l-3 3V4z" />
+          </svg>
+          {commentCount}
         </span>
       )}
     </button>

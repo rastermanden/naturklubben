@@ -95,6 +95,17 @@ function repository(overrides: Partial<AccountExportRepository> = {}) {
         },
       ]
     },
+    getPhotoComments: async (id) => {
+      seenUserIds.push(id)
+      return [
+        {
+          id: 'comment-1',
+          photo_id: 'photo-1',
+          body: 'Flot billede!',
+          created_at: '2026-08-03T10:00:00.000Z',
+        },
+      ]
+    },
     getPhotoDownloadUrls: async () => ({
       original: 'https://storage.test/original?token=short-lived',
       optimized: 'https://storage.test/optimized?token=short-lived',
@@ -120,9 +131,17 @@ Deno.test(
     const body = await response.json()
 
     assertEquals(response.status, 200)
-    assertEquals(seenUserIds, [userId, userId, userId, userId, userId])
+    assertEquals(seenUserIds, [userId, userId, userId, userId, userId, userId])
     assertEquals(body.account.email, 'medlem@example.com')
     assertEquals(body.messages[0].content, 'Hej')
+    assertEquals(body.photo_comments, [
+      {
+        id: 'comment-1',
+        photo_id: 'photo-1',
+        body: 'Flot billede!',
+        created_at: '2026-08-03T10:00:00.000Z',
+      },
+    ])
     assertEquals(
       body.photos[0].download_urls.original,
       'https://storage.test/original?token=short-lived',
