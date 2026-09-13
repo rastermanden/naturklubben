@@ -527,6 +527,10 @@ set start_at = (
 ) at time zone 'Europe/Copenhagen'
 where id = '00000000-0000-0000-0000-0000000000e1';
 
+-- Loggen og kørslerne er lukket for medlemmer (test 17 og 19), så de
+-- aflæses uden for Idas session.
+do $$ begin perform tests.reset_session(); end $$;
+
 select is(
   (
     select count(*)::int
@@ -548,9 +552,13 @@ select is(
   'og kørslen'
 );
 
+do $$ begin perform tests.login('00000000-0000-0000-0000-0000000000f1'); end $$;
+
 update public.events
 set start_at = start_at + interval '7 days'
 where id = '00000000-0000-0000-0000-0000000000e1';
+
+do $$ begin perform tests.reset_session(); end $$;
 
 select is(
   (
@@ -583,8 +591,6 @@ select is(
   1,
   '"ny begivenhed" om den samme sendes ikke igen'
 );
-
-do $$ begin perform tests.reset_session(); end $$;
 
 select is(
   public.enqueue_event_reminders(),
