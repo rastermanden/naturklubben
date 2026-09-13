@@ -8,6 +8,7 @@ import {
   type MessageExport,
   type PhotoDownloadUrls,
   type PhotoExport,
+  type PollVoteExport,
   type ProfileExport,
 } from './handler.ts'
 
@@ -101,6 +102,28 @@ Deno.serve(async (req) => {
           ...attendance,
           event: Array.isArray(event) ? (event[0] ?? null) : event,
         })) satisfies AttendanceExport[]
+      })
+    },
+
+    async getPollVotes(userId) {
+      return collectPages(async (from, to) => {
+        const { data, error } = await supabase
+          .from('poll_votes')
+          .select(
+            'poll_id, option_id, created_at, poll:polls(id, question), option:poll_options(id, label)',
+          )
+          .eq('user_id', userId)
+          .order('created_at', { ascending: true })
+          .order('poll_id', { ascending: true })
+          .range(from, to)
+        queryError('Stemmer på afstemninger kunne ikke hentes', error)
+        return (data ?? []).map(({ poll, option, ...vote }) => ({
+          ...vote,
+          poll: Array.isArray(poll) ? (poll[0] ?? null) : (poll ?? null),
+          option: Array.isArray(option)
+            ? (option[0] ?? null)
+            : (option ?? null),
+        })) satisfies PollVoteExport[]
       })
     },
 

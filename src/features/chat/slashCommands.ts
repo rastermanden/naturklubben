@@ -6,16 +6,30 @@ const SHRUG_COMMAND_PATTERN = /^\/shrug(?:[ \t]+(.+))?$/i
 const HELP_COMMAND_PATTERN = /^\/help$/i
 const AWAY_COMMAND_PATTERN = /^\/away(?:[ \t]+(.+))?$/i
 const BACK_COMMAND_PATTERN = /^\/back$/i
+const POLL_COMMAND_PATTERN = /^\/afstemning(?:[ \t]+([\s\S]+))?$/i
 
 const SHRUG = '¯\\_(ツ)_/¯'
 
-// En kommando ender enten som en besked i chatten ('message') eller som en
-// lokal virkning, kun afsenderen ser -- mIRC's kommandoer var begge dele.
+// Samme grænser som migrationen 20260913170000_chat_polls.sql håndhæver i
+// databasen (polls.question og poll_options.label) -- parseren skal afvise
+// en for lang afstemning med en venlig besked, før den overhovedet når
+// create_poll og rammer et check-constraint-brud.
+export const POLL_MIN_OPTIONS = 2
+export const POLL_MAX_OPTIONS = 6
+export const POLL_QUESTION_MAX_LENGTH = 300
+export const POLL_OPTION_MAX_LENGTH = 200
+
+// En kommando ender enten som en besked i chatten ('message'), en afstemning
+// ('poll', som klienten sender som besked og derefter kalder create_poll
+// for), en fejlbesked, kun afsenderen ser ('error') eller en lokal virkning,
+// kun afsenderen ser -- mIRC's kommandoer var begge dele.
 export type ParsedCommand =
   | { kind: 'message'; content: string; messageType: MessageType }
+  | { kind: 'poll'; question: string; options: string[] }
   | { kind: 'help' }
   | { kind: 'away'; message: string | null }
   | { kind: 'back' }
+  | { kind: 'error'; message: string }
 
 // mIRC's klassiske "/slap <nick>" tager bare den resterende tekst som mål --
 // uden at slå navnet op mod nogen medlemsliste. Samme her: kommandoen virker,
@@ -61,7 +75,64 @@ export function parseChatCommand(rawInput: string): ParsedCommand | null {
 
   if (BACK_COMMAND_PATTERN.test(input)) return { kind: 'back' }
 
+  const poll = POLL_COMMAND_PATTERN.exec(input)
+  if (poll) return parsePollCommand(poll[1])
+
   return null
+}
+
+// "/afstemning <spørgsmål> | <svar 1> | <svar 2> [| ...]": spørgsmål og svar
+// adskilles af '|', ligesom en tabel-række -- ugyldig eller tom input giver
+// en venlig fejl i stedet for en tavs afvisning eller et databasefejlsvar.
+function parsePollCommand(rawArguments: string | undefined): ParsedCommand {
+  const usageError: ParsedCommand = {
+    kind: 'error',
+    message:
+      'Brug /afstemning <spørgsmål> | <svar 1> | <svar 2> [| ...] -- med mellem ' +
+      `${POLL_MIN_OPTIONS} og ${POLL_MAX_OPTIONS} svar.`,
+  }
+
+  const rest = rawArguments?.trim()
+  if (!rest) return usageError
+
+  const parts = rest.split('|').map((part) => part.trim())
+  const [question, ...options] = parts
+
+  if (!question) return usageError
+  if (question.length > POLL_QUESTION_MAX_LENGTH) {
+    return {
+      kind: 'error',
+      message: `Spørgsmålet må højst være ${POLL_QUESTION_MAX_LENGTH} tegn.`,
+    }
+  }
+
+  if (options.some((option) => option.length === 0)) {
+    return { kind: 'error', message: 'Svarmulighederne må ikke være tomme.' }
+  }
+
+  if (options.length < POLL_MIN_OPTIONS || options.length > POLL_MAX_OPTIONS) {
+    return {
+      kind: 'error',
+      message: `En afstemning skal have mellem ${POLL_MIN_OPTIONS} og ${POLL_MAX_OPTIONS} svar.`,
+    }
+  }
+
+  if (options.some((option) => option.length > POLL_OPTION_MAX_LENGTH)) {
+    return {
+      kind: 'error',
+      message: `Hvert svar må højst være ${POLL_OPTION_MAX_LENGTH} tegn.`,
+    }
+  }
+
+  const uniqueOptions = new Set(options.map((option) => option.toLowerCase()))
+  if (uniqueOptions.size !== options.length) {
+    return {
+      kind: 'error',
+      message: 'To svar i samme afstemning må ikke være ens.',
+    }
+  }
+
+  return { kind: 'poll', question, options }
 }
 
 export interface SlashCommand {
@@ -71,6 +142,11 @@ export interface SlashCommand {
 }
 
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
+  {
+    command: '/afstemning',
+    usage: '/afstemning <spørgsmål> | <svar 1> | <svar 2> [| ...]',
+    description: `Opretter en afstemning med ${POLL_MIN_OPTIONS}-${POLL_MAX_OPTIONS} svar`,
+  },
   {
     command: '/away',
     usage: '/away [besked]',
