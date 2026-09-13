@@ -3,6 +3,7 @@ import {
   computeStandings,
   generateRoundRobinMatches,
   rankStandings,
+  sharedLeaders,
   type StandingsMatch,
 } from './roundRobin'
 
@@ -141,5 +142,103 @@ describe('computeStandings + rankStandings', () => {
     // kan skilles på indbyrdes opgør (hver har 1 sejr i gruppen), så
     // enkeltspilsforskellen afgør rækkefølgen.
     expect(ranked.map((s) => s.participantId)).toEqual(['a', 'c', 'b'])
+  })
+})
+
+describe('sharedLeaders', () => {
+  it('giver kun én leder, når stillingen ikke er uafgjort', () => {
+    const matches: StandingsMatch[] = [
+      { participant1Id: 'a', participant2Id: 'b', winnerId: 'a', games: [] },
+      { participant1Id: 'a', participant2Id: 'c', winnerId: 'a', games: [] },
+      { participant1Id: 'b', participant2Id: 'c', winnerId: 'b', games: [] },
+    ]
+    const standings = computeStandings(['a', 'b', 'c'], matches)
+    const ranked = rankStandings(standings, matches)
+
+    expect(sharedLeaders(ranked, matches).map((s) => s.participantId)).toEqual([
+      'a',
+    ])
+  })
+
+  it('finder én leder, når indbyrdes opgør afgør en lige stilling', () => {
+    // Samme data som testen for indbyrdes opgør ovenfor: a og b har begge 2
+    // sejre, men a slog b direkte -- ikke reelt uafgjort.
+    const matches: StandingsMatch[] = [
+      {
+        participant1Id: 'a',
+        participant2Id: 'b',
+        winnerId: 'a',
+        games: [{ winnerId: 'a' }, { winnerId: 'b' }, { winnerId: 'a' }],
+      },
+      { participant1Id: 'a', participant2Id: 'c', winnerId: 'a', games: [] },
+      {
+        participant1Id: 'b',
+        participant2Id: 'c',
+        winnerId: 'b',
+        games: [{ winnerId: 'b' }, { winnerId: 'b' }],
+      },
+      {
+        participant1Id: 'b',
+        participant2Id: 'd',
+        winnerId: 'b',
+        games: [{ winnerId: 'b' }, { winnerId: 'b' }],
+      },
+    ]
+    const standings = computeStandings(['a', 'b', 'c', 'd'], matches)
+    const ranked = rankStandings(standings, matches)
+
+    expect(sharedLeaders(ranked, matches).map((s) => s.participantId)).toEqual([
+      'a',
+    ])
+  })
+
+  it('finder én leder, når enkeltspilsforskellen afgør en lige stilling', () => {
+    const matches: StandingsMatch[] = [
+      {
+        participant1Id: 'a',
+        participant2Id: 'b',
+        winnerId: 'a',
+        games: [{ winnerId: 'a' }, { winnerId: 'a' }],
+      },
+      {
+        participant1Id: 'b',
+        participant2Id: 'c',
+        winnerId: 'b',
+        games: [{ winnerId: 'b' }, { winnerId: 'c' }, { winnerId: 'b' }],
+      },
+      {
+        participant1Id: 'c',
+        participant2Id: 'a',
+        winnerId: 'c',
+        games: [{ winnerId: 'c' }, { winnerId: 'a' }, { winnerId: 'c' }],
+      },
+    ]
+    const standings = computeStandings(['a', 'b', 'c'], matches)
+    const ranked = rankStandings(standings, matches)
+
+    expect(sharedLeaders(ranked, matches).map((s) => s.participantId)).toEqual([
+      'a',
+    ])
+  })
+
+  it('giver delt førsteplads, når intet kan skille de bedste', () => {
+    // a og b har hver 1 sejr, har aldrig mødt hinanden, og har ingen
+    // enkeltspil registreret -- helt uafgjort.
+    const matches: StandingsMatch[] = [
+      { participant1Id: 'a', participant2Id: 'c', winnerId: 'a', games: [] },
+      { participant1Id: 'b', participant2Id: 'd', winnerId: 'b', games: [] },
+    ]
+    const standings = computeStandings(['a', 'b', 'c', 'd'], matches)
+    const ranked = rankStandings(standings, matches)
+
+    expect(
+      sharedLeaders(ranked, matches)
+        .map((s) => s.participantId)
+        .sort(),
+    ).toEqual(['a', 'b'])
+  })
+
+  it('giver en tom liste uden deltagere', () => {
+    expect(sharedLeaders([], [])).toEqual([])
   })
 })

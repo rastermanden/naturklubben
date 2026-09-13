@@ -46,6 +46,7 @@ export function BracketView({ matches, nameFor }: BracketViewProps) {
                         match.winner_id !== null &&
                         match.winner_id === match.participant1_id
                       }
+                      isBye={match.status === 'completed'}
                       nameFor={nameFor}
                     />
                     <div className="my-1 border-t border-line-soft" />
@@ -55,6 +56,7 @@ export function BracketView({ matches, nameFor }: BracketViewProps) {
                         match.winner_id !== null &&
                         match.winner_id === match.participant2_id
                       }
+                      isBye={match.status === 'completed'}
                       nameFor={nameFor}
                     />
                   </div>
@@ -71,10 +73,14 @@ export function BracketView({ matches, nameFor }: BracketViewProps) {
 function ParticipantRow({
   participantId,
   isWinner,
+  isBye,
   nameFor,
 }: {
   participantId: string | null
   isWinner: boolean
+  /** Kampen er allerede afgjort -- en tom plads her er en bye, ikke en
+   * modstander, der endnu mangler. */
+  isBye: boolean
   nameFor: (participantId: string) => string
 }) {
   return (
@@ -84,7 +90,7 @@ function ParticipantRow({
       {participantId ? (
         nameFor(participantId)
       ) : (
-        <span className="italic">Venter…</span>
+        <span className="italic">{isBye ? 'Bye' : 'Venter…'}</span>
       )}
     </p>
   )

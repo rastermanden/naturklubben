@@ -95,6 +95,30 @@ export function computeStandings(
   return Array.from(byId.values())
 }
 
+/** Indbyrdes sejre, men kun i kampe mellem to medlemmer af samme gruppe. */
+function headToHeadWinsWithinGroup(
+  groupIds: Set<string>,
+  matches: StandingsMatch[],
+): Map<string, number> {
+  const wins = new Map<string, number>([...groupIds].map((id) => [id, 0]))
+
+  for (const match of matches) {
+    if (
+      match.winnerId &&
+      groupIds.has(match.participant1Id) &&
+      groupIds.has(match.participant2Id)
+    ) {
+      wins.set(match.winnerId, (wins.get(match.winnerId) ?? 0) + 1)
+    }
+  }
+
+  return wins
+}
+
+function gameDiff(standing: Standing): number {
+  return standing.gamesWon - standing.gamesLost
+}
+
 /**
  * Rangerer stillingen efter (1) kampsejre, (2) indbyrdes opgør mellem lige
  * mange kampsejre, (3) forskel i enkeltspilsejre. Deltagere, der stadig
@@ -124,22 +148,7 @@ function rankTiedGroup(
   matches: StandingsMatch[],
 ): Standing[] {
   const groupIds = new Set(group.map((standing) => standing.participantId))
-  const headToHeadWins = new Map<string, number>(
-    group.map((standing) => [standing.participantId, 0]),
-  )
-
-  for (const match of matches) {
-    if (
-      match.winnerId &&
-      groupIds.has(match.participant1Id) &&
-      groupIds.has(match.participant2Id)
-    ) {
-      headToHeadWins.set(
-        match.winnerId,
-        (headToHeadWins.get(match.winnerId) ?? 0) + 1,
-      )
-    }
-  }
+  const headToHeadWins = headToHeadWinsWithinGroup(groupIds, matches)
 
   return [...group].sort((a, b) => {
     const headToHeadDiff =
@@ -147,8 +156,34 @@ function rankTiedGroup(
       (headToHeadWins.get(a.participantId) ?? 0)
     if (headToHeadDiff !== 0) return headToHeadDiff
 
-    const gameDiffA = a.gamesWon - a.gamesLost
-    const gameDiffB = b.gamesWon - b.gamesLost
-    return gameDiffB - gameDiffA
+    return gameDiff(b) - gameDiff(a)
   })
+}
+
+/**
+ * Deltagerne i førstepladsen -- mere end én, hvis ingen af tiebreakerne
+ * (indbyrdes opgør, enkeltspilsforskel) kan skille dem. Bruges til at vise
+ * "delt førsteplads" i stedet for at kåre en tilfældig vinder, når stillingen
+ * reelt er uafgjort. `rankedStandings` skal komme fra `rankStandings`.
+ */
+export function sharedLeaders(
+  rankedStandings: Standing[],
+  matches: StandingsMatch[],
+): Standing[] {
+  if (rankedStandings.length === 0) return []
+
+  const [first] = rankedStandings
+  const tiedByWins = rankedStandings.filter((s) => s.won === first.won)
+  if (tiedByWins.length === 1) return [first]
+
+  const groupIds = new Set(tiedByWins.map((s) => s.participantId))
+  const headToHeadWins = headToHeadWinsWithinGroup(groupIds, matches)
+  const firstHeadToHead = headToHeadWins.get(first.participantId) ?? 0
+  const firstDiff = gameDiff(first)
+
+  return tiedByWins.filter(
+    (s) =>
+      (headToHeadWins.get(s.participantId) ?? 0) === firstHeadToHead &&
+      gameDiff(s) === firstDiff,
+  )
 }

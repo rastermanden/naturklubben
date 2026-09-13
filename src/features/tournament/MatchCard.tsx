@@ -6,15 +6,25 @@ interface MatchCardProps {
   nameFor: (participantId: string) => string
   onRecordResult: (gameWinnerIds: string[]) => void
   submitting: boolean
+  /** Kan resultatet trygt fortrydes? (Ikke en bye, og den kamp, vinderen
+   * eventuelt er rykket videre til, er ikke selv afgjort endnu.) */
+  canUndo: boolean
+  onUndo: () => void
+  undoing: boolean
 }
 
 /** Best of three: brugeren vælger vinderen af hvert enkeltspil, appen
- * udregner selv kampvinderen (først til 2 spil vundet). */
+ * udregner selv kampvinderen (først til 2 spil vundet). Kaldes kun med
+ * kampe, der har begge deltagere sat -- en kamp, der stadig venter på en
+ * modstander, vises i stedet i BracketView. */
 export function MatchCard({
   match,
   nameFor,
   onRecordResult,
   submitting,
+  canUndo,
+  onUndo,
+  undoing,
 }: MatchCardProps) {
   const [gameWinnerIds, setGameWinnerIds] = useState<string[]>([])
 
@@ -27,20 +37,22 @@ export function MatchCard({
         <p className="text-ink">
           {nameFor(match.participant1_id!)} – {nameFor(match.participant2_id!)}
         </p>
+        {canUndo && (
+          <button
+            type="button"
+            onClick={onUndo}
+            disabled={undoing}
+            className="mt-2 text-sm text-accent-soft underline disabled:opacity-60"
+          >
+            {undoing ? 'Fortryder…' : 'Fortryd resultat'}
+          </button>
+        )}
       </div>
     )
   }
 
-  if (!match.participant1_id || !match.participant2_id) {
-    return (
-      <div className="rounded-xl border border-dashed border-line-soft p-4 text-ink-subtle">
-        Venter på modstander…
-      </div>
-    )
-  }
-
-  const participant1Id = match.participant1_id
-  const participant2Id = match.participant2_id
+  const participant1Id = match.participant1_id!
+  const participant2Id = match.participant2_id!
   const wins1 = gameWinnerIds.filter((id) => id === participant1Id).length
   const wins2 = gameWinnerIds.filter((id) => id === participant2Id).length
   const decidedWinnerId =

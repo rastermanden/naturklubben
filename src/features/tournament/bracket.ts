@@ -47,8 +47,20 @@ export function generateSingleEliminationBracket(
   const byeIds = shuffledIds.slice(0, numByes)
   const pairedIds = shuffledIds.slice(numByes)
 
-  const matches: GeneratedMatch[] = []
-  let matchIndex = 0
+  // Hvilke af runde 1's kampe er byes? Fordelt på tværs af runde 2's kampe
+  // fremfor stablet i de første indeks -- ellers ville to byes ofte lande i
+  // samme runde 2-kamp og møde hinanden i stedet for en rigtig modstander,
+  // selvom der var plads til at sprede dem. Er der flere byes end runde
+  // 2-kampe, fordeler pigeonhole-princippet uundgåeligt mere end én bye på
+  // nogle af dem -- så tæt på jævnt som muligt.
+  const matchesInRound1 = bracketSize / 2
+  const round2Buckets = Math.max(Math.floor(matchesInRound1 / 2), 1)
+  const byeMatchIndexes = new Set<number>()
+  for (let i = 0; i < numByes; i++) {
+    const bucket = i % round2Buckets
+    const occurrenceInBucket = Math.floor(i / round2Buckets)
+    byeMatchIndexes.add(bucket * 2 + occurrenceInBucket)
+  }
 
   function linkToNextRound(index: number) {
     if (totalRounds <= 1) {
@@ -61,30 +73,35 @@ export function generateSingleEliminationBracket(
     }
   }
 
-  for (const byeId of byeIds) {
-    matches.push({
-      round: 1,
-      matchIndex,
-      participant1Id: byeId,
-      participant2Id: null,
-      winnerId: byeId,
-      status: 'completed',
-      ...linkToNextRound(matchIndex),
-    })
-    matchIndex++
-  }
+  const matches: GeneratedMatch[] = []
+  let byeCursor = 0
+  let pairCursor = 0
 
-  for (let i = 0; i < pairedIds.length; i += 2) {
-    matches.push({
-      round: 1,
-      matchIndex,
-      participant1Id: pairedIds[i],
-      participant2Id: pairedIds[i + 1],
-      winnerId: null,
-      status: 'pending',
-      ...linkToNextRound(matchIndex),
-    })
-    matchIndex++
+  for (let matchIndex = 0; matchIndex < matchesInRound1; matchIndex++) {
+    if (byeMatchIndexes.has(matchIndex)) {
+      const byeId = byeIds[byeCursor++]
+      matches.push({
+        round: 1,
+        matchIndex,
+        participant1Id: byeId,
+        participant2Id: null,
+        winnerId: byeId,
+        status: 'completed',
+        ...linkToNextRound(matchIndex),
+      })
+    } else {
+      const participant1Id = pairedIds[pairCursor++]
+      const participant2Id = pairedIds[pairCursor++]
+      matches.push({
+        round: 1,
+        matchIndex,
+        participant1Id,
+        participant2Id,
+        winnerId: null,
+        status: 'pending',
+        ...linkToNextRound(matchIndex),
+      })
+    }
   }
 
   // Byes er allerede afgjort -- deres vinder fylder direkte den plads,
