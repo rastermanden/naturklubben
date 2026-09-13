@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BEST_OF_DEFAULT, gamesToWin } from './rules'
 import type { TournamentMatch } from './types'
 
 interface MatchCardProps {
@@ -13,10 +14,11 @@ interface MatchCardProps {
   undoing: boolean
 }
 
-/** Best of three: brugeren vælger vinderen af hvert enkeltspil, appen
- * udregner selv kampvinderen (først til 2 spil vundet). Kaldes kun med
- * kampe, der har begge deltagere sat -- en kamp, der stadig venter på en
- * modstander, vises i stedet i BracketView. */
+/** Brugeren vælger vinderen af hvert enkeltspil, appen udregner selv
+ * kampvinderen (først til flertallet af kampens `best_of` spil -- 2 ved
+ * bedst af tre, 3 ved bedst af fem i finalen). Kaldes kun med kampe, der har
+ * begge deltagere sat -- en kamp, der stadig venter på en modstander, vises
+ * i stedet i BracketView. */
 export function MatchCard({
   match,
   nameFor,
@@ -55,8 +57,9 @@ export function MatchCard({
   const participant2Id = match.participant2_id!
   const wins1 = gameWinnerIds.filter((id) => id === participant1Id).length
   const wins2 = gameWinnerIds.filter((id) => id === participant2Id).length
+  const needed = gamesToWin(match.best_of)
   const decidedWinnerId =
-    wins1 >= 2 ? participant1Id : wins2 >= 2 ? participant2Id : null
+    wins1 >= needed ? participant1Id : wins2 >= needed ? participant2Id : null
   const gameNumber = gameWinnerIds.length + 1
 
   return (
@@ -69,6 +72,12 @@ export function MatchCard({
           {wins1}–{wins2}
         </span>
       </div>
+
+      {match.best_of !== BEST_OF_DEFAULT && (
+        <p className="text-sm text-ink-subtle">
+          Bedst af {match.best_of} -- først til {needed} vundne spil.
+        </p>
+      )}
 
       {!decidedWinnerId && (
         <div className="flex flex-col gap-2">

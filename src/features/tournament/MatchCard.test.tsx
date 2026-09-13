@@ -22,6 +22,7 @@ function pendingMatch(
     next_match_id: null,
     next_match_slot: null,
     bye: false,
+    best_of: 3,
     ...overrides,
   }
 }
@@ -93,6 +94,54 @@ describe('MatchCard', () => {
     fireEvent.click(saveButton)
 
     expect(onRecordResult).toHaveBeenCalledWith(['p1', 'p2', 'p1'])
+  })
+
+  it('kræver tre vundne spil i en finale bedst af fem', () => {
+    const onRecordResult = vi.fn()
+    render(
+      <MatchCard
+        match={pendingMatch({ best_of: 5 })}
+        nameFor={nameFor}
+        onRecordResult={onRecordResult}
+        submitting={false}
+        {...defaultUndoProps}
+      />,
+    )
+
+    expect(
+      screen.getByText('Bedst af 5 -- først til 3 vundne spil.'),
+    ).toBeTruthy()
+
+    // To spilsejre afgør ikke en finale -- der skal spilles videre.
+    fireEvent.click(screen.getByRole('button', { name: 'Alice' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Alice' }))
+    expect(screen.queryByRole('button', { name: /Gem resultat/ })).toBeNull()
+    expect(screen.getByText('Spil 3: hvem vandt?')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bob' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bob' }))
+    expect(screen.queryByRole('button', { name: /Gem resultat/ })).toBeNull()
+    expect(screen.getByText('Spil 5: hvem vandt?')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alice' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Gem resultat -- Alice vinder' }),
+    )
+    expect(onRecordResult).toHaveBeenCalledWith(['p1', 'p1', 'p2', 'p2', 'p1'])
+  })
+
+  it('nævner ikke kampformen, når den er den sædvanlige bedst af tre', () => {
+    render(
+      <MatchCard
+        match={pendingMatch()}
+        nameFor={nameFor}
+        onRecordResult={vi.fn()}
+        submitting={false}
+        {...defaultUndoProps}
+      />,
+    )
+
+    expect(screen.queryByText(/Bedst af/)).toBeNull()
   })
 
   it('kan fortryde sidste spil, før resultatet gemmes', () => {

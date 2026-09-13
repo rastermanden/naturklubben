@@ -28,6 +28,7 @@ function match(overrides: Partial<TournamentMatch> = {}): TournamentMatch {
     next_match_id: null,
     next_match_slot: null,
     bye: false,
+    best_of: 3,
     ...overrides,
   }
 }

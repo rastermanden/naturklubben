@@ -220,6 +220,28 @@ describe('generateSingleEliminationBracket', () => {
     }
   })
 
+  it('spiller finalen bedst af fem og alt andet bedst af tre', () => {
+    for (const n of [2, 3, 4, 5, 6, 7, 8]) {
+      const matches = generateSingleEliminationBracket(
+        participants(n),
+        identityShuffle,
+      )
+      const lastRound = Math.max(...matches.map((m) => m.round))
+      const final = matches.filter((m) => m.round === lastRound)
+
+      // Sidste runde er altid præcis én kamp -- finalen -- og aldrig en bye.
+      expect(final).toHaveLength(1)
+      expect(final[0].bye).toBe(false)
+      expect(final[0].bestOf).toBe(5)
+
+      // Ved 2 deltagere ER runde 1 finalen; ellers er alt andet bedst af tre.
+      for (const match of matches) {
+        if (match.round === lastRound && !match.bye) continue
+        expect(match.bestOf).toBe(3)
+      }
+    }
+  })
+
   it('lader turneringens opretter vælge, hvem der sidder over i runde 1', () => {
     const matches = generateSingleEliminationBracket(
       participants(5),

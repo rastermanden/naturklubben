@@ -1,3 +1,4 @@
+import { BEST_OF_DEFAULT } from './rules'
 import type { GeneratedMatch } from './types'
 
 /** Hver deltager møder alle andre præcis én gang. */
@@ -17,6 +18,7 @@ export function generateRoundRobinMatches(
         winnerId: null,
         status: 'pending',
         bye: false,
+        bestOf: BEST_OF_DEFAULT,
         nextMatchRound: null,
         nextMatchIndex: null,
         nextMatchSlot: null,
