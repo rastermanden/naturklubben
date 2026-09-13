@@ -40,8 +40,12 @@ function joinNames(names: string[]) {
 
 /**
  * Kan resultatet trygt fortrydes? En bye har intet resultat at fortryde, og
- * er vinderen allerede rykket videre til en kamp, der selv er afgjort, ville
- * en fortrydelse trække tæppet væk under det resultat.
+ * er vinderen allerede rykket videre til en kamp, der selv er afgjort med et
+ * rigtigt resultat, ville en fortrydelse trække tæppet væk under det
+ * resultat. Er den efterfølgende kamp derimod selv en bye, er den kun
+ * afgjort som en automatisk konsekvens af netop dette resultat (se
+ * record_tournament_match_result) -- den bliver fortrudt med det samme
+ * baglæns, så kæden fortsætter til den kamp, der reelt skal beskyttes.
  */
 function canUndoMatch(
   match: TournamentMatch,
@@ -50,9 +54,14 @@ function canUndoMatch(
   if (match.status !== 'completed' || match.participant2_id === null) {
     return false
   }
-  if (!match.next_match_id) return true
-  const nextMatch = matchesById.get(match.next_match_id)
-  return !nextMatch || nextMatch.status !== 'completed'
+  let current = match
+  while (current.next_match_id) {
+    const nextMatch = matchesById.get(current.next_match_id)
+    if (!nextMatch || nextMatch.status !== 'completed') return true
+    if (!nextMatch.bye) return false
+    current = nextMatch
+  }
+  return true
 }
 
 function TournamentDetail({

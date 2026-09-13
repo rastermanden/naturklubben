@@ -29,6 +29,8 @@ export interface TournamentMatch {
   status: MatchStatus
   next_match_id: string | null
   next_match_slot: 1 | 2 | null
+  /** Kampens anden plads bliver aldrig udfyldt -- se bracket.ts. */
+  bye: boolean
 }
 
 export interface TournamentGame {
@@ -55,4 +57,6 @@ export interface GeneratedMatch {
   nextMatchRound: number | null
   nextMatchIndex: number | null
   nextMatchSlot: 1 | 2 | null
+  /** Kampens anden plads bliver aldrig udfyldt -- se bracket.ts. */
+  bye: boolean
 }

@@ -16,6 +16,7 @@ export function generateRoundRobinMatches(
         participant2Id: participantIds[j],
         winnerId: null,
         status: 'pending',
+        bye: false,
         nextMatchRound: null,
         nextMatchIndex: null,
         nextMatchSlot: null,
