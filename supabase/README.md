@@ -835,23 +835,31 @@ genabonnere med en ny nøgle, så klienten smider det gamle abonnement væk før
 ## Notifikationer ud over chatten
 
 Push-infrastrukturen fra chatten (`push_subscriptions`, VAPID-nøglerne, service workerens
-`push`-handler) bruges også til tre ting, der får medlemmer tilbage i appen (#216):
+`push`-handler) bruges også til fire ting, der får medlemmer tilbage i appen (#216, #236):
 
-| Type                      | Hvem                                | Udløses af                                        | Åbner                   |
-| ------------------------- | ----------------------------------- | ------------------------------------------------- | ----------------------- |
-| `event_created`           | Alle andre medlemmer end opretteren | Opretterens klient kalder `calendar-push`         | `/kalender/<id>`        |
-| `event_reminder`          | De tilmeldte (`attending`)          | pg_cron hvert kvarter, fra kl. 17 dagen før       | `/kalender/<id>`        |
-| `badge_nomination_review` | Admins                              | Indstillerens klient kalder `badge-notifications` | `/admin?sektion=badges` |
+| Type                      | Hvem                                  | Udløses af                                                                                                         | Åbner                   |
+| ------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| `event_created`           | Alle andre medlemmer end opretteren   | Opretterens klient kalder `calendar-push`                                                                          | `/kalender/<id>`        |
+| `event_reminder`          | De tilmeldte (`attending`)            | pg_cron hvert kvarter, fra kl. 17 dagen før                                                                        | `/kalender/<id>`        |
+| `waitlist_promoted`       | De(n), der rykkede op fra ventelisten | Klienten, hvis handling gav pladsen, kalder `calendar-push` lige efter `respond_to_event`/`promote_event_waitlist` | `/kalender/<id>`        |
+| `badge_nomination_review` | Admins                                | Indstillerens klient kalder `badge-notifications`                                                                  | `/admin?sektion=badges` |
 
 Den indstillede får ingen besked om en ny indstilling: badge-modellen holder
 indstillinger skjult for modtageren, indtil badgen er tildelt (ellers ville en afvist
 indstilling være synlig), og tildelingen har sin egen push i `badge-notifications`.
 
-`chat-push` er uændret. De nye typer deler én vej, `_shared/pushDelivery.ts`, og næste
-type (#236, oprykning fra ventelisten) føjer sit navn til `NOTIFICATION_KINDS` i `_shared/pushKinds.ts`
-(listen deles med frontendens indstillinger), bygger sin payload
-(`_shared/pushPayloads.ts`), udvider `kind`-constrainten på `notification_preferences` og
-`push_deliveries` i sin egen migration og kalder `deliverPush`.
+`chat-push` er uændret. De nye typer deler én vej, `_shared/pushDelivery.ts`. `waitlist_promoted`
+(#236) fulgte samme opskrift som de tre første: sit navn i `NOTIFICATION_KINDS`
+(`_shared/pushKinds.ts`, delt med frontendens indstillinger), sin payload i
+`_shared/pushPayloads.ts`, `kind`-constrainten udvidet på `notification_preferences` og
+`push_deliveries` i sin egen migration, og et kald til `deliverPush`. Klienten sender kun
+`eventId` og de id'er, RPC'en selv gav den tilbage -- `calendar-push` stoler ikke på den
+liste blindt, men snævrer den ind til dem, der reelt sidder på en `attending`-plads til
+begivenheden lige nu (`_shared/waitlistPromotionRecipients.ts`), og nægter at sende, hvis
+kalderen ikke selv har noget med begivenheden at gøre (arrangør, admin, eller selv svaret
+på den). Leveringsloggens nøgle er (`waitlist_promoted`, begivenheden, medlemmet), så et
+medlem højst får én push om én begivenhed, uanset hvor mange gange de cykler ind og ud af
+ventelisten til den.
 
 ### Til og fra pr. type
 
@@ -859,9 +867,9 @@ type (#236, oprykning fra ventelisten) føjer sit navn til `NOTIFICATION_KINDS` 
 `set_notification_preference(kind, enabled)`, som sætter `auth.uid()` som ejer. Ingen række
 er et ja: typerne er slået til for alle -- også dem, der var medlem før -- ligesom
 `feature_notifications_enabled` har default `true`. UI'et står på `/profil` under
-"Notifikationer"; almindelige medlemmer ser kun `event_created` og `event_reminder`,
-admins også `badge_nomination_review`. Chattens og nyhedernes valg står stadig på `/chat`
-og `/nyheder`.
+"Notifikationer"; almindelige medlemmer ser `event_created`, `event_reminder` og
+`waitlist_promoted`, admins også `badge_nomination_review`. Chattens og nyhedernes valg
+står stadig på `/chat` og `/nyheder`.
 
 Filtreringen sker i functionen, ikke i klienten: en klient kan ikke undlade at modtage en
 notifikation, den allerede har fået.

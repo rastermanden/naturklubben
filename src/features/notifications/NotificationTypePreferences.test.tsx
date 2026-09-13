@@ -63,7 +63,14 @@ describe('NotificationTypePreferences', () => {
         ) as HTMLInputElement
       ).checked,
     ).toBe(true)
-    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+    expect(
+      (
+        screen.getByLabelText(
+          'Når jeg rykker op fra ventelisten på en tur',
+        ) as HTMLInputElement
+      ).checked,
+    ).toBe(true)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
   })
 
   it('viser ikke admin-valget for et almindeligt medlem', async () => {
@@ -74,6 +81,27 @@ describe('NotificationTypePreferences', () => {
     expect(screen.queryByLabelText(REVIEW_LABEL)).toBeNull()
   })
 
+  it('gemmer et fravalg af venteliste-oprykningen', async () => {
+    mockPreferenceRows([])
+    renderPreferences()
+
+    const promoted = await screen.findByLabelText(
+      'Når jeg rykker op fra ventelisten på en tur',
+    )
+    expect((promoted as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(promoted)
+
+    await vi.waitFor(() =>
+      expect(supabaseMocks.rpc).toHaveBeenCalledWith(
+        'set_notification_preference',
+        { p_kind: 'waitlist_promoted', p_enabled: false },
+      ),
+    )
+    await vi.waitFor(() =>
+      expect((promoted as HTMLInputElement).checked).toBe(false),
+    )
+  })
+
   it('viser admin-valget for en admin, slået til som standard', async () => {
     adminMock.isAdmin = true
     mockPreferenceRows([])
@@ -81,7 +109,7 @@ describe('NotificationTypePreferences', () => {
 
     const review = await screen.findByLabelText(REVIEW_LABEL)
     expect((review as HTMLInputElement).checked).toBe(true)
-    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(4)
   })
 
   it('viser et gemt fravalg', async () => {

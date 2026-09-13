@@ -22,6 +22,7 @@ export { NOTIFICATION_KINDS, type NotificationKind }
 export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
   event_created: 'Når der kommer en ny begivenhed i kalenderen',
   event_reminder: 'Dagen før en begivenhed, jeg er tilmeldt',
+  waitlist_promoted: 'Når jeg rykker op fra ventelisten på en tur',
   badge_nomination_review:
     'Når et medlem indstilles til en badge, der skal godkendes',
 }
@@ -41,6 +42,7 @@ function allEnabled(): NotificationPreferences {
   return {
     event_created: true,
     event_reminder: true,
+    waitlist_promoted: true,
     badge_nomination_review: true,
   }
 }

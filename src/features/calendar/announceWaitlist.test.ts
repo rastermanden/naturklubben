@@ -3,14 +3,19 @@ import {
   announcePromotion,
   announceReminder,
   mentionedMembers,
+  notifyPromotedMembers,
   promotionAnnouncement,
   promotionCause,
   reminderAnnouncement,
 } from './announceWaitlist'
 
 const announceInChat = vi.hoisted(() => vi.fn())
+const supabaseMocks = vi.hoisted(() => ({
+  functions: { invoke: vi.fn() },
+}))
 
 vi.mock('../profile/announceInChat', () => ({ announceInChat }))
+vi.mock('../../lib/supabaseClient', () => ({ supabase: supabaseMocks }))
 
 const profiles = {
   carol: {
@@ -33,6 +38,11 @@ describe('announceWaitlist', () => {
   beforeEach(() => {
     announceInChat.mockReset()
     announceInChat.mockResolvedValue(true)
+    supabaseMocks.functions.invoke.mockReset()
+    supabaseMocks.functions.invoke.mockResolvedValue({
+      data: null,
+      error: null,
+    })
   })
 
   it('skriver mentions med profilens navn og et fallback uden navn', () => {
@@ -182,5 +192,37 @@ describe('announceWaitlist', () => {
     expect(mentions).toEqual(memberIds.slice(0, 20))
     expect(content).toContain('og 3 andre har ikke svaret endnu')
     expect(content).toMatch(/^minder om «Skovtur» søndag 20\. september kl\. /)
+  })
+
+  it('beder calendar-push give de oprykkede en push', async () => {
+    await notifyPromotedMembers('event-1', ['carol', 'dave'])
+
+    expect(supabaseMocks.functions.invoke).toHaveBeenCalledWith(
+      'calendar-push',
+      {
+        body: {
+          kind: 'waitlist_promoted',
+          eventId: 'event-1',
+          userIds: ['carol', 'dave'],
+        },
+      },
+    )
+  })
+
+  it('sender ingen push, når ingen rykkede op', async () => {
+    await notifyPromotedMembers('event-1', [])
+
+    expect(supabaseMocks.functions.invoke).not.toHaveBeenCalled()
+  })
+
+  it('en fejlet push vælter ikke resten -- bedste indsats', async () => {
+    supabaseMocks.functions.invoke.mockResolvedValue({
+      data: null,
+      error: new Error('nede'),
+    })
+
+    await expect(
+      notifyPromotedMembers('event-1', ['carol']),
+    ).resolves.toBeUndefined()
   })
 })

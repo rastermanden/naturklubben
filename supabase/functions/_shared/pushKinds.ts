@@ -7,6 +7,7 @@ export const NOTIFICATION_KINDS = [
   'event_created',
   'event_reminder',
   'badge_nomination_review',
+  'waitlist_promoted',
 ] as const
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]

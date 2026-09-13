@@ -1,5 +1,6 @@
 import { MENTION_LIMIT } from '../chat/mentions'
 import type { ProfileSummary } from '../chat/useProfilesMap'
+import { supabase } from '../../lib/supabaseClient'
 import { announceInChat } from '../profile/announceInChat'
 import type { AttendanceStatus } from './waitlist'
 
@@ -142,6 +143,29 @@ export function announcePromotion(
     othersCount,
   )
   return announceInChat(userId, content, mentionedIds, messageType)
+}
+
+/**
+ * Beder calendar-push give de oprykkede fra ventelisten en push ud over
+ * chatten (#236). Samme mønster som notifyOthers ved en ny begivenhed
+ * (useEvents.ts): begivenheden/svaret er allerede gemt, og chatbeskeden er
+ * sendt eller på vej, så en fejl her må ikke vælte noget -- de oprykkede
+ * går bare glip af *pushen*, ikke af pladsen eller chatbeskeden. Functionen
+ * slår selv op, hvem af id'erne der reelt sidder på en plads nu, og nægter
+ * at sende, hvis kalderen ikke selv har noget med begivenheden at gøre.
+ */
+export function notifyPromotedMembers(
+  eventId: string,
+  promotedIds: readonly string[],
+) {
+  if (promotedIds.length === 0) return Promise.resolve()
+  return supabase.functions
+    .invoke('calendar-push', {
+      body: { kind: 'waitlist_promoted', eventId, userIds: promotedIds },
+    })
+    .then(({ error }) => {
+      if (error) console.warn('Push om oprykningen kunne ikke sendes', error)
+    })
 }
 
 export function announceReminder(

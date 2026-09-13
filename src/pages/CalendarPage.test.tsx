@@ -67,6 +67,7 @@ vi.mock('../features/calendar/GuestRequestsSection', () => ({
 // gemmes ingen begivenhed, så den kaldes aldrig.
 vi.mock('../features/calendar/announceWaitlist', () => ({
   announcePromotion: vi.fn(),
+  notifyPromotedMembers: vi.fn(),
 }))
 vi.mock('../features/chat/useProfilesMap', () => ({
   useProfilesMap: () => ({ data: undefined }),

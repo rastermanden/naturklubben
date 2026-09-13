@@ -135,6 +135,30 @@ export function eventReminderPayload({
   }
 }
 
+/**
+ * Ventelisten (#222/#236): en plads blev ledig, og medlemmet rykkede op.
+ * Samme payload til alle, der rykkede op i samme omgang -- deltes ikke ud
+ * fra, hvad der gav pladsen (afbud, hævet loft), det siger chatbeskeden
+ * allerede. Samme tag og sti som `event_created`/`event_reminder`: alle tre
+ * handler om den samme begivenhed og skal ikke stable notifikationer om den
+ * op i skuffen.
+ */
+export function waitlistPromotedPayload({
+  event,
+}: {
+  event: EventSummary
+}): PushPayload {
+  const where = event.location?.trim()
+  return {
+    title: `Du har fået en plads: ${shortTitle(event.title)}`,
+    body: `Der blev en plads ledig, så du er nu tilmeldt ${formatEventStart(event.start_at)}${
+      where ? ` · ${where}` : ''
+    }.`,
+    tag: eventTag(event.id),
+    path: eventPath(event.id),
+  }
+}
+
 export interface BadgeNominationSummary {
   id: string
   badgeName: string | null | undefined

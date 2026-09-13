@@ -7,7 +7,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(54);
+select plan(59);
 
 do $$
 begin
@@ -199,6 +199,27 @@ select throws_ok(
   '22023',
   null,
   'en ukendt type afvises'
+);
+
+select lives_ok(
+  $$select public.set_notification_preference('waitlist_promoted', false)$$,
+  'et medlem kan slå oprykning fra ventelisten fra'
+);
+
+select is(
+  (
+    select enabled
+    from public.notification_preferences
+    where user_id = '00000000-0000-0000-0000-0000000000f1'
+      and kind = 'waitlist_promoted'
+  ),
+  false,
+  'valget for waitlist_promoted gemmes på medlemmet selv'
+);
+
+select lives_ok(
+  $$select public.set_notification_preference('waitlist_promoted', true)$$,
+  'og til igen'
 );
 
 select throws_ok(
@@ -434,6 +455,34 @@ select set_eq(
     )$$,
   array['00000000-0000-0000-0000-0000000000f1']::uuid[],
   'loggen er pr. type: "ny begivenhed" og påmindelsen om den samme tæller hver for sig'
+);
+
+select set_eq(
+  $$select * from public.claim_push_deliveries(
+      'waitlist_promoted',
+      '00000000-0000-0000-0000-0000000000e1',
+      array[
+        '00000000-0000-0000-0000-0000000000f1',
+        '00000000-0000-0000-0000-0000000000f2'
+      ]::uuid[]
+    )$$,
+  array[
+    '00000000-0000-0000-0000-0000000000f1',
+    '00000000-0000-0000-0000-0000000000f2'
+  ]::uuid[],
+  'waitlist_promoted er en gyldig type i leveringsloggen (#236) -- første claim giver begge'
+);
+
+select is_empty(
+  $$select * from public.claim_push_deliveries(
+      'waitlist_promoted',
+      '00000000-0000-0000-0000-0000000000e1',
+      array[
+        '00000000-0000-0000-0000-0000000000f1',
+        '00000000-0000-0000-0000-0000000000f2'
+      ]::uuid[]
+    )$$,
+  'og en gentagelse for samme begivenhed og medlemmer giver ingen -- én oprykningsbesked pr. (medlem, begivenhed)'
 );
 
 select is_empty(
