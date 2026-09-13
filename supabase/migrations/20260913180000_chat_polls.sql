@@ -387,9 +387,9 @@ grant execute on function public.close_poll(uuid)
 -- Branch), så migrationen skal selv skrive dem eksplicit -- de kommer ikke
 -- fra platformens standardrettigheder.
 -- ---------------------------------------------------------------------------
-grant select on table public.polls to authenticated;
-grant select on table public.poll_options to authenticated;
-grant select on table public.poll_votes to authenticated;
+grant select on table public.polls to anon, authenticated;
+grant select on table public.poll_options to anon, authenticated;
+grant select on table public.poll_votes to anon, authenticated;
 grant delete, insert, select, update on table public.polls to service_role;
 grant delete, insert, select, update on table public.poll_options to service_role;
 grant delete, insert, select, update on table public.poll_votes to service_role;
