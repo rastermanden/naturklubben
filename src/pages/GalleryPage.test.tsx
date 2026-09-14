@@ -2,12 +2,15 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import type { Photo } from '../features/gallery/types'
-import type { EventPhotoCount } from '../features/gallery/useEventPhotoCounts'
+import type { GalleryAlbum } from '../features/gallery/useGalleryAlbums'
 
 const mocks = vi.hoisted(() => ({
-  eventPhotoCounts: {
-    data: [] as EventPhotoCount[],
+  albumsQuery: {
+    data: [] as GalleryAlbum[],
+    isLoading: false,
     isError: false,
+    isSuccess: true,
+    refetch: vi.fn(),
   },
   photosQuery: {
     data: undefined as { photos: Photo[] } | undefined,
@@ -23,6 +26,9 @@ const mocks = vi.hoisted(() => ({
   photoQuery: {
     data: undefined as Photo | null | undefined,
     isSuccess: false,
+  },
+  commentCounts: {
+    data: [] as { photo_id: string; comment_count: number }[],
   },
   upload: {
     items: [] as never[],
@@ -47,6 +53,27 @@ vi.mock('../features/gallery/usePhotos', () => ({
   usePhotos: () => mocks.photosQuery,
   usePhoto: () => mocks.photoQuery,
 }))
+vi.mock('../lib/supabaseClient', () => ({
+  supabase: {
+    storage: {
+      from: () => ({
+        getPublicUrl: (path: string) => ({
+          data: { publicUrl: `https://example.test/${path}` },
+        }),
+      }),
+    },
+  },
+}))
+vi.mock('../features/gallery/useGalleryAlbums', () => ({
+  useGalleryAlbums: () => mocks.albumsQuery,
+}))
+vi.mock('../features/gallery/usePhotoCommentCounts', () => ({
+  usePhotoCommentCounts: () => mocks.commentCounts,
+  commentCountFor: (
+    counts: { photo_id: string; comment_count: number }[] | undefined,
+    photoId: string,
+  ) => counts?.find((row) => row.photo_id === photoId)?.comment_count ?? 0,
+}))
 vi.mock('../features/gallery/useUploadPhotos', () => ({
   useUploadPhotos: () => mocks.upload,
   validateFiles: mocks.validateFiles,
@@ -66,12 +93,18 @@ vi.mock('../features/gallery/useEventsForSelect', () => ({
     isError: false,
   }),
 }))
-vi.mock('../features/gallery/useEventPhotoCounts', () => ({
-  useEventPhotoCounts: () => mocks.eventPhotoCounts,
-}))
 vi.mock('../features/gallery/PhotoThumbnail', () => ({
-  PhotoThumbnail: ({ photo }: { photo: Photo }) => (
-    <button type="button">{photo.caption}</button>
+  PhotoThumbnail: ({
+    photo,
+    commentCount,
+  }: {
+    photo: Photo
+    commentCount?: number
+  }) => (
+    <button type="button">
+      {photo.caption}
+      {commentCount ? ` (${commentCount})` : ''}
+    </button>
   ),
 }))
 vi.mock('../features/gallery/PhotoLightbox', () => ({
@@ -129,6 +162,18 @@ function photo(id: string, caption: string, eventId: string | null): Photo {
   }
 }
 
+function album(overrides: Partial<GalleryAlbum> = {}): GalleryAlbum {
+  return {
+    albumId: 'event-1',
+    eventId: 'event-1',
+    title: 'Event event-1',
+    eventDate: '2026-08-20T12:00:00.000Z',
+    photoCount: 1,
+    cover: null,
+    ...overrides,
+  }
+}
+
 function renderGallery(path = '/billeder') {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -138,8 +183,12 @@ function renderGallery(path = '/billeder') {
 }
 
 beforeEach(() => {
-  mocks.eventPhotoCounts.data = []
-  mocks.eventPhotoCounts.isError = false
+  mocks.albumsQuery.data = []
+  mocks.albumsQuery.isLoading = false
+  mocks.albumsQuery.isError = false
+  mocks.albumsQuery.isSuccess = true
+  mocks.albumsQuery.refetch.mockReset()
+  mocks.commentCounts.data = []
   mocks.photosQuery.data = undefined
   mocks.photosQuery.isLoading = false
   mocks.photosQuery.isError = false
@@ -174,48 +223,38 @@ describe('GalleryPage', () => {
     expect(mocks.photosQuery.refetch).toHaveBeenCalledOnce()
   })
 
-  it('distinguishes an empty gallery from an empty event filter', () => {
+  it('shows an empty state when the gallery has no photos at all', () => {
     mocks.photosQuery.data = { photos: [] }
     mocks.photosQuery.isSuccess = true
-    const view = renderGallery()
+    renderGallery()
     expect(screen.getByText(/Ingen billeder endnu/)).toBeTruthy()
-
-    view.unmount()
-    mocks.photosQuery.data = {
-      photos: [
-        photo('photo-1', 'Bål', 'event-1'),
-        photo('photo-2', 'Sø', null),
-      ],
-    }
-    renderGallery('/billeder?event=event-2')
-    expect(
-      screen.getByText('Der er ingen billeder for det valgte filter.'),
-    ).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Vis alle billeder' }))
-    expect(screen.getByRole('button', { name: 'Bål' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Sø' })).toBeTruthy()
   })
 
-  it('only lists events that have photos, with their photo count (#149)', () => {
-    mocks.photosQuery.data = { photos: [] }
+  it('opens the gallery in the album grid, grouped by event (#218)', () => {
+    mocks.photosQuery.data = {
+      photos: [photo('photo-1', 'Bål', 'event-1')],
+    }
     mocks.photosQuery.isSuccess = true
-    mocks.eventPhotoCounts.data = [
-      { event_id: 'event-1', title: 'Bål-tur', photo_count: 3 },
+    mocks.albumsQuery.data = [
+      album({ photoCount: 3 }),
+      album({
+        albumId: 'without-event',
+        eventId: null,
+        title: 'Uden begivenhed',
+        eventDate: null,
+        photoCount: 2,
+      }),
     ]
     renderGallery()
 
-    const select = screen.getByLabelText(
-      'Filtrér efter begivenhed',
-    ) as HTMLSelectElement
-    const optionLabels = [...select.options].map((option) => option.text)
-
-    expect(optionLabels).toContain('Bål-tur (3)')
-    // "Fugletur" har ingen billeder og har derfor ikke sin egen række i
-    // eventPhotoCounts-viewet -- den må ikke optræde i dropdown'en.
-    expect(optionLabels).not.toContain('Fugletur')
+    expect(screen.getByTestId('gallery-album-grid')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Event event-1/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Uden begivenhed/ })).toBeTruthy()
+    // Ingen enkeltbilleder på albumforsiden.
+    expect(screen.queryByRole('button', { name: 'Bål' })).toBeNull()
   })
 
-  it('filters by event through the URL-backed select', () => {
+  it('opens an album and shows only its photos, with a deep link (#218)', () => {
     mocks.photosQuery.data = {
       photos: [
         photo('photo-1', 'Bål', 'event-1'),
@@ -223,23 +262,16 @@ describe('GalleryPage', () => {
       ],
     }
     mocks.photosQuery.isSuccess = true
-    mocks.eventPhotoCounts.data = [
-      { event_id: 'event-1', title: 'Event event-1', photo_count: 1 },
-      { event_id: 'event-2', title: 'Event event-2', photo_count: 1 },
-    ]
-    renderGallery('/billeder?event=event-1')
+    mocks.albumsQuery.data = [album({ photoCount: 1 })]
+
+    renderGallery('/billeder?album=event-1')
 
     expect(screen.getByRole('button', { name: 'Bål' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Sø' })).toBeNull()
-
-    fireEvent.change(screen.getByLabelText('Filtrér efter begivenhed'), {
-      target: { value: 'event-2' },
-    })
-    expect(screen.queryByRole('button', { name: 'Bål' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Sø' })).toBeTruthy()
+    expect(screen.getByText('Event event-1')).toBeTruthy()
   })
 
-  it('opens a legacy photo deep-link even when the event filter excludes it', () => {
+  it('opens an album from the grid by clicking it', () => {
     mocks.photosQuery.data = {
       photos: [
         photo('photo-1', 'Bål', 'event-1'),
@@ -247,10 +279,72 @@ describe('GalleryPage', () => {
       ],
     }
     mocks.photosQuery.isSuccess = true
-    renderGallery('/billeder?event=event-1&photo=photo-2')
+    mocks.albumsQuery.data = [
+      album({ photoCount: 1 }),
+      album({
+        albumId: 'event-2',
+        eventId: 'event-2',
+        title: 'Event event-2',
+        photoCount: 1,
+      }),
+    ]
+    renderGallery()
 
-    expect(screen.getByRole('dialog', { name: 'Åbent photo-2' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Event event-1/ }))
+
+    expect(screen.getByRole('button', { name: 'Bål' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Sø' })).toBeNull()
+  })
+
+  it('goes back to the album grid', () => {
+    mocks.photosQuery.data = {
+      photos: [photo('photo-1', 'Bål', 'event-1')],
+    }
+    mocks.photosQuery.isSuccess = true
+    mocks.albumsQuery.data = [album({ photoCount: 1 })]
+    renderGallery('/billeder?album=event-1')
+
+    fireEvent.click(screen.getByRole('button', { name: '← Alle album' }))
+
+    expect(screen.getByTestId('gallery-album-grid')).toBeTruthy()
+  })
+
+  it('shows a fallback when the opened album has no matching photos', () => {
+    mocks.photosQuery.data = {
+      photos: [photo('photo-1', 'Bål', 'event-1')],
+    }
+    mocks.photosQuery.isSuccess = true
+    renderGallery('/billeder?album=event-2')
+
+    expect(
+      screen.getByText('Der er ingen billeder i dette album endnu.'),
+    ).toBeTruthy()
+  })
+
+  it('shows the comment count badge from the batched counts hook', () => {
+    mocks.photosQuery.data = {
+      photos: [photo('photo-1', 'Bål', 'event-1')],
+    }
+    mocks.photosQuery.isSuccess = true
+    mocks.commentCounts.data = [{ photo_id: 'photo-1', comment_count: 2 }]
+    renderGallery('/billeder?album=event-1')
+
+    expect(screen.getByRole('button', { name: 'Bål (2)' })).toBeTruthy()
+  })
+
+  it('opens a legacy photo deep-link within its own album even without an album param', () => {
+    mocks.photosQuery.data = {
+      photos: [
+        photo('photo-1', 'Bål', 'event-1'),
+        photo('photo-2', 'Sø', 'event-2'),
+      ],
+    }
+    mocks.photosQuery.isSuccess = true
+    renderGallery('/billeder?photo=photo-1')
+
+    expect(screen.getByRole('dialog', { name: 'Åbent photo-1' })).toBeTruthy()
+    // Album-gitteret vises stadig i baggrunden, ikke et fladt fotostream.
+    expect(screen.getByTestId('gallery-album-grid')).toBeTruthy()
   })
 
   it('fetches a shared photo that is outside the loaded pages', () => {
@@ -263,7 +357,7 @@ describe('GalleryPage', () => {
     mocks.photoQuery.data = linked
     mocks.photoQuery.isSuccess = true
 
-    renderGallery('/billeder?photo=photo-older')
+    renderGallery('/billeder?album=event-1&photo=photo-older')
 
     expect(
       screen.getByRole('dialog', { name: 'Åbent photo-older' }),
@@ -277,7 +371,7 @@ describe('GalleryPage', () => {
     failed.optimization_error = 'Kunne ikke behandles'
     mocks.photosQuery.data = { photos: [failed] }
     mocks.photosQuery.isSuccess = true
-    renderGallery('/billeder?photo=photo-1')
+    renderGallery('/billeder?album=event-1&photo=photo-1')
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Genforsøg optimering' }),
@@ -309,22 +403,22 @@ describe('GalleryPage', () => {
     expect(document.activeElement).toBe(chooser)
   })
 
-  it('loads another bounded page and does not declare a filtered gallery empty early', () => {
+  it('loads another bounded page inside an album', () => {
     mocks.photosQuery.data = {
       photos: [photo('photo-1', 'Bål', 'event-1')],
     }
     mocks.photosQuery.isSuccess = true
     mocks.photosQuery.hasNextPage = true
-    renderGallery('/billeder?event=event-2')
+    renderGallery('/billeder?album=event-2')
 
     expect(
-      screen.queryByText('Der er ingen billeder for det valgte filter.'),
+      screen.queryByText('Der er ingen billeder i dette album endnu.'),
     ).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Hent flere billeder' }))
     expect(mocks.photosQuery.fetchNextPage).toHaveBeenCalledOnce()
   })
 
-  it('browses through the filtered photos from the lightbox', () => {
+  it('browses through the album photos from the lightbox', () => {
     mocks.photosQuery.data = {
       photos: [
         photo('photo-1', 'Bål', 'event-1'),
@@ -333,7 +427,7 @@ describe('GalleryPage', () => {
       ],
     }
     mocks.photosQuery.isSuccess = true
-    renderGallery('/billeder?event=event-1&photo=photo-1')
+    renderGallery('/billeder?album=event-1&photo=photo-1')
 
     expect(screen.getByText('Billede 1 af 2')).toBeTruthy()
     expect(
@@ -344,7 +438,7 @@ describe('GalleryPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Næste billede' }))
 
-    // Billedet uden for filteret springes over.
+    // Billedet uden for albummet springes over.
     expect(screen.getByRole('dialog', { name: 'Åbent photo-3' })).toBeTruthy()
     expect(screen.getByText('Billede 2 af 2')).toBeTruthy()
     expect(

@@ -6,6 +6,7 @@ import {
   type AccountExportRepository,
   type AttendanceExport,
   type MessageExport,
+  type PhotoCommentExport,
   type PhotoDownloadUrls,
   type PhotoExport,
   type PollVoteExport,
@@ -124,6 +125,20 @@ Deno.serve(async (req) => {
             ? (option[0] ?? null)
             : (option ?? null),
         })) satisfies PollVoteExport[]
+      })
+    },
+
+    async getPhotoComments(userId) {
+      return collectPages(async (from, to) => {
+        const { data, error } = await supabase
+          .from('photo_comments')
+          .select('id, photo_id, body, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+        queryError('Kommentarer kunne ikke hentes', error)
+        return (data ?? []) as PhotoCommentExport[]
       })
     },
 

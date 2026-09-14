@@ -70,4 +70,34 @@ describe('PhotoThumbnail', () => {
       }),
     ).toBeTruthy()
   })
+
+  it('shows a comment count badge when there are comments', () => {
+    render(
+      <PhotoThumbnail
+        photo={photo('Bål ved søen')}
+        onClick={vi.fn()}
+        commentCount={3}
+      />,
+    )
+
+    expect(screen.getByLabelText('3 kommentarer')).toBeTruthy()
+  })
+
+  it('uses the singular label for exactly one comment', () => {
+    render(
+      <PhotoThumbnail
+        photo={photo('Bål ved søen')}
+        onClick={vi.fn()}
+        commentCount={1}
+      />,
+    )
+
+    expect(screen.getByLabelText('1 kommentar')).toBeTruthy()
+  })
+
+  it('hides the comment badge when there are no comments', () => {
+    render(<PhotoThumbnail photo={photo('Bål ved søen')} onClick={vi.fn()} />)
+
+    expect(screen.queryByLabelText(/kommentar/)).toBeNull()
+  })
 })

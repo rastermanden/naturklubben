@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  clearAlbumSearchParams,
   filterPhotosByEvent,
   updateGallerySearchParam,
-  WITHOUT_EVENT_FILTER,
+  WITHOUT_EVENT_ALBUM,
 } from './gallerySearchParams'
 import type { Photo } from './types'
 
@@ -26,23 +27,31 @@ function photo(id: string, eventId: string | null): Photo {
 }
 
 describe('gallery search params', () => {
-  it('preserves unrelated and photo params when changing the event filter', () => {
+  it('preserves unrelated and photo params when changing the album', () => {
     const current = new URLSearchParams(
-      'photo=photo-1&event=old-event&campaign=summer',
+      'photo=photo-1&album=old-album&campaign=summer',
     )
 
     expect(
-      updateGallerySearchParam(current, 'event', 'new-event').toString(),
-    ).toBe('photo=photo-1&event=new-event&campaign=summer')
-    expect(current.get('event')).toBe('old-event')
+      updateGallerySearchParam(current, 'album', 'new-album').toString(),
+    ).toBe('photo=photo-1&album=new-album&campaign=summer')
+    expect(current.get('album')).toBe('old-album')
   })
 
   it('removes only the requested parameter', () => {
-    const current = new URLSearchParams('photo=photo-1&event=event-1')
+    const current = new URLSearchParams('photo=photo-1&album=album-1')
 
     expect(updateGallerySearchParam(current, 'photo', null).toString()).toBe(
-      'event=event-1',
+      'album=album-1',
     )
+  })
+
+  it('clears both the album and photo params but keeps the rest', () => {
+    const current = new URLSearchParams(
+      'photo=photo-1&album=album-1&campaign=summer',
+    )
+
+    expect(clearAlbumSearchParams(current).toString()).toBe('campaign=summer')
   })
 
   it('filters by an event or missing event without changing the source list', () => {
@@ -56,7 +65,7 @@ describe('gallery search params', () => {
       'photo-2',
     ])
     expect(
-      filterPhotosByEvent(photos, WITHOUT_EVENT_FILTER).map(({ id }) => id),
+      filterPhotosByEvent(photos, WITHOUT_EVENT_ALBUM).map(({ id }) => id),
     ).toEqual(['photo-3'])
     expect(filterPhotosByEvent(photos, null)).toBe(photos)
   })
