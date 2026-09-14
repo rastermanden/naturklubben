@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -35,15 +36,20 @@ const mocks = vi.hoisted(() => ({
     isError: false,
     refetch: vi.fn(),
   },
-  mutation: { mutateAsync: vi.fn(), isPending: false },
+  // Egne mocks pr. mutation (i stedet for én delt) -- ellers kan en test,
+  // der gemmer en redigering, ikke se om det gik gennem updateEvent eller
+  // (fejlagtigt) createEvent.
+  createEvent: { mutateAsync: vi.fn(), isPending: false },
+  updateEvent: { mutateAsync: vi.fn(), isPending: false },
+  deleteEvent: { mutateAsync: vi.fn(), isPending: false },
 }))
 
 vi.mock('../features/calendar/useEvents', () => ({
   useEvents: () => ({
     eventsQuery: mocks.eventsQuery,
-    createEvent: mocks.mutation,
-    updateEvent: mocks.mutation,
-    deleteEvent: mocks.mutation,
+    createEvent: mocks.createEvent,
+    updateEvent: mocks.updateEvent,
+    deleteEvent: mocks.deleteEvent,
   }),
 }))
 vi.mock('../features/auth/useAuth', () => ({
@@ -115,6 +121,9 @@ function renderAt(path: string) {
 afterEach(() => {
   cleanup()
   mocks.eventsQuery.data = undefined
+  mocks.createEvent.mutateAsync.mockReset()
+  mocks.updateEvent.mutateAsync.mockReset()
+  mocks.deleteEvent.mutateAsync.mockReset()
 })
 
 describe('CalendarPage: /kalender/<id>', () => {
@@ -213,5 +222,58 @@ describe('CalendarPage: /kalender/<id>', () => {
     renderAt('/kalender')
 
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})
+
+// En begivenhed skal kunne rettes og gøres offentlig, efter den er oprettet
+// -- ikke kun i selve oprettelsesflowet (se EventForm.test.tsx for selve
+// formularens felter). Her måles, at redigeringsformularen faktisk gemmer
+// gennem updateEvent (aldrig createEvent), og at det inkluderer at slå
+// "Åben for ikke-medlemmer" til efter oprettelsen.
+describe('CalendarPage: redigering af en eksisterende begivenhed', () => {
+  it('gemmer en redigering gennem updateEvent, ikke createEvent', async () => {
+    mocks.eventsQuery.data = [EVENT]
+    mocks.updateEvent.mutateAsync.mockResolvedValue([])
+    renderAt(`/kalender/${EVENT.id}`)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Redigér' }))
+    const form = await screen.findByRole('dialog', {
+      name: 'Redigér begivenhed',
+    })
+    fireEvent.change(within(form).getByLabelText('Titel'), {
+      target: { value: 'Svampetur i Rude Skov (flyttet)' },
+    })
+    fireEvent.submit(within(form).getByLabelText('Titel').closest('form')!)
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(mocks.updateEvent.mutateAsync).toHaveBeenCalledWith({
+      event: EVENT,
+      input: expect.objectContaining({
+        title: 'Svampetur i Rude Skov (flyttet)',
+        is_public: false,
+      }),
+    })
+    expect(mocks.createEvent.mutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('kan gøre en eksisterende, privat begivenhed offentlig', async () => {
+    mocks.eventsQuery.data = [EVENT]
+    mocks.updateEvent.mutateAsync.mockResolvedValue([])
+    renderAt(`/kalender/${EVENT.id}`)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Redigér' }))
+    const form = await screen.findByRole('dialog', {
+      name: 'Redigér begivenhed',
+    })
+    const isPublic = within(form).getByLabelText(/Åben for ikke-medlemmer/)
+    expect((isPublic as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(isPublic)
+    fireEvent.submit(within(form).getByLabelText('Titel').closest('form')!)
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(mocks.updateEvent.mutateAsync).toHaveBeenCalledWith({
+      event: EVENT,
+      input: expect.objectContaining({ is_public: true }),
+    })
   })
 })

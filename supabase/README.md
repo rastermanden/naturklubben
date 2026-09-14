@@ -687,8 +687,15 @@ push-leveringen -- kun submit/migration/RLS/UI.
 
 ## Offentlig kalender og gæster (#224)
 
-En arrangør (eller en admin) sætter `is_public` på en begivenhed i `EventForm`. Det
-gør tre ting:
+En arrangør (eller en admin) sætter `is_public` på en begivenhed i `EventForm` --
+lige så vel ved at redigere en allerede oprettet begivenhed som i selve
+oprettelsesflowet: RLS'ens opdateringspolitik (`Owners and admins can update events`,
+`20260831120000_events_admin_update.sql`) dækker alle kolonner, ikke kun dem, formularen
+viser ved oprettelse, så et privat arrangement kan gøres offentligt bagefter og en
+offentlig begivenhed lukkes igen -- uden en ny række.
+`supabase/tests/rls/17_public_events_toggle.sql` måler netop den effekt af en UPDATE
+(ikke en INSERT): at anon får/mister adgang med det samme, og at et andet medlem end
+ejeren/en admin ikke kan gøre det. At sætte `is_public` gør tre ting:
 
 1. Begivenheden vises på `/kalender/offentlig`, som kan ses uden login, gennem viewet
    `public_events` (id, titel, beskrivelse, sted, tid -- aldrig `created_by`). Anon
