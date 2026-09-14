@@ -477,16 +477,16 @@ resultat, og `finish(true)` afslutter med exit 3.
 
 Produktbeslutningen i #86 er en hybrid mellem sletning og anonymisering:
 
-| Data                                                                             | Ved kontosletning                                                                                             |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Auth-bruger, profil, avatar, allowlist-adgang                                    | Slettes permanent.                                                                                            |
-| Originale og optimerede galleribilleder samt metadata                            | Slettes permanent.                                                                                            |
-| Kalenderdeltagelser, push-abonnementer, notifikationsvalg og leveringslog (#216) | Slettes via eksisterende `ON DELETE CASCADE`.                                                                 |
-| Chatbeskeder                                                                     | Bevares, men `user_id` sættes til `NULL` og klienten viser “Tidligere medlem”; admins kan fortsat slette dem. |
-| Kalenderbegivenheder                                                             | Bevares, men `created_by` sættes til `NULL`; admins kan fortsat slette dem.                                   |
-| Prøvemedlemsansøgninger med samme e-mail                                         | Slettes af Auth-delete-triggeren, hvis de stadig findes.                                                      |
-| Spilresultater (#202)                                                            | Slettes via `ON DELETE CASCADE` -- et resultat er personligt, ikke klubhistorik.                              |
-| Adminrolle-audit (#96)                                                           | Bevares, men både bruger-id og navnesnapshots erstattes med en fælles anonym værdi.                           |
+| Data                                                                                                              | Ved kontosletning                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Auth-bruger, profil, avatar, allowlist-adgang                                                                     | Slettes permanent.                                                                                            |
+| Originale og optimerede galleribilleder samt metadata                                                             | Slettes permanent.                                                                                            |
+| Kalenderdeltagelser, push-abonnementer, notifikationsvalg, leveringslog (#216) og kommentarer til billeder (#218) | Slettes via eksisterende `ON DELETE CASCADE`.                                                                 |
+| Chatbeskeder                                                                                                      | Bevares, men `user_id` sættes til `NULL` og klienten viser “Tidligere medlem”; admins kan fortsat slette dem. |
+| Kalenderbegivenheder                                                                                              | Bevares, men `created_by` sættes til `NULL`; admins kan fortsat slette dem.                                   |
+| Prøvemedlemsansøgninger med samme e-mail                                                                          | Slettes af Auth-delete-triggeren, hvis de stadig findes.                                                      |
+| Spilresultater (#202)                                                                                             | Slettes via `ON DELETE CASCADE` -- et resultat er personligt, ikke klubhistorik.                              |
+| Adminrolle-audit (#96)                                                                                            | Bevares, men både bruger-id og navnesnapshots erstattes med en fælles anonym værdi.                           |
 
 Storage, Postgres og Auth Admin kan ikke indgå i én fælles transaktion.
 Slettefunktionerne er derfor eksplicit genoptagelige:
