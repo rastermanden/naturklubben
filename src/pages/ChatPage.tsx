@@ -9,6 +9,8 @@ import {
   groupReactionsByMessage,
   summarizeReactions,
 } from '../features/chat/reactions'
+import { usePolls } from '../features/chat/usePolls'
+import { groupPollsByMessage, summarizePoll } from '../features/chat/polls'
 import { useOnlinePresence } from '../features/chat/useOnlinePresence'
 import { useFullscreen } from '../features/chat/useFullscreen'
 import {
@@ -60,6 +62,8 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
     () => groupReactionsByMessage(reactions),
     [reactions],
   )
+  const { polls, createPoll, castVote, closePoll } = usePolls(messages, userId)
+  const pollsByMessage = useMemo(() => groupPollsByMessage(polls), [polls])
 
   const [draft, setDraft] = useState('')
   // Markørens position i skrivefeltet: en mention kan skrives midt i teksten,
@@ -246,10 +250,14 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
   // Kommandoer, der ikke sender noget til chatten, men kun virker for
   // afsenderen selv -- svaret vises som en systemlinje, ingen andre ser.
   function runLocalCommand(
-    command: Exclude<ParsedCommand, { kind: 'message' }>,
+    command: Exclude<ParsedCommand, { kind: 'message' } | { kind: 'poll' }>,
   ) {
     if (command.kind === 'help') {
       pushNotice(helpText())
+      return
+    }
+    if (command.kind === 'error') {
+      pushNotice(command.message)
       return
     }
     if (command.kind === 'away') {
@@ -288,6 +296,43 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
     )
   }
 
+  // "/afstemning" sender selve spørgsmålet som en helt almindelig besked --
+  // afstemningen er ikke andet end en besked, den hænger på (se
+  // 20260913180000_chat_polls.sql) -- og kalder derefter create_poll med
+  // besked-id'et og svarene. Fejler create_poll, efter beskeden allerede er
+  // sendt, står spørgsmålet tilbage som en almindelig tekstbesked uden
+  // afstemningskort; det er sjældent nok til ikke at kræve en oprydning her.
+  async function sendPoll(
+    originalInput: string,
+    question: string,
+    options: string[],
+  ) {
+    if (sendMessage.isPending || createPoll.isPending) return
+    try {
+      const message = await sendMessage.mutateAsync({
+        userId,
+        content: question,
+        replyToMessageId: null,
+      })
+      await createPoll.mutateAsync({ messageId: message.id, options })
+    } catch {
+      setDraft((current) => current || originalInput)
+      setSendError('Afstemningen kunne ikke oprettes. Prøv igen.')
+    }
+  }
+
+  function votePoll(message: Message, optionId: string) {
+    const currentPoll = pollsByMessage.get(message.id)
+    if (!currentPoll) return
+    castVote.mutate({ pollId: currentPoll.id, optionId })
+  }
+
+  function closeSelectedPoll(message: Message) {
+    const currentPoll = pollsByMessage.get(message.id)
+    if (!currentPoll) return
+    closePoll.mutate(currentPoll.id)
+  }
+
   function sendCurrentDraft() {
     const rawContent = draft.trim()
     if (!rawContent || rawContent.length > MAX_MESSAGE_LENGTH) return
@@ -295,6 +340,13 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
     // De lokale kommandoer sender ingenting og skal derfor virke, også mens
     // en tidligere besked stadig er undervejs.
     const command = parseChatCommand(rawContent)
+    if (command && command.kind === 'poll') {
+      if (sendMessage.isPending || createPoll.isPending) return
+      setDraft('')
+      setSendError(null)
+      void sendPoll(rawContent, command.question, command.options)
+      return
+    }
     if (command && command.kind !== 'message') {
       setDraft('')
       setSendError(null)
@@ -682,6 +734,22 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
                   isHighlighted={message.id === highlightedMessageId}
                   isMentioned={message.mentions.includes(userId)}
                   members={allMembers}
+                  poll={
+                    pollsByMessage.has(message.id)
+                      ? summarizePoll(pollsByMessage.get(message.id)!, userId)
+                      : undefined
+                  }
+                  onVotePoll={votePoll}
+                  onClosePoll={closeSelectedPoll}
+                  isVotingPoll={
+                    castVote.isPending &&
+                    pollsByMessage.get(message.id)?.id ===
+                      castVote.variables?.pollId
+                  }
+                  isClosingPoll={
+                    closePoll.isPending &&
+                    pollsByMessage.get(message.id)?.id === closePoll.variables
+                  }
                 />
               ))}
               {notices.map((notice) => (

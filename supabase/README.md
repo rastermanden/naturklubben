@@ -15,6 +15,7 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 | `event_guest_requests`                     | Ansøgninger fra ikke-medlemmer om at deltage i en åben begivenhed (#224): navn, e-mail, evt. besked, antal personer og status. Delvist unikt indeks: én åben (pending/godkendt) ansøgning pr. e-mail pr. begivenhed. Arrangøren svarer selv via en `mailto:`-knap i UI'et (#239), ikke automatisk.                                                                                              | Kun begivenhedens arrangør (`created_by`) og admins kan læse (`can_manage_event_guests`). Ingen klientskrivning: oprettes af `submit_event_guest_request_limited` (service_role), afgøres af `approve_/reject_event_guest_request`. `event_guest_counts` giver alle medlemmer antallet af godkendte gæster. |
 | `photos`                                   | Metadata og vedvarende optimeringsstatus for uploadede billeder -- selve filerne ligger i Storage (#12/#89).                                                                                                                                                                                                                                                                                    | Autentificerede kan læse. Oprettelse/genforsøg går gennem `upsert_photo_upload`; direkte INSERT/UPDATE/DELETE er revoked, så klienten ikke kan skrive serverejede status/outputfelter eller omgå sikker sletning.                                                                                           |
 | `messages`                                 | Gruppechat, ét fælles rum (#14), med valgfri svarreference (#84) og `mentions` med de nævntes bruger-id'er (#179). Afsenderreferencen nulstilles ved kontosletning. Del af `supabase_realtime`.                                                                                                                                                                                                 | Kun autentificerede kan læse/skrive; afsender kan slette egne, og admins kan slette alle. `mentions` skrives kun i afsenderens eget insert -- UPDATE er revoked, så ingen kan nævne nogen på en andens besked.                                                                                              |
+| `polls` / `poll_options` / `poll_votes`    | Afstemninger i chatten (#217): en afstemning hænger på en helt almindelig besked (`polls.message_id`, unikt), med 2-6 svar og én stemme pr. medlem pr. afstemning (`poll_votes`' primærnøgle er `(poll_id, user_id)` -- en ny stemme erstatter den gamle). Del af `supabase_realtime`.                                                                                                         | Læsning følger beskedens rum, akkurat som `message_reactions`. Ingen klientskrivning på nogen af de tre tabeller -- kun `create_poll`, `cast_poll_vote` og `close_poll` skriver. Kun opretteren eller en admin kan lukke en afstemning.                                                                     |
 | `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` og af de øvrige push-functioner (se "Notifikationer ud over chatten").                                                                                                                                                                                                                                          | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                                                                                                                                                                                 |
 | `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                                                                                                                                                                                                                                                                                 | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                                                                                                                                                                                               |
 | `admin_role_changes`                       | Uforanderligt revisionsspor med aktør, medlem, gammel/ny rolle og tidspunkt.                                                                                                                                                                                                                                                                                                                    | Kun admins kan læse; ingen klientrolle kan indsætte, ændre eller slette.                                                                                                                                                                                                                                    |
@@ -157,8 +158,8 @@ Supabase CLI'en ikke skal læse den ved deploy.
   `photos-original` og `photos-optimized`, før Auth-brugeren slettes.
 - `export-account` (#129): kræver samme gateway-JWT, server-side tokenvalidering
   og højst fem minutter gamle genlogin som kontosletning. Functionen filtrerer
-  eksplicit profil, egne beskeder, egne billedmetadata og egne svar på begivenheder
-  (tilmelding, venteliste eller afbud, #222) på
+  eksplicit profil, egne beskeder, egne billedmetadata, egne svar på begivenheder
+  (tilmelding, venteliste eller afbud, #222) og egne stemmer på afstemninger (#217) på
   den validerede brugers id. Billedreferencer får signerede Storage-URL'er med 15
   minutters levetid, og svaret kan downloades som JSON uden andre medlemmers
   private data.
@@ -293,6 +294,44 @@ af databasen:
   tabellen ikke kan skrives uden om RPC'en, at oprykning sker i rækkefølge og kun
   fylder de ledige pladser (også dem, en slettet konto efterlader), og at afbud og
   listen over manglende svar er lukket for andre.
+
+## Afstemninger i chatten
+
+"/afstemning <spørgsmål> | <svar 1> | <svar 2> [| ...]" (#217) laver en
+afstemning direkte i chatten. Alt om selve afstemningen ejes af databasen:
+
+- Afstemningsbeskeden er en helt almindelig række i `messages` -- klienten
+  sender den, som den ville sende enhver anden besked, med spørgsmålet som
+  `content`, og kalder derefter `create_poll(p_message_id, p_options)` for at
+  hænge selve afstemningen på. To kald, ikke ét, netop fordi beskeden ikke er
+  andet end en besked -- søgning, sletning og eksport kender den allerede.
+  `polls.message_id` er unikt: en besked kan højst have én afstemning.
+- `create_poll` kræver, at kalderen selv er beskedens afsender, at beskeden
+  ikke er slettet, og at svarene er 2-6 ikke-tomme tekster -- ellers afvises
+  kaldet med en præcis fejlkode, som klientens parser allerede har filtreret
+  det meste af væk før kaldet (se `src/features/chat/slashCommands.ts`).
+- `cast_poll_vote(p_poll_id, p_option_id)` er den eneste vej til at stemme.
+  `poll_votes`' primærnøgle er `(poll_id, user_id)`, så en ny stemme erstatter
+  den gamle i stedet for at lægge sig ved siden af den -- der er ingen
+  "fjern din stemme", kun "stem om". En lukket afstemning afviser nye
+  stemmer, og et medlem uden adgang til beskedens rum (admin-rummet) kan
+  ikke stemme, selv med et kendt poll-id -- funktionen genskaber selv
+  select-policyens synlighedstjek, fordi den som `security definer` ikke selv
+  er underlagt RLS.
+- `close_poll(p_poll_id)` er kun for opretteren eller en admin, akkurat som
+  reglen for hvem der må slette en besked -- og er idempotent: at lukke en
+  allerede lukket afstemning ændrer intet.
+- Afstemninger er ikke anonyme (#217's afgrænsning): alle, der kan læse
+  beskeden, kan se, hvem der stemte hvad -- samme synlighed som reaktioner.
+- `poll_votes` tæller ikke stemmer ved kontosletning -- `user_id` kaskaderer,
+  så en slettet kontos stemmer forsvinder med den, mens `polls.created_by`
+  (som `messages.user_id`) nulstilles i stedet, så afstemningen og de andres
+  stemmer består. `export-account` tager `poll_votes` med i dataudleveringen.
+- `supabase/tests/rls/18_chat_polls.sql` måler, at kun opretteren kan gøre sin
+  egen besked til en afstemning, at et ikke-medlem (anonym eller et medlem
+  uden adgang til rummet) hverken kan se eller stemme, at en ny stemme
+  erstatter den gamle, at kun opretteren eller en admin kan lukke, og at
+  ingen af de tre tabeller kan skrives uden om RPC'erne.
 
 ## Migrations
 
