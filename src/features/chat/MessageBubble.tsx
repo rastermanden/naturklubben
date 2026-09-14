@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Avatar } from '../../components/Avatar'
 import { MessageReactions, ReactionPicker } from './MessageReactions'
+import { PollCard } from './PollCard'
 import { readableTextColor } from '../../lib/colorContrast'
 import { formatRelativeTime } from './formatRelativeTime'
 import { splitLinks } from './linkify'
 import { splitMentions } from './mentions'
 import type { MentionMember } from './mentions'
+import type { PollSummary } from './polls'
 import type { ReactionSummary } from './reactions'
 import type { Message } from './useMessages'
 import { CauseMarks } from '../profile/CauseMarks'
@@ -98,6 +100,11 @@ export function MessageBubble({
   isHighlighted = false,
   isMentioned = false,
   members = [],
+  poll,
+  onVotePoll,
+  onClosePoll,
+  isVotingPoll = false,
+  isClosingPoll = false,
 }: {
   message: Message
   author: ProfileSummary | undefined
@@ -114,6 +121,12 @@ export function MessageBubble({
   isMentioned?: boolean
   /** Medlemmer, mentions kan slås op i -- navnet følger et navneskift. */
   members?: readonly MentionMember[]
+  /** Afstemningen på denne besked, hvis der er en (#217). */
+  poll?: PollSummary
+  onVotePoll?: (message: Message, optionId: string) => void
+  onClosePoll?: (message: Message) => void
+  isVotingPoll?: boolean
+  isClosingPoll?: boolean
 }) {
   const [, forceUpdate] = useState(0)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -292,6 +305,16 @@ export function MessageBubble({
               members={members}
             />
           </p>
+        )}
+        {!isDeleted && poll && (
+          <PollCard
+            poll={poll}
+            canClose={Boolean(canDelete)}
+            isVoting={isVotingPoll}
+            isClosing={isClosingPoll}
+            onVote={(optionId) => onVotePoll?.(message, optionId)}
+            onClose={() => onClosePoll?.(message)}
+          />
         )}
         {!isDeleted && (
           <>

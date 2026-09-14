@@ -83,6 +83,18 @@ function repository(overrides: Partial<AccountExportRepository> = {}) {
         },
       ]
     },
+    getPollVotes: async (id) => {
+      seenUserIds.push(id)
+      return [
+        {
+          poll_id: 'poll-1',
+          option_id: 'option-1',
+          created_at: '2026-08-03T10:00:00.000Z',
+          poll: { id: 'poll-1', question: 'Hvor skal vi hen på lørdag?' },
+          option: { id: 'option-1', label: 'Skoven' },
+        },
+      ]
+    },
     getPhotoDownloadUrls: async () => ({
       original: 'https://storage.test/original?token=short-lived',
       optimized: 'https://storage.test/optimized?token=short-lived',
@@ -108,7 +120,7 @@ Deno.test(
     const body = await response.json()
 
     assertEquals(response.status, 200)
-    assertEquals(seenUserIds, [userId, userId, userId, userId])
+    assertEquals(seenUserIds, [userId, userId, userId, userId, userId])
     assertEquals(body.account.email, 'medlem@example.com')
     assertEquals(body.messages[0].content, 'Hej')
     assertEquals(
@@ -129,6 +141,15 @@ Deno.test(
           end_at: null,
           created_at: '2026-08-01T10:00:00.000Z',
         },
+      },
+    ])
+    assertEquals(body.poll_votes, [
+      {
+        poll_id: 'poll-1',
+        option_id: 'option-1',
+        created_at: '2026-08-03T10:00:00.000Z',
+        poll: { id: 'poll-1', question: 'Hvor skal vi hen på lørdag?' },
+        option: { id: 'option-1', label: 'Skoven' },
       },
     ])
     assertEquals(body.signed_urls_expire_at, '2026-08-23T18:15:00.000Z')
