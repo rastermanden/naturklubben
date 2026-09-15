@@ -131,6 +131,72 @@ describe('EventForm errors', () => {
       expect.objectContaining({ title: 'Åben skovtur', is_public: true }),
     )
   })
+
+  it('gør en eksisterende, privat begivenhed offentlig ved redigering', () => {
+    const onSubmit = vi.fn()
+    const event: CalendarEvent = {
+      id: 'event-1',
+      title: 'Skovtur',
+      description: null,
+      location: null,
+      start_at: '2026-08-24T10:00:00Z',
+      end_at: null,
+      created_by: 'member-id',
+      is_public: false,
+      max_participants: null,
+    }
+    render(
+      <EventForm
+        event={event}
+        submitting={false}
+        error={null}
+        onSubmit={onSubmit}
+        onCancel={() => undefined}
+      />,
+    )
+
+    const isPublic = screen.getByLabelText(/Åben for ikke-medlemmer/)
+    expect((isPublic as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(isPublic)
+    fireEvent.submit(screen.getByLabelText('Titel').closest('form')!)
+
+    expect(onSubmit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ title: 'Skovtur', is_public: true }),
+    )
+  })
+
+  it('lukker en eksisterende, offentlig begivenhed igen ved redigering', () => {
+    const onSubmit = vi.fn()
+    const event: CalendarEvent = {
+      id: 'event-2',
+      title: 'Åben skovtur',
+      description: null,
+      location: null,
+      start_at: '2026-08-24T10:00:00Z',
+      end_at: null,
+      created_by: 'member-id',
+      is_public: true,
+      max_participants: null,
+    }
+    render(
+      <EventForm
+        event={event}
+        submitting={false}
+        error={null}
+        onSubmit={onSubmit}
+        onCancel={() => undefined}
+      />,
+    )
+
+    const isPublic = screen.getByLabelText(/Åben for ikke-medlemmer/)
+    expect((isPublic as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(isPublic)
+    fireEvent.submit(screen.getByLabelText('Titel').closest('form')!)
+
+    expect(onSubmit).toHaveBeenLastCalledWith(
+      expect.objectContaining({ title: 'Åben skovtur', is_public: false }),
+    )
+  })
 })
 
 describe('EventForm max participants', () => {
