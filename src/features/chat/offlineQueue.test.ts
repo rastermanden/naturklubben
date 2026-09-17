@@ -179,9 +179,9 @@ describe('nextSendableMessage', () => {
   it('sender den ældste først', () => {
     const queue = [queued('client-2'), queued('client-1')]
 
-    expect(
-      nextSendableMessage(queue, 'member-1', 'general')?.clientId,
-    ).toBe('client-1')
+    expect(nextSendableMessage(queue, 'member-1', 'general')?.clientId).toBe(
+      'client-1',
+    )
   })
 
   it('springer en besked over, der allerede er undervejs', () => {
@@ -190,9 +190,9 @@ describe('nextSendableMessage', () => {
       'client-1',
     )
 
-    expect(
-      nextSendableMessage(queue, 'member-1', 'general')?.clientId,
-    ).toBe('client-2')
+    expect(nextSendableMessage(queue, 'member-1', 'general')?.clientId).toBe(
+      'client-2',
+    )
   })
 
   it('giver op efter det aftalte antal forsøg, så brugeren selv skal trykke', () => {
@@ -214,9 +214,9 @@ describe('nextSendableMessage', () => {
     const queue = [queued('client-1', { room: 'admin' })]
 
     expect(nextSendableMessage(queue, 'member-1', 'general')).toBeUndefined()
-    expect(
-      nextSendableMessage(queue, 'member-1', 'admin')?.clientId,
-    ).toBe('client-1')
+    expect(nextSendableMessage(queue, 'member-1', 'admin')?.clientId).toBe(
+      'client-1',
+    )
   })
 })
 
