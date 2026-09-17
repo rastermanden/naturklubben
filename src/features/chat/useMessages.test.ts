@@ -233,4 +233,23 @@ describe('messageFields', () => {
     expect(messageFields).toContain('messages!reply_to_message_id')
     expect(messageFields).not.toContain('_fkey')
   })
+
+  it('henter skrivetidspunktet, så en besked fra offline-køen kan vise det', () => {
+    expect(messageFields).toContain('written_at')
+  })
+})
+
+describe('beskeder sendt fra offline-køen (#219)', () => {
+  it('tager skrivetidspunktet med, når serveren har det', () => {
+    expect(
+      normalizeMessage({
+        ...parent,
+        written_at: '2026-08-23T09:00:00.000Z',
+      }).written_at,
+    ).toBe('2026-08-23T09:00:00.000Z')
+  })
+
+  it('efterlader det tomt på en besked, der blev sendt med forbindelse', () => {
+    expect(normalizeMessage(parent).written_at).toBeNull()
+  })
 })

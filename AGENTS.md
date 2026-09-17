@@ -172,6 +172,20 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
   for hvorfor det er klienten, der sætter den i gang, og hvorfor en nyhed kun sendes én
   gang og kun inden for syv dage.
 
+## Chat uden forbindelse
+
+- Beskeder skrevet uden net lægges i en IndexedDB-kø og sendes af sig selv ved
+  app-start, ved `online`-hændelsen og på kommando fra service workeren. Se
+  `supabase/README.md`, "Chat uden forbindelse (#219)", for idempotensen (klientens id
+  **er** beskedens id, og `send_chat_message` indsætter med `on conflict ... do
+nothing`), delingen af `created_at`/`written_at` og hvad Background Sync gør og ikke
+  gør.
+- Kølogikken skal blive liggende som rene funktioner i
+  `src/features/chat/offlineQueue.ts` -- ingen IndexedDB, netværk eller `navigator` i
+  den fil. Det er den del, CI kan teste; browser-API'erne hører til i `useChatQueue.ts`
+  og `offlineQueueStore.ts` ved siden af. Ændres autorisationsmodellen i RPC'en, skal
+  `supabase/tests/rls/19_chat_offline_queue.sql` følge med.
+
 ## App-version
 
 - Appens version er **commit'en**, ikke et nummer nogen vedligeholder. `vite.config.ts`

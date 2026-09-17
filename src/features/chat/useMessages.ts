@@ -6,6 +6,13 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
+import {
+  dropDeliveredMessages,
+  isRetryableSendError,
+  type QueuedDraft,
+  type QueuedMessage,
+} from './offlineQueue'
+import { useChatQueue } from './useChatQueue'
 
 export type MessageType = 'text' | 'action'
 
@@ -17,6 +24,12 @@ export interface Message {
   /** Bruger-id'er på de medlemmer, beskeden nævner (#179). */
   mentions: string[]
   created_at: string
+  /**
+   * Tidspunktet, brugeren skrev beskeden, for en besked der kom gennem
+   * offline-køen (#219) -- serverens `created_at` er modtagelsestidspunktet.
+   * Mangler på rækker, hvor kolonnen ikke er hentet (fx søge-RPC'en).
+   */
+  written_at?: string | null
   deleted_at: string | null
   deleted_by: string | null
   reply_to_message_id: string | null
@@ -38,10 +51,13 @@ export interface MessageRow {
   message_type?: string
   mentions?: string[] | null
   created_at: string
+  written_at?: string | null
   deleted_at?: string | null
   deleted_by?: string | null
   reply_to_message_id?: string | null
   reply_to?: ReplyPreview | ReplyPreview[] | null
+  /** Kun sat af `send_chat_message`, som svar på om rækken blev oprettet. */
+  inserted?: boolean | null
 }
 
 export type ChatRoom = 'general' | 'admin'
@@ -65,6 +81,7 @@ export const messageFields = `
   message_type,
   mentions,
   created_at,
+  written_at,
   deleted_at,
   deleted_by,
   reply_to_message_id,
@@ -89,6 +106,7 @@ export function normalizeMessage(row: MessageRow): Message {
     message_type: row.message_type === 'action' ? 'action' : 'text',
     mentions: row.mentions ?? [],
     created_at: row.created_at,
+    written_at: row.written_at ?? null,
     deleted_at: row.deleted_at ?? null,
     deleted_by: row.deleted_by ?? null,
     reply_to_message_id: row.reply_to_message_id ?? null,
@@ -305,7 +323,73 @@ async function notifyOthers(messageId: string) {
   if (error) console.warn('Notifikationer kunne ikke sendes', error)
 }
 
-export function useMessages(room: ChatRoom = 'general') {
+/**
+ * Sender en besked, der har ligget i offline-køen (#219).
+ *
+ * RPC'en tager imod klientens id og bruger det som beskedens id, så et gensend
+ * -- fordi svaret gik tabt, eller fordi appen blev lukket midt i afsendelsen --
+ * ikke giver en dublet, men svarer med den række, der allerede ligger der.
+ */
+async function sendQueuedMessage(
+  entry: QueuedMessage,
+): Promise<{ message: Message; inserted: boolean }> {
+  const { data, error } = await supabase.rpc('send_chat_message', {
+    p_client_id: entry.clientId,
+    p_content: entry.content,
+    p_room: entry.room,
+    p_reply_to_message_id: entry.replyToMessageId,
+    p_message_type: entry.messageType,
+    p_mentions: entry.mentions,
+    p_written_at: entry.writtenAt,
+  })
+  if (error) throw error
+
+  const row = (data as MessageRow[] | null)?.[0]
+  if (!row) throw new Error('Serveren bekræftede ikke beskeden.')
+  return { message: normalizeMessage(row), inserted: row.inserted === true }
+}
+
+export interface SendMessageInput {
+  userId: string
+  content: string
+  replyToMessageId: string | null
+  messageType?: MessageType
+  mentions?: string[]
+}
+
+function queuedDraft(input: SendMessageInput, room: ChatRoom): QueuedDraft {
+  return {
+    userId: input.userId,
+    room,
+    content: input.content,
+    messageType: input.messageType ?? 'text',
+    mentions: input.mentions ?? [],
+    replyToMessageId: input.replyToMessageId,
+  }
+}
+
+/**
+ * Købeskeden som en almindelig besked. Kun til at give kalderen et id at holde
+ * i (fx afstemningen, der hænger på beskeden) -- visningen af en ventende
+ * besked står i køen, ikke i beskedhistorikken.
+ */
+function optimisticMessage(entry: QueuedMessage): Message {
+  return {
+    id: entry.clientId,
+    user_id: entry.userId,
+    content: entry.content,
+    message_type: entry.messageType,
+    mentions: entry.mentions,
+    created_at: entry.writtenAt,
+    written_at: null,
+    deleted_at: null,
+    deleted_by: null,
+    reply_to_message_id: entry.replyToMessageId,
+    reply_to: null,
+  }
+}
+
+export function useMessages(room: ChatRoom, userId: string) {
   const queryClient = useQueryClient()
   const queryKey = queryKeyFor(room)
   const liveMessages = useRef(new Map<string, Message>())
@@ -326,6 +410,19 @@ export function useMessages(room: ChatRoom = 'general') {
       ...history,
       messages: mergeMessagePages(history.pages),
     }),
+  })
+
+  const queue = useChatQueue({
+    room,
+    userId,
+    send: sendQueuedMessage,
+    deliver: (message, { notify }) => {
+      liveMessages.current.set(message.id, message)
+      queryClient.setQueryData<InfiniteData<MessagePage>>(queryKey, (history) =>
+        addMessageToHistory(history, message),
+      )
+      if (notify) void notifyOthers(message.id)
+    },
   })
 
   // A server fetch is assembled from a snapshot of the old pages. Reapply
@@ -447,35 +544,43 @@ export function useMessages(room: ChatRoom = 'general') {
   }, [queryClient, queryKey, room])
 
   const sendMessage = useMutation({
-    mutationFn: async ({
-      userId,
-      content,
-      replyToMessageId,
-      messageType = 'text',
-      mentions = [],
-    }: {
-      userId: string
-      content: string
-      replyToMessageId: string | null
-      messageType?: MessageType
-      mentions?: string[]
-    }) => {
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          user_id: userId,
-          content,
-          room,
-          reply_to_message_id: replyToMessageId,
-          message_type: messageType,
-          mentions,
-        })
-        .select(messageFields)
-        .single()
-      if (error) throw error
-      return normalizeMessage(data)
+    mutationFn: async (input: SendMessageInput) => {
+      // Uden forbindelse kan forespørgslen ikke lykkes, så beskeden ryger i
+      // køen med det samme frem for at vente på en fejl.
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return optimisticMessage(await queue.enqueue(queuedDraft(input, room)))
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .insert({
+            user_id: input.userId,
+            content: input.content,
+            room,
+            reply_to_message_id: input.replyToMessageId,
+            message_type: input.messageType ?? 'text',
+            mentions: input.mentions ?? [],
+          })
+          .select(messageFields)
+          .single()
+        if (error) throw error
+        return normalizeMessage(data)
+      } catch (error) {
+        // En telefon i skoven står ofte med `navigator.onLine === true` og
+        // alligevel ingen brugbar forbindelse. Den slags fejl skal ikke møde
+        // brugeren som et afslag: beskeden lægges i køen i stedet. Alt andet
+        // (en afvist politik, en udløbet session) er der ingen grund til at
+        // prøve igen, og skal vises som før.
+        if (!isRetryableSendError(error)) throw error
+        return optimisticMessage(await queue.enqueue(queuedDraft(input, room)))
+      }
     },
     onSuccess: (message) => {
+      // En købesked vises af køen selv, indtil serveren har kvitteret. Den må
+      // ikke også ind i beskedhistorikken: den findes ikke på serveren endnu.
+      if (queue.isQueued(message.id)) return
+
       liveMessages.current.set(message.id, message)
       queryClient.setQueryData<InfiniteData<MessagePage>>(queryKey, (history) =>
         addMessageToHistory(history, message),
@@ -517,7 +622,21 @@ export function useMessages(room: ChatRoom = 'general') {
     },
   })
 
-  return { messagesQuery, sendMessage, deleteMessage, openMessage }
+  return {
+    messagesQuery,
+    sendMessage,
+    deleteMessage,
+    openMessage,
+    // Beskeder, der venter på serveren -- uden dem, der allerede er leveret
+    // (Realtime kan være kommet først, hvis svaret på afsendelsen gik tabt).
+    queuedMessages: dropDeliveredMessages(
+      queue.messages,
+      messagesQuery.data?.messages ?? [],
+    ),
+    retryQueued: queue.retry,
+    discardQueued: queue.discard,
+    isOffline: queue.isOffline,
+  }
 }
 
 export function useMessageSearch(

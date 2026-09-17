@@ -20,6 +20,10 @@ import { NavigationRoute, registerRoute } from 'workbox-routing'
 import { StaleWhileRevalidate } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
+import {
+  CHAT_QUEUE_FLUSH_MESSAGE,
+  CHAT_QUEUE_SYNC_TAG,
+} from './lib/chatQueueSync'
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: (PrecacheEntry | string)[]
@@ -81,6 +85,40 @@ interface PushPayload {
   path?: string
   messageId?: string
 }
+
+// Background Sync (#219). `SyncEvent` og `registration.sync` er ikke med i
+// TypeScripts WebWorker-lib, så vi erklærer kun det, vi bruger.
+interface ChatQueueSyncEvent extends ExtendableEvent {
+  readonly tag: string
+}
+
+/**
+ * Browseren vækker service workeren, når der igen er forbindelse -- typisk
+ * efter en tur i skoven, hvor telefonen har været uden net.
+ *
+ * Selve afsendelsen kan ikke ske her. Chatten sender med brugerens
+ * Supabase-session, og den ligger i app'ens `localStorage`, som en service
+ * worker ikke kan læse. Opgaven er derfor at vække de åbne faner, som *har*
+ * sessionen, og bede dem tømme køen med det samme. Er der ingen åben fane,
+ * bliver køen liggende i IndexedDB og sendes ved næste app-start -- den
+ * fallback, der også gælder i browsere uden Background Sync.
+ */
+const syncListener = (event: ChatQueueSyncEvent) => {
+  if (event.tag !== CHAT_QUEUE_SYNC_TAG) return
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      })
+      for (const client of clients) {
+        client.postMessage({ type: CHAT_QUEUE_FLUSH_MESSAGE })
+      }
+    })(),
+  )
+}
+
+self.addEventListener('sync', syncListener as EventListener)
 
 // `renotify` og `vibrate` findes i alle browsere, der understøtter Web Push,
 // men er ikke med i TypeScripts NotificationOptions.
