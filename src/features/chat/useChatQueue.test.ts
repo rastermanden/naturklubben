@@ -163,6 +163,27 @@ describe('useChatQueue', () => {
     expect(hook.result.current.messages).toHaveLength(0)
   })
 
+  it('sender og viser ikke en besked lagt i køen for et andet rum', async () => {
+    setOnline(false)
+    const { hook, send, deliver } = setup()
+    await act(async () => {
+      await hook.result.current.enqueue({
+        userId: 'member-1',
+        room: 'admin',
+        content: 'Fra admin-chatten',
+      })
+    })
+
+    setOnline(true)
+    await act(async () => {
+      window.dispatchEvent(new Event('online'))
+    })
+
+    expect(send).not.toHaveBeenCalled()
+    expect(deliver).not.toHaveBeenCalled()
+    expect(hook.result.current.messages).toHaveLength(0)
+  })
+
   it('kender forskel på en besked, der venter, og en der er sendt', async () => {
     setOnline(false)
     const { hook } = setup()

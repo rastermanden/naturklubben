@@ -109,7 +109,11 @@ export function useChatQueue({
     flushing.current = true
     try {
       for (;;) {
-        const entry = nextSendableMessage(queueRef.current, userIdRef.current)
+        const entry = nextSendableMessage(
+          queueRef.current,
+          userIdRef.current,
+          room,
+        )
         if (!entry || !isOnline()) break
 
         commit(
@@ -140,7 +144,7 @@ export function useChatQueue({
     } finally {
       flushing.current = false
     }
-  }, [commit, persist, store])
+  }, [commit, persist, room, store])
 
   // App-start: læs køen ind (den ligger i IndexedDB fra sidste gang) og send
   // det, der ligger klar.

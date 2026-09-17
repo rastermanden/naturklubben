@@ -7,7 +7,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(17);
+select plan(18);
 
 do $$
 begin
@@ -37,6 +37,20 @@ select throws_ok(
 
 -- Alice, et almindeligt medlem
 do $$ begin perform tests.login('00000000-0000-0000-0000-00000000000a'); end $$;
+
+select throws_ok(
+  $$insert into public.messages (id, user_id, content, room, written_at)
+    values (
+      '00000000-0000-0000-0000-00000000c000',
+      '00000000-0000-0000-0000-00000000000a',
+      'Direkte med et forfalsket tidsstempel',
+      'general',
+      now() - interval '2 days'
+    )$$,
+  '42501',
+  null,
+  'et medlem kan ikke sætte written_at ved en direkte insert uden om kø-RPC''en'
+);
 
 select results_eq(
   $$select content, user_id, room, client_written_at, inserted

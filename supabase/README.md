@@ -370,6 +370,14 @@ authenticated` og `grant execute ... to authenticated`. Se
   fallback, hvor IndexedDB ikke findes (jsdom, Safari i privat tilstand).
   `useChatQueue.ts` binder dem sammen og tømmer køen ved app-start, ved
   `online`-hændelsen og på kommando fra service workeren.
+- **Køen deles på tværs af rum, men tømningen er rum-afgrænset.**
+  IndexedDB-lageret er ét fælles lager for hele appen, men hvert rums
+  instans af `useChatQueue` (den almindelige chat og admin-chatten) sender
+  kun beskeder skrevet i netop det rum (`nextSendableMessage(queue, userId,
+  room)`). En besked skrevet i admin-chatten uden dækning sendes derfor
+  først, når man igen åbner admin-chatten -- den bliver liggende i køen, men
+  sendes eller vises aldrig i den almindelige chats cache, og en fejlende
+  besked i ét rum blokerer ikke afsendelsen i et andet.
 - **Background Sync vækker faner, ikke beskeder.** `src/sw.ts` lytter på
   `sync`-tag'et og videresender til de åbne faner, som tømmer køen med det
   samme. Service workeren kan ikke selv sende: chatten sender med brugerens

@@ -11,7 +11,9 @@
 -- beskeden fra køen uden risiko for, at den dukker op to gange i chatten.
 --
 -- Afsendelse *med* forbindelse kører uændret gennem den direkte insert-policy;
--- den vej kender intet klient-id, og `written_at` står tom.
+-- den vej kender intet klient-id, og `written_at` står tom -- policyen
+-- håndhæver det nu selv, så en direkte insert ikke kan sætte et vilkårligt
+-- skrivetidspunkt og dermed give en online besked et forfalsket tidsstempel.
 --
 -- `created_at` er fortsat serverens modtagelsestidspunkt og dermed det,
 -- rækkefølgen bygges på. `written_at` er det tidspunkt, brugeren skrev
@@ -20,6 +22,19 @@
 -- nåede frem.
 alter table public.messages
   add column written_at timestamptz;
+
+-- Kun `send_chat_message` må sætte `written_at`: den er security definer og
+-- omgår policyen. Den direkte insert-vej (med forbindelse) må aldrig sætte
+-- den selv, ellers kan et medlem forfalske det viste skrivetidspunkt.
+drop policy "Authenticated can send messages" on public.messages;
+create policy "Authenticated can send messages"
+  on public.messages for insert
+  to authenticated
+  with check (
+    auth.uid() = user_id
+    and (room = 'general' or public.is_admin())
+    and written_at is null
+  );
 
 create function public.send_chat_message(
   p_client_id uuid,

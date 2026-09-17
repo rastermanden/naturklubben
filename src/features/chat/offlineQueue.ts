@@ -166,20 +166,29 @@ export function resumeInterruptedQueue(
 }
 
 /**
- * Den næste besked, der må sendes for den pågældende bruger.
+ * Den næste besked, der må sendes for den pågældende bruger i det rum, man
+ * står i.
  *
- * Køen kan indeholde beskeder fra en tidligere session på samme maskine (en
- * anden bruger, der er logget ud, før køen blev tømt). De må ikke sendes med den
- * nuværende brugers token -- serveren sætter afsenderen til den, der kalder --
- * så de springes over indtil den bruger logger ind igen.
+ * Køen deles i IndexedDB mellem alle rum, men hvert rums instans af
+ * `useChatQueue` tømmer kun sit eget: en besked fra et andet rum (fx skrevet
+ * i admin-chatten, mens man senere står i den almindelige) sendes først, når
+ * man igen er i det rum. Ellers ville den blive leveret til det forkerte
+ * rums cache, og en fejlende besked i ét rum ville blokere et andet.
+ *
+ * Køen kan desuden indeholde beskeder fra en tidligere session på samme
+ * maskine (en anden bruger, der er logget ud, før køen blev tømt). De må ikke
+ * sendes med den nuværende brugers token -- serveren sætter afsenderen til
+ * den, der kalder -- så de springes over indtil den bruger logger ind igen.
  */
 export function nextSendableMessage(
   queue: readonly QueuedMessage[],
   userId: string,
+  room: ChatRoom,
 ): QueuedMessage | undefined {
   return sortQueue(queue).find(
     (entry) =>
       entry.userId === userId &&
+      entry.room === room &&
       entry.status !== 'sending' &&
       entry.attempts < MAX_SEND_ATTEMPTS,
   )

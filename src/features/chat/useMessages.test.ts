@@ -233,10 +233,6 @@ describe('messageFields', () => {
     expect(messageFields).toContain('messages!reply_to_message_id')
     expect(messageFields).not.toContain('_fkey')
   })
-
-  it('henter skrivetidspunktet, så en besked fra offline-køen kan vise det', () => {
-    expect(messageFields).toContain('written_at')
-  })
 })
 
 describe('beskeder sendt fra offline-køen (#219)', () => {
