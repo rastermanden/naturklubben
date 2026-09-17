@@ -374,7 +374,7 @@ authenticated` og `grant execute ... to authenticated`. Se
   IndexedDB-lageret er ét fælles lager for hele appen, men hvert rums
   instans af `useChatQueue` (den almindelige chat og admin-chatten) sender
   kun beskeder skrevet i netop det rum (`nextSendableMessage(queue, userId,
-  room)`). En besked skrevet i admin-chatten uden dækning sendes derfor
+room)`). En besked skrevet i admin-chatten uden dækning sendes derfor
   først, når man igen åbner admin-chatten -- den bliver liggende i køen, men
   sendes eller vises aldrig i den almindelige chats cache, og en fejlende
   besked i ét rum blokerer ikke afsendelsen i et andet.
