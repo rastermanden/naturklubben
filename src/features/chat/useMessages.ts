@@ -544,6 +544,11 @@ export function useMessages(room: ChatRoom, userId: string) {
   }, [queryClient, queryKey, room])
 
   const sendMessage = useMutation({
+    // Uden forbindelse skal `mutationFn` stadig køre -- den er selv den, der
+    // lægger beskeden i køen. Med standard-networkMode ('online') holder
+    // React Query mutationen tilbage, indtil forbindelsen er tilbage, og
+    // beskeden når aldrig køen (og er tabt, hvis appen lukkes imens).
+    networkMode: 'always',
     mutationFn: async (input: SendMessageInput) => {
       // Uden forbindelse kan forespørgslen ikke lykkes, så beskeden ryger i
       // køen med det samme frem for at vente på en fejl.
