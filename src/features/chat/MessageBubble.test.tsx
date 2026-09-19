@@ -560,3 +560,50 @@ describe('MessageBubble kompakt linje', () => {
     expect(time.getAttribute('datetime')).toBe(message.created_at)
   })
 })
+
+describe('MessageBubble og beskeder fra offline-køen (#219)', () => {
+  it('viser skrivetidspunktet, men fortæller hvornår beskeden nåede frem', () => {
+    const writtenAt = '2026-08-23T09:00:00.000Z'
+    render(
+      <MessageBubble
+        message={{ ...message, written_at: writtenAt }}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    const time = screen.getByText('Bo').parentElement!.querySelector('time')!
+    const written = new Date(writtenAt).toLocaleString('da-DK')
+    const received = new Date(message.created_at).toLocaleString('da-DK')
+
+    expect(time.getAttribute('datetime')).toBe(writtenAt)
+    expect(time.getAttribute('title')).toBe(
+      `Skrevet ${written} · modtaget ${received}`,
+    )
+  })
+
+  it('lader en almindelig besked vise serverens tidspunkt som før', () => {
+    render(
+      <MessageBubble
+        message={message}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    const time = screen.getByText('Bo').parentElement!.querySelector('time')!
+
+    expect(time.getAttribute('datetime')).toBe(message.created_at)
+    expect(time.getAttribute('title')).toBe(
+      new Date(message.created_at).toLocaleString('da-DK'),
+    )
+  })
+})

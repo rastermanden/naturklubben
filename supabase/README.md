@@ -15,7 +15,7 @@ deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 | `event_guest_requests`                     | Ansøgninger fra ikke-medlemmer om at deltage i en åben begivenhed (#224): navn, e-mail, evt. besked, antal personer og status. Delvist unikt indeks: én åben (pending/godkendt) ansøgning pr. e-mail pr. begivenhed. Arrangøren svarer selv via en `mailto:`-knap i UI'et (#239), ikke automatisk.                                                                                              | Kun begivenhedens arrangør (`created_by`) og admins kan læse (`can_manage_event_guests`). Ingen klientskrivning: oprettes af `submit_event_guest_request_limited` (service_role), afgøres af `approve_/reject_event_guest_request`. `event_guest_counts` giver alle medlemmer antallet af godkendte gæster.                                                                                                      |
 | `photos`                                   | Metadata og vedvarende optimeringsstatus for uploadede billeder -- selve filerne ligger i Storage (#12/#89).                                                                                                                                                                                                                                                                                    | Autentificerede kan læse. Oprettelse/genforsøg går gennem `upsert_photo_upload`; direkte INSERT/UPDATE/DELETE er revoked, så klienten ikke kan skrive serverejede status/outputfelter eller omgå sikker sletning.                                                                                                                                                                                                |
 | `photo_comments`                           | Kommentarer til et billede (#218): `photo_id`, `user_id`, `body`, `created_at`. Slettes automatisk med billedet (`on delete cascade`). Del af `supabase_realtime`.                                                                                                                                                                                                                              | Autentificerede kan læse. Skrivning kun gennem `create_photo_comment`/`delete_photo_comment` -- direkte INSERT/UPDATE/DELETE er revoked. Sletning kræver forfatteren selv eller en admin. `gallery_albums` (album-forsiden, cover = nyeste optimerede billede pr. `event_id`, NULL = "Uden begivenhed") og `photo_comment_counts` (badge pr. billede) er to security-invoker-views ovenpå photos/photo_comments. |
-| `messages`                                 | Gruppechat, ét fælles rum (#14), med valgfri svarreference (#84) og `mentions` med de nævntes bruger-id'er (#179). Afsenderreferencen nulstilles ved kontosletning. Del af `supabase_realtime`.                                                                                                                                                                                                 | Kun autentificerede kan læse/skrive; afsender kan slette egne, og admins kan slette alle. `mentions` skrives kun i afsenderens eget insert -- UPDATE er revoked, så ingen kan nævne nogen på en andens besked.                                                                                                                                                                                                   |
+| `messages`                                 | Gruppechat, ét fælles rum (#14), med valgfri svarreference (#84) og `mentions` med de nævntes bruger-id'er (#179). Afsenderreferencen nulstilles ved kontosletning. `written_at` er det tidspunkt, brugeren skrev beskeden, når den kom gennem offline-køen (#219); `created_at` er fortsat serverens modtagelsestidspunkt. Del af `supabase_realtime`.                                         | Kun autentificerede kan læse/skrive; afsender kan slette egne, og admins kan slette alle. `mentions` skrives kun i afsenderens eget insert -- UPDATE er revoked, så ingen kan nævne nogen på en andens besked. Beskeder uden forbindelse sendes gennem `send_chat_message`, som selv håndhæver rumreglen, fordi den er `security definer`.                                                                       |
 | `polls` / `poll_options` / `poll_votes`    | Afstemninger i chatten (#217): en afstemning hænger på en helt almindelig besked (`polls.message_id`, unikt), med 2-6 svar og én stemme pr. medlem pr. afstemning (`poll_votes`' primærnøgle er `(poll_id, user_id)` -- en ny stemme erstatter den gamle). Del af `supabase_realtime`.                                                                                                          | Læsning følger beskedens rum, akkurat som `message_reactions`. Ingen klientskrivning på nogen af de tre tabeller -- kun `create_poll`, `cast_poll_vote` og `close_poll` skriver. Kun opretteren eller en admin kan lukke en afstemning.                                                                                                                                                                          |
 | `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` og af de øvrige push-functioner (se "Notifikationer ud over chatten").                                                                                                                                                                                                                                          | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                                                                                                                                                                                                                                                                                      |
 | `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                                                                                                                                                                                                                                                                                 | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                                                                                                                                                                                                                                                                                                    |
@@ -334,6 +334,70 @@ afstemning direkte i chatten. Alt om selve afstemningen ejes af databasen:
   uden adgang til rummet) hverken kan se eller stemme, at en ny stemme
   erstatter den gamle, at kun opretteren eller en admin kan lukke, og at
   ingen af de tre tabeller kan skrives uden om RPC'erne.
+
+## Chat uden forbindelse (#219)
+
+En besked skrevet uden dækning -- typisk i skoven -- fejler ikke længere. Den
+lægges i en lokal kø og sendes, når forbindelsen er tilbage; indtil da står den i
+chatten med "Sendes, når du er online" og knapperne "Prøv igen" og "Slet".
+
+- **Idempotensen ligger i primærnøglen.** Klienten giver den ventende besked et
+  id (`crypto.randomUUID`) og sender den gennem `send_chat_message`, som
+  indsætter rækken med netop det id. En gentagelse -- fordi svaret gik tabt,
+  eller fordi appen blev lukket midt i afsendelsen -- rammer
+  `on conflict on constraint messages_pkey do nothing`, opretter ingen ny række
+  og svarer med den, der allerede ligger der (`inserted = false`). Derfor kan
+  klienten fjerne beskeden fra køen, uden at nogen risikerer at se den to gange.
+  Afsendelse _med_ forbindelse kører uændret gennem den direkte insert-policy.
+- **Tidsstemplerne er delt i to.** `created_at` er serverens
+  modtagelsestidspunkt og er det, rækkefølgen bygges på; `written_at` er det
+  tidspunkt, brugeren skrev beskeden, og er det, boblen viser -- ellers ville en
+  besked fra en hel dag uden dækning se ud, som om den blev skrevet i det
+  øjeblik, den nåede frem. Er de to forskellige, står begge i boblens
+  `title`/`aria-label`. Et ur, der står forkert, kan ikke skrive beskeden ind i
+  fremtiden: RPC'en klipper `written_at` til `now()`.
+- **RPC'en håndhæver selv rumreglen.** Den er `security definer` og omgår
+  dermed insert-policyen, så den tjekker `auth.uid()` og
+  `room = 'general' or public.is_admin()` selv. Afsenderen er altid den, der
+  kalder; der findes ingen parameter for det. Et klient-id, der tilhører en
+  anden, afvises -- svaret ville ellers lække den andens indhold.
+- **Grants skrives af migrationen** (#209): `revoke all ... from public, anon,
+authenticated` og `grant execute ... to authenticated`. Se
+  `20260917090000_chat_offline_queue.sql`.
+- **Køen er ren funktion.** `src/features/chat/offlineQueue.ts` læser og skriver
+  hverken IndexedDB eller netværk, så den kan testes uden browser-API'er.
+  `offlineQueueStore.ts` er IndexedDB-laget, med en Map i hukommelsen som
+  fallback, hvor IndexedDB ikke findes (jsdom, Safari i privat tilstand).
+  `useChatQueue.ts` binder dem sammen og tømmer køen ved app-start, ved
+  `online`-hændelsen og på kommando fra service workeren.
+- **Køen deles på tværs af rum, men tømningen er rum-afgrænset.**
+  IndexedDB-lageret er ét fælles lager for hele appen, men hvert rums
+  instans af `useChatQueue` (den almindelige chat og admin-chatten) sender
+  kun beskeder skrevet i netop det rum (`nextSendableMessage(queue, userId,
+room)`). En besked skrevet i admin-chatten uden dækning sendes derfor
+  først, når man igen åbner admin-chatten -- den bliver liggende i køen, men
+  sendes eller vises aldrig i den almindelige chats cache, og en fejlende
+  besked i ét rum blokerer ikke afsendelsen i et andet.
+- **Background Sync vækker faner, ikke beskeder.** `src/sw.ts` lytter på
+  `sync`-tag'et og videresender til de åbne faner, som tømmer køen med det
+  samme. Service workeren kan ikke selv sende: chatten sender med brugerens
+  Supabase-session, og den ligger i app'ens `localStorage`, som en service worker
+  ikke kan læse. Er der ingen åben fane -- eller ingen Background Sync
+  (Safari og Firefox) -- bliver køen liggende i IndexedDB og sendes ved næste
+  app-start. Det er den aftalte fallback, ikke en fejl.
+- **Testene i CI** dækker kølogikken som rene funktioner
+  (`offlineQueue.test.ts`), lagerets begge grene (`offlineQueueStore.test.ts`,
+  hvor IndexedDB-vejen kører mod en minimal efterligning, fordi jsdom ikke har
+  IndexedDB), komponentens tre tilstande (`PendingMessage.test.tsx`), hændelsen
+  der tømmer køen (`useChatQueue.test.ts`, med netværket mocket), Background
+  Sync-kontrakten (`backgroundSync.test.ts`) og idempotensen databaseret
+  (`supabase/tests/rls/19_chat_offline_queue.sql`).
+- **Det er ikke verificeret i CI:** at en rigtig browser faktisk lægger beskeden
+  i IndexedDB, at `online`-hændelsen kommer som forventet på en telefon, og at
+  browseren vækker service workeren med `sync`, når dækningen vender tilbage.
+  Det kræver en browser med en service worker i drift, og PWA'en bygges kun i
+  produktion. Evidensen for de dele er koden og API-kontrakten -- ikke en kørt
+  ende-til-ende-test.
 
 ## Migrations
 

@@ -144,7 +144,15 @@ export function MessageBubble({
   // samtale. Et tidligere medlem har ingen profil og dermed ingen.
   const pronouns = isFormerMember ? null : displayPronouns(author?.pronouns)
   const isAction = message.message_type === 'action'
-  const fullTimestamp = new Date(message.created_at).toLocaleString('da-DK')
+  // En besked, der har ligget i offline-køen, viser det tidspunkt, den blev
+  // skrevet (#219); rækkefølgen i listen er stadig serverens, altså
+  // modtagelsestidspunktet. Er de to forskellige, står begge i tooltip'en, så
+  // ingen behøver gætte på, hvorfor en besked fra kl. 9 står efter en fra kl. 14.
+  const displayTimestamp = message.written_at ?? message.created_at
+  const fullTimestamp =
+    message.written_at && message.written_at !== message.created_at
+      ? `Skrevet ${new Date(message.written_at).toLocaleString('da-DK')} · modtaget ${new Date(message.created_at).toLocaleString('da-DK')}`
+      : new Date(displayTimestamp).toLocaleString('da-DK')
   const replyName =
     message.reply_to?.user_id === null
       ? 'Tidligere medlem'
@@ -216,12 +224,12 @@ export function MessageBubble({
           {/* Kort form på skærmen, præcist tidspunkt til den, der peger på
               det -- og til skærmlæseren, som ellers ville læse "6 d" op. */}
           <time
-            dateTime={message.created_at}
+            dateTime={displayTimestamp}
             title={fullTimestamp}
             aria-label={fullTimestamp}
             className="opacity-70"
           >
-            {formatRelativeTime(message.created_at)}
+            {formatRelativeTime(displayTimestamp)}
           </time>
           {isMentioned && !isDeleted && (
             <span
