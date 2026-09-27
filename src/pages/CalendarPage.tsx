@@ -12,6 +12,8 @@ import {
   type EventInput,
 } from '../features/calendar/useEvents'
 import { isPastEvent } from '../features/calendar/pastEvents'
+import { useEventPhotoCount } from '../features/calendar/useEventPhotoCount'
+import { eventAlbumPath } from '../features/gallery/gallerySearchParams'
 import {
   dayPosition,
   eventDays,
@@ -198,6 +200,9 @@ function EventDetails({
   onIcal: () => void
 }) {
   const past = isPastEvent(event)
+  // En fejl her skjuler bare linket -- billederne er et ekstra, ikke noget,
+  // dialogen skal vælte over.
+  const photoCount = useEventPhotoCount(event.id).data ?? 0
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useDialogFocus<HTMLDivElement>({
     onClose,
@@ -256,6 +261,15 @@ function EventDetails({
             </div>
           )}
         </dl>
+
+        {photoCount > 0 && (
+          <Link
+            to={eventAlbumPath(event.id)}
+            className="mt-4 inline-flex min-h-11 items-center rounded border border-accent-soft px-4 py-2 text-ink-muted hover:bg-surface-sunken"
+          >
+            Se billeder ({photoCount})
+          </Link>
+        )}
 
         <AttendanceSection
           event={event}

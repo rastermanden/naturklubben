@@ -3,6 +3,11 @@ import type { Photo } from './types'
 /** Album-id for billeder uden en begivenhed -- eget album på forsiden (#218). */
 export const WITHOUT_EVENT_ALBUM = 'without-event'
 
+/** Link til en begivenheds album i galleriet, fx fra kalenderen (#261). */
+export function eventAlbumPath(eventId: string) {
+  return `/billeder?${new URLSearchParams({ album: eventId })}`
+}
+
 export function updateGallerySearchParam(
   current: URLSearchParams,
   key: 'album' | 'photo',
