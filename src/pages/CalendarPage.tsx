@@ -13,6 +13,14 @@ import {
 } from '../features/calendar/useEvents'
 import { isPastEvent } from '../features/calendar/pastEvents'
 import {
+  dayPosition,
+  eventDays,
+  formatEndTime,
+  formatEventTimeShort,
+  formatEventWhen,
+  type DayPosition,
+} from '../features/calendar/eventDays'
+import {
   usePastEvents,
   usePastMonthEvents,
 } from '../features/calendar/usePastEvents'
@@ -33,12 +41,6 @@ const CALENDAR_FEED_URL = supabaseUrl
   ? `${supabaseUrl}/functions/v1/calendar-feed`
   : null
 
-const dateFormatter = new Intl.DateTimeFormat('da-DK', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-})
 const timeFormatter = new Intl.DateTimeFormat('da-DK', {
   hour: '2-digit',
   minute: '2-digit',
@@ -83,6 +85,56 @@ function PublicBadge({ className = '' }: { className?: string }) {
   )
 }
 
+// En flerdagstur tegnes som én bjælke hen over dagene: de indre kanter går
+// helt ud til cellens kant (cellen har p-2), så bjælken kun brydes af
+// gitterlinjen og ved ugeskift.
+const chipShape: Record<DayPosition, string> = {
+  single: 'rounded',
+  first: 'rounded-l -mr-2',
+  middle: '-mx-2',
+  last: 'rounded-r -ml-2',
+}
+
+function MonthEventChip({
+  event,
+  position,
+  onOpen,
+}: {
+  event: CalendarEvent
+  position: DayPosition
+  onOpen: () => void
+}) {
+  const endTime = formatEndTime(event)
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`bg-surface-raised px-2 py-1 text-left text-xs text-ink hover:bg-surface-strong ${chipShape[position]} ${
+        isPastEvent(event) ? 'opacity-60' : ''
+      }`}
+    >
+      {(position === 'single' || position === 'first') && (
+        <>
+          <span className="font-medium">
+            {timeFormatter.format(new Date(event.start_at))}
+          </span>{' '}
+        </>
+      )}
+      {event.title}
+      {position === 'first' && <span aria-hidden="true"> →</span>}
+      {position === 'middle' && (
+        <span className="text-ink-subtle"> (fortsat)</span>
+      )}
+      {position === 'last' && endTime && (
+        <span className="text-ink-subtle"> · til kl. {endTime}</span>
+      )}
+      {event.is_public && position !== 'middle' && position !== 'last' && (
+        <PublicBadge className="ml-1" />
+      )}
+    </button>
+  )
+}
+
 function EventCard({
   event,
   past = false,
@@ -114,7 +166,7 @@ function EventCard({
           {event.is_public && <PublicBadge className="ml-2" />}
         </span>
         <span className="text-sm text-ink-subtle">
-          kl. {timeFormatter.format(start)}
+          {formatEventTimeShort(event)}
           {event.location && ` · ${event.location}`}
         </span>
       </span>
@@ -145,8 +197,6 @@ function EventDetails({
   onDelete: () => void
   onIcal: () => void
 }) {
-  const start = new Date(event.start_at)
-  const end = event.end_at ? new Date(event.end_at) : null
   const past = isPastEvent(event)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useDialogFocus<HTMLDivElement>({
@@ -189,11 +239,7 @@ function EventDetails({
         <dl className="mt-4 grid gap-3 text-ink">
           <div>
             <dt className="text-sm font-medium text-ink-subtle">Tidspunkt</dt>
-            <dd>
-              <span className="capitalize">{dateFormatter.format(start)}</span>
-              {`, kl. ${timeFormatter.format(start)}`}
-              {end && ` – ${timeFormatter.format(end)}`}
-            </dd>
+            <dd>{formatEventWhen(event)}</dd>
           </div>
           {event.location && (
             <div>
@@ -336,14 +382,25 @@ function CalendarPage() {
   const pastEventsQuery = usePastEvents(showPast)
   const pastEvents = pastEventsQuery.data?.pages.flat() ?? []
 
+  // En flerdagstur står på hver af sine dage (#259). En tur, der er i gang,
+  // kommer både med månedens tidligere dage og med de kommende -- én gang.
   const eventsByDay = useMemo(() => {
-    const grouped = new Map<string, CalendarEvent[]>()
+    const unique = new Map<string, CalendarEvent>()
     for (const event of [
       ...(pastMonthQuery.data ?? []),
       ...(eventsQuery.data ?? []),
     ]) {
-      const key = dateKey(new Date(event.start_at))
-      grouped.set(key, [...(grouped.get(key) ?? []), event])
+      unique.set(event.id, event)
+    }
+    const grouped = new Map<string, CalendarEvent[]>()
+    const byStart = [...unique.values()].sort((a, b) =>
+      a.start_at.localeCompare(b.start_at),
+    )
+    for (const event of byStart) {
+      for (const day of eventDays(event)) {
+        const key = dateKey(day)
+        grouped.set(key, [...(grouped.get(key) ?? []), event])
+      }
     }
     return grouped
   }, [pastMonthQuery.data, eventsQuery.data])
@@ -537,25 +594,15 @@ function CalendarPage() {
                       </span>
                       <div className="mt-1 flex flex-col gap-1">
                         {(eventsByDay.get(dateKey(date)) ?? []).map((event) => (
-                          <button
+                          <MonthEventChip
                             key={event.id}
-                            type="button"
-                            onClick={() => {
+                            event={event}
+                            position={dayPosition(event, date)}
+                            onOpen={() => {
                               setMutationError(null)
                               setSelectedEvent(event)
                             }}
-                            className={`rounded bg-surface-raised px-2 py-1 text-left text-xs text-ink hover:bg-surface-strong ${
-                              isPastEvent(event) ? 'opacity-60' : ''
-                            }`}
-                          >
-                            <span className="font-medium">
-                              {timeFormatter.format(new Date(event.start_at))}
-                            </span>{' '}
-                            {event.title}
-                            {event.is_public && (
-                              <PublicBadge className="ml-1" />
-                            )}
-                          </button>
+                          />
                         ))}
                       </div>
                     </>

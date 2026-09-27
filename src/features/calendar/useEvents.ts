@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
 import { capRaised } from './waitlist'
+import { notOverFilter } from './eventDays'
 
 export interface CalendarEvent {
   id: string
@@ -36,7 +37,8 @@ async function fetchUpcomingEvents(): Promise<CalendarEvent[]> {
   const { data, error } = await supabase
     .from('events')
     .select(eventFields)
-    .gte('start_at', startOfToday.toISOString())
+    // En flerdagstur, der er i gang, er stadig kommende (#259).
+    .or(notOverFilter(startOfToday))
     .order('start_at', { ascending: true })
 
   if (error) throw error

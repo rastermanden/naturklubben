@@ -25,9 +25,11 @@ const PUBLIC_EVENT = {
 }
 
 const selectedColumns: string[] = []
+const timeFilters: string[] = []
 
 beforeEach(() => {
   selectedColumns.length = 0
+  timeFilters.length = 0
   supabaseMocks.functions.invoke.mockResolvedValue({
     data: { accepted: true },
     error: null,
@@ -38,9 +40,13 @@ beforeEach(() => {
       select: (columns: string) => {
         selectedColumns.push(columns)
         return {
-          gte: () => ({
-            order: () => Promise.resolve({ data: [PUBLIC_EVENT], error: null }),
-          }),
+          or: (filter: string) => {
+            timeFilters.push(filter)
+            return {
+              order: () =>
+                Promise.resolve({ data: [PUBLIC_EVENT], error: null }),
+            }
+          },
         }
       },
     }
@@ -82,6 +88,12 @@ describe('PublicCalendarPage', () => {
       'id, title, description, location, start_at, end_at',
     ])
     expect(selectedColumns[0]).not.toContain('created_by')
+    // En igangværende flerdagstur er stadig med (#259): filtret ser på
+    // slutningen, ikke kun starten.
+    expect(timeFilters).toHaveLength(1)
+    expect(timeFilters[0]).toMatch(
+      /^end_at\.gt\."[^"]+",start_at\.gte\."[^"]+"$/,
+    )
     // Uden login peger siden på login, ikke på medlemskalenderen.
     expect(screen.getByRole('link', { name: 'Log ind' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Til medlemskalenderen' })).toBe(

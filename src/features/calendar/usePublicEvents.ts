@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
+import { notOverFilter } from './eventDays'
 
 /**
  * En offentlig begivenhed, som viewet `public_events` udleverer til anon:
@@ -25,7 +26,9 @@ export async function fetchUpcomingPublicEvents(): Promise<PublicEvent[]> {
   const { data, error } = await supabase
     .from('public_events')
     .select(publicEventFields)
-    .gte('start_at', startOfToday.toISOString())
+    // En flerdagstur, der er i gang, kan man stadig søge om (#259) --
+    // databasen tager imod ansøgninger, til coalesce(end_at, start_at) er gået.
+    .or(notOverFilter(startOfToday))
     .order('start_at', { ascending: true })
 
   if (error) throw error
