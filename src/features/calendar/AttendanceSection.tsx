@@ -233,11 +233,18 @@ export function AttendanceSection({
   event,
   userId,
   canManage,
+  readOnly = false,
 }: {
   event: CalendarEvent
   userId: string
   /** Arrangøren og admins: må se afbud og hvem der mangler at svare. */
   canManage: boolean
+  /**
+   * Begivenheden er afholdt (#257): deltagerne vises, men man kan hverken
+   * melde sig til, fra eller på ventelisten, og der er ingen at minde om
+   * at svare.
+   */
+  readOnly?: boolean
 }) {
   const profilesQuery = useProfilesMap()
   const { attendanceQuery, respond } = useEventAttendance(
@@ -280,39 +287,41 @@ export function AttendanceSection({
             </span>
           )}
         </h3>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              respond.mutate(ownStatus === 'declined' ? 'none' : 'declined')
-            }
-            disabled={attendanceQuery.isLoading || respond.isPending}
-            className="min-h-11 rounded border border-accent-soft px-4 py-2 font-medium text-ink-muted hover:bg-surface-sunken disabled:opacity-60"
-          >
-            {ownStatus === 'declined' ? 'Fortryd afbud' : 'Kan ikke'}
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              respond.mutate(
+        {!readOnly && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                respond.mutate(ownStatus === 'declined' ? 'none' : 'declined')
+              }
+              disabled={attendanceQuery.isLoading || respond.isPending}
+              className="min-h-11 rounded border border-accent-soft px-4 py-2 font-medium text-ink-muted hover:bg-surface-sunken disabled:opacity-60"
+            >
+              {ownStatus === 'declined' ? 'Fortryd afbud' : 'Kan ikke'}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                respond.mutate(
+                  ownStatus === 'attending' || ownStatus === 'waitlisted'
+                    ? 'none'
+                    : 'attending',
+                )
+              }
+              disabled={attendanceQuery.isLoading || respond.isPending}
+              className={`min-h-11 rounded px-4 py-2 font-medium disabled:opacity-60 ${
                 ownStatus === 'attending' || ownStatus === 'waitlisted'
-                  ? 'none'
-                  : 'attending',
-              )
-            }
-            disabled={attendanceQuery.isLoading || respond.isPending}
-            className={`min-h-11 rounded px-4 py-2 font-medium disabled:opacity-60 ${
-              ownStatus === 'attending' || ownStatus === 'waitlisted'
-                ? 'border border-accent-soft text-ink-muted hover:bg-surface-sunken'
-                : 'bg-accent text-white hover:bg-accent-hover'
-            }`}
-          >
-            {primaryLabel}
-          </button>
-        </div>
+                  ? 'border border-accent-soft text-ink-muted hover:bg-surface-sunken'
+                  : 'bg-accent text-white hover:bg-accent-hover'
+              }`}
+            >
+              {primaryLabel}
+            </button>
+          </div>
+        )}
       </div>
 
-      {ownStatus === 'waitlisted' && ownPosition !== null && (
+      {!readOnly && ownStatus === 'waitlisted' && ownPosition !== null && (
         <p role="status" className="mt-3 text-sm text-ink-body">
           Du står som nr. {ownPosition} på ventelisten. Du rykker automatisk op
           og får besked i chatten, når der bliver en plads.
@@ -353,7 +362,7 @@ export function AttendanceSection({
 
       {attendanceQuery.data && attending.length === 0 && (
         <p className="mt-3 text-sm text-ink-subtle">
-          Ingen har tilmeldt sig endnu.
+          {readOnly ? 'Ingen var tilmeldt.' : 'Ingen har tilmeldt sig endnu.'}
         </p>
       )}
 
@@ -395,7 +404,7 @@ export function AttendanceSection({
         </>
       )}
 
-      {canManage && (
+      {canManage && !readOnly && (
         <MissingResponses
           event={event}
           userId={userId}
