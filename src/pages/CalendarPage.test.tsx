@@ -22,11 +22,20 @@ const EVENT: CalendarEvent = {
   title: 'Svampetur i Rude Skov',
   description: null,
   location: 'P-pladsen',
-  start_at: '2026-09-14T08:00:00.000Z',
+  // Langt ude i fremtiden, så testen ikke skifter opførsel, når datoen
+  // passerer -- tidligere begivenheder vises anderledes (#257).
+  start_at: '2099-09-14T08:00:00.000Z',
   end_at: null,
   created_by: 'member-id',
   is_public: false,
   max_participants: null,
+}
+
+const PAST_EVENT: CalendarEvent = {
+  ...EVENT,
+  id: '00000000-0000-0000-0000-0000000000e2',
+  title: 'Fuglekig ved Tissø',
+  start_at: '2020-05-03T06:00:00.000Z',
 }
 
 const mocks = vi.hoisted(() => ({
@@ -42,6 +51,17 @@ const mocks = vi.hoisted(() => ({
   createEvent: { mutateAsync: vi.fn(), isPending: false },
   updateEvent: { mutateAsync: vi.fn(), isPending: false },
   deleteEvent: { mutateAsync: vi.fn(), isPending: false },
+  pastEventsEnabled: vi.fn(),
+  pastEventsQuery: {
+    data: undefined as { pages: CalendarEvent[][] } | undefined,
+    isLoading: false,
+    isError: false,
+    isFetchNextPageError: false,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: vi.fn(),
+    refetch: vi.fn(),
+  },
 }))
 
 vi.mock('../features/calendar/useEvents', () => ({
@@ -52,6 +72,13 @@ vi.mock('../features/calendar/useEvents', () => ({
     deleteEvent: mocks.deleteEvent,
   }),
 }))
+vi.mock('../features/calendar/usePastEvents', () => ({
+  usePastEvents: (enabled: boolean) => {
+    mocks.pastEventsEnabled(enabled)
+    return mocks.pastEventsQuery
+  },
+  usePastMonthEvents: () => ({ data: [], isError: false, refetch: vi.fn() }),
+}))
 vi.mock('../features/auth/useAuth', () => ({
   useAuth: () => ({ session: { user: { id: 'member-id' } } }),
 }))
@@ -61,10 +88,11 @@ vi.mock('../features/admin/useIsAdmin', () => ({
 // Tilmelding og opgaver har deres egne hooks mod Supabase; her handler det
 // kun om, at dialogen åbner fra URL'en.
 vi.mock('../features/calendar/AttendanceSection', () => ({
-  AttendanceSection: () => null,
+  AttendanceSection: ({ readOnly }: { readOnly?: boolean }) =>
+    readOnly ? <p>Tilmelding lukket</p> : <p>Tilmelding åben</p>,
 }))
 vi.mock('../features/calendar/EventTasksSection', () => ({
-  EventTasksSection: () => null,
+  EventTasksSection: () => <p>Opgaveliste</p>,
 }))
 vi.mock('../features/calendar/GuestRequestsSection', () => ({
   GuestRequestsSection: () => null,
@@ -124,6 +152,10 @@ afterEach(() => {
   mocks.createEvent.mutateAsync.mockReset()
   mocks.updateEvent.mutateAsync.mockReset()
   mocks.deleteEvent.mutateAsync.mockReset()
+  mocks.pastEventsEnabled.mockReset()
+  mocks.pastEventsQuery.data = undefined
+  mocks.pastEventsQuery.hasNextPage = false
+  mocks.pastEventsQuery.fetchNextPage.mockReset()
 })
 
 describe('CalendarPage: /kalender/<id>', () => {
@@ -275,5 +307,81 @@ describe('CalendarPage: redigering af en eksisterende begivenhed', () => {
       event: EVENT,
       input: expect.objectContaining({ is_public: true }),
     })
+  })
+})
+
+describe('CalendarPage: tidligere begivenheder (#257)', () => {
+  it('henter først de tidligere begivenheder, når man beder om dem', () => {
+    mocks.eventsQuery.data = [EVENT]
+    renderAt('/kalender')
+
+    expect(mocks.pastEventsEnabled).toHaveBeenLastCalledWith(false)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Vis tidligere begivenheder' }),
+    )
+    expect(mocks.pastEventsEnabled).toHaveBeenLastCalledWith(true)
+  })
+
+  it('viser de tidligere begivenheder og kan indlæse flere', () => {
+    mocks.eventsQuery.data = [EVENT]
+    mocks.pastEventsQuery.data = { pages: [[PAST_EVENT]] }
+    mocks.pastEventsQuery.hasNextPage = true
+    renderAt('/kalender')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Vis tidligere begivenheder' }),
+    )
+    const section = screen.getByRole('region', {
+      name: 'Tidligere begivenheder',
+    })
+    expect(section.textContent).toContain('Fuglekig ved Tissø')
+
+    fireEvent.click(
+      within(section).getByRole('button', { name: 'Indlæs flere' }),
+    )
+    expect(mocks.pastEventsQuery.fetchNextPage).toHaveBeenCalled()
+  })
+
+  it('siger det, når der ingen tidligere begivenheder er', () => {
+    mocks.eventsQuery.data = [EVENT]
+    mocks.pastEventsQuery.data = { pages: [[]] }
+    renderAt('/kalender')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Vis tidligere begivenheder' }),
+    )
+    expect(
+      screen.getByText('Der er ingen tidligere begivenheder.'),
+    ).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Indlæs flere' })).toBeNull()
+  })
+
+  it('åbner en tidligere begivenhed som afholdt, uden tilmelding og opgaver', () => {
+    mocks.eventsQuery.data = [EVENT]
+    mocks.pastEventsQuery.data = { pages: [[PAST_EVENT]] }
+    renderAt('/kalender')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Vis tidligere begivenheder' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Fuglekig ved Tissø/ }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('Afholdt')).toBeTruthy()
+    expect(within(dialog).getByText('Tilmelding lukket')).toBeTruthy()
+    expect(within(dialog).queryByText('Opgaveliste')).toBeNull()
+    expect(
+      within(dialog).queryByRole('button', { name: 'Tilføj til kalender' }),
+    ).toBeNull()
+  })
+
+  it('åbner en kommende begivenhed med tilmelding og opgaver', async () => {
+    mocks.eventsQuery.data = [EVENT]
+    renderAt(`/kalender/${EVENT.id}`)
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByText('Afholdt')).toBeNull()
+    expect(within(dialog).getByText('Tilmelding åben')).toBeTruthy()
+    expect(within(dialog).getByText('Opgaveliste')).toBeTruthy()
   })
 })
