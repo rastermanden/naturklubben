@@ -51,6 +51,7 @@ const mocks = vi.hoisted(() => ({
   createEvent: { mutateAsync: vi.fn(), isPending: false },
   updateEvent: { mutateAsync: vi.fn(), isPending: false },
   deleteEvent: { mutateAsync: vi.fn(), isPending: false },
+  photoCount: { data: undefined as number | undefined },
   pastEventsEnabled: vi.fn(),
   pastEventsQuery: {
     data: undefined as { pages: CalendarEvent[][] } | undefined,
@@ -78,6 +79,9 @@ vi.mock('../features/calendar/usePastEvents', () => ({
     return mocks.pastEventsQuery
   },
   usePastMonthEvents: () => ({ data: [], isError: false, refetch: vi.fn() }),
+}))
+vi.mock('../features/calendar/useEventPhotoCount', () => ({
+  useEventPhotoCount: () => mocks.photoCount,
 }))
 vi.mock('../features/auth/useAuth', () => ({
   useAuth: () => ({ session: { user: { id: 'member-id' } } }),
@@ -152,6 +156,7 @@ afterEach(() => {
   mocks.createEvent.mutateAsync.mockReset()
   mocks.updateEvent.mutateAsync.mockReset()
   mocks.deleteEvent.mutateAsync.mockReset()
+  mocks.photoCount.data = undefined
   mocks.pastEventsEnabled.mockReset()
   mocks.pastEventsQuery.data = undefined
   mocks.pastEventsQuery.hasNextPage = false
@@ -416,5 +421,37 @@ describe('CalendarPage: flerdagsbegivenheder (#259)', () => {
     expect(screen.getByRole('dialog').textContent).toMatch(
       /kl\. 16\.00 – \S+ den 12\. .*, kl\. 14\.00/,
     )
+  })
+})
+
+describe('CalendarPage: link til billederne (#261)', () => {
+  it('linker til begivenhedens album, når der er billeder', async () => {
+    mocks.eventsQuery.data = [EVENT]
+    mocks.photoCount.data = 12
+    renderAt(`/kalender/${EVENT.id}`)
+
+    const link = within(await screen.findByRole('dialog')).getByRole('link', {
+      name: 'Se billeder (12)',
+    })
+    expect(link.getAttribute('href')).toBe(`/billeder?album=${EVENT.id}`)
+  })
+
+  it('viser intet link uden billeder, eller mens tallet hentes', async () => {
+    mocks.eventsQuery.data = [EVENT]
+    mocks.photoCount.data = 0
+    renderAt(`/kalender/${EVENT.id}`)
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).queryByRole('link', { name: /Se billeder/ }),
+    ).toBeNull()
+
+    cleanup()
+    mocks.photoCount.data = undefined
+    renderAt(`/kalender/${EVENT.id}`)
+    expect(
+      within(await screen.findByRole('dialog')).queryByRole('link', {
+        name: /Se billeder/,
+      }),
+    ).toBeNull()
   })
 })
