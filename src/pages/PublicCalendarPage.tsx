@@ -2,25 +2,11 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth'
 import { GuestRequestForm } from '../features/calendar/GuestRequestForm'
+import { formatEventWhen } from '../features/calendar/eventDays'
 import {
   usePublicEvents,
   type PublicEvent,
 } from '../features/calendar/usePublicEvents'
-
-const dateFormatter = new Intl.DateTimeFormat('da-DK', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-})
-const timeFormatter = new Intl.DateTimeFormat('da-DK', {
-  hour: '2-digit',
-  minute: '2-digit',
-})
-
-function capitalize(text: string) {
-  return text.charAt(0).toUpperCase() + text.slice(1)
-}
 
 function PublicEventCard({
   event,
@@ -30,7 +16,6 @@ function PublicEventCard({
   onApply: () => void
 }) {
   const start = new Date(event.start_at)
-  const end = event.end_at ? new Date(event.end_at) : null
   const headingId = `public-event-${event.id}`
 
   return (
@@ -51,9 +36,7 @@ function PublicEventCard({
             {event.title}
           </h2>
           <p className="mt-1 text-sm text-ink-subtle">
-            {capitalize(dateFormatter.format(start))}
-            {`, kl. ${timeFormatter.format(start)}`}
-            {end && ` – ${timeFormatter.format(end)}`}
+            {formatEventWhen(event)}
             {event.location && ` · ${event.location}`}
           </p>
           {event.description && (

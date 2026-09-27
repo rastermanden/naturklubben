@@ -1,8 +1,10 @@
+import { lastDay } from './eventDays'
+
 /**
  * Grænsen mellem kommende og tidligere begivenheder (#257): midnat i dag,
  * lokal tid -- samme grænse som listen over kommende begivenheder bruger. En
- * tur tidligere i dag er altså stadig "kommende", så man kan nå at melde sig
- * til eller fra, til dagen er omme.
+ * tur, der slutter i dag, er altså stadig "kommende", så man kan nå at melde
+ * sig til eller fra, til dagen er omme.
  */
 export function startOfDay(now: Date): Date {
   const start = new Date(now)
@@ -10,11 +12,15 @@ export function startOfDay(now: Date): Date {
   return start
 }
 
+/**
+ * Afholdt, når begivenhedens sidste dag ligger før i dag. En flerdagstur, der
+ * startede i går og slutter i morgen, er altså stadig kommende (#259).
+ */
 export function isPastEvent(
-  event: { start_at: string },
+  event: { start_at: string; end_at: string | null },
   now: Date = new Date(),
 ): boolean {
-  return new Date(event.start_at) < startOfDay(now)
+  return lastDay(event) < startOfDay(now)
 }
 
 /**

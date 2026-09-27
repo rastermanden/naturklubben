@@ -2,16 +2,21 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
 import { eventFields, type CalendarEvent } from './useEvents'
 import { pastRangeOfMonth, startOfDay } from './pastEvents'
+import { notOverFilter, overEndFilter } from './eventDays'
 
 /** Så mange tidligere begivenheder hentes ad gangen i listen. */
 export const PAST_EVENTS_PAGE_SIZE = 20
 
 async function fetchPastEventsPage(page: number): Promise<CalendarEvent[]> {
   const from = page * PAST_EVENTS_PAGE_SIZE
+  const today = startOfDay(new Date())
   const { data, error } = await supabase
     .from('events')
     .select(eventFields)
-    .lt('start_at', startOfDay(new Date()).toISOString())
+    // Forbi = sluttede før i dag; en igangværende flerdagstur står under de
+    // kommende (#259).
+    .lt('start_at', today.toISOString())
+    .or(overEndFilter(today))
     .order('start_at', { ascending: false })
     .order('id', { ascending: false })
     .range(from, from + PAST_EVENTS_PAGE_SIZE - 1)
@@ -36,7 +41,7 @@ export function usePastEvents(enabled: boolean) {
 }
 
 /**
- * Begivenhederne i den del af `month`, der ligger før i dag -- til
+ * Begivenhederne, der optager en dag i den del af `month`, der ligger før i dag -- til
  * månedsvisningen, når man bladrer tilbage. Tom (og intet kald) for en
  * måned, der ligger helt efter i dag.
  */
@@ -55,8 +60,10 @@ export function usePastMonthEvents(month: Date) {
       const { data, error } = await supabase
         .from('events')
         .select(eventFields)
-        .gte('start_at', range!.from.toISOString())
+        // Også en flerdagstur, der startede før måneden og varer ind i den
+        // (#259).
         .lt('start_at', range!.to.toISOString())
+        .or(notOverFilter(range!.from))
         .order('start_at', { ascending: true })
 
       if (error) throw error

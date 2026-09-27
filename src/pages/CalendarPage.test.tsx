@@ -385,3 +385,36 @@ describe('CalendarPage: tidligere begivenheder (#257)', () => {
     expect(within(dialog).getByText('Opgaveliste')).toBeTruthy()
   })
 })
+
+describe('CalendarPage: flerdagsbegivenheder (#259)', () => {
+  it('viser en weekendtur på alle tre dage i månedsvisningen', () => {
+    const today = new Date()
+    const month = today.getMonth()
+    const year = today.getFullYear()
+    mocks.eventsQuery.data = [
+      {
+        ...EVENT,
+        id: '00000000-0000-0000-0000-0000000000e3',
+        title: 'Weekend i Mols Bjerge',
+        start_at: new Date(year, month, 10, 16, 0).toISOString(),
+        end_at: new Date(year, month, 12, 14, 0).toISOString(),
+      },
+    ]
+    renderAt('/kalender')
+
+    const monthView = screen.getByRole('region', { name: 'Månedsvisning' })
+    const chips = within(monthView).getAllByRole('button', {
+      name: /Weekend i Mols Bjerge/,
+    })
+    expect(chips).toHaveLength(3)
+    expect(chips[0]!.textContent).toMatch(/^16.00 Weekend i Mols Bjerge/)
+    expect(chips[1]!.textContent).toContain('(fortsat)')
+    expect(chips[2]!.textContent).toContain('til kl. 14.00')
+
+    // Detaljerne skriver slutdatoen ud, ikke kun klokkeslættet.
+    fireEvent.click(chips[1]!)
+    expect(screen.getByRole('dialog').textContent).toMatch(
+      /kl\. 16\.00 – \S+ den 12\. .*, kl\. 14\.00/,
+    )
+  })
+})
