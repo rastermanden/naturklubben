@@ -3,8 +3,8 @@
 [![Deploy to GitHub Pages](https://github.com/rastermanden/naturklubben/actions/workflows/deploy.yml/badge.svg)](https://github.com/rastermanden/naturklubben/actions/workflows/deploy.yml)
 
 Medlemsapp for Naturklubben — hero-forside, aktivitetsside, og bag login: kalender,
-billedgalleri og gruppechat. Se GitHub-issue #1 for den fulde plan og `CLAUDE.md` for
-projektets udviklingskonventioner.
+billedgalleri og gruppechat. Se GitHub-issue #1 for den fulde plan og `CLAUDE.md`
+for projektets udviklingskonventioner. `AGENTS.md` er samme fil.
 
 ## Teknologi
 
@@ -73,7 +73,7 @@ fragment i behold. Hvilke URL'er Supabase overhovedet må sende folk hen til, st
 - [`docs/kodegennemgang-2026-08-23.md`](docs/kodegennemgang-2026-08-23.md) — gennemgang af
   hele appen: arkitektur, styrker, fund og roadmap. Fundene er oprettet som issues med
   labels `blocker`, `risiko`, `friktion` og `finish`.
-- `CLAUDE.md` — projektets udviklingskonventioner.
+- `CLAUDE.md` — projektets udviklingskonventioner. `AGENTS.md` peger på samme fil.
 - `supabase/README.md` — backend-opsætning, nøgler og auth-URL'er.
 
 ## Mappestruktur

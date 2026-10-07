@@ -1,4 +1,7 @@
-# Naturklubben — projektinstruktioner til Claude
+# Naturklubben — projektinstruktioner
+
+`AGENTS.md` er et symlink til denne fil. Ret kun her. Claude Code læser `CLAUDE.md`,
+og de andre coding agents læser `AGENTS.md`, så begge får samme tekst.
 
 Medlemsapp for Naturklubben. Frontend hostes statisk på GitHub Pages, backend er Supabase
 (Postgres, Auth, Storage, Realtime, Edge Functions). Se GitHub-issue #1 for det fulde
