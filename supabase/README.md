@@ -1,34 +1,42 @@
 # Supabase
 
-Se `CLAUDE.md` i repo-roden for de overordnede spilleregler: migrations skrives og
+Se `AGENTS.md` i repo-roden for de overordnede spilleregler: migrations skrives og
 committes som SQL-filer her, valideres via Supabase Preview Branching på PR'en, og
 deployes automatisk til produktion ved merge til `main` -- aldrig manuelt.
 
 ## Skema
 
-| Tabel                                      | Formål                                                                                                                                                                                                                                                  | RLS                                                                                                                                                                                                                 |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`                                 | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag, en kortvarig serverstyret slettereservation, `chat_notification_preference` (#179) og `feature_notifications_enabled` (#184).                  | Alle autentificerede kan læse; ejeren kan kun opdatere profilfelter uden en aktiv slettereservation. `is_admin` ændres via `set_admin_role()`.                                                                      |
-| `activities`                               | Offentligt indhold om klubbens aktiviteter (#10).                                                                                                                                                                                                       | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                                                                                                |
-| `events`                                   | Kalenderbegivenheder (#11). Opretterreferencen nulstilles ved kontosletning, så fælles historik bevares anonymt.                                                                                                                                        | Autentificerede kan læse/oprette; kun ejer kan opdatere/slette egne, mens admins kan slette alle. Anon kan kun læse titel, tid og sted via kolonnegrants; `calendar_feed_events` samler netop de offentlige felter. |
-| `photos`                                   | Metadata og vedvarende optimeringsstatus for uploadede billeder -- selve filerne ligger i Storage (#12/#89).                                                                                                                                            | Autentificerede kan læse. Oprettelse/genforsøg går gennem `upsert_photo_upload`; direkte INSERT/UPDATE/DELETE er revoked, så klienten ikke kan skrive serverejede status/outputfelter eller omgå sikker sletning.   |
-| `messages`                                 | Gruppechat, ét fælles rum (#14), med valgfri svarreference (#84) og `mentions` med de nævntes bruger-id'er (#179). Afsenderreferencen nulstilles ved kontosletning. Del af `supabase_realtime`.                                                         | Kun autentificerede kan læse/skrive; afsender kan slette egne, og admins kan slette alle. `mentions` skrives kun i afsenderens eget insert -- UPDATE er revoked, så ingen kan nævne nogen på en andens besked.      |
-| `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` til at sende notifikationer om nye chatbeskeder.                                                                                                                        | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                                                                                         |
-| `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                                                                                                                                         | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                                                                                                       |
-| `admin_role_changes`                       | Uforanderligt revisionsspor med aktør, medlem, gammel/ny rolle og tidspunkt.                                                                                                                                                                            | Kun admins kan læse; ingen klientrolle kan indsætte, ændre eller slette.                                                                                                                                            |
-| `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                                                                                                                                             | Ingen offentlig insert-policy; kun den service-role-beskyttede submit-RPC kan oprette, og kun admins kan læse/behandle.                                                                                             |
-| `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                                                                                                                                              | Ingen policies og ingen grants til `anon`/`authenticated` -- kun `probation-notifications` med Secret key kan læse rækken.                                                                                          |
-| `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                                                                                                                                               | Ingen policies og ingen grants til `anon`/`authenticated` -- kun Edge Functionens Secret key kan læse rækken.                                                                                                       |
-| `feature_announcements`                    | Nyheder om nye funktioner i appen (#184). Rækkerne skrives af migrationer; `push_*`-felterne er outboxen for udsendelsen.                                                                                                                               | Medlemmer kan læse udgivne nyheder gennem en kolonnegrant uden `push_*`. Ingen klientskrivning -- kun `claim_/complete_feature_announcement_push` (service_role) rører status.                                      |
-| `feature_announcement_push_deliveries`     | Hvilke abonnementer der allerede har fået push om en given nyhed, så et genforsøg kun rammer dem, der mangler den. Rækkerne følger abonnementet og forsvinder med det.                                                                                  | Ingen policies og ingen grants til `anon`/`authenticated` -- kun `feature-announcements` med Secret key rører loggen.                                                                                               |
-| `feature_announcement_reads`               | Hvilke nyheder det enkelte medlem har set, så banneret ved, hvornår det skal tie.                                                                                                                                                                       | Kun ejeren kan læse, oprette og fjerne sine egne rækker. UPDATE er revoked -- `read_at` er et tidspunkt, ikke et felt, der redigeres.                                                                               |
-| `badges`                                   | Badge-kataloget (#159): navn, uploadet billede, den runde beskæring (`crop_x`/`crop_y`/`crop_size`), fysiske mål og status på trykfilen.                                                                                                                | Alle medlemmer kan læse; kun admins kan skrive. `print_*` er revoked fra kolonnegrant'en og ejes af `render-badge-print` gennem `claim_badge_print`/`complete_badge_print`.                                         |
-| `badge_nominations`                        | Indstillinger af ét medlem til én badge, med begrundelse. Delvist unikt indeks tillader kun én åben indstilling pr. (badge, medlem).                                                                                                                    | Admins og den, der selv har indstillet, kan læse. INSERT/UPDATE/DELETE er revoked -- kun `nominate_member_for_badge` og `vote_on_badge_nomination` skriver.                                                         |
-| `badge_nomination_approvals`               | Én række pr. admin-stemme (`approve`/`reject`) med valgfri kommentar. Unik på (indstilling, admin).                                                                                                                                                     | Samme læseregel som indstillingen. Ingen klientskrivning.                                                                                                                                                           |
-| `member_badges`                            | De tildelte badges. `nominated_by`/`reason` kopieres med, så vitrinen kan vise dem uden at åbne indstillingerne for alle.                                                                                                                               | Alle medlemmer kan læse. Ingen klientskrivning -- tildeling sker kun i `vote_on_badge_nomination`.                                                                                                                  |
-| `badge_productions`                        | Produktionsopgaven på det fysiske badge, med `due_at` = tildeling + 24 timer.                                                                                                                                                                           | Kun admins kan læse. Skrivning gennem `claim_badge_production`/`complete_badge_production`.                                                                                                                         |
-| `game_scores`                              | Resultater fra spil-sektionen (#202), ét spil pr. række: `tetris` og `kaper`. `game` afgrænser listen, og et check-constraint pr. spil holder point op mod `lines` (rækker i Tetris, træk i Kaptajn Kaper), så et umuligt tal ikke kan lande på listen. | Alle medlemmer kan læse -- resultatlisten er hele pointen. Man kan kun indsætte sit eget resultat, UPDATE er revoked (et resultat rettes ikke bagefter), og både spilleren selv og admins kan slette.               |
-| `private.probation_submission_attempts`    | Kortlivede HMAC-hashes til server-side rate limiting; indeholder aldrig rå IP, subnet eller e-mail.                                                                                                                                                     | `private` eksponeres ikke gennem Data API'et; ingen grants til `anon`/`authenticated`.                                                                                                                              |
+| Tabel                                      | Formål                                                                                                                                                                                                                                                                                                                                                                                          | RLS                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profiles`                                 | 1:1 med `auth.users`. Oprettes automatisk ved signup via `handle_new_user`-trigger. Har `is_admin`-flag, en kortvarig serverstyret slettereservation, `chat_notification_preference` (#179) og `feature_notifications_enabled` (#184).                                                                                                                                                          | Alle autentificerede kan læse; ejeren kan kun opdatere profilfelter uden en aktiv slettereservation. `is_admin` ændres via `set_admin_role()`.                                                                                                                                                                                                                                                                   |
+| `activities`                               | Offentligt indhold om klubbens aktiviteter (#10).                                                                                                                                                                                                                                                                                                                                               | Alle (også anonyme) kan læse; kun admins kan skrive.                                                                                                                                                                                                                                                                                                                                                             |
+| `events`                                   | Kalenderbegivenheder (#11) med valgfrit pladsloft `max_participants` (#222). Opretterreferencen nulstilles ved kontosletning, så fælles historik bevares anonymt. `is_public` (#224) åbner begivenheden for ikke-medlemmer. `notification_function_url` sættes af en trigger ud fra requestets host og bruges af påmindelsen dagen før (#216).                                                  | Autentificerede kan læse/oprette; ejer og admins kan opdatere, ejer og admins kan slette. Anon ser kun rækker med `is_public` og kun titel, beskrivelse, tid og sted via kolonnegrants -- aldrig `created_by`. `calendar_feed_events` og `public_events` er de to anon-views.                                                                                                                                    |
+| `event_attendance`                         | Medlemmernes svar på en begivenhed: `attending`, `waitlisted` eller `declined` (#222). Ventelisten står i `created_at`-rækkefølge.                                                                                                                                                                                                                                                              | Alle medlemmer kan læse tilmeldinger og venteliste; et afbud ser kun den, der meldte det, arrangøren og admins. INSERT/UPDATE/DELETE er revoked -- kun `respond_to_event` og `promote_event_waitlist` skriver, bag en advisory lock pr. begivenhed, så loftet ikke kan omgås.                                                                                                                                    |
+| `event_guest_requests`                     | Ansøgninger fra ikke-medlemmer om at deltage i en åben begivenhed (#224): navn, e-mail, evt. besked, antal personer og status. Delvist unikt indeks: én åben (pending/godkendt) ansøgning pr. e-mail pr. begivenhed. Arrangøren svarer selv via en `mailto:`-knap i UI'et (#239), ikke automatisk.                                                                                              | Kun begivenhedens arrangør (`created_by`) og admins kan læse (`can_manage_event_guests`). Ingen klientskrivning: oprettes af `submit_event_guest_request_limited` (service_role), afgøres af `approve_/reject_event_guest_request`. `event_guest_counts` giver alle medlemmer antallet af godkendte gæster.                                                                                                      |
+| `photos`                                   | Metadata og vedvarende optimeringsstatus for uploadede billeder -- selve filerne ligger i Storage (#12/#89).                                                                                                                                                                                                                                                                                    | Autentificerede kan læse. Oprettelse/genforsøg går gennem `upsert_photo_upload`; direkte INSERT/UPDATE/DELETE er revoked, så klienten ikke kan skrive serverejede status/outputfelter eller omgå sikker sletning.                                                                                                                                                                                                |
+| `photo_comments`                           | Kommentarer til et billede (#218): `photo_id`, `user_id`, `body`, `created_at`. Slettes automatisk med billedet (`on delete cascade`). Del af `supabase_realtime`.                                                                                                                                                                                                                              | Autentificerede kan læse. Skrivning kun gennem `create_photo_comment`/`delete_photo_comment` -- direkte INSERT/UPDATE/DELETE er revoked. Sletning kræver forfatteren selv eller en admin. `gallery_albums` (album-forsiden, cover = nyeste optimerede billede pr. `event_id`, NULL = "Uden begivenhed") og `photo_comment_counts` (badge pr. billede) er to security-invoker-views ovenpå photos/photo_comments. |
+| `messages`                                 | Gruppechat, ét fælles rum (#14), med valgfri svarreference (#84) og `mentions` med de nævntes bruger-id'er (#179). Afsenderreferencen nulstilles ved kontosletning. `written_at` er det tidspunkt, brugeren skrev beskeden, når den kom gennem offline-køen (#219); `created_at` er fortsat serverens modtagelsestidspunkt. Del af `supabase_realtime`.                                         | Kun autentificerede kan læse/skrive; afsender kan slette egne, og admins kan slette alle. `mentions` skrives kun i afsenderens eget insert -- UPDATE er revoked, så ingen kan nævne nogen på en andens besked. Beskeder uden forbindelse sendes gennem `send_chat_message`, som selv håndhæver rumreglen, fordi den er `security definer`.                                                                       |
+| `polls` / `poll_options` / `poll_votes`    | Afstemninger i chatten (#217): en afstemning hænger på en helt almindelig besked (`polls.message_id`, unikt), med 2-6 svar og én stemme pr. medlem pr. afstemning (`poll_votes`' primærnøgle er `(poll_id, user_id)` -- en ny stemme erstatter den gamle). Del af `supabase_realtime`.                                                                                                          | Læsning følger beskedens rum, akkurat som `message_reactions`. Ingen klientskrivning på nogen af de tre tabeller -- kun `create_poll`, `cast_poll_vote` og `close_poll` skriver. Kun opretteren eller en admin kan lukke en afstemning.                                                                                                                                                                          |
+| `push_subscriptions`                       | Web Push-abonnementer, én række per browser/installation. Bruges af `chat-push` og af de øvrige push-functioner (se "Notifikationer ud over chatten").                                                                                                                                                                                                                                          | Kun ejeren kan læse/skrive sine egne rækker. Edge-functionen læser på tværs med Secret key.                                                                                                                                                                                                                                                                                                                      |
+| `allowed_emails`                           | Allowlist over e-mails, der må oprette en bruger. Håndhæves af `check_allowed_email`-triggeren på `auth.users`.                                                                                                                                                                                                                                                                                 | Kun admins kan læse/skrive (via `public.is_admin()`); almindelige medlemmer har ingen adgang.                                                                                                                                                                                                                                                                                                                    |
+| `admin_role_changes`                       | Uforanderligt revisionsspor med aktør, medlem, gammel/ny rolle og tidspunkt.                                                                                                                                                                                                                                                                                                                    | Kun admins kan læse; ingen klientrolle kan indsætte, ændre eller slette.                                                                                                                                                                                                                                                                                                                                         |
+| `probation_applications`                   | Åbne ansøgninger om prøvemedlemskab. Admin kan godkende dem direkte ind i `allowed_emails`.                                                                                                                                                                                                                                                                                                     | Ingen offentlig insert-policy; kun den service-role-beskyttede submit-RPC kan oprette, og kun admins kan læse/behandle.                                                                                                                                                                                                                                                                                          |
+| `probation_application_push_subscriptions` | Ansøgerens private Web Push-endpoint, knyttet til én ansøgning indtil afgørelsen er sendt.                                                                                                                                                                                                                                                                                                      | Ingen policies og ingen grants til `anon`/`authenticated` -- kun `probation-notifications` med Secret key kan læse rækken.                                                                                                                                                                                                                                                                                       |
+| `push_vapid_keys`                          | Klubbens VAPID-nøglepar til Web Push. Én række, oprettet af `chat-push` selv første gang.                                                                                                                                                                                                                                                                                                       | Ingen policies og ingen grants til `anon`/`authenticated` -- kun Edge Functionens Secret key kan læse rækken.                                                                                                                                                                                                                                                                                                    |
+| `feature_announcements`                    | Nyheder om nye funktioner i appen (#184). Rækkerne skrives af migrationer; `push_*`-felterne er outboxen for udsendelsen.                                                                                                                                                                                                                                                                       | Medlemmer kan læse udgivne nyheder gennem en kolonnegrant uden `push_*`. Ingen klientskrivning -- kun `claim_/complete_feature_announcement_push` (service_role) rører status.                                                                                                                                                                                                                                   |
+| `feature_announcement_push_deliveries`     | Hvilke abonnementer der allerede har fået push om en given nyhed, så et genforsøg kun rammer dem, der mangler den. Rækkerne følger abonnementet og forsvinder med det.                                                                                                                                                                                                                          | Ingen policies og ingen grants til `anon`/`authenticated` -- kun `feature-announcements` med Secret key rører loggen.                                                                                                                                                                                                                                                                                            |
+| `feature_announcement_reads`               | Hvilke nyheder det enkelte medlem har set, så banneret ved, hvornår det skal tie.                                                                                                                                                                                                                                                                                                               | Kun ejeren kan læse, oprette og fjerne sine egne rækker. UPDATE er revoked -- `read_at` er et tidspunkt, ikke et felt, der redigeres.                                                                                                                                                                                                                                                                            |
+| `badges`                                   | Badge-kataloget (#159): navn, uploadet billede, den runde beskæring (`crop_x`/`crop_y`/`crop_size`), fysiske mål og status på trykfilen.                                                                                                                                                                                                                                                        | Alle medlemmer kan læse; kun admins kan skrive. `print_*` er revoked fra kolonnegrant'en og ejes af `render-badge-print` gennem `claim_badge_print`/`complete_badge_print`.                                                                                                                                                                                                                                      |
+| `badge_nominations`                        | Indstillinger af ét medlem til én badge, med begrundelse. Delvist unikt indeks tillader kun én åben indstilling pr. (badge, medlem).                                                                                                                                                                                                                                                            | Admins og den, der selv har indstillet, kan læse. INSERT/UPDATE/DELETE er revoked -- kun `nominate_member_for_badge` og `vote_on_badge_nomination` skriver.                                                                                                                                                                                                                                                      |
+| `badge_nomination_approvals`               | Én række pr. admin-stemme (`approve`/`reject`) med valgfri kommentar. Unik på (indstilling, admin).                                                                                                                                                                                                                                                                                             | Samme læseregel som indstillingen. Ingen klientskrivning.                                                                                                                                                                                                                                                                                                                                                        |
+| `member_badges`                            | De tildelte badges. `nominated_by`/`reason` kopieres med, så vitrinen kan vise dem uden at åbne indstillingerne for alle.                                                                                                                                                                                                                                                                       | Alle medlemmer kan læse. Ingen klientskrivning -- tildeling sker kun i `vote_on_badge_nomination`.                                                                                                                                                                                                                                                                                                               |
+| `badge_productions`                        | Produktionsopgaven på det fysiske badge, med `due_at` = tildeling + 24 timer.                                                                                                                                                                                                                                                                                                                   | Kun admins kan læse. Skrivning gennem `claim_badge_production`/`complete_badge_production`.                                                                                                                                                                                                                                                                                                                      |
+| `game_scores`                              | Resultater fra spil-sektionen (#202), ét spil pr. række: `tetris`, `kaper`, `2048` og `naturquiz` (#221). `game` afgrænser listen, og et check-constraint pr. spil holder point op mod `lines` (rækker i Tetris, træk i Kaptajn Kaper, rigtige svar i Naturquiz) eller mod et fast loft (2048, hvor `lines`/`level` står på deres standardværdier), så et umuligt tal ikke kan lande på listen. | Alle medlemmer kan læse -- resultatlisten er hele pointen. Man kan kun indsætte sit eget resultat, UPDATE er revoked (et resultat rettes ikke bagefter), og både spilleren selv og admins kan slette.                                                                                                                                                                                                            |
+| `notification_preferences`                 | Medlemmets til/fra pr. notifikationstype ud over chatten (#216): `event_created`, `event_reminder`, `waitlist_promoted` (#236) og `badge_nomination_review` (kun admins får den). Ingen række betyder ja tak.                                                                                                                                                                                   | Medlemmet kan læse sine egne rækker; skrivning kun gennem `set_notification_preference`.                                                                                                                                                                                                                                                                                                                         |
+| `push_deliveries`                          | Leveringslog pr. (type, emne, medlem) for notifikationerne ud over chatten. `claim_push_deliveries` tager modtagerne, før der sendes, så ingen får det samme to gange. `kind` er låst til de samme typer som `notification_preferences`.                                                                                                                                                        | Ingen policies og ingen grants til klientroller -- kun Edge Functionens Secret key.                                                                                                                                                                                                                                                                                                                              |
+| `event_reminders`                          | Outbox for påmindelsen dagen før en begivenhed: kørslens status, forsøg og det token, pg_net sender med til `calendar-push`.                                                                                                                                                                                                                                                                    | Ingen policies og ingen grants til klientroller -- kun Edge Functionens Secret key.                                                                                                                                                                                                                                                                                                                              |
+| `private.probation_submission_attempts`    | Kortlivede HMAC-hashes til server-side rate limiting; indeholder aldrig rå IP, subnet eller e-mail.                                                                                                                                                                                                                                                                                             | `private` eksponeres ikke gennem Data API'et; ingen grants til `anon`/`authenticated`.                                                                                                                                                                                                                                                                                                                           |
+| `private.event_guest_request_attempts`     | Samme for gæsteansøgninger (#224).                                                                                                                                                                                                                                                                                                                                                              | Samme.                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Storage buckets
 
@@ -106,7 +114,8 @@ Supabase CLI'en ikke skal læse den ved deploy.
   kan sende en bruger-JWT. Gateway-verifikation er derfor slået fra. Funktionen bruger
   projektets Publishable key og kan via anon-rollen kun læse den dataminimerede
   `calendar_feed_events`-view med titel, tidspunkt og sted -- aldrig beskrivelse eller
-  andre medlemsdata.
+  andre medlemsdata. Siden #224 indeholder viewet kun begivenheder med `is_public`;
+  se "Offentlig kalender og gæster" nedenfor.
 - `probation-notifications` (#82): leverer Web Push til admins ved nye
   prøvemedlemskabsansøgninger og til ansøgeren ved godkendelse/afvisning. Funktionen
   modtager kun et ansøgnings-id og en tilfældig, servergenereret notification-token
@@ -114,6 +123,14 @@ Supabase CLI'en ikke skal læse den ved deploy.
   Secret key. Postgres køer kaldet efter commit med `pg_net`, og `pg_cron` genforsøger
   midlertidige fejl. Funktionen deployes derfor med `--no-verify-jwt`, men hvert POST
   laver sin egen token/admin-kontrol, før en leveringsstatus kan tages til behandling.
+- `submit-event-guest-request` (#224): den offentlige "Søg om at deltage"-formular på
+  `/kalender/offentlig`. Samme grænse som `submit-probation-application` -- delt
+  IP-normalisering i `_shared/clientAddress.ts`, egne HMAC-domæner, service-role-only RPC
+  `submit_event_guest_request_limited` med de samme rate-limit-grænser -- plus svaret
+  `event_unavailable` (404), når begivenheden ikke er offentlig eller er overstået. En
+  allerede åben ansøgning fra samme e-mail får samme 202 som en ny. Svaret til gæsten
+  sendes ikke af en Edge Function (#239): arrangøren skriver selv fra sin egen mailklient,
+  se "Offentlig kalender og gæster" nedenfor.
 - `submit-probation-application` (#87): eneste offentlige indgang til nye
   prøvemedlemskabsansøgninger. Functionen validerer input, bruger Cloudflares
   platform-satte `CF-Connecting-IP`, HMAC-hasher misbrugssignaler og kalder en
@@ -142,7 +159,9 @@ Supabase CLI'en ikke skal læse den ved deploy.
   `photos-original` og `photos-optimized`, før Auth-brugeren slettes.
 - `export-account` (#129): kræver samme gateway-JWT, server-side tokenvalidering
   og højst fem minutter gamle genlogin som kontosletning. Functionen filtrerer
-  eksplicit profil, egne beskeder, egne billedmetadata og egne tilmeldinger på
+  eksplicit profil, egne beskeder, egne billedmetadata, egne kommentarer til billeder
+  (#218), egne svar på begivenheder (tilmelding, venteliste eller afbud, #222) og egne
+  stemmer på afstemninger (#217) på
   den validerede brugers id. Billedreferencer får signerede Storage-URL'er med 15
   minutters levetid, og svaret kan downloades som JSON uden andre medlemmers
   private data.
@@ -161,10 +180,23 @@ Supabase CLI'en ikke skal læse den ved deploy.
   claim'et fri igen efter to minutter, og admin-panelet skriver "Trykfilen gik i
   stå" i stedet for at love, at den er på vej (se `src/features/badges/printStatus.ts`).
 - `badge-notifications` (#159): push til admins, når en indstilling oprettes, og til
-  både medlemmet og admins, når en badge tildeles. Genbruger `push_subscriptions`,
+  både medlemmet og admins, når en badge tildeles. Den indstillede får ingen besked om
+  indstillingen -- de hører først om det, når badgen er tildelt, så en afvist
+  indstilling ikke er synlig for modtageren. Genbruger `push_subscriptions`,
   VAPID-nøglerne og `_shared/webpush.ts` fra `chat-push`. Som `chat-push` tager den kun
   et id fra klienten -- aldrig teksten -- og afviser både en indstilling, kalderen ikke
-  selv har lavet, og en hændelse, der er mere end fem minutter gammel.
+  selv har lavet, og en hændelse, der er mere end fem minutter gammel. Beskeden om en ny
+  indstilling går gennem `_shared/pushDelivery.ts` som `badge_nomination_review` (#216),
+  så en admins fravalg respekteres, og et gentaget kald ikke sender igen; se
+  "Notifikationer ud over chatten".
+- `calendar-push` (#216, #236): push om kalenderen. `event_created` kaldes af opretterens
+  egen klient lige efter indsættelsen og giver alle andre medlemmer besked; `event_reminder`
+  kaldes fra databasen (pg_cron + pg_net, `enqueue_event_reminders`) med kørslens token
+  fra `event_reminders` og minder de tilmeldte om begivenheden dagen før; `waitlist_promoted`
+  kaldes af klienten, hvis handling gav en plads, lige efter `respond_to_event`/
+  `promote_event_waitlist`. Deployes med `--no-verify-jwt`, fordi der ingen bruger er bag
+  cron-kaldet; `event_created` og `waitlist_promoted` validerer selv bearer-tokenet, og
+  `event_reminder` kræver kørslens token. Se "Notifikationer ud over chatten".
 - `feature-announcements` (#184): sender push om nye funktioner i appen. Nyhederne selv
   oprettes af migrationer i `feature_announcements`; functionen er kun leveringen. Den
   tager intet fra kalderen -- hverken tekst eller modtagere -- og hver nyhed sendes kun
@@ -231,9 +263,145 @@ skal godkende, før en badge tildeles (#159).
   være den ene af de to, at en admin ikke kan stemme to gange, og at et almindeligt
   medlem hverken kan uploade i `badge-images` eller se produktionslisten.
 
+## Pladsloft og venteliste
+
+En begivenhed kan have et `max_participants` (#222). Alt om, hvem der har en plads, ejes
+af databasen:
+
+- `respond_to_event(p_event_id, p_response)` er den eneste vej til at svare
+  (`attending`, `declined` eller `none` for at trække svaret tilbage). Den tager en
+  advisory lock pr. begivenhed, tæller deltagerne bag låsen og afgør, om en tilmelding
+  får en plads eller lander på ventelisten. Frigiver et svar en plads, rykker den
+  forreste på ventelisten op i samme transaktion, og RPC'en returnerer
+  `{status, promoted}`, så klienten kan sige det i chatten. To samtidige afbud kan
+  derfor ikke rykke to medlemmer op til den samme plads.
+- Ledige pladser tilhører ventelisten: en ny tilmelding fylder først køen op, før den
+  selv får en plads, og hvert svar -- uanset hvem der svarer, og hvad -- fylder de
+  ledige pladser, før det returnerer. Så efterlader et hævet loft eller en slettet
+  konto højst ledige pladser med folk i kø, indtil nogen svarer på begivenheden.
+- `promote_event_waitlist(p_event_id)` er til arrangøren og admins efter et hævet loft;
+  den returnerer de oprykkede.
+- `event_members_without_response(p_event_id)` giver arrangøren og admins listen over
+  medlemmer uden svar; alle andre afvises med `42501`. Hvem der kommer, er fælles
+  viden -- hvem der har meldt afbud eller _ikke_ har svaret, er kun arrangørens.
+  Afbuddene håndhæves i tabellens select-policy, ikke kun i klienten.
+- Besked til de oprykkede går i chatten med dem som `mentions`, sendt af den, hvis svar
+  fyldte pladsen (`src/features/calendar/announceWaitlist.ts`): som handlingsbesked, når
+  afsenderen selv gav pladsen fra sig eller hævede loftet, ellers som neutral tekst --
+  pladsen kan være frigivet uden om RPC'en (en slettet konto) og først fyldt af et
+  senere svar.
+  Push følger chat-push's mention-regel (se "Mentions og hvor meget der sendes"); en
+  særskilt push-type for oprykning er opfølgningen #236.
+- `supabase/tests/rls/17_event_waitlist.sql` måler, at loftet håndhæves, at
+  tabellen ikke kan skrives uden om RPC'en, at oprykning sker i rækkefølge og kun
+  fylder de ledige pladser (også dem, en slettet konto efterlader), og at afbud og
+  listen over manglende svar er lukket for andre.
+
+## Afstemninger i chatten
+
+"/afstemning <spørgsmål> | <svar 1> | <svar 2> [| ...]" (#217) laver en
+afstemning direkte i chatten. Alt om selve afstemningen ejes af databasen:
+
+- Afstemningsbeskeden er en helt almindelig række i `messages` -- klienten
+  sender den, som den ville sende enhver anden besked, med spørgsmålet som
+  `content`, og kalder derefter `create_poll(p_message_id, p_options)` for at
+  hænge selve afstemningen på. To kald, ikke ét, netop fordi beskeden ikke er
+  andet end en besked -- søgning, sletning og eksport kender den allerede.
+  `polls.message_id` er unikt: en besked kan højst have én afstemning.
+- `create_poll` kræver, at kalderen selv er beskedens afsender, at beskeden
+  ikke er slettet, og at svarene er 2-6 ikke-tomme tekster -- ellers afvises
+  kaldet med en præcis fejlkode, som klientens parser allerede har filtreret
+  det meste af væk før kaldet (se `src/features/chat/slashCommands.ts`).
+- `cast_poll_vote(p_poll_id, p_option_id)` er den eneste vej til at stemme.
+  `poll_votes`' primærnøgle er `(poll_id, user_id)`, så en ny stemme erstatter
+  den gamle i stedet for at lægge sig ved siden af den -- der er ingen
+  "fjern din stemme", kun "stem om". En lukket afstemning afviser nye
+  stemmer, og et medlem uden adgang til beskedens rum (admin-rummet) kan
+  ikke stemme, selv med et kendt poll-id -- funktionen genskaber selv
+  select-policyens synlighedstjek, fordi den som `security definer` ikke selv
+  er underlagt RLS.
+- `close_poll(p_poll_id)` er kun for opretteren eller en admin, akkurat som
+  reglen for hvem der må slette en besked -- og er idempotent: at lukke en
+  allerede lukket afstemning ændrer intet.
+- Afstemninger er ikke anonyme (#217's afgrænsning): alle, der kan læse
+  beskeden, kan se, hvem der stemte hvad -- samme synlighed som reaktioner.
+- `poll_votes` tæller ikke stemmer ved kontosletning -- `user_id` kaskaderer,
+  så en slettet kontos stemmer forsvinder med den, mens `polls.created_by`
+  (som `messages.user_id`) nulstilles i stedet, så afstemningen og de andres
+  stemmer består. `export-account` tager `poll_votes` med i dataudleveringen.
+- `supabase/tests/rls/18_chat_polls.sql` måler, at kun opretteren kan gøre sin
+  egen besked til en afstemning, at et ikke-medlem (anonym eller et medlem
+  uden adgang til rummet) hverken kan se eller stemme, at en ny stemme
+  erstatter den gamle, at kun opretteren eller en admin kan lukke, og at
+  ingen af de tre tabeller kan skrives uden om RPC'erne.
+
+## Chat uden forbindelse (#219)
+
+En besked skrevet uden dækning -- typisk i skoven -- fejler ikke længere. Den
+lægges i en lokal kø og sendes, når forbindelsen er tilbage; indtil da står den i
+chatten med "Sendes, når du er online" og knapperne "Prøv igen" og "Slet".
+
+- **Idempotensen ligger i primærnøglen.** Klienten giver den ventende besked et
+  id (`crypto.randomUUID`) og sender den gennem `send_chat_message`, som
+  indsætter rækken med netop det id. En gentagelse -- fordi svaret gik tabt,
+  eller fordi appen blev lukket midt i afsendelsen -- rammer
+  `on conflict on constraint messages_pkey do nothing`, opretter ingen ny række
+  og svarer med den, der allerede ligger der (`inserted = false`). Derfor kan
+  klienten fjerne beskeden fra køen, uden at nogen risikerer at se den to gange.
+  Afsendelse _med_ forbindelse kører uændret gennem den direkte insert-policy.
+- **Tidsstemplerne er delt i to.** `created_at` er serverens
+  modtagelsestidspunkt og er det, rækkefølgen bygges på; `written_at` er det
+  tidspunkt, brugeren skrev beskeden, og er det, boblen viser -- ellers ville en
+  besked fra en hel dag uden dækning se ud, som om den blev skrevet i det
+  øjeblik, den nåede frem. Er de to forskellige, står begge i boblens
+  `title`/`aria-label`. Et ur, der står forkert, kan ikke skrive beskeden ind i
+  fremtiden: RPC'en klipper `written_at` til `now()`.
+- **RPC'en håndhæver selv rumreglen.** Den er `security definer` og omgår
+  dermed insert-policyen, så den tjekker `auth.uid()` og
+  `room = 'general' or public.is_admin()` selv. Afsenderen er altid den, der
+  kalder; der findes ingen parameter for det. Et klient-id, der tilhører en
+  anden, afvises -- svaret ville ellers lække den andens indhold.
+- **Grants skrives af migrationen** (#209): `revoke all ... from public, anon,
+authenticated` og `grant execute ... to authenticated`. Se
+  `20260917090000_chat_offline_queue.sql`.
+- **Køen er ren funktion.** `src/features/chat/offlineQueue.ts` læser og skriver
+  hverken IndexedDB eller netværk, så den kan testes uden browser-API'er.
+  `offlineQueueStore.ts` er IndexedDB-laget, med en Map i hukommelsen som
+  fallback, hvor IndexedDB ikke findes (jsdom, Safari i privat tilstand).
+  `useChatQueue.ts` binder dem sammen og tømmer køen ved app-start, ved
+  `online`-hændelsen og på kommando fra service workeren.
+- **Køen deles på tværs af rum, men tømningen er rum-afgrænset.**
+  IndexedDB-lageret er ét fælles lager for hele appen, men hvert rums
+  instans af `useChatQueue` (den almindelige chat og admin-chatten) sender
+  kun beskeder skrevet i netop det rum (`nextSendableMessage(queue, userId,
+room)`). En besked skrevet i admin-chatten uden dækning sendes derfor
+  først, når man igen åbner admin-chatten -- den bliver liggende i køen, men
+  sendes eller vises aldrig i den almindelige chats cache, og en fejlende
+  besked i ét rum blokerer ikke afsendelsen i et andet.
+- **Background Sync vækker faner, ikke beskeder.** `src/sw.ts` lytter på
+  `sync`-tag'et og videresender til de åbne faner, som tømmer køen med det
+  samme. Service workeren kan ikke selv sende: chatten sender med brugerens
+  Supabase-session, og den ligger i app'ens `localStorage`, som en service worker
+  ikke kan læse. Er der ingen åben fane -- eller ingen Background Sync
+  (Safari og Firefox) -- bliver køen liggende i IndexedDB og sendes ved næste
+  app-start. Det er den aftalte fallback, ikke en fejl.
+- **Testene i CI** dækker kølogikken som rene funktioner
+  (`offlineQueue.test.ts`), lagerets begge grene (`offlineQueueStore.test.ts`,
+  hvor IndexedDB-vejen kører mod en minimal efterligning, fordi jsdom ikke har
+  IndexedDB), komponentens tre tilstande (`PendingMessage.test.tsx`), hændelsen
+  der tømmer køen (`useChatQueue.test.ts`, med netværket mocket), Background
+  Sync-kontrakten (`backgroundSync.test.ts`) og idempotensen databaseret
+  (`supabase/tests/rls/19_chat_offline_queue.sql`).
+- **Det er ikke verificeret i CI:** at en rigtig browser faktisk lægger beskeden
+  i IndexedDB, at `online`-hændelsen kommer som forventet på en telefon, og at
+  browseren vækker service workeren med `sync`, når dækningen vender tilbage.
+  Det kræver en browser med en service worker i drift, og PWA'en bygges kun i
+  produktion. Evidensen for de dele er koden og API-kontrakten -- ikke en kørt
+  ende-til-ende-test.
+
 ## Migrations
 
-Filnavngivning: `<timestamp>_<beskrivelse>.sql` i `supabase/migrations/`. Se `CLAUDE.md`
+Filnavngivning: `<timestamp>_<beskrivelse>.sql` i `supabase/migrations/`. Se `AGENTS.md`
 for hele arbejdsgangen (skriv → commit → PR → Preview Branch-validering → merge →
 automatisk produktionsdeploy).
 
@@ -345,7 +513,7 @@ glemmer en af delene, fejler dér.
 
 **Normalt gør du ingenting.** Du pusher, og `database`-jobbet kører hele kæden på
 PR'en -- bootstrap, alle migrationer i navnerækkefølge, pgTAP. Det tager under et
-minut. Der er bevidst **ingen lokal opsætning**: kerneprincippet i `CLAUDE.md` er, at
+minut. Der er bevidst **ingen lokal opsætning**: kerneprincippet i `AGENTS.md` er, at
 en bidragyder hverken skal have Docker eller en database installeret.
 
 Har du brug for at gentage kørslen mod en konkret database -- fx PR'ens egen Supabase
@@ -373,16 +541,16 @@ resultat, og `finish(true)` afslutter med exit 3.
 
 Produktbeslutningen i #86 er en hybrid mellem sletning og anonymisering:
 
-| Data                                                  | Ved kontosletning                                                                                             |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Auth-bruger, profil, avatar, allowlist-adgang         | Slettes permanent.                                                                                            |
-| Originale og optimerede galleribilleder samt metadata | Slettes permanent.                                                                                            |
-| Kalenderdeltagelser og push-abonnementer              | Slettes via eksisterende `ON DELETE CASCADE`.                                                                 |
-| Chatbeskeder                                          | Bevares, men `user_id` sættes til `NULL` og klienten viser “Tidligere medlem”; admins kan fortsat slette dem. |
-| Kalenderbegivenheder                                  | Bevares, men `created_by` sættes til `NULL`; admins kan fortsat slette dem.                                   |
-| Prøvemedlemsansøgninger med samme e-mail              | Slettes af Auth-delete-triggeren, hvis de stadig findes.                                                      |
-| Spilresultater (#202)                                 | Slettes via `ON DELETE CASCADE` -- et resultat er personligt, ikke klubhistorik.                              |
-| Adminrolle-audit (#96)                                | Bevares, men både bruger-id og navnesnapshots erstattes med en fælles anonym værdi.                           |
+| Data                                                                                                              | Ved kontosletning                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Auth-bruger, profil, avatar, allowlist-adgang                                                                     | Slettes permanent.                                                                                            |
+| Originale og optimerede galleribilleder samt metadata                                                             | Slettes permanent.                                                                                            |
+| Kalenderdeltagelser, push-abonnementer, notifikationsvalg, leveringslog (#216) og kommentarer til billeder (#218) | Slettes via eksisterende `ON DELETE CASCADE`.                                                                 |
+| Chatbeskeder                                                                                                      | Bevares, men `user_id` sættes til `NULL` og klienten viser “Tidligere medlem”; admins kan fortsat slette dem. |
+| Kalenderbegivenheder                                                                                              | Bevares, men `created_by` sættes til `NULL`; admins kan fortsat slette dem.                                   |
+| Prøvemedlemsansøgninger med samme e-mail                                                                          | Slettes af Auth-delete-triggeren, hvis de stadig findes.                                                      |
+| Spilresultater (#202)                                                                                             | Slettes via `ON DELETE CASCADE` -- et resultat er personligt, ikke klubhistorik.                              |
+| Adminrolle-audit (#96)                                                                                            | Bevares, men både bruger-id og navnesnapshots erstattes med en fælles anonym værdi.                           |
 
 Storage, Postgres og Auth Admin kan ikke indgå i én fælles transaktion.
 Slettefunktionerne er derfor eksplicit genoptagelige:
@@ -410,6 +578,11 @@ Retention for prøvemedlemskab håndhæves dagligt af det idempotent planlagte
 - godkendte og afviste ansøgninger slettes 90 dage efter `reviewed_at`;
 - uafgjorte ansøgninger slettes 12 måneder efter `created_at`;
 - den tilknyttede push-række slettes via `ON DELETE CASCADE`.
+
+Gæsteansøgninger til åbne begivenheder (#224) slettes af
+`purge-expired-event-guest-requests` 30 dage efter begivenhedens sluttidspunkt
+(`end_at`, ellers `start_at`) -- uanset om de blev godkendt, afvist eller aldrig
+besvaret. Slettes begivenheden, følger ansøgningerne med via `ON DELETE CASCADE`.
 
 Jobbet er adskilt fra #87's rate-limit-oprydning
 `cleanup-probation-submission-attempts`. Rate-limit-tabellen indeholder kun
@@ -578,6 +751,50 @@ spoofet, multipel `X-Forwarded-For`; den skal ignoreres, mens platformens
 PR-previews har ingen service worker og kan derfor ikke afprøve selve
 push-leveringen -- kun submit/migration/RLS/UI.
 
+## Offentlig kalender og gæster (#224)
+
+En arrangør (eller en admin) sætter `is_public` på en begivenhed i `EventForm` --
+lige så vel ved at redigere en allerede oprettet begivenhed som i selve
+oprettelsesflowet: RLS'ens opdateringspolitik (`Owners and admins can update events`,
+`20260831120000_events_admin_update.sql`) dækker alle kolonner, ikke kun dem, formularen
+viser ved oprettelse, så et privat arrangement kan gøres offentligt bagefter og en
+offentlig begivenhed lukkes igen -- uden en ny række.
+`supabase/tests/rls/17_public_events_toggle.sql` måler netop den effekt af en UPDATE
+(ikke en INSERT): at anon får/mister adgang med det samme, og at et andet medlem end
+ejeren/en admin ikke kan gøre det. At sætte `is_public` gør tre ting:
+
+1. Begivenheden vises på `/kalender/offentlig`, som kan ses uden login, gennem viewet
+   `public_events` (id, titel, beskrivelse, sted, tid -- aldrig `created_by`). Anon
+   har kun kolonnegrants på netop de felter, og anon-policy'en på `events` slipper kun
+   `is_public`-rækker igennem. Før #224 kunne anon læse alle begivenheder, fordi
+   policy'en fra #11's feed sagde `using (true)` og #209 gav anon hele tabellen.
+2. iCal-feedet (`calendar-feed`) indeholder den. Feedet læser `calendar_feed_events`,
+   som nu selv filtrerer på `is_public`, så private begivenheder aldrig er i feedet
+   (#118).
+3. Folk uden for klubben kan søge om at deltage. Ansøgningen går gennem
+   `submit-event-guest-request` og lander i `event_guest_requests`. Arrangøren og
+   admins ser den i begivenhedens dialog i kalenderen (`GuestRequestsSection`) og
+   godkender/afviser med `approve_event_guest_request()` /
+   `reject_event_guest_request()`. Begge kræver `can_manage_event_guests(event_id)`:
+   `is_admin()` eller `events.created_by = auth.uid()`. Alle andre medlemmer ser kun
+   "gæster: n" (summen af `party_size` for godkendte) fra viewet `event_guest_counts`.
+
+Afgørelsen sætter `status` og `reviewed_at`/`reviewed_by`. Der er ingen automatisk
+levering til ansøgeren (#239 fjernede den, se nedenfor) -- klienten viser i stedet
+en "Skriv til gæsten"-knap med det samme.
+
+### Svaret til ansøgeren (#239)
+
+Gæsterne er ikke i appen og kan ikke få svaret som Web Push. En tidligere
+automatisk mail-udsendelse blev fjernet i #239.
+
+`GuestRequestsSection` viser ansøgerens e-mail og en "Skriv til
+gæsten"-knap. Den åbner et `mailto:`-link med emne og en klar dansk kladde --
+godkendt eller afvist, med begivenhedens titel og tidspunkt indsat -- som
+arrangøren kan rette til og sende fra sin egen mailklient. Der er ingen
+leveringsstatus at vise eller genforsøge; kladden er bygget lokalt i klienten
+(`guestReplyMailto.ts`) og kræver ikke et kald til Supabase.
+
 ## Auth-URL'er: hvor links i mails lander
 
 Supabase afgør ud fra to projektindstillinger, hvor et link i en bekræftelses- eller
@@ -686,7 +903,7 @@ konfigurerer i praksis serveren.
 
 Det er bevidst: at oprette et repo-secret er et manuelt dashboard-trin, og projektets
 kerneprincip er, at alt ud over engangsopsætningen i #2/#3 skal kunne ske ved at skrive
-kode og pushe (se `CLAUDE.md`). Tidligere svarede functionen 503, og appen sagde "Push-
+kode og pushe (se `AGENTS.md`). Tidligere svarede functionen 503, og appen sagde "Push-
 notifikationer er ikke konfigureret på serveren endnu" -- uden nogen vej frem, der ikke gik
 gennem et dashboard.
 
@@ -718,11 +935,107 @@ genabonnere med en ny nøgle, så klienten smider det gamle abonnement væk før
 - **PR-previews**: service workeren bygges kun i produktionsbuildet (se `vite.config.ts`),
   så notifikationer kan ikke afprøves på et preview-link -- kun på den udgivne app.
 
+## Notifikationer ud over chatten
+
+Push-infrastrukturen fra chatten (`push_subscriptions`, VAPID-nøglerne, service workerens
+`push`-handler) bruges også til fire ting, der får medlemmer tilbage i appen (#216, #236):
+
+| Type                      | Hvem                                  | Udløses af                                                                                                         | Åbner                   |
+| ------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| `event_created`           | Alle andre medlemmer end opretteren   | Opretterens klient kalder `calendar-push`                                                                          | `/kalender/<id>`        |
+| `event_reminder`          | De tilmeldte (`attending`)            | pg_cron hvert kvarter, fra kl. 17 dagen før                                                                        | `/kalender/<id>`        |
+| `waitlist_promoted`       | De(n), der rykkede op fra ventelisten | Klienten, hvis handling gav pladsen, kalder `calendar-push` lige efter `respond_to_event`/`promote_event_waitlist` | `/kalender/<id>`        |
+| `badge_nomination_review` | Admins                                | Indstillerens klient kalder `badge-notifications`                                                                  | `/admin?sektion=badges` |
+
+Den indstillede får ingen besked om en ny indstilling: badge-modellen holder
+indstillinger skjult for modtageren, indtil badgen er tildelt (ellers ville en afvist
+indstilling være synlig), og tildelingen har sin egen push i `badge-notifications`.
+
+`chat-push` er uændret. De nye typer deler én vej, `_shared/pushDelivery.ts`. `waitlist_promoted`
+(#236) fulgte samme opskrift som de tre første: sit navn i `NOTIFICATION_KINDS`
+(`_shared/pushKinds.ts`, delt med frontendens indstillinger), sin payload i
+`_shared/pushPayloads.ts`, `kind`-constrainten udvidet på `notification_preferences` og
+`push_deliveries` i sin egen migration, og et kald til `deliverPush`. Klienten sender kun
+`eventId` og de id'er, RPC'en selv gav den tilbage -- `calendar-push` stoler ikke på den
+liste blindt, men snævrer den ind til dem, der reelt sidder på en `attending`-plads til
+begivenheden lige nu (`_shared/waitlistPromotionRecipients.ts`), og nægter at sende, hvis
+kalderen ikke selv har noget med begivenheden at gøre (arrangør, admin, eller selv svaret
+på den). Leveringsloggens nøgle er (`waitlist_promoted`, begivenheden, medlemmet), så et
+medlem højst får én push om én begivenhed, uanset hvor mange gange de cykler ind og ud af
+ventelisten til den.
+
+### Til og fra pr. type
+
+`notification_preferences` har én række pr. (medlem, type) og skrives kun gennem
+`set_notification_preference(kind, enabled)`, som sætter `auth.uid()` som ejer. Ingen række
+er et ja: typerne er slået til for alle -- også dem, der var medlem før -- ligesom
+`feature_notifications_enabled` har default `true`. UI'et står på `/profil` under
+"Notifikationer"; almindelige medlemmer ser `event_created`, `event_reminder` og
+`waitlist_promoted`, admins også `badge_nomination_review`. Chattens og nyhedernes valg
+står stadig på `/chat` og `/nyheder`.
+
+Filtreringen sker i functionen, ikke i klienten: en klient kan ikke undlade at modtage en
+notifikation, den allerede har fået.
+
+### Ingen får det samme to gange
+
+`push_deliveries` er en log pr. (type, emne, medlem). `deliverPush` kalder
+`claim_push_deliveries` med de medlemmer, der vil have typen og har mindst én enhed, _før_
+der sendes -- kun de medlemmer, der ikke allerede stod i loggen, kommer tilbage, og kun de
+får noget. To klienter, der kalder samtidig, eller en cron-kørsel, der løber igen, sender
+derfor aldrig det samme to gange. Prisen er, at et push, der fejler hos push-tjenesten, ikke
+forsøges igen -- hellere en notifikation, der mangler, end den samme to gange (samme
+afvejning som for nyhederne). Medlemmer uden enhed claimes ikke, så en, der slår
+notifikationer til senere samme dag, stadig kan få sin påmindelse. Loggen ryddes efter 90
+dage.
+
+Flyttes en begivenhed til en anden dag, glemmer triggeren `events_remember_notification_url`
+påmindelsen om den: `event_reminder`-rækkerne i `push_deliveries` og kørslen i
+`event_reminders` slettes, så vinduet dagen før den nye dato sender forfra til de tilmeldte.
+Et nyt klokkeslæt samme dag rører ikke loggen, og "ny begivenhed" sendes aldrig igen.
+
+Loggen hænger på medlemmet og ikke på abonnementet (i modsætning til
+`feature_announcement_push_deliveries`): "du er tilmeldt en tur i morgen" er én besked til
+én person, uanset hvor mange enheder de har.
+
+### Påmindelsen dagen før
+
+`probation-notifications` viste mønstret: databasen ejer status og genforsøg, functionen
+ejer kun HTTP-kaldene. Her:
+
+1. `pg_cron` kører `enqueue_event_reminders()` hvert kvarter. Vinduet er fra kl. 17
+   (Europe/Copenhagen) dagen før til midnat; en, der først tilmelder sig på selve dagen,
+   får ingen påmindelse. Kørslens ur er et argument (`p_now`, standard `now()`), så
+   pgTAP kan sætte klokken fast i stedet for at afhænge af, hvornår CI kører.
+2. For hver begivenhed i vinduet tager kørslen en række i `event_reminders`
+   (`sending`, forsøg +1) og POSTer `{ kind, eventId, token }` til `calendar-push` med
+   `pg_net`.
+3. Functionen bekræfter tokenet med `claim_event_reminder`, finder de tilmeldte (kun
+   `status = 'attending'` -- hverken afbud eller ventelisten, #222), sender gennem
+   `deliverPush` og melder tilbage med `complete_event_reminder`.
+4. Efter en vellykket kørsel kigges der forbi igen hver time, så en, der først tilmelder
+   sig om aftenen, også får sin påmindelse -- loggen holder de andre fri. Fejl og kørsler,
+   der gik i stå, forsøges igen efter et kvarter; vinduet begrænser antallet af forsøg.
+
+`pg_net` kender ikke functionens URL, og en cron-kørsel har ingen request at udlede den af.
+`probation_notification_function_url()` løser det ved at læse requestets host-header, når
+ansøgningen oprettes; her gør triggeren `events_remember_notification_url` det samme, når
+en begivenhed oprettes eller redigeres fra appen, og gemmer den i
+`events.notification_function_url`. Triggeren ejer kolonnen -- et medlem kan ikke pege den
+mod en fremmed host, og en begivenhed uden URL får requestets host, næste gang den
+redigeres. Uden header (pgTAP, psql) gemmes null, og kørslen låner den seneste kendte URL
+fra en anden begivenhed: det er samme host for alle. Begivenhederne fra før migrationen
+fik deres URL én gang, i selve migrationen, fra den seneste ansøgning om prøvemedlemskab
+(`probation_applications.notification_function_url` med `/calendar-push` i stedet for
+`/probation-notifications`), så også de får deres påmindelse fra dag ét. Kun på en helt
+ny Preview Branch uden nogen begivenhed fra appen sendes ingen påmindelser, indtil den
+første er oprettet.
+
 ## Nyheder om nye funktioner
 
 Medlemmerne skal kunne se, at appen har fået noget nyt, uden at nogen fortæller dem det
 mundtligt. En nyhed er derfor **kode**: hver funktion tager sin egen række med i den
-migration, den alligevel har (skabelonen står i `CLAUDE.md`).
+migration, den alligevel har (skabelonen står i `AGENTS.md`).
 
 Flowet, ende til ende:
 

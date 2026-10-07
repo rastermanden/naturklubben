@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Avatar } from '../../components/Avatar'
 import { MessageReactions, ReactionPicker } from './MessageReactions'
+import { PollCard } from './PollCard'
 import { readableTextColor } from '../../lib/colorContrast'
 import { formatRelativeTime } from './formatRelativeTime'
 import { splitLinks } from './linkify'
 import { splitMentions } from './mentions'
 import type { MentionMember } from './mentions'
+import type { PollSummary } from './polls'
 import type { ReactionSummary } from './reactions'
 import type { Message } from './useMessages'
 import { CauseMarks } from '../profile/CauseMarks'
@@ -98,6 +100,11 @@ export function MessageBubble({
   isHighlighted = false,
   isMentioned = false,
   members = [],
+  poll,
+  onVotePoll,
+  onClosePoll,
+  isVotingPoll = false,
+  isClosingPoll = false,
 }: {
   message: Message
   author: ProfileSummary | undefined
@@ -114,6 +121,12 @@ export function MessageBubble({
   isMentioned?: boolean
   /** Medlemmer, mentions kan slås op i -- navnet følger et navneskift. */
   members?: readonly MentionMember[]
+  /** Afstemningen på denne besked, hvis der er en (#217). */
+  poll?: PollSummary
+  onVotePoll?: (message: Message, optionId: string) => void
+  onClosePoll?: (message: Message) => void
+  isVotingPoll?: boolean
+  isClosingPoll?: boolean
 }) {
   const [, forceUpdate] = useState(0)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -131,7 +144,15 @@ export function MessageBubble({
   // samtale. Et tidligere medlem har ingen profil og dermed ingen.
   const pronouns = isFormerMember ? null : displayPronouns(author?.pronouns)
   const isAction = message.message_type === 'action'
-  const fullTimestamp = new Date(message.created_at).toLocaleString('da-DK')
+  // En besked, der har ligget i offline-køen, viser det tidspunkt, den blev
+  // skrevet (#219); rækkefølgen i listen er stadig serverens, altså
+  // modtagelsestidspunktet. Er de to forskellige, står begge i tooltip'en, så
+  // ingen behøver gætte på, hvorfor en besked fra kl. 9 står efter en fra kl. 14.
+  const displayTimestamp = message.written_at ?? message.created_at
+  const fullTimestamp =
+    message.written_at && message.written_at !== message.created_at
+      ? `Skrevet ${new Date(message.written_at).toLocaleString('da-DK')} · modtaget ${new Date(message.created_at).toLocaleString('da-DK')}`
+      : new Date(displayTimestamp).toLocaleString('da-DK')
   const replyName =
     message.reply_to?.user_id === null
       ? 'Tidligere medlem'
@@ -203,12 +224,12 @@ export function MessageBubble({
           {/* Kort form på skærmen, præcist tidspunkt til den, der peger på
               det -- og til skærmlæseren, som ellers ville læse "6 d" op. */}
           <time
-            dateTime={message.created_at}
+            dateTime={displayTimestamp}
             title={fullTimestamp}
             aria-label={fullTimestamp}
             className="opacity-70"
           >
-            {formatRelativeTime(message.created_at)}
+            {formatRelativeTime(displayTimestamp)}
           </time>
           {isMentioned && !isDeleted && (
             <span
@@ -292,6 +313,16 @@ export function MessageBubble({
               members={members}
             />
           </p>
+        )}
+        {!isDeleted && poll && (
+          <PollCard
+            poll={poll}
+            canClose={Boolean(canDelete)}
+            isVoting={isVotingPoll}
+            isClosing={isClosingPoll}
+            onVote={(optionId) => onVotePoll?.(message, optionId)}
+            onClose={() => onClosePoll?.(message)}
+          />
         )}
         {!isDeleted && (
           <>

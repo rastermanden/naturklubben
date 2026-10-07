@@ -61,6 +61,19 @@ export const routeMetadata = [
     announcement: 'Kalender indlæst',
   },
   {
+    path: '/kalender/offentlig',
+    documentTitle: 'Åbne ture | Naturklubben',
+    announcement: 'Åbne ture indlæst',
+  },
+  // En enkelt begivenhed, åbnet fra en notifikation (#216) eller et delt link.
+  // Dynamiske stier efter deres statiske søskende: RouteNavigation finder
+  // siden ved første match, og denne matcher også /kalender/offentlig.
+  {
+    path: '/kalender/:eventId',
+    documentTitle: 'Kalender | Naturklubben',
+    announcement: 'Kalender indlæst',
+  },
+  {
     path: '/billeder',
     documentTitle: 'Billeder | Naturklubben',
     announcement: 'Billeder indlæst',
@@ -89,6 +102,21 @@ export const routeMetadata = [
     path: '/spil/kaper',
     documentTitle: 'Kaptajn Kaper i Kattegat | Naturklubben',
     announcement: 'Kaptajn Kaper i Kattegat indlæst',
+  },
+  {
+    path: '/spil/2048',
+    documentTitle: '2048 | Naturklubben',
+    announcement: '2048 indlæst',
+  },
+  {
+    path: '/spil/naturquiz',
+    documentTitle: 'Naturquiz | Naturklubben',
+    announcement: 'Naturquiz indlæst',
+  },
+  {
+    path: '/aktiviteter/btg-turnering',
+    documentTitle: 'BTG turnering | Naturklubben',
+    announcement: 'BTG turnering indlæst',
   },
   {
     path: '/medlemmer',

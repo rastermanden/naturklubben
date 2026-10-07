@@ -21,6 +21,11 @@ vi.mock('../auth/useAuth', () => ({
 vi.mock('../admin/useIsAdmin', () => ({
   useIsAdmin: () => ({ isAdmin: mocks.isAdmin, loading: false }),
 }))
+vi.mock('./PhotoComments', () => ({
+  PhotoComments: ({ photoId }: { photoId: string }) => (
+    <div data-testid="photo-comments">{photoId}</div>
+  ),
+}))
 
 import { PhotoLightbox } from './PhotoLightbox'
 

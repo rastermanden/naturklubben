@@ -2,9 +2,10 @@
 
 [![Deploy to GitHub Pages](https://github.com/rastermanden/naturklubben/actions/workflows/deploy.yml/badge.svg)](https://github.com/rastermanden/naturklubben/actions/workflows/deploy.yml)
 
-Medlemsapp for Naturklubben — hero-forside, aktivitetsside, og bag login: kalender,
-billedgalleri og gruppechat. Se GitHub-issue #1 for den fulde plan og `CLAUDE.md`
-for projektets udviklingskonventioner. `AGENTS.md` er samme fil.
+Medlemsapp for Naturklubben — hero-forside, aktivitetsside, offentlig kalender med de
+begivenheder, arrangøren har åbnet for ikke-medlemmer (#224), og bag login: kalender,
+billedgalleri og gruppechat. Se GitHub-issue #1 for den fulde plan og `AGENTS.md` for
+projektets udviklingskonventioner. `CLAUDE.md` importerer samme fil.
 
 ## Teknologi
 
@@ -16,7 +17,7 @@ Realtime, Edge Functions).
 
 ```bash
 npm install
-cp .env.example .env.local   # udfyld med værdier fra Supabase, se CLAUDE.md/issue #2
+cp .env.example .env.local   # udfyld med værdier fra Supabase, se AGENTS.md/issue #2
 npm run dev
 ```
 
@@ -65,15 +66,16 @@ man kan se på selve appen, at man ikke er på produktionssitet.
 Bekræftelses- og nulstillingsmails fra Supabase lander på `/velkommen` og
 `/ny-adgangskode` i appen. GitHub Pages har ingen SPA-fallback, så buildet udgiver en
 `404.html`, der sender vilkårlige stier videre til `index.html` med sti, query og
-fragment i behold. Hvilke URL'er Supabase overhovedet må sende folk hen til, styres af
-`.github/workflows/sync-auth-config.yml` -- se `supabase/README.md`.
+fragment i behold. Push-notifikationer om kalenderen åbner på samme måde
+`/kalender/<id>` direkte. Hvilke URL'er Supabase overhovedet må sende folk hen til, styres
+af `.github/workflows/sync-auth-config.yml` -- se `supabase/README.md`.
 
 ## Dokumentation
 
 - [`docs/kodegennemgang-2026-08-23.md`](docs/kodegennemgang-2026-08-23.md) — gennemgang af
   hele appen: arkitektur, styrker, fund og roadmap. Fundene er oprettet som issues med
   labels `blocker`, `risiko`, `friktion` og `finish`.
-- `CLAUDE.md` — projektets udviklingskonventioner. `AGENTS.md` peger på samme fil.
+- `AGENTS.md` — projektets udviklingskonventioner. `CLAUDE.md` importerer samme fil.
 - `supabase/README.md` — backend-opsætning, nøgler og auth-URL'er.
 
 ## Mappestruktur
@@ -86,6 +88,6 @@ src/
   lib/         # supabaseClient.ts, queryClient.ts
   hooks/       # delte React hooks
 supabase/
-  migrations/  # SQL-migrations — deployes automatisk ved merge til main, se CLAUDE.md
-  functions/   # Edge Functions — deployes via GitHub Actions, se CLAUDE.md
+  migrations/  # SQL-migrations — deployes automatisk ved merge til main, se AGENTS.md
+  functions/   # Edge Functions — deployes via GitHub Actions, se AGENTS.md
 ```

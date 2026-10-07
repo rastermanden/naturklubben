@@ -1,5 +1,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  createQueuedMessage,
+  type QueuedMessage,
+} from '../features/chat/offlineQueue'
 import type { Message } from '../features/chat/useMessages'
 import ChatPage from './ChatPage'
 
@@ -13,6 +17,16 @@ const mocks = vi.hoisted(() => ({
   presenceAway: [] as unknown[],
   fetchNextPage: vi.fn(),
   searchFetchNextPage: vi.fn(),
+  polls: [] as unknown[],
+  createPollMutateAsync: vi.fn(),
+  castVoteMutate: vi.fn(),
+  closePollMutate: vi.fn(),
+  sendMutateAsync: vi.fn(),
+  sendIsPending: false,
+  isOffline: false,
+  queuedMessages: [] as QueuedMessage[],
+  retryQueued: vi.fn(),
+  discardQueued: vi.fn(),
   searchPages: undefined as
     { messages: Message[]; hasMore: boolean }[] | undefined,
   profiles: {
@@ -62,7 +76,8 @@ vi.mock('../features/chat/useMessages', () => ({
     },
     sendMessage: {
       mutate: mocks.mutate,
-      isPending: false,
+      mutateAsync: mocks.sendMutateAsync,
+      isPending: mocks.sendIsPending,
     },
     deleteMessage: {
       mutate: mocks.deleteMutate,
@@ -74,6 +89,10 @@ vi.mock('../features/chat/useMessages', () => ({
       isPending: false,
       isError: false,
     },
+    queuedMessages: mocks.queuedMessages,
+    retryQueued: mocks.retryQueued,
+    discardQueued: mocks.discardQueued,
+    isOffline: mocks.isOffline,
   }),
   useMessageSearch: () => ({
     data: mocks.searchPages ? { pages: mocks.searchPages } : undefined,
@@ -90,6 +109,23 @@ vi.mock('../features/chat/useReactions', () => ({
   useReactions: () => ({
     reactions: mocks.reactions,
     toggleReaction: { mutate: mocks.toggleReaction },
+  }),
+}))
+
+vi.mock('../features/chat/usePolls', () => ({
+  usePolls: () => ({
+    polls: mocks.polls,
+    createPoll: { mutateAsync: mocks.createPollMutateAsync, isPending: false },
+    castVote: {
+      mutate: mocks.castVoteMutate,
+      isPending: false,
+      variables: undefined,
+    },
+    closePoll: {
+      mutate: mocks.closePollMutate,
+      isPending: false,
+      variables: undefined,
+    },
   }),
 }))
 
@@ -124,6 +160,17 @@ beforeEach(() => {
   mocks.mutate.mockReset()
   mocks.toggleReaction.mockReset()
   mocks.reactions = []
+  mocks.polls = []
+  mocks.createPollMutateAsync.mockReset()
+  mocks.castVoteMutate.mockReset()
+  mocks.closePollMutate.mockReset()
+  mocks.sendMutateAsync.mockReset()
+  mocks.sendMutateAsync.mockResolvedValue({ id: 'message-99' })
+  mocks.sendIsPending = false
+  mocks.isOffline = false
+  mocks.queuedMessages = []
+  mocks.retryQueued.mockReset()
+  mocks.discardQueued.mockReset()
   mocks.deleteMutate.mockReset()
   mocks.isAdmin = false
   mocks.mutateAsync.mockReset()
@@ -414,6 +461,153 @@ describe('ChatPage slash commands', () => {
         onError: expect.any(Function),
       }),
     )
+  })
+})
+
+describe('ChatPage /afstemning', () => {
+  it('sends the question as an ordinary message and creates the poll on it', async () => {
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: {
+        value: '/afstemning Hvor skal vi hen? | Skoven | Stranden',
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(
+      (
+        screen.getByRole('textbox', {
+          name: 'Skriv en besked',
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toBe('')
+
+    await vi.waitFor(() => {
+      expect(mocks.sendMutateAsync).toHaveBeenCalledWith({
+        userId: 'current-member',
+        content: 'Hvor skal vi hen?',
+        replyToMessageId: null,
+      })
+    })
+    await vi.waitFor(() => {
+      expect(mocks.createPollMutateAsync).toHaveBeenCalledWith({
+        messageId: 'message-99',
+        options: ['Skoven', 'Stranden'],
+      })
+    })
+  })
+
+  it('does not clear the draft or create the poll while a previous send is still pending', () => {
+    mocks.sendIsPending = true
+    render(<ChatPage />)
+
+    const textbox = screen.getByRole('textbox', { name: 'Skriv en besked' })
+    fireEvent.change(textbox, {
+      target: {
+        value: '/afstemning Hvor skal vi hen? | Skoven | Stranden',
+      },
+    })
+    // Enter-tasten kalder sendCurrentDraft() ubetinget, uafhængigt af at
+    // Send-knappen er disabled mens en tidligere besked er undervejs.
+    fireEvent.keyDown(textbox, { key: 'Enter' })
+
+    expect((textbox as HTMLTextAreaElement).value).toBe(
+      '/afstemning Hvor skal vi hen? | Skoven | Stranden',
+    )
+    expect(mocks.sendMutateAsync).not.toHaveBeenCalled()
+    expect(mocks.createPollMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('shows a friendly notice instead of sending anything for invalid input', () => {
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: { value: '/afstemning Kun ét spørgsmål' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    expect(mocks.sendMutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByText(/mellem 2 og 6 svar/)).toBeTruthy()
+  })
+
+  it('renders the poll on its message with counts and percentages', () => {
+    mocks.polls = [
+      {
+        id: 'poll-1',
+        message_id: 'message-1',
+        question: 'Skal vi mødes ved søen?',
+        created_by: 'other-member',
+        closed_at: null,
+        closed_by: null,
+        options: [
+          { id: 'option-1', poll_id: 'poll-1', position: 0, label: 'Ja' },
+          { id: 'option-2', poll_id: 'poll-1', position: 1, label: 'Nej' },
+        ],
+        votes: [
+          { poll_id: 'poll-1', user_id: 'other-member', option_id: 'option-1' },
+        ],
+      },
+    ]
+
+    render(<ChatPage />)
+
+    expect(screen.getByText('Ja')).toBeTruthy()
+    expect(screen.getByText('Nej')).toBeTruthy()
+    expect(screen.getByText('1 stemme')).toBeTruthy()
+  })
+
+  it('votes by calling castVote with the poll and chosen answer', () => {
+    mocks.polls = [
+      {
+        id: 'poll-1',
+        message_id: 'message-1',
+        question: 'Skal vi mødes ved søen?',
+        created_by: 'other-member',
+        closed_at: null,
+        closed_by: null,
+        options: [
+          { id: 'option-1', poll_id: 'poll-1', position: 0, label: 'Ja' },
+          { id: 'option-2', poll_id: 'poll-1', position: 1, label: 'Nej' },
+        ],
+        votes: [],
+      },
+    ]
+
+    render(<ChatPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Stem på Ja/ }))
+
+    expect(mocks.castVoteMutate).toHaveBeenCalledWith({
+      pollId: 'poll-1',
+      optionId: 'option-1',
+    })
+  })
+
+  it('lets the creator close their own poll', () => {
+    mocks.polls = [
+      {
+        id: 'poll-1',
+        message_id: 'message-1',
+        question: 'Skal vi mødes ved søen?',
+        created_by: 'current-member',
+        closed_at: null,
+        closed_by: null,
+        options: [
+          { id: 'option-1', poll_id: 'poll-1', position: 0, label: 'Ja' },
+          { id: 'option-2', poll_id: 'poll-1', position: 1, label: 'Nej' },
+        ],
+        votes: [],
+      },
+    ]
+    mocks.messages = [{ ...mocks.messages[0], user_id: 'current-member' }]
+
+    render(<ChatPage />)
+
+    fireEvent.click(screen.getByText('Luk afstemningen'))
+
+    expect(mocks.closePollMutate).toHaveBeenCalledWith('poll-1')
   })
 })
 
@@ -774,5 +968,91 @@ describe('ChatPage plads på en telefon', () => {
     expect(
       screen.getByRole('button', { name: 'Vis chatten i fuldskærm' }),
     ).toBeTruthy()
+  })
+})
+
+describe('ChatPage offline-kø (#219)', () => {
+  function queuedMessage(): QueuedMessage {
+    return createQueuedMessage(
+      {
+        userId: 'current-member',
+        room: 'general',
+        content: 'Hilsen fra skoven',
+      },
+      'client-1',
+      '2026-09-17T09:00:00.000Z',
+    )
+  }
+
+  it('viser den ventende besked med markør og de to handlinger', () => {
+    mocks.queuedMessages = [queuedMessage()]
+    mocks.isOffline = true
+    render(<ChatPage />)
+
+    expect(screen.getByText('Hilsen fra skoven')).toBeTruthy()
+    expect(screen.getByText('Sendes, når du er online')).toBeTruthy()
+    expect(screen.getByText(/Du er offline/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Prøv igen/ }))
+    expect(mocks.retryQueued).toHaveBeenCalledWith('client-1')
+
+    fireEvent.click(screen.getByRole('button', { name: /^Slet beskeden/ }))
+    expect(mocks.discardQueued).toHaveBeenCalledWith('client-1')
+  })
+
+  it('siger ikke, at der ingen beskeder er, når der venter én', () => {
+    mocks.messages = []
+    mocks.queuedMessages = [queuedMessage()]
+    render(<ChatPage />)
+
+    expect(screen.queryByText(/Ingen beskeder endnu/)).toBeNull()
+  })
+
+  it('lader beskeden blive skrevet og sendt videre til køen, mens man er offline', () => {
+    mocks.isOffline = true
+    render(<ChatPage />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Skriv en besked' }), {
+      target: { value: 'Vi ses i skoven' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        userId: 'current-member',
+        content: 'Vi ses i skoven',
+        replyToMessageId: null,
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+    expect(
+      (
+        screen.getByRole('textbox', {
+          name: 'Skriv en besked',
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toBe('')
+  })
+
+  it('holder afstemningen i kladden, når der ikke er forbindelse til at oprette den', () => {
+    mocks.isOffline = true
+    render(<ChatPage />)
+
+    const textbox = screen.getByRole('textbox', { name: 'Skriv en besked' })
+    fireEvent.change(textbox, {
+      target: { value: '/afstemning Hvor skal vi hen? | Skov | Strand' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(
+      screen.getByText(
+        'En afstemning kan først oprettes, når du er online igen.',
+      ),
+    ).toBeTruthy()
+    expect((textbox as HTMLTextAreaElement).value).toBe(
+      '/afstemning Hvor skal vi hen? | Skov | Strand',
+    )
+    expect(mocks.sendMutateAsync).not.toHaveBeenCalled()
+    expect(mocks.createPollMutateAsync).not.toHaveBeenCalled()
   })
 })

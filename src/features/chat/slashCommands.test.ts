@@ -95,6 +95,85 @@ describe('parseChatCommand: lokale kommandoer', () => {
   })
 })
 
+describe('parseChatCommand: /afstemning', () => {
+  it('parses a question with two answers', () => {
+    expect(
+      parseChatCommand('/afstemning Hvor skal vi hen? | Skoven | Stranden'),
+    ).toEqual({
+      kind: 'poll',
+      question: 'Hvor skal vi hen?',
+      options: ['Skoven', 'Stranden'],
+    })
+  })
+
+  it('trims whitespace around the question and each answer', () => {
+    expect(
+      parseChatCommand(
+        '/afstemning   Hvor skal vi hen?   |  Skoven  |  Stranden  ',
+      ),
+    ).toEqual({
+      kind: 'poll',
+      question: 'Hvor skal vi hen?',
+      options: ['Skoven', 'Stranden'],
+    })
+  })
+
+  it('is case-insensitive', () => {
+    expect(parseChatCommand('/AFSTEMNING Hvem? | Ada | Bo')).toEqual({
+      kind: 'poll',
+      question: 'Hvem?',
+      options: ['Ada', 'Bo'],
+    })
+  })
+
+  it('accepts up to six answers', () => {
+    const command = parseChatCommand(
+      '/afstemning Hvem? | Ada | Bo | Carl | Dea | Eva | Finn',
+    )
+    expect(command).toEqual({
+      kind: 'poll',
+      question: 'Hvem?',
+      options: ['Ada', 'Bo', 'Carl', 'Dea', 'Eva', 'Finn'],
+    })
+  })
+
+  it('gives a friendly error with no arguments at all', () => {
+    const command = parseChatCommand('/afstemning')
+    expect(command?.kind).toBe('error')
+  })
+
+  it('gives a friendly error with only a question and no answers', () => {
+    const command = parseChatCommand('/afstemning Hvor skal vi hen?')
+    expect(command?.kind).toBe('error')
+  })
+
+  it('gives a friendly error with only one answer', () => {
+    const command = parseChatCommand('/afstemning Hvor skal vi hen? | Skoven')
+    expect(command?.kind).toBe('error')
+  })
+
+  it('gives a friendly error with more than six answers', () => {
+    const command = parseChatCommand(
+      '/afstemning Hvem? | Ada | Bo | Carl | Dea | Eva | Finn | Gry',
+    )
+    expect(command?.kind).toBe('error')
+  })
+
+  it('gives a friendly error when an answer is empty', () => {
+    const command = parseChatCommand('/afstemning Hvem? | Ada |  | Bo')
+    expect(command?.kind).toBe('error')
+  })
+
+  it('gives a friendly error when two answers are the same', () => {
+    const command = parseChatCommand('/afstemning Hvem? | Ada | ada | Bo')
+    expect(command?.kind).toBe('error')
+  })
+
+  it('does not treat unrelated text as the command', () => {
+    expect(parseChatCommand('/afstemninger er sjove')).toBeNull()
+  })
+})
+
 describe('helpText', () => {
   it('lists every command with its usage', () => {
     const text = helpText()
@@ -108,6 +187,7 @@ describe('helpText', () => {
 describe('matchSlashCommandHints', () => {
   it('suggests every command while the slash is alone', () => {
     expect(matchSlashCommandHints('/').map((hint) => hint.command)).toEqual([
+      '/afstemning',
       '/away',
       '/back',
       '/help',

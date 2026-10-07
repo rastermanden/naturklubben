@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useActivities } from '../features/activities/useActivities'
 import { ActivityIcon } from '../features/activities/ActivityIcon'
 
@@ -19,6 +20,29 @@ function ActivitiesPage() {
             vi samles om gennem året.
           </p>
         </header>
+
+        <div className="mx-auto mt-10 max-w-2xl">
+          <Link
+            to="/aktiviteter/btg-turnering"
+            className="flex min-h-11 items-center justify-between gap-4 rounded-2xl border border-line-soft bg-surface p-6 shadow-sm hover:bg-surface-sunken"
+          >
+            <span>
+              <span className="block text-xl font-semibold text-ink">
+                BTG turnering
+              </span>
+              <span className="mt-1 block text-ink-muted">
+                Hold styr på kampe, resultater og stilling til klubbens
+                bøssetennisgolf-turneringer.
+              </span>
+            </span>
+            <span
+              aria-hidden="true"
+              className="shrink-0 text-2xl text-ink-subtle"
+            >
+              →
+            </span>
+          </Link>
+        </div>
 
         <section className="mt-10" aria-live="polite" aria-busy={isPending}>
           {isPending && (

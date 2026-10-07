@@ -2,7 +2,11 @@
 //
 // Push-notifikationer om badges (#159):
 //   kind: 'nominated' -> admins får besked om, at der ligger en ny indstilling
-//                        til godkendelse.
+//                        til godkendelse. Den indstillede får ingenting: en
+//                        afvist indstilling må ikke være synlig for modtageren
+//                        (se badges-migrationen). Admins kan slå beskeden fra
+//                        på profilen (#216), og leveringsloggen sørger for, at
+//                        et gentaget kald ikke sender igen (_shared/pushDelivery.ts).
 //   kind: 'awarded'   -> det tildelte medlem får besked, og admins får besked
 //                        om, at produktionsuret på de 24 timer er startet.
 //
@@ -17,6 +21,8 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
 import { handleCors } from '../_shared/cors.ts'
+import { deliverPush } from '../_shared/pushDelivery.ts'
+import { badgeNominationAdminPayload } from '../_shared/pushPayloads.ts'
 import { getVapidDetails } from '../_shared/vapid.ts'
 import { sendPushNotification, type VapidDetails } from '../_shared/webpush.ts'
 
@@ -136,18 +142,31 @@ Deno.serve(async (req) => {
       .eq('is_admin', true)
     if (adminsError) return respond({ error: adminsError.message }, 500)
 
-    const recipients = new Set(
-      (admins ?? []).map((admin) => admin.id).filter((id) => id !== user.id),
-    )
-    groups.push({
-      recipients,
-      payload: JSON.stringify({
-        title: 'Ny indstilling til en badge',
-        body: `${displayName(nomination.nominator?.full_name)} har indstillet ${displayName(nomination.nominee?.full_name)} til ${nomination.badges?.name ?? 'en badge'}.`,
-        tag: 'naturklubben-badge-nomination',
-        path: 'admin',
-      }),
-    })
+    const summary = {
+      id: nomination.id,
+      badgeName: nomination.badges?.name,
+      nomineeName: nomination.nominee?.full_name,
+      nominatorName: nomination.nominator?.full_name,
+    }
+
+    const adminIds = (admins ?? [])
+      .map((admin) => admin.id as string)
+      .filter((id) => id !== user.id)
+
+    try {
+      const result = await deliverPush({
+        supabase,
+        vapid,
+        kind: 'badge_nomination_review',
+        subjectId: nomination.id,
+        userIds: adminIds,
+        payload: badgeNominationAdminPayload(summary),
+      })
+      return respond(result)
+    } catch (caught) {
+      console.error('Notifikationen om indstillingen fejlede', caught)
+      return respond({ error: 'Notifikationen kunne ikke sendes' }, 500)
+    }
   } else {
     if (typeof body.memberBadgeId !== 'string' || !body.memberBadgeId) {
       return respond({ error: 'memberBadgeId er påkrævet' }, 400)

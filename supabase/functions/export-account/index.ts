@@ -6,8 +6,10 @@ import {
   type AccountExportRepository,
   type AttendanceExport,
   type MessageExport,
+  type PhotoCommentExport,
   type PhotoDownloadUrls,
   type PhotoExport,
+  type PollVoteExport,
   type ProfileExport,
 } from './handler.ts'
 
@@ -90,7 +92,7 @@ Deno.serve(async (req) => {
         const { data, error } = await supabase
           .from('event_attendance')
           .select(
-            'event_id, created_at, event:events(id, title, description, location, start_at, end_at, created_at)',
+            'event_id, status, created_at, event:events(id, title, description, location, start_at, end_at, created_at)',
           )
           .eq('user_id', userId)
           .order('created_at', { ascending: true })
@@ -101,6 +103,42 @@ Deno.serve(async (req) => {
           ...attendance,
           event: Array.isArray(event) ? (event[0] ?? null) : event,
         })) satisfies AttendanceExport[]
+      })
+    },
+
+    async getPollVotes(userId) {
+      return collectPages(async (from, to) => {
+        const { data, error } = await supabase
+          .from('poll_votes')
+          .select(
+            'poll_id, option_id, created_at, poll:polls(id, question), option:poll_options(id, label)',
+          )
+          .eq('user_id', userId)
+          .order('created_at', { ascending: true })
+          .order('poll_id', { ascending: true })
+          .range(from, to)
+        queryError('Stemmer på afstemninger kunne ikke hentes', error)
+        return (data ?? []).map(({ poll, option, ...vote }) => ({
+          ...vote,
+          poll: Array.isArray(poll) ? (poll[0] ?? null) : (poll ?? null),
+          option: Array.isArray(option)
+            ? (option[0] ?? null)
+            : (option ?? null),
+        })) satisfies PollVoteExport[]
+      })
+    },
+
+    async getPhotoComments(userId) {
+      return collectPages(async (from, to) => {
+        const { data, error } = await supabase
+          .from('photo_comments')
+          .select('id, photo_id, body, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)
+        queryError('Kommentarer kunne ikke hentes', error)
+        return (data ?? []) as PhotoCommentExport[]
       })
     },
 

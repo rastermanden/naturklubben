@@ -266,6 +266,119 @@ describe('MessageBubble', () => {
     expect(container.querySelector('li')?.children.length).toBe(1)
   })
 
+  it('renders the poll card with its question already shown by the ordinary message content', () => {
+    render(
+      <MessageBubble
+        message={{
+          ...message,
+          content: 'Hvor skal vi hen på lørdag?',
+          reply_to_message_id: null,
+          reply_to: null,
+        }}
+        author={author}
+        replyAuthor={undefined}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+        poll={{
+          id: 'poll-1',
+          question: 'Hvor skal vi hen på lørdag?',
+          closed: false,
+          createdBy: 'member-2',
+          totalVotes: 1,
+          options: [
+            {
+              id: 'option-1',
+              label: 'Skoven',
+              count: 1,
+              percentage: 100,
+              votedByMe: false,
+            },
+            {
+              id: 'option-2',
+              label: 'Stranden',
+              count: 0,
+              percentage: 0,
+              votedByMe: false,
+            },
+          ],
+          ownVoteOptionId: null,
+        }}
+        onVotePoll={vi.fn()}
+        onClosePoll={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Skoven')).toBeTruthy()
+    expect(screen.getByText('Stranden')).toBeTruthy()
+    expect(screen.getByText('1 stemme')).toBeTruthy()
+  })
+
+  it('does not show a poll card on a message without a poll', () => {
+    render(
+      <MessageBubble
+        message={message}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByText('Luk afstemningen')).toBeNull()
+  })
+
+  it('hides the poll card on a deleted message', () => {
+    render(
+      <MessageBubble
+        message={{
+          ...message,
+          deleted_at: '2026-09-14T09:00:00.000Z',
+          deleted_by: 'member-2',
+          content: '',
+        }}
+        author={author}
+        replyAuthor={undefined}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+        poll={{
+          id: 'poll-1',
+          question: 'Hvor skal vi hen på lørdag?',
+          closed: false,
+          createdBy: 'member-2',
+          totalVotes: 0,
+          options: [
+            {
+              id: 'option-1',
+              label: 'Skoven',
+              count: 0,
+              percentage: 0,
+              votedByMe: false,
+            },
+            {
+              id: 'option-2',
+              label: 'Stranden',
+              count: 0,
+              percentage: 0,
+              votedByMe: false,
+            },
+          ],
+          ownVoteOptionId: null,
+        }}
+        onVotePoll={vi.fn()}
+        onClosePoll={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Beskeden er slettet.')).toBeTruthy()
+    expect(screen.queryByText('Skoven')).toBeNull()
+  })
+
   it('makes a pasted link clickable', () => {
     render(
       <MessageBubble
@@ -445,5 +558,52 @@ describe('MessageBubble kompakt linje', () => {
     expect(time.getAttribute('title')).toBe(precise)
     expect(time.getAttribute('aria-label')).toBe(precise)
     expect(time.getAttribute('datetime')).toBe(message.created_at)
+  })
+})
+
+describe('MessageBubble og beskeder fra offline-køen (#219)', () => {
+  it('viser skrivetidspunktet, men fortæller hvornår beskeden nåede frem', () => {
+    const writtenAt = '2026-08-23T09:00:00.000Z'
+    render(
+      <MessageBubble
+        message={{ ...message, written_at: writtenAt }}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    const time = screen.getByText('Bo').parentElement!.querySelector('time')!
+    const written = new Date(writtenAt).toLocaleString('da-DK')
+    const received = new Date(message.created_at).toLocaleString('da-DK')
+
+    expect(time.getAttribute('datetime')).toBe(writtenAt)
+    expect(time.getAttribute('title')).toBe(
+      `Skrevet ${written} · modtaget ${received}`,
+    )
+  })
+
+  it('lader en almindelig besked vise serverens tidspunkt som før', () => {
+    render(
+      <MessageBubble
+        message={message}
+        author={author}
+        replyAuthor={replyAuthor}
+        isOwn={false}
+        onReply={vi.fn()}
+        reactions={[]}
+        onToggleReaction={vi.fn()}
+      />,
+    )
+
+    const time = screen.getByText('Bo').parentElement!.querySelector('time')!
+
+    expect(time.getAttribute('datetime')).toBe(message.created_at)
+    expect(time.getAttribute('title')).toBe(
+      new Date(message.created_at).toLocaleString('da-DK'),
+    )
   })
 })

@@ -1,10 +1,10 @@
 import { lazy, Suspense, type ReactNode } from 'react'
-import { Route, Routes, useLocation } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import HeroPage from './pages/HeroPage'
 import { AdminRoute } from './features/admin/AdminRoute'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
 import { Layout } from './components/Layout'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import { routeMetadata, type AppRoutePath } from './routeMetadata'
 
 const AccountDeletedPage = lazy(() => import('./pages/AccountDeletedPage'))
@@ -24,10 +24,14 @@ const ProbationApplicationPage = lazy(
   () => import('./pages/ProbationApplicationPage'),
 )
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const PublicCalendarPage = lazy(() => import('./pages/PublicCalendarPage'))
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
 const GamesPage = lazy(() => import('./pages/GamesPage'))
 const TetrisPage = lazy(() => import('./pages/TetrisPage'))
 const KaperPage = lazy(() => import('./pages/KaperPage'))
+const TwentyFortyEightPage = lazy(() => import('./pages/TwentyFortyEightPage'))
+const NaturquizPage = lazy(() => import('./pages/NaturquizPage'))
+const TournamentPage = lazy(() => import('./pages/TournamentPage'))
 const SignupPage = lazy(() => import('./pages/SignupPage'))
 const WelcomePage = lazy(() => import('./pages/WelcomePage'))
 
@@ -48,20 +52,6 @@ function loadRoute(element: ReactNode) {
   return <Suspense fallback={<RouteLoadingFallback />}>{element}</Suspense>
 }
 
-function RouteErrorBoundary({ children }: { children: ReactNode }) {
-  const location = useLocation()
-
-  return (
-    <ErrorBoundary
-      key={location.key}
-      variant="route"
-      reportSource="react-route"
-    >
-      {children}
-    </ErrorBoundary>
-  )
-}
-
 const routeElements: Record<AppRoutePath, ReactNode> = {
   '/': <HeroPage />,
   '/aktiviteter': loadRoute(<ActivitiesPage />),
@@ -74,12 +64,27 @@ const routeElements: Record<AppRoutePath, ReactNode> = {
   '/velkommen': loadRoute(<WelcomePage />),
   '/ny-adgangskode': loadRoute(<ResetPasswordPage />),
   '/kalender': <ProtectedRoute>{loadRoute(<CalendarPage />)}</ProtectedRoute>,
+  '/kalender/offentlig': loadRoute(<PublicCalendarPage />),
+  // Dynamiske stier efter deres statiske søskende: RouteNavigation finder
+  // siden ved første match, og /kalender/:eventId matcher også /kalender/offentlig.
+  '/kalender/:eventId': (
+    <ProtectedRoute>{loadRoute(<CalendarPage />)}</ProtectedRoute>
+  ),
   '/billeder': <ProtectedRoute>{loadRoute(<GalleryPage />)}</ProtectedRoute>,
   '/chat': <ProtectedRoute>{loadRoute(<ChatPage />)}</ProtectedRoute>,
   '/naturlog': <ProtectedRoute>{loadRoute(<NaturlogPage />)}</ProtectedRoute>,
   '/spil': <ProtectedRoute>{loadRoute(<GamesPage />)}</ProtectedRoute>,
   '/spil/tetris': <ProtectedRoute>{loadRoute(<TetrisPage />)}</ProtectedRoute>,
   '/spil/kaper': <ProtectedRoute>{loadRoute(<KaperPage />)}</ProtectedRoute>,
+  '/spil/2048': (
+    <ProtectedRoute>{loadRoute(<TwentyFortyEightPage />)}</ProtectedRoute>
+  ),
+  '/spil/naturquiz': (
+    <ProtectedRoute>{loadRoute(<NaturquizPage />)}</ProtectedRoute>
+  ),
+  '/aktiviteter/btg-turnering': (
+    <ProtectedRoute>{loadRoute(<TournamentPage />)}</ProtectedRoute>
+  ),
   '/medlemmer': <ProtectedRoute>{loadRoute(<MembersPage />)}</ProtectedRoute>,
   '/nyheder': <ProtectedRoute>{loadRoute(<NewsPage />)}</ProtectedRoute>,
   '/admin': (

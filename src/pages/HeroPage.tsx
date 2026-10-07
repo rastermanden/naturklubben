@@ -58,6 +58,14 @@ function HeroPage() {
           >
             Se aktiviteter
           </Link>
+          {!session && (
+            <Link
+              to="/kalender/offentlig"
+              className="min-h-11 flex items-center rounded border border-accent px-5 py-2 text-ink-muted"
+            >
+              Se åbne ture
+            </Link>
+          )}
         </div>
       </section>
 

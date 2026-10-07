@@ -8,16 +8,20 @@ import {
 } from '../features/gallery/useUploadPhotos'
 import { useDeletePhoto } from '../features/gallery/useDeletePhoto'
 import { useEventsForSelect } from '../features/gallery/useEventsForSelect'
+import { useGalleryAlbums } from '../features/gallery/useGalleryAlbums'
+import type { GalleryAlbum } from '../features/gallery/useGalleryAlbums'
+import { GalleryAlbumGrid } from '../features/gallery/GalleryAlbumGrid'
 import {
-  useEventPhotoCounts,
-  type EventPhotoCount,
-} from '../features/gallery/useEventPhotoCounts'
+  commentCountFor,
+  usePhotoCommentCounts,
+} from '../features/gallery/usePhotoCommentCounts'
 import { PhotoThumbnail } from '../features/gallery/PhotoThumbnail'
 import { PhotoLightbox } from '../features/gallery/PhotoLightbox'
 import {
+  clearAlbumSearchParams,
   filterPhotosByEvent,
   updateGallerySearchParam,
-  WITHOUT_EVENT_FILTER,
+  WITHOUT_EVENT_ALBUM,
 } from '../features/gallery/gallerySearchParams'
 import { useRetryPhotoOptimization } from '../features/gallery/useRetryPhotoOptimization'
 import { useAutoOptimizePendingPhotos } from '../features/gallery/useAutoOptimizePendingPhotos'
@@ -25,7 +29,8 @@ import type { Photo } from '../features/gallery/types'
 import { useErrorFocus } from '../hooks/useErrorFocus'
 
 const EMPTY_PHOTOS: Photo[] = []
-const EMPTY_EVENT_OPTIONS: EventPhotoCount[] = []
+const EMPTY_ALBUMS: GalleryAlbum[] = []
+const EMPTY_IDS: string[] = []
 
 // Hent næste side, inden man bladrer helt ud til kanten af det indlæste
 // galleri, så bladringen ikke står stille og venter på et netværkskald.
@@ -44,10 +49,18 @@ function queueStatus(item: UploadQueueItem) {
   }
 }
 
+function formatAlbumDate(value: string) {
+  return new Date(value).toLocaleDateString('da-DK', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
 function GalleryPage() {
   const photosQuery = usePhotos()
+  const albumsQuery = useGalleryAlbums()
   const eventsQuery = useEventsForSelect()
-  const eventPhotoCountsQuery = useEventPhotoCounts()
   const upload = useUploadPhotos()
   const deletePhoto = useDeletePhoto()
   const retryOptimization = useRetryPhotoOptimization()
@@ -62,24 +75,45 @@ function GalleryPage() {
   const [dragActive, setDragActive] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const sharedPhotoId = searchParams.get('photo')
-  const eventFilter = searchParams.get('event')
+  // Album pr. begivenhed (#218): "album" står i URL'en, så et enkelt album kan
+  // deles som link. Uden "album" viser forsiden album-gitteret.
+  const albumParam = searchParams.get('album')
   const photos = photosQuery.data?.photos ?? EMPTY_PHOTOS
+  const albums = albumsQuery.data ?? EMPTY_ALBUMS
   useAutoOptimizePendingPhotos()
-  const filteredPhotos = useMemo(
-    () => filterPhotosByEvent(photos, eventFilter),
-    [eventFilter, photos],
-  )
-  const eventOptions = eventPhotoCountsQuery.data ?? EMPTY_EVENT_OPTIONS
-  const selectedFilterIsUnknown =
-    eventFilter !== null &&
-    eventFilter !== WITHOUT_EVENT_FILTER &&
-    !eventOptions.some((event) => event.event_id === eventFilter)
+
   const cachedActivePhoto =
     sharedPhotoId !== null
       ? photos.find((photo) => photo.id === sharedPhotoId)
       : undefined
   const sharedPhotoQuery = usePhoto(sharedPhotoId, cachedActivePhoto)
   const activePhoto = cachedActivePhoto ?? sharedPhotoQuery.data ?? null
+
+  // Et delt fotolink uden et albumparameter (ældre links, eller et link delt
+  // via "Del link" i lysbordet) bladrer stadig kun inden for sit eget album --
+  // udledt af selve billedet, så URL'en ikke behøver at blive omskrevet.
+  const navigationAlbumId =
+    albumParam ??
+    (activePhoto ? (activePhoto.event_id ?? WITHOUT_EVENT_ALBUM) : null)
+  const filteredPhotos = useMemo(
+    () =>
+      navigationAlbumId
+        ? filterPhotosByEvent(photos, navigationAlbumId)
+        : EMPTY_PHOTOS,
+    [navigationAlbumId, photos],
+  )
+  const currentAlbum = albumParam
+    ? (albums.find((album) => album.albumId === albumParam) ?? null)
+    : null
+  const currentAlbumTitle =
+    currentAlbum?.title ??
+    (albumParam === WITHOUT_EVENT_ALBUM ? 'Uden begivenhed' : 'Album')
+
+  const commentCountedPhotoIds = albumParam
+    ? filteredPhotos.map((photo) => photo.id)
+    : EMPTY_IDS
+  const commentCountsQuery = usePhotoCommentCounts(commentCountedPhotoIds)
+
   const activeIndex = activePhoto
     ? filteredPhotos.findIndex((photo) => photo.id === activePhoto.id)
     : -1
@@ -120,7 +154,7 @@ function GalleryPage() {
   const focusCameraError = useErrorFocus(cameraButtonRef)
 
   function setGalleryParam(
-    key: 'event' | 'photo',
+    key: 'album' | 'photo',
     value: string | null,
     options?: { replace?: boolean },
   ) {
@@ -128,6 +162,16 @@ function GalleryPage() {
       (current) => updateGallerySearchParam(current, key, value),
       options,
     )
+  }
+
+  function openAlbum(album: GalleryAlbum) {
+    setActionError(null)
+    setGalleryParam('album', album.albumId)
+  }
+
+  function backToAlbums() {
+    setActionError(null)
+    setSearchParams((current) => clearAlbumSearchParams(current))
   }
 
   // Bladring erstatter historikposten, så Tilbage lukker lightboxen i stedet
@@ -195,35 +239,11 @@ function GalleryPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl p-4 sm:p-6">
-      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink-body">Billeder</h1>
-          <p className="mt-1 text-ink-subtle">
-            Billeder fra klubbens ture og begivenheder.
-          </p>
-        </div>
-        <label className="flex min-w-60 flex-col gap-1 text-sm text-ink-body">
-          Filtrér efter begivenhed
-          <select
-            id="gallery-filter-event"
-            value={eventFilter ?? ''}
-            onChange={(event) =>
-              setGalleryParam('event', event.target.value || null)
-            }
-            className="min-h-11 rounded border border-line-strong bg-surface px-3 py-2 text-base"
-          >
-            <option value="">Alle billeder</option>
-            <option value={WITHOUT_EVENT_FILTER}>Uden begivenhed</option>
-            {selectedFilterIsUnknown && eventFilter && (
-              <option value={eventFilter}>Ukendt begivenhed</option>
-            )}
-            {eventOptions.map((event) => (
-              <option key={event.event_id} value={event.event_id}>
-                {event.title} ({event.photo_count})
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="mb-5">
+        <h1 className="text-2xl font-semibold text-ink-body">Billeder</h1>
+        <p className="mt-1 text-ink-subtle">
+          Billeder fra klubbens ture og begivenheder, samlet i album.
+        </p>
       </div>
 
       <section
@@ -431,56 +451,111 @@ function GalleryPage() {
         </p>
       )}
 
-      {photosQuery.isSuccess &&
-        !photosQuery.hasNextPage &&
-        photos.length > 0 &&
-        filteredPhotos.length === 0 && (
-          <div className="rounded bg-surface-sunken p-5 text-ink-muted">
-            <p>Der er ingen billeder for det valgte filter.</p>
+      {photosQuery.isSuccess && photos.length > 0 && !albumParam && (
+        <>
+          {albumsQuery.isLoading && (
+            <p role="status" className="py-12 text-center text-ink-muted">
+              Henter album…
+            </p>
+          )}
+          {albumsQuery.isError && (
+            <div
+              role="alert"
+              className="rounded border border-danger-line bg-danger-surface p-4 text-danger-strong"
+            >
+              Albummene kunne ikke hentes.
+              <button
+                type="button"
+                onClick={() => albumsQuery.refetch()}
+                className="ml-2 min-h-11 underline"
+              >
+                Prøv igen
+              </button>
+            </div>
+          )}
+          {albumsQuery.isSuccess && (
+            <GalleryAlbumGrid albums={albums} onOpenAlbum={openAlbum} />
+          )}
+        </>
+      )}
+
+      {photosQuery.isSuccess && photos.length > 0 && albumParam && (
+        <>
+          <div className="mb-4 flex flex-col gap-1">
             <button
               type="button"
-              onClick={() => setGalleryParam('event', null)}
-              className="mt-2 min-h-11 underline"
+              onClick={backToAlbums}
+              className="min-h-11 self-start text-sm text-ink-muted underline underline-offset-2"
             >
-              Vis alle billeder
+              ← Alle album
             </button>
+            <h2 className="text-xl font-semibold text-ink-body">
+              {currentAlbumTitle}
+            </h2>
+            {currentAlbum && (
+              <p className="text-sm text-ink-subtle">
+                {currentAlbum.photoCount === 1
+                  ? '1 billede'
+                  : `${currentAlbum.photoCount} billeder`}
+                {currentAlbum.eventDate &&
+                  ` · ${formatAlbumDate(currentAlbum.eventDate)}`}
+              </p>
+            )}
           </div>
-        )}
 
-      {filteredPhotos.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-          {filteredPhotos.map((photo) => (
-            <PhotoThumbnail
-              key={photo.id}
-              photo={photo}
-              onClick={() => {
-                setActionError(null)
-                setGalleryParam('photo', photo.id)
-              }}
-            />
-          ))}
-        </div>
-      )}
+          {!photosQuery.hasNextPage && filteredPhotos.length === 0 && (
+            <div className="rounded bg-surface-sunken p-5 text-ink-muted">
+              <p>Der er ingen billeder i dette album endnu.</p>
+              <button
+                type="button"
+                onClick={backToAlbums}
+                className="mt-2 min-h-11 underline"
+              >
+                Tilbage til album
+              </button>
+            </div>
+          )}
 
-      {photosQuery.hasNextPage && (
-        <div className="mt-5 text-center">
-          <button
-            type="button"
-            onClick={() => void photosQuery.fetchNextPage()}
-            disabled={photosQuery.isFetchingNextPage}
-            className="min-h-11 rounded-lg border border-accent px-5 py-2 text-ink-body disabled:cursor-wait disabled:opacity-60"
-          >
-            {photosQuery.isFetchingNextPage
-              ? 'Henter flere billeder…'
-              : 'Hent flere billeder'}
-          </button>
-        </div>
-      )}
+          {filteredPhotos.length > 0 && (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              {filteredPhotos.map((photo) => (
+                <PhotoThumbnail
+                  key={photo.id}
+                  photo={photo}
+                  commentCount={commentCountFor(
+                    commentCountsQuery.data,
+                    photo.id,
+                  )}
+                  onClick={() => {
+                    setActionError(null)
+                    setGalleryParam('photo', photo.id)
+                  }}
+                />
+              ))}
+            </div>
+          )}
 
-      {photosQuery.isFetchNextPageError && (
-        <p role="alert" className="mt-3 text-center text-danger">
-          Flere billeder kunne ikke hentes. Prøv igen.
-        </p>
+          {photosQuery.hasNextPage && (
+            <div className="mt-5 text-center">
+              <button
+                type="button"
+                onClick={() => void photosQuery.fetchNextPage()}
+                disabled={photosQuery.isFetchingNextPage}
+                className="min-h-11 rounded-lg border border-accent px-5 py-2 text-ink-body disabled:cursor-wait disabled:opacity-60"
+              >
+                {photosQuery.isFetchingNextPage
+                  ? 'Henter flere billeder…'
+                  : 'Hent flere billeder'}
+              </button>
+            </div>
+          )}
+
+          {photosQuery.isFetchNextPageError && (
+            <p role="alert" className="mt-3 text-center text-danger">
+              Flere billeder kunne ikke hentes. Prøv igen.
+            </p>
+          )}
+        </>
       )}
 
       {photosQuery.isSuccess &&

@@ -13,6 +13,7 @@ import {
   canRetryOptimization,
   optimizationStatusLabel,
 } from './optimizationStatus'
+import { PhotoComments } from './PhotoComments'
 import type { Photo } from './types'
 
 // En vandret bevægelse skal være tydeligt vandret, før den tæller som et
@@ -359,6 +360,8 @@ export function PhotoLightbox({
       >
         {visibleShareStatus ?? ''}
       </p>
+
+      <PhotoComments photoId={photo.id} />
     </div>
   )
 }

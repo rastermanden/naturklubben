@@ -66,7 +66,45 @@ function repository(overrides: Partial<AccountExportRepository> = {}) {
     },
     getAttendance: async (id) => {
       seenUserIds.push(id)
-      return []
+      return [
+        {
+          event_id: 'event-1',
+          status: 'declined',
+          created_at: '2026-08-02T10:00:00.000Z',
+          event: {
+            id: 'event-1',
+            title: 'Skovtur',
+            description: null,
+            location: null,
+            start_at: '2026-09-20T08:00:00.000Z',
+            end_at: null,
+            created_at: '2026-08-01T10:00:00.000Z',
+          },
+        },
+      ]
+    },
+    getPollVotes: async (id) => {
+      seenUserIds.push(id)
+      return [
+        {
+          poll_id: 'poll-1',
+          option_id: 'option-1',
+          created_at: '2026-08-03T10:00:00.000Z',
+          poll: { id: 'poll-1', question: 'Hvor skal vi hen på lørdag?' },
+          option: { id: 'option-1', label: 'Skoven' },
+        },
+      ]
+    },
+    getPhotoComments: async (id) => {
+      seenUserIds.push(id)
+      return [
+        {
+          id: 'comment-1',
+          photo_id: 'photo-1',
+          body: 'Flot billede!',
+          created_at: '2026-08-03T10:00:00.000Z',
+        },
+      ]
     },
     getPhotoDownloadUrls: async () => ({
       original: 'https://storage.test/original?token=short-lived',
@@ -93,13 +131,46 @@ Deno.test(
     const body = await response.json()
 
     assertEquals(response.status, 200)
-    assertEquals(seenUserIds, [userId, userId, userId, userId])
+    assertEquals(seenUserIds, [userId, userId, userId, userId, userId, userId])
     assertEquals(body.account.email, 'medlem@example.com')
     assertEquals(body.messages[0].content, 'Hej')
+    assertEquals(body.photo_comments, [
+      {
+        id: 'comment-1',
+        photo_id: 'photo-1',
+        body: 'Flot billede!',
+        created_at: '2026-08-03T10:00:00.000Z',
+      },
+    ])
     assertEquals(
       body.photos[0].download_urls.original,
       'https://storage.test/original?token=short-lived',
     )
+    assertEquals(body.activity_registrations, [
+      {
+        event_id: 'event-1',
+        status: 'declined',
+        created_at: '2026-08-02T10:00:00.000Z',
+        event: {
+          id: 'event-1',
+          title: 'Skovtur',
+          description: null,
+          location: null,
+          start_at: '2026-09-20T08:00:00.000Z',
+          end_at: null,
+          created_at: '2026-08-01T10:00:00.000Z',
+        },
+      },
+    ])
+    assertEquals(body.poll_votes, [
+      {
+        poll_id: 'poll-1',
+        option_id: 'option-1',
+        created_at: '2026-08-03T10:00:00.000Z',
+        poll: { id: 'poll-1', question: 'Hvor skal vi hen på lørdag?' },
+        option: { id: 'option-1', label: 'Skoven' },
+      },
+    ])
     assertEquals(body.signed_urls_expire_at, '2026-08-23T18:15:00.000Z')
     assert(response.headers.get('Cache-Control') === 'no-store')
     assert(response.headers.get('Content-Disposition')?.includes('.json'))

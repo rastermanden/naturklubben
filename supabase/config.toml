@@ -8,6 +8,13 @@ verify_jwt = false
 enabled = true
 verify_jwt = false
 
+# Offentlig kalender (#224): gæsteformularen har ingen bruger-JWT. Svaret til
+# gæsten sendes ikke længere som e-mail (#239) -- arrangøren svarer selv fra
+# sin egen mailklient via en mailto:-knap i UI'et.
+[functions.submit-event-guest-request]
+enabled = true
+verify_jwt = false
+
 [functions.report-client-error]
 enabled = true
 verify_jwt = false
@@ -28,3 +35,10 @@ verify_jwt = true
 [functions.badge-notifications]
 enabled = true
 verify_jwt = true
+
+# Push ud over chatten (#216). Functionen tjekker selv medlemmets bearer-token
+# (event_created) og kørslens token mod event_reminders (event_reminder), så
+# gateway-JWT'en er slået fra -- som i deploy-functions.yml (--no-verify-jwt).
+[functions.calendar-push]
+enabled = true
+verify_jwt = false

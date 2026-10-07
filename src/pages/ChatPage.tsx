@@ -4,11 +4,14 @@ import { MessageBubble } from '../features/chat/MessageBubble'
 import { OnlineMembers } from '../features/chat/OnlineMembers'
 import { useMessages, useMessageSearch } from '../features/chat/useMessages'
 import type { ChatRoom } from '../features/chat/useMessages'
+import { PendingMessage } from '../features/chat/PendingMessage'
 import { useReactions } from '../features/chat/useReactions'
 import {
   groupReactionsByMessage,
   summarizeReactions,
 } from '../features/chat/reactions'
+import { usePolls } from '../features/chat/usePolls'
+import { groupPollsByMessage, summarizePoll } from '../features/chat/polls'
 import { useOnlinePresence } from '../features/chat/useOnlinePresence'
 import { useFullscreen } from '../features/chat/useFullscreen'
 import {
@@ -44,8 +47,16 @@ interface ChatPageProps {
 function ChatPage({ room = 'general' }: ChatPageProps) {
   const { session } = useAuth()
   const userId = session!.user.id
-  const { messagesQuery, sendMessage, deleteMessage, openMessage } =
-    useMessages(room)
+  const {
+    messagesQuery,
+    sendMessage,
+    deleteMessage,
+    openMessage,
+    queuedMessages,
+    retryQueued,
+    discardQueued,
+    isOffline,
+  } = useMessages(room, userId)
   const { isAdmin } = useIsAdmin()
   const { isFullscreen, toggleFullscreen } = useFullscreen()
   const { data: profiles, refetch: refetchProfiles } = useProfilesMap()
@@ -60,6 +71,8 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
     () => groupReactionsByMessage(reactions),
     [reactions],
   )
+  const { polls, createPoll, castVote, closePoll } = usePolls(messages, userId)
+  const pollsByMessage = useMemo(() => groupPollsByMessage(polls), [polls])
 
   const [draft, setDraft] = useState('')
   // Markørens position i skrivefeltet: en mention kan skrives midt i teksten,
@@ -117,9 +130,14 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
     return profiles?.[id]?.full_name ?? 'Medlem'
   }
 
+  function nameForMember(id: string | null) {
+    return id === null ? 'Tidligere medlem' : nameOf(id)
+  }
+
   const listRef = useRef<HTMLUListElement>(null)
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const previousMessageCount = useRef(0)
+  const previousQueuedCount = useRef(0)
   const previousOldestMessageId = useRef<string | undefined>(undefined)
   const [prependScrollSnapshot, setPrependScrollSnapshot] = useState<{
     scrollHeight: number
@@ -202,6 +220,16 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
     return () => window.clearTimeout(timeout)
   }, [highlightedMessageId, messages])
 
+  // En besked, der lægges i køen, skal stå nederst i strømmen, akkurat som en
+  // sendt besked ville gøre -- man skal kunne se, at den kom af sted.
+  useEffect(() => {
+    if (queuedMessages.length > previousQueuedCount.current) {
+      scrollToBottom('smooth')
+    }
+    previousQueuedCount.current = queuedMessages.length
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queuedMessages.length])
+
   async function loadOlderMessages() {
     const list = listRef.current
     const snapshot = list
@@ -246,10 +274,14 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
   // Kommandoer, der ikke sender noget til chatten, men kun virker for
   // afsenderen selv -- svaret vises som en systemlinje, ingen andre ser.
   function runLocalCommand(
-    command: Exclude<ParsedCommand, { kind: 'message' }>,
+    command: Exclude<ParsedCommand, { kind: 'message' } | { kind: 'poll' }>,
   ) {
     if (command.kind === 'help') {
       pushNotice(helpText())
+      return
+    }
+    if (command.kind === 'error') {
+      pushNotice(command.message)
       return
     }
     if (command.kind === 'away') {
@@ -288,6 +320,43 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
     )
   }
 
+  // "/afstemning" sender selve spørgsmålet som en helt almindelig besked --
+  // afstemningen er ikke andet end en besked, den hænger på (se
+  // 20260913180000_chat_polls.sql) -- og kalder derefter create_poll med
+  // besked-id'et og svarene. Fejler create_poll, efter beskeden allerede er
+  // sendt, står spørgsmålet tilbage som en almindelig tekstbesked uden
+  // afstemningskort; det er sjældent nok til ikke at kræve en oprydning her.
+  async function sendPoll(
+    originalInput: string,
+    question: string,
+    options: string[],
+  ) {
+    if (sendMessage.isPending || createPoll.isPending) return
+    try {
+      const message = await sendMessage.mutateAsync({
+        userId,
+        content: question,
+        replyToMessageId: null,
+      })
+      await createPoll.mutateAsync({ messageId: message.id, options })
+    } catch {
+      setDraft((current) => current || originalInput)
+      setSendError('Afstemningen kunne ikke oprettes. Prøv igen.')
+    }
+  }
+
+  function votePoll(message: Message, optionId: string) {
+    const currentPoll = pollsByMessage.get(message.id)
+    if (!currentPoll) return
+    castVote.mutate({ pollId: currentPoll.id, optionId })
+  }
+
+  function closeSelectedPoll(message: Message) {
+    const currentPoll = pollsByMessage.get(message.id)
+    if (!currentPoll) return
+    closePoll.mutate(currentPoll.id)
+  }
+
   function sendCurrentDraft() {
     const rawContent = draft.trim()
     if (!rawContent || rawContent.length > MAX_MESSAGE_LENGTH) return
@@ -295,6 +364,21 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
     // De lokale kommandoer sender ingenting og skal derfor virke, også mens
     // en tidligere besked stadig er undervejs.
     const command = parseChatCommand(rawContent)
+    if (command && command.kind === 'poll') {
+      if (sendMessage.isPending || createPoll.isPending) return
+      // Selve afstemningen oprettes i et separat kald, der kræver, at beskeden
+      // allerede findes på serveren. Uden forbindelse kan den ikke blive til
+      // andet end et spørgsmål, der ser ud som en almindelig besked, så
+      // kladden bliver stående i stedet.
+      if (isOffline) {
+        setSendError('En afstemning kan først oprettes, når du er online igen.')
+        return
+      }
+      setDraft('')
+      setSendError(null)
+      void sendPoll(rawContent, command.question, command.options)
+      return
+    }
     if (command && command.kind !== 'message') {
       setDraft('')
       setSendError(null)
@@ -648,7 +732,7 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
                   </button>
                 </li>
               )}
-              {messages.length === 0 && (
+              {messages.length === 0 && queuedMessages.length === 0 && (
                 <li className="py-12 text-center text-ink-subtle">
                   Ingen beskeder endnu. Vær den første til at sige hej!
                 </li>
@@ -682,8 +766,44 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
                   isHighlighted={message.id === highlightedMessageId}
                   isMentioned={message.mentions.includes(userId)}
                   members={allMembers}
+                  poll={
+                    pollsByMessage.has(message.id)
+                      ? summarizePoll(pollsByMessage.get(message.id)!, userId)
+                      : undefined
+                  }
+                  onVotePoll={votePoll}
+                  onClosePoll={closeSelectedPoll}
+                  isVotingPoll={
+                    castVote.isPending &&
+                    pollsByMessage.get(message.id)?.id ===
+                      castVote.variables?.pollId
+                  }
+                  isClosingPoll={
+                    closePoll.isPending &&
+                    pollsByMessage.get(message.id)?.id === closePoll.variables
+                  }
                 />
               ))}
+              {queuedMessages.map((entry) => {
+                const replyTo = entry.replyToMessageId
+                  ? (messages.find(
+                      (message) => message.id === entry.replyToMessageId,
+                    ) ?? null)
+                  : null
+                return (
+                  <PendingMessage
+                    key={entry.clientId}
+                    entry={entry}
+                    author={profiles?.[entry.userId]}
+                    replyTo={replyTo}
+                    replyToName={
+                      replyTo ? nameForMember(replyTo.user_id) : null
+                    }
+                    onRetry={retryQueued}
+                    onDiscard={discardQueued}
+                  />
+                )
+              })}
               {notices.map((notice) => (
                 <li
                   key={notice.id}
@@ -734,6 +854,15 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
         )}
 
         <form onSubmit={handleSubmit} className="flex shrink-0 flex-col gap-2">
+          {isOffline && (
+            <p
+              role="status"
+              className="rounded-lg border border-line bg-surface-sunken px-3 py-2 text-sm text-ink-body"
+            >
+              Du er offline. Beskeder sendes automatisk, når du igen har
+              forbindelse.
+            </p>
+          )}
           {replyingTo && (
             <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface-sunken px-3 py-2 text-sm text-ink">
               <p role="status" aria-live="polite" className="min-w-0">

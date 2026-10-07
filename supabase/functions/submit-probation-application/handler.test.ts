@@ -1,9 +1,9 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from 'vitest'
+import { extractTrustedClientAddress } from '../_shared/clientAddress'
 import {
   createSubmissionHandler,
-  extractTrustedClientAddress,
   hmacSignal,
   type SubmissionRpcArguments,
   type SubmissionRpcResult,

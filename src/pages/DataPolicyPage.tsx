@@ -60,7 +60,10 @@ function DataPolicyPage() {
             Browserens push-endpoint og krypteringsnøgler gemmes kun for at
             levere valgte notifikationer. De slettes, når du slår funktionen
             fra, når push-tjenesten melder abonnementet udløbet, eller når
-            kontoen slettes.
+            kontoen slettes. Dine valg pr. notifikationstype gemmes på din
+            profil, og en log over, hvilke notifikationer du har fået, gemmes i
+            90 dage, så du ikke får den samme to gange. Begge slettes ved
+            kontosletning.
           </p>
         </section>
 
@@ -77,6 +80,26 @@ function DataPolicyPage() {
             medlemsadgangen fjernes eller kontoen slettes. Spam-beskyttelsen
             gemmer kun HMAC-hashes af e-mail- og netværkssignaler, aldrig de rå
             værdier, og sletter dem efter 25 timer.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold text-ink-body">
+            Ansøgninger om at deltage i åbne begivenheder
+          </h2>
+          <p className="mt-2">
+            Folk uden for klubben kan søge om at deltage i en begivenhed, som
+            arrangøren har åbnet for ikke-medlemmer. Navn, e-mail, antal
+            personer og en eventuel besked bruges kun til at behandle
+            ansøgningen, og oplysningerne kan kun ses af begivenhedens arrangør
+            og klubbens administratorer. Arrangøren svarer selv fra sin egen
+            mailklient -- der sendes ingen automatisk mail. Andre medlemmer ser
+            kun antallet af godkendte gæster. Alle ansøgninger til en begivenhed
+            -- godkendte, afviste og ubesvarede -- slettes automatisk 30 dage
+            efter, at begivenheden er afholdt. Slettes begivenheden, slettes
+            ansøgningerne med det samme. Spam-beskyttelsen gemmer, som for
+            prøvemedlemskaber, kun HMAC-hashes af e-mail- og netværkssignaler og
+            sletter dem efter 25 timer.
           </p>
         </section>
 

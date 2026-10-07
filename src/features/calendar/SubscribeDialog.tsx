@@ -70,7 +70,8 @@ export function SubscribeDialog({
 
         <p className="mt-4 text-ink">
           Abonnerer du, holder din egen kalender sig selv opdateret med klubbens
-          ture og arrangementer. Kopiér linket og indsæt det i din kalender-app.
+          åbne ture og arrangementer. Private begivenheder vises kun her i
+          appen. Kopiér linket og indsæt det i din kalender-app.
         </p>
 
         <label
