@@ -23,6 +23,22 @@ lokale terminal. Derfor gælder:
   pushes som almindelig kode. Deploy sker automatisk via de integrationer, der opsættes i
   #2 og #3, aldrig ved at nogen manuelt kører en deploy-kommando.
 
+## Kør `npm run check` før hver PR
+
+- **Kør `npm run check`, før du åbner eller opdaterer en PR, der rører frontend-koden.**
+  Scriptet kører de samme fire trin som CI's `lint-and-typecheck`-job — `npm test`,
+  `npm run lint` (oxlint), `npm run typecheck` (`tsc -b`) og `npm run format:check`
+  (prettier) — så en fejl fanges lokalt i stedet for at gøre PR'en rød på GitHub. Fejler
+  et trin, så ret det (fx `npm run format` for formatteringsfejl) og kør igen, indtil
+  `check` er grøn. Først derefter commit/push.
+- Mangler `node_modules`, kør `npm ci` én gang i worktree'et først. Det er lokalt værktøj
+  i én session, ikke et deploy-trin, så det bryder ikke kerneprincippet ovenfor.
+- Scriptet dækker **ikke** Edge Function-trinnene (`deno test`/`deno check`) eller
+  migrations-/pgTAP-jobbet. Rører PR'en `supabase/functions/`, så kør også
+  `deno test --config supabase/deno.json supabase/functions/_shared/*.test.ts` og
+  `deno check --config supabase/deno.json supabase/functions/*/index.ts`. Migrationer
+  valideres fortsat på PR'ens Preview Branch og i CI's `database`-job, ikke lokalt.
+
 ## Database-migrations
 
 - **Kør ALDRIG `supabase db push` eller anden manuel deploy-kommando mod
