@@ -1,6 +1,7 @@
 import { formatDuration } from './leaderboard'
 import { rankName } from './kaper/engine'
 import { className } from './sti/engine'
+import { className as fugletraekClass } from './fugletraek/engine'
 import type { GameId, GameScore } from './types'
 
 export interface GameDefinition {
@@ -74,6 +75,16 @@ export const games: readonly GameDefinition[] = [
     symbol: '🧭',
     describeScore: (score) =>
       `${score.lines} poster · ${className(score.level)} · terræn ${formatDuration(score.duration_seconds)}`,
+  },
+  {
+    id: 'fugletraek',
+    title: 'Fugletræk',
+    tagline:
+      'Vend kortene to ad gangen og find parrene af danske dyr. Færre vendinger og kortere tid giver flere point.',
+    path: '/spil/fugletraek',
+    symbol: '🐦',
+    describeScore: (score) =>
+      `${score.lines} vendinger · ${fugletraekClass(score.level)} · ${formatDuration(score.duration_seconds)}`,
   },
 ]
 
