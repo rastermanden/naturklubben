@@ -8,6 +8,7 @@ const submit = vi.hoisted(() => ({
   isPending: false,
   isError: false,
   isSuccess: false,
+  error: null as unknown,
 }))
 
 vi.mock('../useGameScores', () => ({
@@ -38,6 +39,8 @@ function cardButtons(): HTMLButtonElement[] {
 afterEach(() => {
   cleanup()
   submit.mutate.mockReset()
+  submit.isError = false
+  submit.error = null
   vi.restoreAllMocks()
   vi.useRealTimers()
 })
@@ -118,5 +121,36 @@ describe('FugletraekGame', () => {
     })
     expect(cards[0].getAttribute('aria-pressed')).toBe('false')
     expect(cards[other].getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('viser Postgres-fejlen, når resultatet ikke kunne gemmes', () => {
+    submit.isError = true
+    submit.error = {
+      code: '23514',
+      message:
+        'new row violates check constraint "game_scores_score_plausible"',
+    }
+    const seed = 42
+    const probe = startGame(1, mulberry32(seed))
+    vi.spyOn(Math, 'random').mockImplementation(mulberry32(seed))
+
+    render(<FugletraekGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Let · 6 par' }))
+
+    const cards = cardButtons()
+    const kinds = new Set(probe.cards.map((card) => card.kind))
+    for (const kind of kinds) {
+      const indices = probe.cards
+        .map((card, index) => ({ card, index }))
+        .filter((entry) => entry.card.kind === kind)
+        .map((entry) => entry.index)
+      fireEvent.click(cards[indices[0]])
+      fireEvent.click(cards[indices[1]])
+    }
+
+    expect(
+      screen.getByText('Resultatet blev ikke gemt. Prøv igen'),
+    ).toBeTruthy()
+    expect(screen.getByText(/23514:/)).toBeTruthy()
   })
 })
