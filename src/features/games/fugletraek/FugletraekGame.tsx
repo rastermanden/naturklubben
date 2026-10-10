@@ -25,6 +25,22 @@ function StatTile({ label, value }: { label: string; value: string }) {
 
 const CLASSES = [1, 2, 3] as const
 
+/**
+ * Teknisk forklaring på, hvorfor et resultat ikke blev gemt -- til brug under
+ * preview-test, hvor en tom branch-database kan afvise indsættelsen. Supabase
+ * kaster en PostgrestError med `code` (fx `23514` for en check-constraint,
+ * `23503` for en manglende profil-række) og `message`. Vises småt under knappen,
+ * så en rigtig fejl kan skelnes fra en, der forsvinder med et nyt forsøg.
+ */
+function describeSaveError(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null
+  const { code, message } = error as { code?: unknown; message?: unknown }
+  const text = typeof message === 'string' ? message : null
+  const num = typeof code === 'string' ? code : null
+  if (num && text) return `${num}: ${text}`
+  return text ?? num
+}
+
 /** Antal kolonner, så brættet står pænt i begge temaer og på en telefon. */
 const COLUMNS: Record<GameClass, number> = { 1: 3, 2: 4, 3: 4 }
 
@@ -157,13 +173,20 @@ export function FugletraekGame() {
                   <p className="text-sm text-white/80">Gemmer resultatet…</p>
                 )}
                 {submitScore.isError && (
-                  <button
-                    type="button"
-                    onClick={saveResult}
-                    className="min-h-11 rounded-lg border border-white/60 px-4 py-2 text-sm"
-                  >
-                    Resultatet blev ikke gemt. Prøv igen
-                  </button>
+                  <div className="flex flex-col items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={saveResult}
+                      className="min-h-11 rounded-lg border border-white/60 px-4 py-2 text-sm"
+                    >
+                      Resultatet blev ikke gemt. Prøv igen
+                    </button>
+                    {describeSaveError(submitScore.error) && (
+                      <p className="max-w-xs break-words text-xs text-white/70">
+                        {describeSaveError(submitScore.error)}
+                      </p>
+                    )}
+                  </div>
                 )}
                 {submitScore.isSuccess && (
                   <p className="text-sm text-white/80">
