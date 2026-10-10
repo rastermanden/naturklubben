@@ -166,7 +166,9 @@ describe('point', () => {
     const perfect = scoreFor(1, CLASS_PAIRS[1], 0)
     expect(scoreFor(1, CLASS_PAIRS[1] + 4, 30)).toBeLessThan(perfect)
     expect(scoreFor(1, CLASS_PAIRS[1], 60)).toBeLessThan(perfect)
-    expect(scoreFor(1, CLASS_PAIRS[1], 0)).toBeLessThanOrEqual(CLASS_MAX_SCORE[1])
+    expect(scoreFor(1, CLASS_PAIRS[1], 0)).toBeLessThanOrEqual(
+      CLASS_MAX_SCORE[1],
+    )
   })
 
   it('giver nul for en umulig vendings-tælling', () => {

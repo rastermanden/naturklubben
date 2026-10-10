@@ -81,14 +81,13 @@ export function FugletraekGame() {
       <div className="flex gap-2">
         <StatTile
           label="Par"
-          value={idle ? '–' : `${state.matchedPairs} / ${CLASS_PAIRS[state.level]}`}
+          value={
+            idle ? '–' : `${state.matchedPairs} / ${CLASS_PAIRS[state.level]}`
+          }
         />
         <StatTile label="Vendinger" value={idle ? '–' : String(state.flips)} />
         <StatTile label="Klasse" value={idle ? '–' : classTitle(state.level)} />
-        <StatTile
-          label="Tid"
-          value={idle ? '–' : formatDuration(elapsed)}
-        />
+        <StatTile label="Tid" value={idle ? '–' : formatDuration(elapsed)} />
       </div>
 
       <div className="relative overflow-hidden rounded-xl border border-line-soft bg-surface p-3">

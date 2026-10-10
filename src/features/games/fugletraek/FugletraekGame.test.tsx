@@ -48,9 +48,7 @@ describe('FugletraekGame', () => {
 
     expect(screen.getByText('Vælg et bræt')).toBeTruthy()
     expect(stat('Vendinger')).toBe('–')
-    expect(
-      screen.getByRole('button', { name: 'Let · 6 par' }),
-    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Let · 6 par' })).toBeTruthy()
   })
 
   it('åbner brættet og tæller en vending, når to kort vendes', () => {

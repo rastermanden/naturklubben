@@ -93,9 +93,7 @@ export interface FugletraekState {
   matchedPairs: number
 }
 
-export type Action =
-  | { type: 'flip'; index: number }
-  | { type: 'clearMismatch' }
+export type Action = { type: 'flip'; index: number } | { type: 'clearMismatch' }
 
 export function className(level: number): string {
   if (level === 1) return 'let'

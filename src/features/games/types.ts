@@ -1,12 +1,7 @@
 /** Spil, der kan lægge resultater på klubbens liste. Skal matche
  *  `game_scores_game_known` i databasen. */
 export type GameId =
-  | 'tetris'
-  | 'kaper'
-  | '2048'
-  | 'naturquiz'
-  | 'sti'
-  | 'fugletraek'
+  'tetris' | 'kaper' | '2048' | 'naturquiz' | 'sti' | 'fugletraek'
 
 export interface GamePlayer {
   id: string
