@@ -114,6 +114,11 @@ export const routeMetadata = [
     announcement: 'Naturquiz indlæst',
   },
   {
+    path: '/spil/sti',
+    documentTitle: 'Stifinderen | Naturklubben',
+    announcement: 'Stifinderen indlæst',
+  },
+  {
     path: '/aktiviteter/btg-turnering',
     documentTitle: 'BTG turnering | Naturklubben',
     announcement: 'BTG turnering indlæst',

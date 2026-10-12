@@ -1,6 +1,6 @@
 /** Spil, der kan lægge resultater på klubbens liste. Skal matche
  *  `game_scores_game_known` i databasen. */
-export type GameId = 'tetris' | 'kaper' | '2048' | 'naturquiz'
+export type GameId = 'tetris' | 'kaper' | '2048' | 'naturquiz' | 'sti'
 
 export interface GamePlayer {
   id: string
@@ -14,9 +14,10 @@ export interface GameScore {
   player_id: string
   score: number
   /** Ryddede rækker i Tetris, antal træk i Kaptajn Kaper, antal rigtige svar
-   *  (ud af 10) i Naturquiz; 0 i 2048. */
+   *  (ud af 10) i Naturquiz, poster i Stifinderen; 0 i 2048. */
   lines: number
-  /** Niveau i Tetris, rang i Kaptajn Kaper; 1 i 2048 og Naturquiz. */
+  /** Niveau i Tetris, rang i Kaptajn Kaper, baneklasse i Stifinderen;
+   *  1 i 2048 og Naturquiz. */
   level: number
   duration_seconds: number
   created_at: string

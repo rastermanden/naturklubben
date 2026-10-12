@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabaseClient'
 import { capRaised } from './waitlist'
+import { notOverFilter } from './eventDays'
 
 export interface CalendarEvent {
   id: string
@@ -26,7 +27,7 @@ export interface EventInput {
   max_participants: number | null
 }
 
-const eventFields =
+export const eventFields =
   'id, title, description, location, start_at, end_at, created_by, is_public, max_participants'
 
 async function fetchUpcomingEvents(): Promise<CalendarEvent[]> {
@@ -36,7 +37,8 @@ async function fetchUpcomingEvents(): Promise<CalendarEvent[]> {
   const { data, error } = await supabase
     .from('events')
     .select(eventFields)
-    .gte('start_at', startOfToday.toISOString())
+    // En flerdagstur, der er i gang, er stadig kommende (#259).
+    .or(notOverFilter(startOfToday))
     .order('start_at', { ascending: true })
 
   if (error) throw error
@@ -63,6 +65,9 @@ async function notifyOthers(eventId: string) {
 export function useEvents(userId: string) {
   const queryClient = useQueryClient()
   const queryKey = ['events', 'upcoming']
+  // Prefikset rammer også tidligere begivenheder (usePastEvents), så en
+  // rettet eller slettet tur også opdateres dér.
+  const allEventsKey = ['events']
 
   const eventsQuery = useQuery({
     queryKey,
@@ -83,7 +88,7 @@ export function useEvents(userId: string) {
       // Ikke afventet: formularen skal lukke, når begivenheden er gemt -- ikke
       // når push-tjenesterne har svaret.
       void notifyOthers(eventId)
-      return queryClient.invalidateQueries({ queryKey })
+      return queryClient.invalidateQueries({ queryKey: allEventsKey })
     },
   })
 
@@ -121,7 +126,7 @@ export function useEvents(userId: string) {
       return (data as string[] | null) ?? []
     },
     onSuccess: (_promoted, { event }) => {
-      void queryClient.invalidateQueries({ queryKey })
+      void queryClient.invalidateQueries({ queryKey: allEventsKey })
       void queryClient.invalidateQueries({
         queryKey: ['event-attendance', event.id],
       })
@@ -133,7 +138,7 @@ export function useEvents(userId: string) {
       const { error } = await supabase.from('events').delete().eq('id', id)
       if (error) throw error
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: allEventsKey }),
   })
 
   return { eventsQuery, createEvent, updateEvent, deleteEvent }

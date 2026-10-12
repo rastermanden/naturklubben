@@ -67,7 +67,11 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await supabase
       .from('calendar_feed_events')
       .select('id, title, location, start_at, end_at')
-      .gte('start_at', startOfToday.toISOString())
+      // Samme regel som appen: en flerdagstur, der er i gang, bliver i feedet
+      // (#259). Værdien citeres, fordi or() læser `.` og `:` som syntaks.
+      .or(
+        `end_at.gt."${startOfToday.toISOString()}",start_at.gte."${startOfToday.toISOString()}"`,
+      )
       .order('start_at', { ascending: true })
 
     if (error) {

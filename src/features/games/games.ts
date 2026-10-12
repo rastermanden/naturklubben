@@ -1,5 +1,6 @@
 import { formatDuration } from './leaderboard'
 import { rankName } from './kaper/engine'
+import { className } from './sti/engine'
 import type { GameId, GameScore } from './types'
 
 export interface GameDefinition {
@@ -13,8 +14,9 @@ export interface GameDefinition {
   /**
    * Linjen under navnet på resultatlisten. Kolonnerne i `game_scores` er de
    * samme for alle spil, men de betyder noget forskelligt: `lines` er rækker i
-   * Tetris og træk i Kaptajn Kaper, og niveauet dér er en rang. 2048 bruger
-   * kun `score` og `duration_seconds`.
+   * Tetris, træk i Kaptajn Kaper og poster i Stifinderen, og niveauet dér er
+   * en rang eller en baneklasse. 2048 bruger kun `score` og
+   * `duration_seconds`.
    */
   describeScore: (score: GameScore) => string
 }
@@ -62,6 +64,16 @@ export const games: readonly GameDefinition[] = [
     symbol: '🌿',
     describeScore: (score) =>
       `${score.lines}/10 rigtige · ${formatDuration(score.duration_seconds)}`,
+  },
+  {
+    id: 'sti',
+    title: 'Stifinderen',
+    tagline:
+      'Gå posterne i rækkefølge. Sti er hurtig, mose er langsom, og den hurtigste rute vinder.',
+    path: '/spil/sti',
+    symbol: '🧭',
+    describeScore: (score) =>
+      `${score.lines} poster · ${className(score.level)} · terræn ${formatDuration(score.duration_seconds)}`,
   },
 ]
 

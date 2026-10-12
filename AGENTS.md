@@ -1,4 +1,7 @@
-# Naturklubben — projektinstruktioner til Claude
+# Naturklubben — projektinstruktioner
+
+`CLAUDE.md` importerer denne fil med `@AGENTS.md`. Ret kun her. Claude Code læser
+`CLAUDE.md`, og de andre coding agents læser `AGENTS.md`, så begge får samme tekst.
 
 Medlemsapp for Naturklubben. Frontend hostes statisk på GitHub Pages, backend er Supabase
 (Postgres, Auth, Storage, Realtime, Edge Functions). Se GitHub-issue #1 for det fulde
@@ -172,6 +175,20 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
   for hvorfor det er klienten, der sætter den i gang, og hvorfor en nyhed kun sendes én
   gang og kun inden for syv dage.
 
+## Chat uden forbindelse
+
+- Beskeder skrevet uden net lægges i en IndexedDB-kø og sendes af sig selv ved
+  app-start, ved `online`-hændelsen og på kommando fra service workeren. Se
+  `supabase/README.md`, "Chat uden forbindelse (#219)", for idempotensen (klientens id
+  **er** beskedens id, og `send_chat_message` indsætter med `on conflict ... do
+nothing`), delingen af `created_at`/`written_at` og hvad Background Sync gør og ikke
+  gør.
+- Kølogikken skal blive liggende som rene funktioner i
+  `src/features/chat/offlineQueue.ts` -- ingen IndexedDB, netværk eller `navigator` i
+  den fil. Det er den del, CI kan teste; browser-API'erne hører til i `useChatQueue.ts`
+  og `offlineQueueStore.ts` ved siden af. Ændres autorisationsmodellen i RPC'en, skal
+  `supabase/tests/rls/19_chat_offline_queue.sql` følge med.
+
 ## App-version
 
 - Appens version er **commit'en**, ikke et nummer nogen vedligeholder. `vite.config.ts`
@@ -212,15 +229,10 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
   function-secrets, og de vinder over tabellen. Den offentlige nøgle bygges bevidst
   **ikke** ind i frontenden; klienten henter den fra `chat-push`, så nøglerne kan roteres
   uden et nyt frontend-build. Se `supabase/README.md`.
-- **E-mail til gæster** (kun Edge Functions, #224): svar på ansøgninger om at deltage i
-  åbne begivenheder sendes med Resend. Det kræver **både** repo-secret'et
-  `RESEND_API_KEY` og repo-variablen `EMAIL_FROM` (en afsender på et domæne, der er
-  verificeret hos Resend -- Resends testafsender kan ikke nå gæster).
-  `deploy-functions.yml` skubber dem videre som function-secrets, hvis begge findes --
-  samme mønster som VAPID. Mangler en af dem, deployes alt stadig, men hvert svar ender
-  som "failed" med en tydelig besked til arrangøren. Det er den ene bevidste undtagelse
-  fra "intet manuelt secret": gæster er ikke i appen og kan ikke få Web Push. Se
-  `supabase/README.md`, "Offentlig kalender".
+- **E-mail til gæster**: intet secret og ingen automatisk udsendelse. Et svar på en
+  ansøgning om at deltage i en åben begivenhed sendes af arrangøren selv fra deres egen
+  mailklient, via "Skriv til gæsten"-kladden i kalenderen (#239). Der er derfor intet
+  mail-trin i `deploy-functions.yml`. Se `supabase/README.md`, "Svaret til ansøgeren".
 - **CI-only** (kun brugt af GitHub Actions, aldrig af en udvikler lokalt):
   `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` — bruges til at deploye Edge Functions
   ikke-interaktivt og til at slå PR'ens Preview Branch op, så preview-buildet rammer den

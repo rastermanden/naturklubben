@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  eventAlbumPath,
   clearAlbumSearchParams,
   filterPhotosByEvent,
   updateGallerySearchParam,
@@ -68,5 +69,13 @@ describe('gallery search params', () => {
       filterPhotosByEvent(photos, WITHOUT_EVENT_ALBUM).map(({ id }) => id),
     ).toEqual(['photo-3'])
     expect(filterPhotosByEvent(photos, null)).toBe(photos)
+  })
+})
+
+describe('eventAlbumPath', () => {
+  it('peger på begivenhedens album i galleriet', () => {
+    expect(eventAlbumPath('00000000-0000-0000-0000-0000000000e1')).toBe(
+      '/billeder?album=00000000-0000-0000-0000-0000000000e1',
+    )
   })
 })

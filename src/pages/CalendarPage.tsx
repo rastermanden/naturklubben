@@ -11,6 +11,21 @@ import {
   type CalendarEvent,
   type EventInput,
 } from '../features/calendar/useEvents'
+import { isPastEvent } from '../features/calendar/pastEvents'
+import { useEventPhotoCount } from '../features/calendar/useEventPhotoCount'
+import { eventAlbumPath } from '../features/gallery/gallerySearchParams'
+import {
+  dayPosition,
+  eventDays,
+  formatEndTime,
+  formatEventTimeShort,
+  formatEventWhen,
+  type DayPosition,
+} from '../features/calendar/eventDays'
+import {
+  usePastEvents,
+  usePastMonthEvents,
+} from '../features/calendar/usePastEvents'
 import {
   announcePromotion,
   notifyPromotedMembers,
@@ -28,12 +43,6 @@ const CALENDAR_FEED_URL = supabaseUrl
   ? `${supabaseUrl}/functions/v1/calendar-feed`
   : null
 
-const dateFormatter = new Intl.DateTimeFormat('da-DK', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-})
 const timeFormatter = new Intl.DateTimeFormat('da-DK', {
   hour: '2-digit',
   minute: '2-digit',
@@ -78,6 +87,95 @@ function PublicBadge({ className = '' }: { className?: string }) {
   )
 }
 
+// En flerdagstur tegnes som én bjælke hen over dagene: de indre kanter går
+// helt ud til cellens kant (cellen har p-2), så bjælken kun brydes af
+// gitterlinjen og ved ugeskift.
+const chipShape: Record<DayPosition, string> = {
+  single: 'rounded',
+  first: 'rounded-l -mr-2',
+  middle: '-mx-2',
+  last: 'rounded-r -ml-2',
+}
+
+function MonthEventChip({
+  event,
+  position,
+  onOpen,
+}: {
+  event: CalendarEvent
+  position: DayPosition
+  onOpen: () => void
+}) {
+  const endTime = formatEndTime(event)
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`bg-surface-raised px-2 py-1 text-left text-xs text-ink hover:bg-surface-strong ${chipShape[position]} ${
+        isPastEvent(event) ? 'opacity-60' : ''
+      }`}
+    >
+      {(position === 'single' || position === 'first') && (
+        <>
+          <span className="font-medium">
+            {timeFormatter.format(new Date(event.start_at))}
+          </span>{' '}
+        </>
+      )}
+      {event.title}
+      {position === 'first' && <span aria-hidden="true"> →</span>}
+      {position === 'middle' && (
+        <span className="text-ink-subtle"> (fortsat)</span>
+      )}
+      {position === 'last' && endTime && (
+        <span className="text-ink-subtle"> · til kl. {endTime}</span>
+      )}
+      {event.is_public && position !== 'middle' && position !== 'last' && (
+        <PublicBadge className="ml-1" />
+      )}
+    </button>
+  )
+}
+
+function EventCard({
+  event,
+  past = false,
+  onOpen,
+}: {
+  event: CalendarEvent
+  past?: boolean
+  onOpen: () => void
+}) {
+  const start = new Date(event.start_at)
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex min-h-20 items-center gap-4 rounded-lg border border-line p-4 text-left"
+    >
+      <span className="flex w-14 shrink-0 flex-col items-center rounded bg-surface-sunken px-2 py-1 text-ink-body">
+        <span className="text-xs uppercase">
+          {start.toLocaleDateString('da-DK', {
+            month: 'short',
+          })}
+        </span>
+        <span className="text-xl font-semibold">{start.getDate()}</span>
+        {past && <span className="text-xs">{start.getFullYear()}</span>}
+      </span>
+      <span>
+        <span className="block font-medium text-ink">
+          {event.title}
+          {event.is_public && <PublicBadge className="ml-2" />}
+        </span>
+        <span className="text-sm text-ink-subtle">
+          {formatEventTimeShort(event)}
+          {event.location && ` · ${event.location}`}
+        </span>
+      </span>
+    </button>
+  )
+}
+
 function EventDetails({
   event,
   userId,
@@ -101,8 +199,10 @@ function EventDetails({
   onDelete: () => void
   onIcal: () => void
 }) {
-  const start = new Date(event.start_at)
-  const end = event.end_at ? new Date(event.end_at) : null
+  const past = isPastEvent(event)
+  // En fejl her skjuler bare linket -- billederne er et ekstra, ikke noget,
+  // dialogen skal vælte over.
+  const photoCount = useEventPhotoCount(event.id).data ?? 0
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useDialogFocus<HTMLDivElement>({
     onClose,
@@ -135,14 +235,16 @@ function EventDetails({
           </button>
         </div>
 
+        {past && (
+          <p className="mt-2 inline-block rounded bg-surface-sunken px-2 py-1 text-sm text-ink-muted">
+            Afholdt
+          </p>
+        )}
+
         <dl className="mt-4 grid gap-3 text-ink">
           <div>
             <dt className="text-sm font-medium text-ink-subtle">Tidspunkt</dt>
-            <dd>
-              <span className="capitalize">{dateFormatter.format(start)}</span>
-              {`, kl. ${timeFormatter.format(start)}`}
-              {end && ` – ${timeFormatter.format(end)}`}
-            </dd>
+            <dd>{formatEventWhen(event)}</dd>
           </div>
           {event.location && (
             <div>
@@ -160,16 +262,36 @@ function EventDetails({
           )}
         </dl>
 
-        <AttendanceSection event={event} userId={userId} canManage={canEdit} />
+        {photoCount > 0 && (
+          <Link
+            to={eventAlbumPath(event.id)}
+            className="mt-4 inline-flex min-h-11 items-center rounded border border-accent-soft px-4 py-2 text-ink-muted hover:bg-surface-sunken"
+          >
+            Se billeder ({photoCount})
+          </Link>
+        )}
 
-        <GuestRequestsSection
-          eventId={event.id}
-          isPublic={event.is_public}
-          canManage={canEdit}
+        <AttendanceSection
           event={event}
+          userId={userId}
+          canManage={canEdit}
+          readOnly={past}
         />
 
-        <EventTasksSection eventId={event.id} userId={userId} />
+        {/* Gæsteansøgninger og opgaver handler om at få turen til at ske --
+            efter den er afholdt, er der intet at tage stilling til. */}
+        {!past && (
+          <>
+            <GuestRequestsSection
+              eventId={event.id}
+              isPublic={event.is_public}
+              canManage={canEdit}
+              event={event}
+            />
+
+            <EventTasksSection eventId={event.id} userId={userId} />
+          </>
+        )}
 
         {error && (
           <p role="alert" className="mt-4 text-sm text-danger">
@@ -178,13 +300,17 @@ function EventDetails({
         )}
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={onIcal}
-            className="min-h-11 rounded border border-accent-soft px-4 py-2 text-ink-muted hover:bg-surface-sunken"
-          >
-            Tilføj til kalender
-          </button>
+          {past ? (
+            <span />
+          ) : (
+            <button
+              type="button"
+              onClick={onIcal}
+              className="min-h-11 rounded border border-accent-soft px-4 py-2 text-ink-muted hover:bg-surface-sunken"
+            >
+              Tilføj til kalender
+            </button>
+          )}
 
           {(canEdit || canDelete) && (
             <div className="flex gap-3">
@@ -263,20 +389,35 @@ function CalendarPage() {
   const openEvent = editingEvent ? null : (selectedEvent ?? routedEvent)
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [subscribeOpen, setSubscribeOpen] = useState(false)
+  // Tidligere begivenheder (#257): månedsvisningen henter den viste måneds
+  // dage før i dag, listen på mobil først, når man beder om den.
+  const pastMonthQuery = usePastMonthEvents(visibleMonth)
+  const [showPast, setShowPast] = useState(false)
+  const pastEventsQuery = usePastEvents(showPast)
+  const pastEvents = pastEventsQuery.data?.pages.flat() ?? []
 
+  // En flerdagstur står på hver af sine dage (#259). En tur, der er i gang,
+  // kommer både med månedens tidligere dage og med de kommende -- én gang.
   const eventsByDay = useMemo(() => {
+    const unique = new Map<string, CalendarEvent>()
+    for (const event of [
+      ...(pastMonthQuery.data ?? []),
+      ...(eventsQuery.data ?? []),
+    ]) {
+      unique.set(event.id, event)
+    }
     const grouped = new Map<string, CalendarEvent[]>()
-    for (const event of eventsQuery.data ?? []) {
-      const key = dateKey(new Date(event.start_at))
-      grouped.set(key, [...(grouped.get(key) ?? []), event])
+    const byStart = [...unique.values()].sort((a, b) =>
+      a.start_at.localeCompare(b.start_at),
+    )
+    for (const event of byStart) {
+      for (const day of eventDays(event)) {
+        const key = dateKey(day)
+        grouped.set(key, [...(grouped.get(key) ?? []), event])
+      }
     }
     return grouped
-  }, [eventsQuery.data])
-
-  const currentMonth = new Date()
-  currentMonth.setDate(1)
-  currentMonth.setHours(0, 0, 0, 0)
-  const canGoBack = visibleMonth > currentMonth
+  }, [pastMonthQuery.data, eventsQuery.data])
 
   function moveMonth(offset: number) {
     setChosenMonth(
@@ -353,7 +494,7 @@ function CalendarPage() {
         <div>
           <h1 className="text-3xl font-semibold text-ink-body">Kalender</h1>
           <p className="mt-1 text-ink-subtle">
-            Klubbens kommende ture og arrangementer.{' '}
+            Klubbens ture og arrangementer.{' '}
             <Link to="/kalender/offentlig" className="underline">
               Se den offentlige kalender
             </Link>
@@ -412,7 +553,6 @@ function CalendarPage() {
               <button
                 type="button"
                 onClick={() => moveMonth(-1)}
-                disabled={!canGoBack}
                 aria-label="Forrige måned"
                 className="min-h-11 rounded border border-line-strong px-4 text-ink-body disabled:opacity-30"
               >
@@ -430,6 +570,22 @@ function CalendarPage() {
                 →
               </button>
             </div>
+
+            {pastMonthQuery.isError && (
+              <div
+                role="alert"
+                className="mb-4 rounded border border-danger-line bg-danger-surface p-3 text-sm text-danger-strong"
+              >
+                De tidligere begivenheder i måneden kunne ikke hentes.
+                <button
+                  type="button"
+                  onClick={() => pastMonthQuery.refetch()}
+                  className="ml-2 underline"
+                >
+                  Prøv igen
+                </button>
+              </div>
+            )}
 
             <div className="grid grid-cols-7 border-l border-t border-line">
               {weekDays.map((day) => (
@@ -452,23 +608,15 @@ function CalendarPage() {
                       </span>
                       <div className="mt-1 flex flex-col gap-1">
                         {(eventsByDay.get(dateKey(date)) ?? []).map((event) => (
-                          <button
+                          <MonthEventChip
                             key={event.id}
-                            type="button"
-                            onClick={() => {
+                            event={event}
+                            position={dayPosition(event, date)}
+                            onOpen={() => {
                               setMutationError(null)
                               setSelectedEvent(event)
                             }}
-                            className="rounded bg-surface-raised px-2 py-1 text-left text-xs text-ink hover:bg-surface-strong"
-                          >
-                            <span className="font-medium">
-                              {timeFormatter.format(new Date(event.start_at))}
-                            </span>{' '}
-                            {event.title}
-                            {event.is_public && (
-                              <PublicBadge className="ml-1" />
-                            )}
-                          </button>
+                          />
                         ))}
                       </div>
                     </>
@@ -486,42 +634,93 @@ function CalendarPage() {
               </p>
             ) : (
               <div className="flex flex-col gap-3">
-                {eventsQuery.data.map((event) => {
-                  const start = new Date(event.start_at)
-                  return (
-                    <button
+                {eventsQuery.data.map((event) => (
+                  <EventCard
+                    key={event.id}
+                    event={event}
+                    onOpen={() => {
+                      setMutationError(null)
+                      setSelectedEvent(event)
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section
+            className="mt-8 md:hidden"
+            aria-labelledby="past-events-heading"
+          >
+            <h2
+              id="past-events-heading"
+              className="text-lg font-semibold text-ink-body"
+            >
+              Tidligere begivenheder
+            </h2>
+            {!showPast ? (
+              <button
+                type="button"
+                onClick={() => setShowPast(true)}
+                className="mt-3 min-h-11 rounded border border-accent-soft px-4 py-2 text-ink-muted hover:bg-surface-sunken"
+              >
+                Vis tidligere begivenheder
+              </button>
+            ) : pastEventsQuery.isLoading ? (
+              <p role="status" className="mt-3 text-ink-subtle">
+                Henter tidligere begivenheder…
+              </p>
+            ) : pastEventsQuery.isError && pastEvents.length === 0 ? (
+              <div
+                role="alert"
+                className="mt-3 rounded border border-danger-line bg-danger-surface p-4 text-danger-strong"
+              >
+                De tidligere begivenheder kunne ikke hentes.
+                <button
+                  type="button"
+                  onClick={() => pastEventsQuery.refetch()}
+                  className="ml-2 underline"
+                >
+                  Prøv igen
+                </button>
+              </div>
+            ) : pastEvents.length === 0 ? (
+              <p className="mt-3 rounded bg-surface-sunken p-5 text-ink-muted">
+                Der er ingen tidligere begivenheder.
+              </p>
+            ) : (
+              <>
+                <div className="mt-3 flex flex-col gap-3">
+                  {pastEvents.map((event) => (
+                    <EventCard
                       key={event.id}
-                      type="button"
-                      onClick={() => {
+                      event={event}
+                      past
+                      onOpen={() => {
                         setMutationError(null)
                         setSelectedEvent(event)
                       }}
-                      className="flex min-h-20 items-center gap-4 rounded-lg border border-line p-4 text-left"
-                    >
-                      <span className="flex w-14 shrink-0 flex-col items-center rounded bg-surface-sunken px-2 py-1 text-ink-body">
-                        <span className="text-xs uppercase">
-                          {start.toLocaleDateString('da-DK', {
-                            month: 'short',
-                          })}
-                        </span>
-                        <span className="text-xl font-semibold">
-                          {start.getDate()}
-                        </span>
-                      </span>
-                      <span>
-                        <span className="block font-medium text-ink">
-                          {event.title}
-                          {event.is_public && <PublicBadge className="ml-2" />}
-                        </span>
-                        <span className="text-sm text-ink-subtle">
-                          kl. {timeFormatter.format(start)}
-                          {event.location && ` · ${event.location}`}
-                        </span>
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
+                    />
+                  ))}
+                </div>
+                {pastEventsQuery.isFetchNextPageError && (
+                  <p role="alert" className="mt-3 text-sm text-danger">
+                    Flere begivenheder kunne ikke hentes. Prøv igen.
+                  </p>
+                )}
+                {pastEventsQuery.hasNextPage && (
+                  <button
+                    type="button"
+                    onClick={() => void pastEventsQuery.fetchNextPage()}
+                    disabled={pastEventsQuery.isFetchingNextPage}
+                    className="mt-3 min-h-11 w-full rounded border border-accent-soft px-4 py-2 text-ink-muted hover:bg-surface-sunken disabled:opacity-60"
+                  >
+                    {pastEventsQuery.isFetchingNextPage
+                      ? 'Henter…'
+                      : 'Indlæs flere'}
+                  </button>
+                )}
+              </>
             )}
           </section>
         </>

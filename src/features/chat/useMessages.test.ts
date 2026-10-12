@@ -1,4 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import {
+  QueryClient,
+  QueryClientProvider,
+  onlineManager,
+} from '@tanstack/react-query'
+import { createElement, type ReactNode } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   addMessage,
   addMessageToHistory,
@@ -8,10 +15,19 @@ import {
   normalizeMessage,
   removeMessage,
   updateMessage,
+  useMessages,
   type Message,
 } from './useMessages'
 
-vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
+const supabaseMocks = vi.hoisted(() => ({
+  from: vi.fn(),
+  channel: vi.fn(),
+  removeChannel: vi.fn(),
+  rpc: vi.fn(),
+  functions: { invoke: vi.fn() },
+}))
+
+vi.mock('../../lib/supabaseClient', () => ({ supabase: supabaseMocks }))
 
 const parent: Message = {
   id: 'message-1',
@@ -232,5 +248,103 @@ describe('messageFields', () => {
   it('embeds the reply parent through the column, not the constraint', () => {
     expect(messageFields).toContain('messages!reply_to_message_id')
     expect(messageFields).not.toContain('_fkey')
+  })
+})
+
+describe('beskeder sendt fra offline-køen (#219)', () => {
+  it('tager skrivetidspunktet med, når serveren har det', () => {
+    expect(
+      normalizeMessage({
+        ...parent,
+        written_at: '2026-08-23T09:00:00.000Z',
+      }).written_at,
+    ).toBe('2026-08-23T09:00:00.000Z')
+  })
+
+  it('efterlader det tomt på en besked, der blev sendt med forbindelse', () => {
+    expect(normalizeMessage(parent).written_at).toBeNull()
+  })
+})
+
+describe('sendMessage uden forbindelse (#219 -- networkMode)', () => {
+  function setOnline(online: boolean) {
+    Object.defineProperty(window.navigator, 'onLine', {
+      configurable: true,
+      get: () => online,
+    })
+  }
+
+  // Historikhentningen bruger den samme `.from(...)`-kæde. Den kaldes ikke,
+  // når klienten er offline (den er pauset af samme grund som mutationen),
+  // men mockes forsvarende, hvis det nogensinde ændrer sig.
+  function tableChain() {
+    const chain: Record<string, unknown> = {}
+    for (const method of ['select', 'eq', 'order', 'limit', 'or']) {
+      chain[method] = vi.fn(() => chain)
+    }
+    chain.then = (resolve: (value: unknown) => void) =>
+      resolve({ data: [], error: null })
+    return chain
+  }
+
+  function realtimeChannel() {
+    const channel: Record<string, unknown> = {}
+    channel.on = vi.fn(() => channel)
+    channel.subscribe = vi.fn(() => channel)
+    return channel
+  }
+
+  function wrapper(queryClient: QueryClient) {
+    return function Wrapper({ children }: { children: ReactNode }) {
+      return createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        children,
+      )
+    }
+  }
+
+  afterEach(() => {
+    cleanup()
+    setOnline(true)
+    onlineManager.setOnline(true)
+    vi.clearAllMocks()
+  })
+
+  it('lægger beskeden i køen med det samme, i stedet for at vente på at React Query genoptager mutationen', async () => {
+    // Uden `networkMode: 'always'` holder React Query (default networkMode
+    // 'online') mutationen tilbage, indtil forbindelsen er tilbage -- og
+    // `mutationFn`, som lægger beskeden i køen, kører derfor aldrig. Denne
+    // test kører den rigtige `useMessages`-hook gennem en rigtig
+    // QueryClientProvider (ikke en mocket useMessages), så den reproducerer
+    // fejlen, hvis regressionen kommer tilbage.
+    setOnline(false)
+    onlineManager.setOnline(false)
+    supabaseMocks.from.mockReturnValue(tableChain())
+    supabaseMocks.channel.mockReturnValue(realtimeChannel())
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+
+    const { result } = renderHook(() => useMessages('general', 'member-1'), {
+      wrapper: wrapper(queryClient),
+    })
+
+    await act(async () => {
+      result.current.sendMessage.mutate({
+        userId: 'member-1',
+        content: 'Hej fra skoven',
+        replyToMessageId: null,
+      })
+    })
+
+    await waitFor(() => expect(result.current.queuedMessages).toHaveLength(1))
+    expect(result.current.queuedMessages[0]).toMatchObject({
+      content: 'Hej fra skoven',
+      status: 'queued',
+    })
+    // Den skal aldrig prøve at sende, mens den er offline.
+    expect(supabaseMocks.rpc).not.toHaveBeenCalled()
   })
 })

@@ -5,7 +5,7 @@
 Medlemsapp for Naturklubben — hero-forside, aktivitetsside, offentlig kalender med de
 begivenheder, arrangøren har åbnet for ikke-medlemmer (#224), og bag login: kalender,
 billedgalleri og gruppechat. Se GitHub-issue #1 for den fulde plan og `AGENTS.md` for
-projektets udviklingskonventioner.
+projektets udviklingskonventioner. `CLAUDE.md` importerer samme fil.
 
 ## Teknologi
 
@@ -75,7 +75,7 @@ af `.github/workflows/sync-auth-config.yml` -- se `supabase/README.md`.
 - [`docs/kodegennemgang-2026-08-23.md`](docs/kodegennemgang-2026-08-23.md) — gennemgang af
   hele appen: arkitektur, styrker, fund og roadmap. Fundene er oprettet som issues med
   labels `blocker`, `risiko`, `friktion` og `finish`.
-- `AGENTS.md` — projektets udviklingskonventioner.
+- `AGENTS.md` — projektets udviklingskonventioner. `CLAUDE.md` importerer samme fil.
 - `supabase/README.md` — backend-opsætning, nøgler og auth-URL'er.
 
 ## Mappestruktur
