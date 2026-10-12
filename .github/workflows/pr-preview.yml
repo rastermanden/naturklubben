@@ -123,6 +123,10 @@ jobs:
                 fi
               else
                 echo "::warning::Branch-opslag gav HTTP $(cat /tmp/api_status): $(head -c 300 <<<"$branches") $(cat /tmp/api_err 2>/dev/null)"
+                # Et afvist token bliver ikke gyldigt af at vente.
+                case "$(cat /tmp/api_status)" in
+                  401|403) use_production "SUPABASE_ACCESS_TOKEN blev afvist (HTTP $(cat /tmp/api_status)) -- forny repo-secret'en" ;;
+                esac
               fi
             fi
 
