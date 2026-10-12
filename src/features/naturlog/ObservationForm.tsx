@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { validateFiles } from '../gallery/useUploadPhotos'
+import { PositionMapPicker } from './map'
 import {
   draftFromObservation,
   formatPosition,
@@ -50,6 +51,7 @@ export function ObservationForm({
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoError, setPhotoError] = useState<string | null>(null)
   const [position, setPosition] = useState<PositionState>({ status: 'idle' })
+  const [mapOpen, setMapOpen] = useState(false)
   const [validation, setValidation] = useState<{
     field: DraftField
     message: string
@@ -289,6 +291,27 @@ export function ObservationForm({
                   ? 'Finder din position…'
                   : 'Brug min position'}
               </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setMapOpen((open) => !open)}
+              aria-expanded={mapOpen}
+              className="min-h-11 self-start rounded-lg border border-line-strong px-3 text-ink-muted"
+            >
+              {mapOpen ? 'Luk kortet' : 'Placér på kort'}
+            </button>
+            {mapOpen && (
+              <PositionMapPicker
+                position={
+                  draft.latitude !== null && draft.longitude !== null
+                    ? { lat: draft.latitude, lng: draft.longitude }
+                    : null
+                }
+                onChange={(position) => {
+                  update('latitude', position.lat)
+                  update('longitude', position.lng)
+                }}
+              />
             )}
             {position.status === 'error' && (
               <span role="alert" className="text-danger">

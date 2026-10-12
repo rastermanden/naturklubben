@@ -96,6 +96,19 @@ export interface PhotoCommentExport {
   created_at: string
 }
 
+export interface ObservationExport {
+  id: string
+  species: string
+  location: string | null
+  observed_on: string
+  notes: string | null
+  latitude: number | null
+  longitude: number | null
+  photo_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface AccountExportRepository {
   getUser(token: string): Promise<ExportUser | null>
   getProfile(userId: string): Promise<ProfileExport>
@@ -104,6 +117,7 @@ export interface AccountExportRepository {
   getAttendance(userId: string): Promise<AttendanceExport[]>
   getPollVotes(userId: string): Promise<PollVoteExport[]>
   getPhotoComments(userId: string): Promise<PhotoCommentExport[]>
+  getObservations(userId: string): Promise<ObservationExport[]>
   getPhotoDownloadUrls(photo: PhotoExport): Promise<PhotoDownloadUrls>
 }
 
@@ -167,15 +181,23 @@ export async function handleExportAccount(
   }
 
   try {
-    const [profile, messages, photos, attendance, pollVotes, photoComments] =
-      await Promise.all([
-        repository.getProfile(user.id),
-        repository.getMessages(user.id),
-        repository.getPhotos(user.id),
-        repository.getAttendance(user.id),
-        repository.getPollVotes(user.id),
-        repository.getPhotoComments(user.id),
-      ])
+    const [
+      profile,
+      messages,
+      photos,
+      attendance,
+      pollVotes,
+      photoComments,
+      observations,
+    ] = await Promise.all([
+      repository.getProfile(user.id),
+      repository.getMessages(user.id),
+      repository.getPhotos(user.id),
+      repository.getAttendance(user.id),
+      repository.getPollVotes(user.id),
+      repository.getPhotoComments(user.id),
+      repository.getObservations(user.id),
+    ])
     const photosWithUrls = await Promise.all(
       photos.map(async (photo) => ({
         ...photo,
@@ -204,6 +226,7 @@ export async function handleExportAccount(
         photo_comments: photoComments,
         activity_registrations: attendance,
         poll_votes: pollVotes,
+        observations,
       }),
       {
         status: 200,

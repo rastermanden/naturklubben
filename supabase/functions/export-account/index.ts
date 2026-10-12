@@ -6,6 +6,7 @@ import {
   type AccountExportRepository,
   type AttendanceExport,
   type MessageExport,
+  type ObservationExport,
   type PhotoCommentExport,
   type PhotoDownloadUrls,
   type PhotoExport,
@@ -139,6 +140,25 @@ Deno.serve(async (req) => {
           .range(from, to)
         queryError('Kommentarer kunne ikke hentes', error)
         return (data ?? []) as PhotoCommentExport[]
+      })
+    },
+
+    async getObservations(userId) {
+      // Naturloggen er klubbens fælles historik, men eksporten er personlig:
+      // medlemmet får sine egne registreringer med -- positionen inkluderet,
+      // så vedkommende har de data, hjemmefra er skrevet ind.
+      return collectPages(async (from, to) => {
+        const { data, error } = await supabase
+          .from('observations')
+          .select(
+            'id, species, location, observed_on, notes, latitude, longitude, photo_id, created_at, updated_at',
+          )
+          .eq('created_by', userId)
+          .order('observed_on', { ascending: true })
+          .order('created_at', { ascending: true })
+          .range(from, to)
+        queryError('Egne observationer kunne ikke hentes', error)
+        return (data ?? []) as ObservationExport[]
       })
     },
 
