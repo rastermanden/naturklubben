@@ -34,7 +34,8 @@ jobs:
 
       # Supabase er kilden til sandhed: hvis integrationen opretter en Preview
       # Branch for PR'en, bygger vi mod den. Hvis ikke, bygger vi mod produktion
-      # med en tydelig advarsel i log og job-summary.
+      # med en tydelig advarsel i log og job-summary -- men kun når PR'en ikke
+      # rører supabase/. Gør den, fejler trinnet i stedet (se AGENTS.md).
       #
       # Branch-projektets ref og publishable key hentes fra Management API'et og
       # skrives til GITHUB_ENV, hvor build-trinnet nedenfor samler dem op.
@@ -47,12 +48,29 @@ jobs:
           PR_NUMBER: ${{ github.event.number }}
           FALLBACK_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
           FALLBACK_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -uo pipefail
           echo "SUPABASE_PREVIEW_BRANCH_USED=false" >> "$GITHUB_ENV"
 
+          # Rører PR'en supabase/, har Supabase oprettet en Preview Branch, og
+          # produktionsskemaet er IKKE PR'ens skema. Så må vi aldrig falde
+          # tilbage til produktion: preview'et ville skrive rigtige data mod et
+          # skema uden PR'ens migrationer (se #270).
+          touches_supabase=false
+          if git diff --name-only "$(git merge-base "$BASE_SHA" "$HEAD_SHA")" "$HEAD_SHA" -- supabase/ | grep -q .; then
+            touches_supabase=true
+          fi
+          echo "PR'en rører supabase/: $touches_supabase"
+
           # Bruges, når der ikke er en brugbar Preview Branch for PR'en.
           use_production() {
+            if [ "$touches_supabase" = true ]; then
+              echo "::error::$1 -- og PR'en ændrer supabase/, så preview'et bygges IKKE mod produktion."
+              echo "❌ Ingen Preview Branch fundet for en PR med ændringer i \`supabase/\`: $1" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
             echo "::warning::$1 -- preview'et bygges mod PRODUKTIONS-Supabase."
             {
               echo "VITE_SUPABASE_URL=$FALLBACK_URL"
@@ -67,9 +85,14 @@ jobs:
             use_production "SUPABASE_ACCESS_TOKEN eller SUPABASE_PROJECT_REF er ikke sat"
           fi
 
+          # Skriver body på stdout og HTTP-status i /tmp/api_status, så et
+          # fejlende opslag (udløbet token, ændret API) kan ses i loggen.
+          # (En variabel ville gå tabt i $(...)-subshellen.)
           api() {
-            curl -sS --max-time 30 \
-              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "$1"
+            curl -sS --max-time 30 -o /tmp/api_body -w '%{http_code}' \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "$1" \
+              > /tmp/api_status 2>/tmp/api_err || echo "000" > /tmp/api_status
+            cat /tmp/api_body 2>/dev/null
           }
 
           # Supabase opretter ofte branchen lidt efter synchronize-eventet.
@@ -93,6 +116,13 @@ jobs:
                   | .[0]
                   | (.project_ref // .ref // empty)
                 ' <<<"$branches")
+                if [ -z "$branch_ref" ]; then
+                  # Vis hvad API'et faktisk har, så et navne-/feltmismatch kan ses.
+                  echo "Ingen match blandt $(jq length <<<"$branches") branches:"
+                  jq -c '.[] | {name, git_branch, pr_number, is_default, status, ref: (.project_ref // .ref)}' <<<"$branches" || true
+                fi
+              else
+                echo "::warning::Branch-opslag gav HTTP $(cat /tmp/api_status): $(head -c 300 <<<"$branches") $(cat /tmp/api_err 2>/dev/null)"
               fi
             fi
 
@@ -105,6 +135,8 @@ jobs:
                   // (map(select((.name // "") == "anon")) | .[0].api_key)
                   // empty
                 ' <<<"$keys")
+              else
+                echo "::warning::Nøgle-opslag for $branch_ref gav HTTP $(cat /tmp/api_status)."
               fi
             fi
 
