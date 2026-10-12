@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { useAuth } from '../features/auth/useAuth'
@@ -6,12 +6,20 @@ import { PhotoLightbox } from '../features/gallery/PhotoLightbox'
 import type { Photo } from '../features/gallery/types'
 import { useDeletePhoto } from '../features/gallery/useDeletePhoto'
 import { useRetryPhotoOptimization } from '../features/gallery/useRetryPhotoOptimization'
+import {
+  DEFAULT_ZOOM,
+  DENMARK_CENTER,
+  ObservationMap,
+  SpeciesOverview,
+  type MapView,
+} from '../features/naturlog/map'
 import { ObservationCard } from '../features/naturlog/ObservationCard'
 import { ObservationForm } from '../features/naturlog/ObservationForm'
 import {
   filterObservations,
   toFriendlyObservationError,
 } from '../features/naturlog/observationInput'
+import { observationsInYear } from '../features/naturlog/summary'
 import type { Observation, ObservationInput } from '../features/naturlog/types'
 import {
   observationsQueryKey,
@@ -24,6 +32,8 @@ type FormState =
   | { mode: 'closed' }
   | { mode: 'new' }
   | { mode: 'edit'; observation: Observation }
+
+type Tab = 'liste' | 'kort' | 'arter'
 
 function NaturlogLoadingState() {
   return (
@@ -65,9 +75,39 @@ function NaturlogPage() {
   const [status, setStatus] = useState<string | null>(null)
   const [activePhoto, setActivePhoto] = useState<Photo | null>(null)
   const [photoActionError, setPhotoActionError] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('liste')
+  // null = endnu ikke valgt: så følger filteret det nyeste år i loggen, så
+  // vælgeren aldrig viser en værdi, der ikke findes blandt valgmulighederne.
+  const [chosenYear, setChosenYear] = useState<number | 'alle' | null>(null)
+  const [mapView, setMapView] = useState<MapView>({
+    center: DENMARK_CENTER,
+    zoom: DEFAULT_ZOOM,
+  })
 
-  const observations = observationsQuery.data ?? []
+  const observations = useMemo(
+    () => observationsQuery.data ?? [],
+    [observationsQuery.data],
+  )
   const visible = filterObservations(observations, search)
+  const years = useMemo(
+    () =>
+      [...new Set(observations.map((o) => o.observed_on.slice(0, 4)))].sort(
+        (a, b) => b.localeCompare(a),
+      ),
+    [observations],
+  )
+  const year =
+    chosenYear === 'alle'
+      ? null
+      : (chosenYear ?? (years.length > 0 ? Number(years[0]) : null))
+  const yearObservations = useMemo(
+    () => (year ? observationsInYear(visible, year) : visible),
+    [visible, year],
+  )
+
+  function openTab(next: Tab) {
+    setTab(next)
+  }
 
   function openNew() {
     setStatus(null)
@@ -185,6 +225,62 @@ function NaturlogPage() {
         </p>
       )}
 
+      <div className="flex flex-wrap items-center gap-2">
+        <div
+          role="tablist"
+          aria-label="Visning af naturloggen"
+          className="flex gap-1 rounded-lg border border-line-strong bg-surface p-1"
+        >
+          {(
+            [
+              ['liste', 'Liste'],
+              ['kort', 'Kort'],
+              ['arter', 'Arter'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
+              onClick={() => openTab(value)}
+              className={`rounded px-3 py-1.5 text-sm font-medium ${
+                tab === value
+                  ? 'bg-accent-soft text-white'
+                  : 'text-ink-muted hover:text-ink-body'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab !== 'liste' && years.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-ink-subtle">
+            År
+            <select
+              aria-label="År"
+              value={year === null ? '' : String(year)}
+              onChange={(changeEvent) =>
+                setChosenYear(
+                  changeEvent.target.value === ''
+                    ? 'alle'
+                    : Number(changeEvent.target.value),
+                )
+              }
+              className="rounded border border-line-strong bg-surface px-2 py-1.5 text-ink"
+            >
+              <option value="">Alle år</option>
+              {years.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
       {observations.length > 0 && (
         <label className="flex flex-col gap-1 text-sm text-ink-body">
           Søg i loggen
@@ -223,13 +319,13 @@ function NaturlogPage() {
         </div>
       )}
 
-      {observations.length > 0 && visible.length === 0 && (
+      {observations.length > 0 && visible.length === 0 && tab === 'liste' && (
         <p role="status" className="text-ink-subtle">
           Ingen observationer matcher &quot;{search.trim()}&quot;.
         </p>
       )}
 
-      {visible.length > 0 && (
+      {tab === 'liste' && visible.length > 0 && (
         <ul className="flex flex-col gap-3">
           {visible.map((observation) => {
             const isOwner = Boolean(userId) && observation.created_by === userId
@@ -253,6 +349,34 @@ function NaturlogPage() {
             )
           })}
         </ul>
+      )}
+
+      {tab === 'kort' &&
+        (visible.length === 0 ? (
+          <p role="status" className="text-ink-subtle">
+            Ingen observationer matcher &quot;{search.trim()}&quot;.
+          </p>
+        ) : (
+          <ObservationMap
+            emptyMessage={
+              yearObservations.length === 0 && year !== null
+                ? `Ingen observationer fra ${year} matcher.`
+                : undefined
+            }
+            observations={yearObservations}
+            view={mapView}
+            onViewChange={setMapView}
+          />
+        ))}
+
+      {tab === 'arter' && visible.length > 0 && (
+        <SpeciesOverview observations={yearObservations} year={year} />
+      )}
+
+      {tab === 'arter' && visible.length === 0 && (
+        <p role="status" className="text-ink-subtle">
+          Ingen observationer matcher &quot;{search.trim()}&quot;.
+        </p>
       )}
 
       {form.mode !== 'closed' && (

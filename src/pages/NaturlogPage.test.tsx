@@ -243,4 +243,58 @@ describe('NaturlogPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Prøv igen' }))
     expect(mocks.observationsQuery.refetch).toHaveBeenCalled()
   })
+
+  it('samler arterne på Artenes fane med antal og den tidligste observation', () => {
+    mocks.observationsQuery.data = [
+      observation({ id: '1', species: 'Solsort', observed_on: '2026-02-10' }),
+      observation({ id: '2', species: 'solsort', observed_on: '2026-04-20' }),
+      observation({
+        id: '3',
+        species: 'Ravn',
+        observed_on: '2026-01-05',
+      }),
+    ]
+    render(<NaturlogPage />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Arter' }))
+    expect(screen.getByText(/2 arter · 3 observationer i 2026/)).toBeTruthy()
+    expect(screen.getAllByText('Ravn').length).toBeGreaterThan(0)
+    expect(screen.getByText('Solsort')).toBeTruthy()
+    const ravnRow = screen.getByRole('button', { name: /Ravn/ })
+    expect(ravnRow.textContent).toContain('5. januar')
+    const solsortRow = screen.getByRole('button', { name: /Solsort/ })
+    expect(solsortRow.textContent).toContain('10. februar')
+  })
+
+  it('viser kortet fra Kort-fanen', () => {
+    mocks.observationsQuery.data = [
+      observation({
+        id: '1',
+        species: 'Rød glente',
+        latitude: 56.22,
+        longitude: 10.55,
+      }),
+    ]
+    render(<NaturlogPage />)
+    expect(
+      screen.queryByRole('region', { name: 'Kort med observationer' }),
+    ).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Kort' }))
+    expect(
+      screen.getByRole('region', { name: 'Kort med observationer' }),
+    ).toBeTruthy()
+  })
+
+  it('viser et årsfilter og anvender det på Artsvisningen', () => {
+    mocks.observationsQuery.data = [
+      observation({ id: '1', species: 'Solsort', observed_on: '2025-03-01' }),
+      observation({ id: '2', species: 'Ravn', observed_on: '2026-01-05' }),
+    ]
+    render(<NaturlogPage />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Arter' }))
+    const yearSelect = screen.getByLabelText('År')
+    expect(yearSelect).toBeTruthy()
+    fireEvent.change(yearSelect, { target: { value: '2025' } })
+    expect(screen.getByText(/1 art · 1 observation i 2025/)).toBeTruthy()
+    expect(screen.queryByText('Ravn')).toBeNull()
+  })
 })
