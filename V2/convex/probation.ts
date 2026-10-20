@@ -5,7 +5,7 @@ import {
   query,
 } from './_generated/server'
 import { internal } from './_generated/api'
-import { v, type Infer } from 'convex/values'
+import { ConvexError, v, type Infer } from 'convex/values'
 import { requireAdmin } from './authz'
 import {
   isAllowedPushEndpoint,
@@ -179,7 +179,7 @@ export async function hmacSignal(
   value: string,
 ) {
   if (!globalThis.crypto?.subtle) {
-    throw new Error('RATE_LIMIT_HASH_UNAVAILABLE')
+    throw new ConvexError('RATE_LIMIT_HASH_UNAVAILABLE')
   }
   const encoder = new TextEncoder()
   const key = await crypto.subtle.importKey(
@@ -699,7 +699,7 @@ export const approve = mutation({
     const admin = await requireAdmin(ctx)
     const application = await ctx.db.get(args.applicationId)
     if (!application || application.status !== 'pending') {
-      throw new Error('APPLICATION_NOT_FOUND')
+      throw new ConvexError('APPLICATION_NOT_FOUND')
     }
 
     const allowed = await ctx.db
@@ -737,7 +737,7 @@ export const reject = mutation({
     const admin = await requireAdmin(ctx)
     const application = await ctx.db.get(args.applicationId)
     if (!application || application.status !== 'pending') {
-      throw new Error('APPLICATION_NOT_FOUND')
+      throw new ConvexError('APPLICATION_NOT_FOUND')
     }
 
     await ctx.db.patch(application._id, {

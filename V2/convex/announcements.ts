@@ -1,7 +1,7 @@
 import { internalMutation, internalQuery, mutation, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import { internal } from './_generated/api'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { requireProfile, requireWritableProfile } from './authz'
 import { type PushPayload, type PushTarget } from './push'
 

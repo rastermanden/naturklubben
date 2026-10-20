@@ -3,6 +3,7 @@ import { authRoutes } from './features/auth/routes'
 import { calendarRoutes } from './features/calendar/routes'
 import { chatRoutes } from './features/chat/routes'
 import { galleryRoutes } from './features/gallery/routes'
+import { notificationRoutes } from './features/notifications/routes'
 
 export type AppRoute = {
   path: string
@@ -23,5 +24,6 @@ export const appRoutes: AppRoute[] = [
   ...authRoutes,
   ...chatRoutes,
   ...galleryRoutes,
+  ...notificationRoutes,
 ]
 

@@ -2,7 +2,7 @@
 
 import { internalAction } from './_generated/server'
 import { internal } from './_generated/api'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { announcementPayload } from './announcements'
 import { pushPayload, type PushPayload } from './push'
 import { probationPayload } from './probation'
@@ -83,7 +83,7 @@ async function generateVapidKeyPair() {
     new Uint8Array(await crypto.subtle.exportKey('raw', keys.publicKey)),
   )
   const jwk = await crypto.subtle.exportKey('jwk', keys.privateKey)
-  if (!jwk.d) throw new Error('Den genererede nøgle mangler d-komponenten')
+  if (!jwk.d) throw new ConvexError('Den genererede nøgle mangler d-komponenten')
 
   return { publicKey, privateKey: jwk.d }
 }
@@ -138,7 +138,7 @@ async function sendWebPush(
   void target
   void payload
   void vapid
-  throw new Error('PUSH_SENDER_NOT_IMPLEMENTED')
+  throw new ConvexError('PUSH_SENDER_NOT_IMPLEMENTED')
 }
 
 // ---------------------------------------------------------------------------

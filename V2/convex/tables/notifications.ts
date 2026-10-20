@@ -286,17 +286,10 @@ export const notificationTables = {
    * er portet endnu; når det er, skal feltet strammes til `v.id('events')` i
    * samme migration, som flytter rækkerne.
    */
-  eventReminders: defineTable({
-    eventId: v.string(),
-    token: v.string(),
-    status: v.union(
-      v.literal('sending'),
-      v.literal('sent'),
-      v.literal('failed'),
-    ),
-    attempts: v.number(),
-    startedAt: v.number(),
-    sentAt: v.optional(v.number()),
-    error: v.optional(v.string()),
-  }).index('by_event', ['eventId']),
+  /**
+   * Påmindelses-kørslen bor i `convex/tables/calendar.ts` sammen med `events`,
+   * fordi den har én række pr. begivenhed og slettes sammen med den. Der er
+   * bevidst ikke en kopi her: to definitioner af samme tabel ville få
+   * `defineSchema` til at kaste ved deploy.
+   */
 }

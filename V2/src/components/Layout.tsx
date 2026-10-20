@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { appBuildDate, appVersion, formatAppVersion } from '../lib/appVersion'
+import { FeatureAnnouncementBanner } from '../features/announcements/FeatureAnnouncementBanner'
 import { Navbar } from './Navbar'
 
 /**
@@ -14,6 +15,11 @@ export function Layout() {
   return (
     <div className="flex min-h-dvh flex-col bg-app text-ink-body">
       <Navbar />
+
+      {/* Banneret monteres her og ikke på en side: det er også det, der beder
+          serveren om at sende nyhedsnotifikationen, så det skal køre, uanset
+          hvilken side medlemmet åbner. */}
+      <FeatureAnnouncementBanner />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
         <Outlet />

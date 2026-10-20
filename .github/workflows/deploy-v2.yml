@@ -64,6 +64,11 @@ jobs:
         run: npm run build
         env:
           VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL || secrets.VITE_CONVEX_URL }}
+          # HTTP-ruterne (iCal, gæsteformular, prøveansøgning) ligger på
+          # .convex.site. Klienten udleder den af VITE_CONVEX_URL, hvis den ikke
+          # er sat, men på produktion sættes den eksplicit, så et skift af
+          # vært ikke afhænger af en streng-erstatning.
+          VITE_CONVEX_SITE_URL: ${{ vars.VITE_CONVEX_SITE_URL || secrets.VITE_CONVEX_SITE_URL }}
           VITE_BASE_PATH: ${{ inputs.base_path }}
 
       - name: Deploy to Pages

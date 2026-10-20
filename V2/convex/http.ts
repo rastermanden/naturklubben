@@ -1,6 +1,7 @@
 import { httpRouter } from 'convex/server'
 import { auth } from './auth'
 import { registerCalendarFeedRoutes } from './calendarFeed'
+import { probationHttpRoutes } from './probation'
 
 /**
  * HTTP-ruter uden for Convex's eget funktions-API.
@@ -14,5 +15,11 @@ const http = httpRouter()
 
 auth.addHttpRoutes(http)
 registerCalendarFeedRoutes(http)
+
+// Prøvemedlemskabets ansøgningsformular. Ruterne ejes af `probation.ts`, som
+// også har validering, HMAC og rate limiting; her bindes de blot til routeren.
+for (const route of probationHttpRoutes) {
+  http.route({ path: route.path, method: route.method, handler: route.handler })
+}
 
 export default http

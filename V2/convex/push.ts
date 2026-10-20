@@ -1,7 +1,7 @@
 import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import { internal } from './_generated/api'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { requireProfile, requireWritableProfile } from './authz'
 import { notificationKind, type NotificationKind } from './tables/notifications'
 import type { Doc, Id } from './_generated/dataModel'
@@ -409,10 +409,10 @@ export const registerSubscription = mutation({
     const p256dh = args.p256dh.trim()
     const auth = args.auth.trim()
     if (!isAllowedPushEndpoint(endpoint)) {
-      throw new Error('INVALID_PUSH_ENDPOINT')
+      throw new ConvexError('INVALID_PUSH_ENDPOINT')
     }
     if (!isValidSubscriptionKeys(p256dh, auth)) {
-      throw new Error('INVALID_PUSH_KEYS')
+      throw new ConvexError('INVALID_PUSH_KEYS')
     }
 
     const now = Date.now()

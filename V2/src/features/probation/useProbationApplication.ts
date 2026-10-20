@@ -12,15 +12,25 @@ import {
  * vilje: kun dér kan serveren selv se, hvor anmodningen kom fra, og derfor kan
  * rate limitingen ikke omgås ved at kalde en mutation direkte.
  *
- * Adressen kommer fra `VITE_CONVEX_SITE_URL` (Convex' `.convex.site`-vært, hvor
- * `httpAction`'erne ligger). Den skal være sat i `V2/.env.local` og i
- * deploy-workflowet, ligesom `VITE_CONVEX_URL`.
+ * Adressen kommer fra `VITE_CONVEX_SITE_URL`, hvis den er sat (Convex'
+ * `.convex.site`-vært, hvor `httpAction`'erne ligger). Er den ikke, udledes den
+ * af `VITE_CONVEX_URL` med samme regel som `features/calendar/feedUrl.ts`. Det
+ * er ikke kosmetik: PR-previewets `npx convex deploy --cmd` sender kun
+ * deploymentets URL videre til buildet, så uden udledningen ville formularen
+ * være død på hvert preview.
  */
 const PATH = '/proevemedlemskab'
 
 function siteUrl() {
-  const url = import.meta.env.VITE_CONVEX_SITE_URL
-  return typeof url === 'string' ? url.replace(/\/$/, '') : ''
+  const explicit = import.meta.env.VITE_CONVEX_SITE_URL
+  if (typeof explicit === 'string' && explicit.length > 0) {
+    return explicit.replace(/\/$/, '')
+  }
+
+  const convexUrl = import.meta.env.VITE_CONVEX_URL
+  return typeof convexUrl === 'string'
+    ? convexUrl.replace('.convex.cloud', '.convex.site').replace(/\/$/, '')
+    : ''
 }
 
 export interface ProbationApplicationInput {

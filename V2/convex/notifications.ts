@@ -1,5 +1,5 @@
 import { mutation, query } from './_generated/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { requireProfile, requireWritableProfile } from './authz'
 import {
   NOTIFICATION_KINDS,

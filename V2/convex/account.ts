@@ -1,7 +1,7 @@
 import { internalMutation, mutation, query } from './_generated/server'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { internal } from './_generated/api'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { requireProfile } from './authz'
 import type { Id } from './_generated/dataModel'
 
@@ -192,12 +192,12 @@ export const requestDeletion = mutation({
   handler: async (ctx, args) => {
     const profile = await requireProfile(ctx)
     if (args.confirmation !== ACCOUNT_DELETION_CONFIRMATION) {
-      throw new Error('INVALID_CONFIRMATION')
+      throw new ConvexError('INVALID_CONFIRMATION')
     }
 
     const now = Date.now()
     if (profile.isAdmin && !(await anotherAdminExists(ctx, profile._id, now))) {
-      throw new Error('LAST_ADMIN')
+      throw new ConvexError('LAST_ADMIN')
     }
 
     await ctx.db.patch(profile._id, { deletionReservedAt: now })
