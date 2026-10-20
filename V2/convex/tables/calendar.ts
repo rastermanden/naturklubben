@@ -56,7 +56,14 @@ export const calendarTables = {
     startAt: v.number(),
     endAt: v.optional(v.number()),
     endsAt: v.number(),
-    createdBy: v.id('profiles'),
+    /**
+     * Arrangøren. Valgfri, fordi en begivenhed er klubbens historik og bliver
+     * stående, når arrangøren sletter sin konto -- se `deleteAccount` i
+     * `convex/account.ts`. I den gamle app blev kolonnen `on delete set null`
+     * (20260823170000_account_deletion.sql), og den regel er den samme her.
+     * Er feltet tomt, kan kun en administrator slette begivenheden.
+     */
+    createdBy: v.optional(v.id('profiles')),
     /** Åben for ikke-medlemmer: vises på den offentlige kalender. */
     isPublic: v.boolean(),
     /** Pladsloft; udeladt er ubegrænset. */
@@ -70,7 +77,7 @@ export const calendarTables = {
     .index('by_end', ['endsAt'])
     .index('by_public_end', ['isPublic', 'endsAt'])
     // Ikke brugt af kalenderens egne queries: den bruges, når en konto slettes
-    // og medlemmets rækker skal findes (medlemsdomænet).
+    // og medlemmets rækker skal findes (`convex/account.ts`).
     .index('by_creator', ['createdBy']),
 
   /**

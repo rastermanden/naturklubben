@@ -102,6 +102,8 @@ function normalizeEventInput(input: EventInput) {
 
 /** Har medlemmet ret til at rette begivenheden? Arrangøren eller en admin. */
 function canManageEvent(profile: Doc<'profiles'>, event: Doc<'events'>) {
+  // `createdBy` er valgfrit: en slettet konto efterlader begivenheden uden
+  // arrangør, og så er det kun en administrator, der kan rette den.
   return event.createdBy === profile._id || profile.isAdmin
 }
 
@@ -243,7 +245,9 @@ function toEventSummary(event: Doc<'events'>) {
     location: event.location ?? null,
     startAt: event.startAt,
     endAt: event.endAt ?? null,
-    createdBy: event.createdBy,
+    // `null` og ikke `undefined`: klienten kender ikke forskellen, og en
+    // begivenhed uden arrangør (efter en kontosletning) skal vises som det.
+    createdBy: event.createdBy ?? null,
     isPublic: event.isPublic,
     maxParticipants: event.maxParticipants ?? null,
     attendingCount: event.attendingCount,
@@ -493,7 +497,11 @@ export const event = query({
       ...toEventSummary(event),
       isOrganiser: event.createdBy === profile._id,
       canEdit: canManageEvent(profile, event),
-      canDelete: event.createdBy === profile._id,
+      // Samme regel som `deleteEvent` håndhæver: arrangøren eller en admin.
+      // Admin-retten er ikke ny -- den kom med
+      // 20260823170000_account_deletion.sql, fordi en begivenhed uden arrangør
+      // ellers aldrig kunne slettes af nogen.
+      canDelete: profile.isAdmin || event.createdBy === profile._id,
       myStatus: mine?.status ?? null,
       myWaitlistPosition: mine?.waitlistPosition ?? null,
     }
@@ -789,9 +797,11 @@ export const deleteEvent = mutation({
     const profile = await requireWritableProfile(ctx)
     const event = await requireEvent(ctx, args.eventId)
 
-    // Også en admin skal kunne rette, men ikke slette en andens begivenhed:
-    // den regel er fra #196 og er ikke ændret her.
-    if (event.createdBy !== profile._id) {
+    // Arrangøren -- eller en administrator. Admin-retten er ikke ny: den kom
+    // med 20260823170000_account_deletion.sql (politikken "Admins can delete
+    // any event"), fordi en begivenhed, hvis arrangør har slettet sin konto,
+    // ellers var uigenkaldeligt låst fast. Se også `canManageEvent`.
+    if (event.createdBy !== profile._id && !profile.isAdmin) {
       throw new ConvexError('NOT_EVENT_OWNER')
     }
 
