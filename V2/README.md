@@ -30,10 +30,12 @@ GitHub.
 
 1. Opret et projekt på <https://dashboard.convex.dev> (eller kør
    `npx convex dev` lokalt første gang, som logger ind via browseren). **Vælg
-   region `aws-eu-west-1` (Irland) med det samme** — regionen kan ikke ændres
-   bagefter, og en flytning kræver eksport/import til et nyt projekt. EU koster
-   30 % tillæg på forbruget; for en klub af denne størrelse er det småpenge mod
-   at have medlemmernes billeder og chat liggende uden for EU.
+   `aws-us-east-1`** — det er den billigste region (uden det 30 %
+   regionaltillæg, som EU, Sydney og Canada koster), og beslutningen er taget:
+   pris frem for placering. Konsekvensen skal siges højt: medlemsdata,
+   billeder og chat ligger dermed uden for EU. Regionen kan ikke ændres
+   bagefter — en flytning kræver eksport/import til et nyt projekt — så skal
+   det ændres, er det en ny beslutning med en ny opsætning.
 2. `cd V2 && npm install`
 3. `npx convex dev` — opretter udviklings-deploymentet, skriver
    `VITE_CONVEX_URL` i `V2/.env.local` og genererer `convex/_generated/`.
@@ -43,8 +45,14 @@ GitHub.
 
 Til GitHub Actions skal der bruges to ting i repoets indstillinger:
 
-- `CONVEX_DEPLOY_KEY` (secret) — til `npx convex deploy` fra CI.
-- `VITE_CONVEX_URL` (variable eller secret) — til frontend-buildet.
+- `CONVEX_DEPLOY_KEY` (secret) — til `npx convex deploy` fra CI mod
+  produktions-deploymentet.
+- `CONVEX_PREVIEW_DEPLOY_KEY` (secret) — en **preview** deploy key, som
+  `pr-preview-v2.yml` bruger. Den kan kun oprette og deploye til preview-
+  deployments, ikke til produktion; den findes på projektets indstillingsside.
+- `VITE_CONVEX_URL` (variable eller secret) — til frontend-buildet i
+  `deploy-v2.yml`. PR-previewet skal ikke bruge den: der kommer URL'en fra
+  deployet selv.
 
 ## Skift mellem de to apps
 
@@ -132,13 +140,16 @@ automatisk efter 5 dage (14 på de betalte planer). `--preview-run <funktion>`
 kan seede data ved oprettelsen, hvilket er den nærmeste pendant til at køre
 migrationer på en frisk preview-database.
 
-Det betyder, at V2 **kan** få et per-PR-backend som den gamle app, men det skal
-skrives: en workflow, der (1) deployer backend med en preview deploy key, (2)
-læser det preview-deployments URL ud og (3) bygger frontend med den URL. Indtil
-den workflow findes, er et V2-preview et frontend-preview mod ét delt
-deployment. Forskellen fra Supabase er, at branchen ikke får en *kopi af
-data* — et preview-deployment starter tomt (eller med det, `--preview-run`
-lægger ind).
+Det betyder, at V2 kan få et per-PR-backend som den gamle app — og det er
+skrevet: `.github/workflows/pr-preview-v2.yml` kører `npx convex deploy` med
+`--preview-name pr-<nr>` og `--cmd 'npm run build'` /
+`--cmd-url-env-var-name VITE_CONVEX_URL`, så backend og frontend hører sammen i
+samme build, og lægger resultatet i `pr-preview/pr-<nr>/` med samme action som
+den gamle app. Tre forbehold hører med: preview-deployments er en
+**beta-funktion** og ryddes efter 5 dage (14 på betalte planer), deploymentet
+starter **tomt** (ingen brugere, ingen data — skal et preview testes logget ind,
+oprettes en bruger der), og PR'er fra forks eller fra Copilot coding agent får
+ingen secrets og dermed intet preview, præcis som i dag.
 
 ## Verifikation
 

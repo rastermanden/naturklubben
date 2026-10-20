@@ -1,0 +1,81 @@
+name: PR Preview V2 (Convex)
+
+# Preview for V2: hver PR får sit eget Convex-deployment og sit eget
+# frontend-build, der peger på det. Det er den nærmeste pendant til Supabase's
+# Preview Branch, som den gamle app bruger i `pr-preview.yml`.
+#
+# To ting fra Convex-dokumentationen, som workflowet bygger på:
+#
+# - `npx convex deploy` med en **preview deploy key** opretter (eller genbruger)
+#   et midlertidigt deployment pr. navn. `--preview-name` gør navnet "pr-<nr>",
+#   så det er stabilt mellem kørsler, selv om branchenavnet ændrer sig.
+# - `--cmd-url-env-var-name VITE_CONVEX_URL` kører build-kommandoen *efter*
+#   deployet med deploymentets URL i den variabel. Derfor skal URL'en ikke
+#   gættes eller læses ud af dashboardet.
+#
+# Forbehold, som ikke kan kodes væk:
+#
+# - Preview-deployments er en **beta-funktion** hos Convex og ryddes automatisk
+#   efter 5 dage (14 på de betalte planer). En gammel PRs preview kan altså være
+#   væk, selv om PR'en stadig er åben.
+# - Deploymentet starter **tomt**. Der er ingen kopi af produktionsdata, og
+#   ingen brugere -- skal et preview testes logget ind, oprettes en bruger der.
+# - PR'er fra forks får ingen secrets og kan derfor ikke bygge et preview, og
+#   PR'er fra Copilot coding agent skal have deres workflows godkendt manuelt.
+#   Det er samme begrænsning som i `pr-preview.yml`.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pr-preview-v2-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Versionsstrengen i footeren bygges med `git describe --tags`; en
+          # shallow checkout uden tags giver altid den bare commit-sha.
+          fetch-depth: 0
+
+      - if: github.event.action != 'closed'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: V2/package-lock.json
+
+      - if: github.event.action != 'closed'
+        name: Install
+        working-directory: V2
+        run: npm ci
+
+      # Backend og frontend i ét trin: `--cmd` kører buildet, når deploymentet
+      # findes, og giver dets URL videre som VITE_CONVEX_URL. Fejler deployet,
+      # bliver der intet build -- hvilket er meningen: et preview uden backend
+      # er en hvid side med en grøn check.
+      - if: github.event.action != 'closed'
+        name: Deploy preview-deployment og byg mod det
+        working-directory: V2
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          VITE_BASE_PATH: /naturklubben/pr-preview/pr-${{ github.event.number }}/
+        run: |
+          npx convex deploy \
+            --preview-name "pr-${{ github.event.number }}" \
+            --cmd 'npm run build' \
+            --cmd-url-env-var-name VITE_CONVEX_URL
+
+      # Samme action som den gamle app bruger: den lægger buildet i
+      # pr-preview/pr-<nr>/ på gh-pages og fjerner mappen igen, når PR'en
+      # lukkes (event-typen `closed` ovenfor).
+      - uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ./V2/dist
