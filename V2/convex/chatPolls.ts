@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { mutation } from './_generated/server'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
@@ -35,7 +35,7 @@ function requireRoomAccess(
   room: 'general' | 'admin',
 ) {
   if (room === 'admin' && !profile.isAdmin) {
-    throw new Error('NOT_ADMIN')
+    throw new ConvexError('NOT_ADMIN')
   }
 }
 
@@ -118,27 +118,27 @@ export const createPoll = mutation({
     const profile = await requireWritableProfile(ctx)
 
     const message = await ctx.db.get(args.messageId)
-    if (message === null) throw new Error('POLL_CREATE_MESSAGE_NOT_FOUND')
+    if (message === null) throw new ConvexError('POLL_CREATE_MESSAGE_NOT_FOUND')
     requireRoomAccess(profile, message.room)
 
     if (message.authorId !== profile._id) {
-      throw new Error('POLL_CREATE_NOT_AUTHORIZED')
+      throw new ConvexError('POLL_CREATE_NOT_AUTHORIZED')
     }
     if (message.deletedAt !== undefined) {
-      throw new Error('POLL_CREATE_MESSAGE_DELETED')
+      throw new ConvexError('POLL_CREATE_MESSAGE_DELETED')
     }
 
     const existing = await ctx.db
       .query('chatPolls')
       .withIndex('by_message', (q) => q.eq('messageId', args.messageId))
       .unique()
-    if (existing !== null) throw new Error('POLL_CREATE_ALREADY_EXISTS')
+    if (existing !== null) throw new ConvexError('POLL_CREATE_ALREADY_EXISTS')
 
     if (
       args.options.length < POLL_MIN_OPTIONS ||
       args.options.length > POLL_MAX_OPTIONS
     ) {
-      throw new Error('POLL_CREATE_INVALID_OPTIONS')
+      throw new ConvexError('POLL_CREATE_INVALID_OPTIONS')
     }
 
     const labels = args.options.map((option) => option.trim())
@@ -147,14 +147,14 @@ export const createPoll = mutation({
         (label) => label.length === 0 || label.length > POLL_OPTION_MAX_LENGTH,
       )
     ) {
-      throw new Error('POLL_CREATE_INVALID_OPTIONS')
+      throw new ConvexError('POLL_CREATE_INVALID_OPTIONS')
     }
 
     // Spørgsmålet er beskedens indhold. Er beskeden længere end et spørgsmål
     // må være, afvises den her frem for at blive klippet -- samme grænse som
     // den gamle apps constraint på `polls.question`.
     if (message.content.length > POLL_QUESTION_MAX_LENGTH) {
-      throw new Error('POLL_CREATE_QUESTION_TOO_LONG')
+      throw new ConvexError('POLL_CREATE_QUESTION_TOO_LONG')
     }
 
     const pollId = await ctx.db.insert('chatPolls', {
@@ -188,17 +188,17 @@ export const castPollVote = mutation({
     const profile = await requireWritableProfile(ctx)
 
     const poll = await ctx.db.get(args.pollId)
-    if (poll === null) throw new Error('POLL_VOTE_NOT_FOUND')
+    if (poll === null) throw new ConvexError('POLL_VOTE_NOT_FOUND')
 
     const message = await ctx.db.get(poll.messageId)
-    if (message === null) throw new Error('POLL_VOTE_NOT_FOUND')
+    if (message === null) throw new ConvexError('POLL_VOTE_NOT_FOUND')
     requireRoomAccess(profile, message.room)
 
-    if (poll.closedAt !== undefined) throw new Error('POLL_VOTE_CLOSED')
+    if (poll.closedAt !== undefined) throw new ConvexError('POLL_VOTE_CLOSED')
 
     const option = await ctx.db.get(args.optionId)
     if (option === null || option.pollId !== poll._id) {
-      throw new Error('POLL_VOTE_UNKNOWN_OPTION')
+      throw new ConvexError('POLL_VOTE_UNKNOWN_OPTION')
     }
 
     const existing = await ctx.db
@@ -243,14 +243,14 @@ export const closePoll = mutation({
     const profile = await requireWritableProfile(ctx)
 
     const poll = await ctx.db.get(args.pollId)
-    if (poll === null) throw new Error('POLL_CLOSE_NOT_FOUND')
+    if (poll === null) throw new ConvexError('POLL_CLOSE_NOT_FOUND')
 
     const message = await ctx.db.get(poll.messageId)
-    if (message === null) throw new Error('POLL_CLOSE_NOT_FOUND')
+    if (message === null) throw new ConvexError('POLL_CLOSE_NOT_FOUND')
     requireRoomAccess(profile, message.room)
 
     if (poll.createdBy !== profile._id && !profile.isAdmin) {
-      throw new Error('POLL_CLOSE_NOT_AUTHORIZED')
+      throw new ConvexError('POLL_CLOSE_NOT_AUTHORIZED')
     }
 
     if (poll.closedAt !== undefined) return

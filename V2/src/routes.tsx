@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { authRoutes } from './features/auth/routes'
 import { calendarRoutes } from './features/calendar/routes'
+import { chatRoutes } from './features/chat/routes'
 import { galleryRoutes } from './features/gallery/routes'
 
 export type AppRoute = {
@@ -20,6 +21,7 @@ export type AppRoute = {
 export const appRoutes: AppRoute[] = [
   ...calendarRoutes,
   ...authRoutes,
+  ...chatRoutes,
   ...galleryRoutes,
 ]
 

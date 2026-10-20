@@ -1,5 +1,5 @@
 import { paginationOptsValidator } from 'convex/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import type { Infer } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import type { QueryCtx } from './_generated/server'
@@ -69,7 +69,7 @@ const SEARCH_RESULT_LIMIT = 20
  */
 function requireRoomAccess(profile: Doc<'profiles'>, room: ChatRoom) {
   if (room === 'admin' && !profile.isAdmin) {
-    throw new Error('NOT_ADMIN')
+    throw new ConvexError('NOT_ADMIN')
   }
 }
 
@@ -440,7 +440,7 @@ export const context = query({
   handler: async (ctx, args) => {
     const profile = await requireProfile(ctx)
     const target = await ctx.db.get(args.messageId)
-    if (target === null) throw new Error('MESSAGE_NOT_FOUND')
+    if (target === null) throw new ConvexError('MESSAGE_NOT_FOUND')
     requireRoomAccess(profile, target.room)
 
     const size = clamp(args.size ?? 25, 1, 50)
@@ -631,13 +631,13 @@ export const sendMessage = mutation({
     requireRoomAccess(profile, args.room)
 
     if (args.clientId.trim().length === 0) {
-      throw new Error('MESSAGE_SEND_MISSING_CLIENT_ID')
+      throw new ConvexError('MESSAGE_SEND_MISSING_CLIENT_ID')
     }
     if (
       args.content.length < 1 ||
       args.content.length > MESSAGE_MAX_LENGTH
     ) {
-      throw new Error('MESSAGE_SEND_INVALID_CONTENT')
+      throw new ConvexError('MESSAGE_SEND_INVALID_CONTENT')
     }
 
     const existing = await ctx.db
@@ -648,7 +648,7 @@ export const sendMessage = mutation({
       // En andens klient-id må hverken overskrives eller læses: svaret ville
       // ellers lække indholdet af en besked, kalderen ikke ejer.
       if (existing.authorId !== profile._id) {
-        throw new Error('MESSAGE_SEND_CLIENT_ID_CONFLICT')
+        throw new ConvexError('MESSAGE_SEND_CLIENT_ID_CONFLICT')
       }
       return { messageId: existing._id, inserted: false }
     }
@@ -656,12 +656,12 @@ export const sendMessage = mutation({
     let replyToId: Id<'messages'> | undefined
     if (args.replyToId !== undefined && args.replyToId !== null) {
       const parent = await ctx.db.get(args.replyToId)
-      if (parent === null) throw new Error('MESSAGE_REPLY_NOT_FOUND')
+      if (parent === null) throw new ConvexError('MESSAGE_REPLY_NOT_FOUND')
       // Fremmednøglen i den gamle app krævede blot, at beskeden fandtes. Her
       // kræves også samme rum, så et svar ikke kan pege ind i admin-rummet.
-      if (parent.room !== args.room) throw new Error('MESSAGE_REPLY_WRONG_ROOM')
+      if (parent.room !== args.room) throw new ConvexError('MESSAGE_REPLY_WRONG_ROOM')
       if (parent.deletedAt !== undefined) {
-        throw new Error('MESSAGE_REPLY_DELETED')
+        throw new ConvexError('MESSAGE_REPLY_DELETED')
       }
       replyToId = parent._id
     }
@@ -712,13 +712,13 @@ export const softDeleteMessage = mutation({
     const profile = await requireWritableProfile(ctx)
 
     const message = await ctx.db.get(args.messageId)
-    if (message === null) throw new Error('MESSAGE_DELETE_NOT_FOUND')
+    if (message === null) throw new ConvexError('MESSAGE_DELETE_NOT_FOUND')
     requireRoomAccess(profile, message.room)
 
     if (message.deletedAt !== undefined) return
 
     if (message.authorId !== profile._id && !profile.isAdmin) {
-      throw new Error('MESSAGE_DELETE_NOT_AUTHORIZED')
+      throw new ConvexError('MESSAGE_DELETE_NOT_AUTHORIZED')
     }
 
     await ctx.db.patch(args.messageId, {
@@ -748,9 +748,9 @@ export const toggleReaction = mutation({
     const profile = await requireWritableProfile(ctx)
 
     const message = await ctx.db.get(args.messageId)
-    if (message === null) throw new Error('MESSAGE_NOT_FOUND')
+    if (message === null) throw new ConvexError('MESSAGE_NOT_FOUND')
     requireRoomAccess(profile, message.room)
-    if (message.deletedAt !== undefined) throw new Error('MESSAGE_DELETED')
+    if (message.deletedAt !== undefined) throw new ConvexError('MESSAGE_DELETED')
 
     const existing = await ctx.db
       .query('messageReactions')
