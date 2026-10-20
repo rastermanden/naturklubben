@@ -3,7 +3,7 @@ import { internalMutation, mutation, query, action } from './_generated/server'
 import { internal } from './_generated/api'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import {
   requireAdmin,
   requireProfile,
@@ -414,21 +414,21 @@ export const createPhoto = mutation({
 
     const metadata = await ctx.db.system.get(args.storageId)
     if (metadata === null) {
-      throw new Error('PHOTO_UPLOAD_NOT_FOUND')
+      throw new ConvexError('PHOTO_UPLOAD_NOT_FOUND')
     }
     if (!(metadata.contentType ?? '').startsWith('image/')) {
       await ctx.storage.delete(args.storageId)
-      throw new Error('PHOTO_NOT_AN_IMAGE')
+      throw new ConvexError('PHOTO_NOT_AN_IMAGE')
     }
     if (metadata.size > MAX_FILE_SIZE) {
       await ctx.storage.delete(args.storageId)
-      throw new Error('PHOTO_TOO_LARGE')
+      throw new ConvexError('PHOTO_TOO_LARGE')
     }
 
     const caption = trimmedOrUndefined(args.caption)
     if (caption !== undefined && caption.length > MAX_CAPTION_LENGTH) {
       await ctx.storage.delete(args.storageId)
-      throw new Error('PHOTO_CAPTION_TOO_LONG')
+      throw new ConvexError('PHOTO_CAPTION_TOO_LONG')
     }
 
     const clientUploadId = trimmedOrUndefined(args.clientUploadId)
@@ -493,12 +493,12 @@ export const deletePhoto = mutation({
 
     const photo = await ctx.db.get(args.photoId)
     if (photo === null) {
-      throw new Error('PHOTO_NOT_FOUND')
+      throw new ConvexError('PHOTO_NOT_FOUND')
     }
 
     const isOwner = photo.uploaderId === profile._id
     if (!isOwner && !profile.isAdmin) {
-      throw new Error('PHOTO_DELETE_NOT_AUTHORIZED')
+      throw new ConvexError('PHOTO_DELETE_NOT_AUTHORIZED')
     }
 
     const now = Date.now()
@@ -506,7 +506,7 @@ export const deletePhoto = mutation({
       photo.optimizationStatus === 'processing' &&
       !isStaleProcessing(photo, now)
     ) {
-      throw new Error('PHOTO_BUSY')
+      throw new ConvexError('PHOTO_BUSY')
     }
 
     if (!isOwner) {
@@ -571,12 +571,12 @@ export const addComment = mutation({
 
     const body = args.body.trim()
     if (body.length === 0 || body.length > MAX_COMMENT_LENGTH) {
-      throw new Error('PHOTO_COMMENT_INVALID_BODY')
+      throw new ConvexError('PHOTO_COMMENT_INVALID_BODY')
     }
 
     const photo = await ctx.db.get(args.photoId)
     if (photo === null) {
-      throw new Error('PHOTO_NOT_FOUND')
+      throw new ConvexError('PHOTO_NOT_FOUND')
     }
 
     const now = Date.now()
@@ -612,10 +612,10 @@ export const deleteComment = mutation({
 
     const comment = await ctx.db.get(args.commentId)
     if (comment === null) {
-      throw new Error('PHOTO_COMMENT_NOT_FOUND')
+      throw new ConvexError('PHOTO_COMMENT_NOT_FOUND')
     }
     if (comment.authorId !== profile._id && !profile.isAdmin) {
-      throw new Error('PHOTO_COMMENT_DELETE_NOT_AUTHORIZED')
+      throw new ConvexError('PHOTO_COMMENT_DELETE_NOT_AUTHORIZED')
     }
 
     await ctx.db.delete(comment._id)
@@ -698,7 +698,7 @@ export const finishOptimization = internalMutation({
 
     const photo = await ctx.db.get(args.photoId)
     if (photo === null || photo.uploaderId !== profile._id) {
-      throw new Error('PHOTO_NOT_FOUND')
+      throw new ConvexError('PHOTO_NOT_FOUND')
     }
     if (
       photo.optimizationStatus !== 'processing' ||
