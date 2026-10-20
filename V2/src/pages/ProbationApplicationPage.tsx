@@ -1,0 +1,178 @@
+import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
+import { useAction } from 'convex/react'
+import { api } from '../../convex/_generated/api'
+import {
+  toFriendlyProbationApplicationError,
+  useSubmitProbationApplication,
+} from '../features/probation/useProbationApplication'
+import {
+  prepareBrowserPushSubscription,
+  PushSetupError,
+} from '../features/notifications/usePushNotifications'
+
+const PUSH_ERROR_TEXT = {
+  unsupported:
+    'Din browser kan ikke modtage svaret som notifikation. Brug en browser med Web Push og prøv igen.',
+  'needs-install':
+    'På iPhone og iPad skal appen først lægges på hjemmeskærmen (Del → Føj til hjemmeskærm). Åbn den derfra og prøv igen.',
+  blocked:
+    'Notifikationer er blokeret for siden. Slå dem til i browserens indstillinger og prøv igen.',
+} as const
+
+/**
+ * Ansøg om prøvemedlemskab.
+ *
+ * Siden er offentlig, fordi ansøgeren ikke har en konto endnu. Ansøgeren skal
+ * give tilladelse til notifikationer, fordi svaret kommer som et push til
+ * netop den enhed, ansøgningen blev sendt fra -- der er endnu ingen profil at
+ * sende til.
+ */
+function ProbationApplicationPage() {
+  const fetchVapidPublicKey = useAction(api.push.vapidPublicKey)
+  const submitApplication = useSubmitProbationApplication()
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [motivation, setMotivation] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [submitted, setSubmitted] = useState(false)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    setError(null)
+
+    try {
+      const subscription = await prepareBrowserPushSubscription(async () =>
+        await fetchVapidPublicKey({}),
+      )
+      await submitApplication.submit({
+        fullName,
+        email,
+        motivation,
+        subscription,
+      })
+      setSubmitted(true)
+      setFullName('')
+      setEmail('')
+      setMotivation('')
+    } catch (submitError) {
+      setError(
+        submitError instanceof PushSetupError
+          ? PUSH_ERROR_TEXT[submitError.reason]
+          : toFriendlyProbationApplicationError(submitError),
+      )
+    }
+  }
+
+  if (submitted) {
+    return (
+      <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-4 p-6 text-center">
+        <h1 className="text-2xl font-semibold text-ink-body">
+          Ansøgning modtaget
+        </h1>
+        <p className="text-ink-muted">
+          Tak for din interesse i Naturklubben. Vi gennemgår ansøgningen manuelt
+          og sender svaret som en notifikation på denne enhed.
+        </p>
+        <Link to="/" className="underline">
+          Tilbage til forsiden
+        </Link>
+      </main>
+    )
+  }
+
+  return (
+    <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-6 p-6">
+      <div className="space-y-2">
+        <h1 className="text-2xl font-semibold text-ink-body">
+          Ansøg om prøvemedlemskab
+        </h1>
+        <p className="text-ink-muted">
+          Fortæl kort, hvem du er, og hvorfor du gerne vil være med i klubben.
+          Når du sender, beder browseren om lov til at vise notifikationer, så
+          du kan få svar på ansøgningen.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
+          Navn
+          <input
+            id="probation-full-name"
+            type="text"
+            required
+            maxLength={200}
+            autoComplete="name"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            className="rounded border border-line-strong px-3 py-2 text-base"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
+          E-mail
+          <input
+            id="probation-email"
+            type="email"
+            required
+            maxLength={320}
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            className="rounded border border-line-strong px-3 py-2 text-base"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm text-ink-body">
+          Hvorfor vil du være med?
+          <textarea
+            id="probation-motivation"
+            required
+            maxLength={5000}
+            rows={5}
+            value={motivation}
+            onChange={(event) => setMotivation(event.target.value)}
+            className="rounded border border-line-strong px-3 py-2 text-base"
+          />
+        </label>
+
+        {error && (
+          <p
+            id="probation-application-error"
+            role="alert"
+            className="text-sm text-danger"
+          >
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={submitApplication.isPending}
+          className="min-h-11 rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
+        >
+          {submitApplication.isPending
+            ? 'Sender…'
+            : 'Tillad notifikationer og send'}
+        </button>
+      </form>
+
+      <div className="flex flex-col gap-1 text-sm text-ink-muted">
+        <span>
+          Har du allerede fået grønt lys?{' '}
+          <Link to="/opret" className="underline">
+            Opret bruger
+          </Link>
+        </span>
+        <span>
+          Har du allerede en bruger?{' '}
+          <Link to="/login" className="underline">
+            Log ind
+          </Link>
+        </span>
+      </div>
+    </main>
+  )
+}
+
+export default ProbationApplicationPage
