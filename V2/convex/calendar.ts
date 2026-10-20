@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import {
   internalMutation,
   internalQuery,
@@ -63,27 +63,27 @@ const eventInputArgs = {
 function normalizeEventInput(input: EventInput) {
   const title = input.title.trim()
   if (title.length === 0 || title.length > 120) {
-    throw new Error('EVENT_TITLE_INVALID')
+    throw new ConvexError('EVENT_TITLE_INVALID')
   }
 
   const description = input.description?.trim()
   const location = input.location?.trim()
 
   if (!Number.isFinite(input.startAt)) {
-    throw new Error('EVENT_START_INVALID')
+    throw new ConvexError('EVENT_START_INVALID')
   }
   if (input.endAt !== null && !Number.isFinite(input.endAt)) {
-    throw new Error('EVENT_END_INVALID')
+    throw new ConvexError('EVENT_END_INVALID')
   }
   if (input.endAt !== null && input.endAt < input.startAt) {
-    throw new Error('EVENT_ENDS_BEFORE_START')
+    throw new ConvexError('EVENT_ENDS_BEFORE_START')
   }
 
   if (
     input.maxParticipants !== null &&
     (!Number.isInteger(input.maxParticipants) || input.maxParticipants < 1)
   ) {
-    throw new Error('EVENT_CAP_INVALID')
+    throw new ConvexError('EVENT_CAP_INVALID')
   }
 
   return {
@@ -255,7 +255,7 @@ function toEventSummary(event: Doc<'events'>) {
 /** Begivenheden, eller en fejl hvis den ikke findes. */
 async function requireEvent(ctx: QueryCtx, eventId: Id<'events'>) {
   const event = await ctx.db.get(eventId)
-  if (event === null) throw new Error('EVENT_NOT_FOUND')
+  if (event === null) throw new ConvexError('EVENT_NOT_FOUND')
   return event
 }
 
@@ -310,16 +310,16 @@ function normalizeActivityInput(input: {
   const title = input.title.trim()
   const description = input.description.trim()
   if (title.length === 0 || description.length === 0) {
-    throw new Error('ACTIVITY_FIELDS_REQUIRED')
+    throw new ConvexError('ACTIVITY_FIELDS_REQUIRED')
   }
 
   const linkUrl = input.linkUrl?.trim() || undefined
   const linkLabel = input.linkLabel?.trim() || undefined
   if ((linkUrl === undefined) !== (linkLabel === undefined)) {
-    throw new Error('ACTIVITY_LINK_INCOMPLETE')
+    throw new ConvexError('ACTIVITY_LINK_INCOMPLETE')
   }
   if (linkUrl !== undefined && !/^https?:\/\//i.test(linkUrl)) {
-    throw new Error('ACTIVITY_LINK_INVALID')
+    throw new ConvexError('ACTIVITY_LINK_INVALID')
   }
 
   return {
@@ -363,7 +363,7 @@ export const updateActivity = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx)
     const activity = await ctx.db.get(args.activityId)
-    if (activity === null) throw new Error('ACTIVITY_NOT_FOUND')
+    if (activity === null) throw new ConvexError('ACTIVITY_NOT_FOUND')
     await ctx.db.patch(activity._id, normalizeActivityInput(args))
     return null
   },
@@ -374,7 +374,7 @@ export const deleteActivity = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx)
     const activity = await ctx.db.get(args.activityId)
-    if (activity === null) throw new Error('ACTIVITY_NOT_FOUND')
+    if (activity === null) throw new ConvexError('ACTIVITY_NOT_FOUND')
     await ctx.db.delete(activity._id)
     return null
   },
@@ -575,7 +575,7 @@ export const membersWithoutResponse = query({
     const profile = await requireProfile(ctx)
     const event = await requireEvent(ctx, args.eventId)
     if (!canManageEvent(profile, event)) {
-      throw new Error('NOT_EVENT_MANAGER')
+      throw new ConvexError('NOT_EVENT_MANAGER')
     }
 
     const answered = new Set(
@@ -641,7 +641,7 @@ export const guestRequests = query({
     const profile = await requireProfile(ctx)
     const event = await requireEvent(ctx, args.eventId)
     if (!canManageEvent(profile, event)) {
-      throw new Error('NOT_EVENT_MANAGER')
+      throw new ConvexError('NOT_EVENT_MANAGER')
     }
 
     const rows = await ctx.db
@@ -763,7 +763,7 @@ export const updateEvent = mutation({
     const profile = await requireWritableProfile(ctx)
     const event = await requireEvent(ctx, args.eventId)
     if (!canManageEvent(profile, event)) {
-      throw new Error('NOT_EVENT_MANAGER')
+      throw new ConvexError('NOT_EVENT_MANAGER')
     }
 
     const fields = normalizeEventInput(args)
@@ -792,7 +792,7 @@ export const deleteEvent = mutation({
     // Også en admin skal kunne rette, men ikke slette en andens begivenhed:
     // den regel er fra #196 og er ikke ændret her.
     if (event.createdBy !== profile._id) {
-      throw new Error('NOT_EVENT_OWNER')
+      throw new ConvexError('NOT_EVENT_OWNER')
     }
 
     for (const row of await attendanceRows(ctx, args.eventId)) {
@@ -948,7 +948,7 @@ export const createTask = mutation({
 
     const title = args.title.trim()
     if (title.length === 0 || title.length > 200) {
-      throw new Error('TASK_TITLE_INVALID')
+      throw new ConvexError('TASK_TITLE_INVALID')
     }
 
     return await ctx.db.insert('eventTasks', {
@@ -969,9 +969,9 @@ export const claimTask = mutation({
   handler: async (ctx, args) => {
     const profile = await requireWritableProfile(ctx)
     const task = await ctx.db.get(args.taskId)
-    if (task === null) throw new Error('TASK_NOT_FOUND')
+    if (task === null) throw new ConvexError('TASK_NOT_FOUND')
     if (task.assignedTo !== undefined && task.assignedTo !== profile._id) {
-      throw new Error('TASK_ALREADY_CLAIMED')
+      throw new ConvexError('TASK_ALREADY_CLAIMED')
     }
     await ctx.db.patch(task._id, { assignedTo: profile._id })
     return null
@@ -984,9 +984,9 @@ export const releaseTask = mutation({
   handler: async (ctx, args) => {
     const profile = await requireWritableProfile(ctx)
     const task = await ctx.db.get(args.taskId)
-    if (task === null) throw new Error('TASK_NOT_FOUND')
+    if (task === null) throw new ConvexError('TASK_NOT_FOUND')
     if (task.assignedTo !== profile._id) {
-      throw new Error('TASK_NOT_YOURS')
+      throw new ConvexError('TASK_NOT_YOURS')
     }
     await ctx.db.patch(task._id, { assignedTo: undefined })
     return null
@@ -999,9 +999,9 @@ export const deleteTask = mutation({
   handler: async (ctx, args) => {
     const profile = await requireWritableProfile(ctx)
     const task = await ctx.db.get(args.taskId)
-    if (task === null) throw new Error('TASK_NOT_FOUND')
+    if (task === null) throw new ConvexError('TASK_NOT_FOUND')
     if (task.createdBy !== profile._id) {
-      throw new Error('NOT_TASK_CREATOR')
+      throw new ConvexError('NOT_TASK_CREATOR')
     }
     await ctx.db.delete(task._id)
     return null
@@ -1025,14 +1025,14 @@ export const decideGuestRequest = mutation({
   handler: async (ctx, args) => {
     const profile = await requireProfile(ctx)
     const request = await ctx.db.get(args.requestId)
-    if (request === null) throw new Error('GUEST_REQUEST_NOT_FOUND')
+    if (request === null) throw new ConvexError('GUEST_REQUEST_NOT_FOUND')
 
     const event = await requireEvent(ctx, request.eventId)
     if (!canManageEvent(profile, event)) {
-      throw new Error('NOT_EVENT_MANAGER')
+      throw new ConvexError('NOT_EVENT_MANAGER')
     }
     if (request.status !== 'pending') {
-      throw new Error('GUEST_REQUEST_DECIDED')
+      throw new ConvexError('GUEST_REQUEST_DECIDED')
     }
 
     await ctx.db.patch(request._id, {

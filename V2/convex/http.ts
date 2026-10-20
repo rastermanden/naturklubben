@@ -1,5 +1,6 @@
 import { httpRouter } from 'convex/server'
 import { auth } from './auth'
+import { registerCalendarFeedRoutes } from './calendarFeed'
 
 /**
  * HTTP-ruter uden for Convex's eget funktions-API.
@@ -12,5 +13,6 @@ import { auth } from './auth'
 const http = httpRouter()
 
 auth.addHttpRoutes(http)
+registerCalendarFeedRoutes(http)
 
 export default http
