@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { requireProfile, requireWritableProfile } from './authz'
@@ -48,26 +48,26 @@ function danishTodayCeiling(): string {
 
 function validateContent(input: ObservationContent): ObservationContent {
   const species = input.species.trim()
-  if (species.length === 0) throw new Error('OBSERVATION_SPECIES_REQUIRED')
+  if (species.length === 0) throw new ConvexError('OBSERVATION_SPECIES_REQUIRED')
   if (species.length > SPECIES_MAX_LENGTH) {
-    throw new Error('OBSERVATION_SPECIES_TOO_LONG')
+    throw new ConvexError('OBSERVATION_SPECIES_TOO_LONG')
   }
 
   const location = input.location?.trim() || undefined
   if (location !== undefined && location.length > LOCATION_MAX_LENGTH) {
-    throw new Error('OBSERVATION_LOCATION_TOO_LONG')
+    throw new ConvexError('OBSERVATION_LOCATION_TOO_LONG')
   }
 
   const notes = input.notes?.trim() || undefined
   if (notes !== undefined && notes.length > NOTES_MAX_LENGTH) {
-    throw new Error('OBSERVATION_NOTES_TOO_LONG')
+    throw new ConvexError('OBSERVATION_NOTES_TOO_LONG')
   }
 
   if (!ISO_DATE.test(input.observedOn)) {
-    throw new Error('OBSERVATION_DATE_INVALID')
+    throw new ConvexError('OBSERVATION_DATE_INVALID')
   }
   if (input.observedOn > danishTodayCeiling()) {
-    throw new Error('OBSERVATION_DATE_IN_FUTURE')
+    throw new ConvexError('OBSERVATION_DATE_IN_FUTURE')
   }
 
   // Positionen er enten sat eller ikke sat. En halv position kan ikke vises på
@@ -76,19 +76,19 @@ function validateContent(input: ObservationContent): ObservationContent {
   const hasLatitude = input.latitude !== undefined
   const hasLongitude = input.longitude !== undefined
   if (hasLatitude !== hasLongitude) {
-    throw new Error('OBSERVATION_POSITION_INCOMPLETE')
+    throw new ConvexError('OBSERVATION_POSITION_INCOMPLETE')
   }
   if (
     input.latitude !== undefined &&
     (input.latitude < -90 || input.latitude > 90)
   ) {
-    throw new Error('OBSERVATION_POSITION_INVALID')
+    throw new ConvexError('OBSERVATION_POSITION_INVALID')
   }
   if (
     input.longitude !== undefined &&
     (input.longitude < -180 || input.longitude > 180)
   ) {
-    throw new Error('OBSERVATION_POSITION_INVALID')
+    throw new ConvexError('OBSERVATION_POSITION_INVALID')
   }
 
   return {
@@ -179,9 +179,9 @@ export const update = mutation({
     const profile = await requireWritableProfile(ctx)
 
     const observation = await ctx.db.get(args.observationId)
-    if (observation === null) throw new Error('OBSERVATION_NOT_FOUND')
+    if (observation === null) throw new ConvexError('OBSERVATION_NOT_FOUND')
     if (observation.createdById !== profile._id) {
-      throw new Error('OBSERVATION_NOT_OWNER')
+      throw new ConvexError('OBSERVATION_NOT_OWNER')
     }
 
     const content = validateContent({
@@ -207,9 +207,9 @@ export const remove = mutation({
     const profile = await requireWritableProfile(ctx)
 
     const observation = await ctx.db.get(args.observationId)
-    if (observation === null) throw new Error('OBSERVATION_NOT_FOUND')
+    if (observation === null) throw new ConvexError('OBSERVATION_NOT_FOUND')
     if (observation.createdById !== profile._id && !profile.isAdmin) {
-      throw new Error('OBSERVATION_NOT_ALLOWED')
+      throw new ConvexError('OBSERVATION_NOT_ALLOWED')
     }
 
     await ctx.db.delete(observation._id)

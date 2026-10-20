@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { requireProfile, requireWritableProfile } from './authz'
@@ -75,7 +75,7 @@ export const detail = query({
     await requireProfile(ctx)
 
     const tournament = await ctx.db.get(args.tournamentId)
-    if (tournament === null) throw new Error('TOURNAMENT_NOT_FOUND')
+    if (tournament === null) throw new ConvexError('TOURNAMENT_NOT_FOUND')
 
     const participants = await ctx.db
       .query('tournamentParticipants')
@@ -194,13 +194,13 @@ export const create = mutation({
 
     const profileIds = args.participantProfileIds
     if (new Set(profileIds).size !== profileIds.length) {
-      throw new Error('TOURNAMENT_DUPLICATE_PARTICIPANT')
+      throw new ConvexError('TOURNAMENT_DUPLICATE_PARTICIPANT')
     }
     if (profileIds.length < MIN_PARTICIPANTS) {
-      throw new Error('TOURNAMENT_TOO_FEW_PARTICIPANTS')
+      throw new ConvexError('TOURNAMENT_TOO_FEW_PARTICIPANTS')
     }
     if (profileIds.length > MAX_PARTICIPANTS) {
-      throw new Error('TOURNAMENT_TOO_MANY_PARTICIPANTS')
+      throw new ConvexError('TOURNAMENT_TOO_MANY_PARTICIPANTS')
     }
 
     const now = Date.now()
@@ -220,7 +220,7 @@ export const create = mutation({
       const profile = await ctx.db.get(profileId)
       // Et manglende medlem vælter hele mutationen, så turneringen ikke bliver
       // oprettet med en tom plads i bracketten.
-      if (profile === null) throw new Error('TOURNAMENT_PARTICIPANT_NOT_FOUND')
+      if (profile === null) throw new ConvexError('TOURNAMENT_PARTICIPANT_NOT_FOUND')
 
       participantIds.push(
         await ctx.db.insert('tournamentParticipants', {
@@ -269,7 +269,7 @@ export const create = mutation({
         `${match.nextMatchRound}:${match.nextMatchIndex}`,
       )
       if (matchId === undefined || nextMatchId === undefined) {
-        throw new Error('TOURNAMENT_PLAN_INVALID')
+        throw new ConvexError('TOURNAMENT_PLAN_INVALID')
       }
       await ctx.db.patch(matchId, {
         nextMatchId,
@@ -315,7 +315,7 @@ export const record = mutation({
     await requireWritableProfile(ctx)
 
     const match = await ctx.db.get(args.matchId)
-    if (match === null) throw new Error('MATCH_NOT_FOUND')
+    if (match === null) throw new ConvexError('MATCH_NOT_FOUND')
 
     const needed = gamesToWin(match.bestOf)
 
@@ -326,30 +326,30 @@ export const record = mutation({
     const winnerId = args.gameWinnerIds.find(
       (id) => (winsBy.get(id) ?? 0) >= needed,
     )
-    if (winnerId === undefined) throw new Error('MATCH_NO_MAJORITY')
+    if (winnerId === undefined) throw new ConvexError('MATCH_NO_MAJORITY')
     if (args.gameWinnerIds.length > match.bestOf) {
-      throw new Error('MATCH_TOO_MANY_GAMES')
+      throw new ConvexError('MATCH_TOO_MANY_GAMES')
     }
 
-    if (match.status !== 'pending') throw new Error('MATCH_ALREADY_COMPLETED')
-    if (match.bye) throw new Error('MATCH_IS_BYE')
+    if (match.status !== 'pending') throw new ConvexError('MATCH_ALREADY_COMPLETED')
+    if (match.bye) throw new ConvexError('MATCH_IS_BYE')
 
     const firstId = match.participant1Id
     const secondId = match.participant2Id
     if (firstId === undefined || secondId === undefined) {
-      throw new Error('MATCH_MISSING_PARTICIPANT')
+      throw new ConvexError('MATCH_MISSING_PARTICIPANT')
     }
 
     // Samme regel som triggeren `tournament_games_winner_is_participant`:
     // et enkeltspil skal handle om kampens egne to deltagere.
     for (const id of args.gameWinnerIds) {
       if (id !== firstId && id !== secondId) {
-        throw new Error('GAME_WINNER_NOT_IN_MATCH')
+        throw new ConvexError('GAME_WINNER_NOT_IN_MATCH')
       }
     }
 
     const tournament = await ctx.db.get(match.tournamentId)
-    if (tournament === null) throw new Error('TOURNAMENT_NOT_FOUND')
+    if (tournament === null) throw new ConvexError('TOURNAMENT_NOT_FOUND')
 
     const now = Date.now()
     for (const [index, id] of args.gameWinnerIds.entries()) {
@@ -441,12 +441,12 @@ export const undo = mutation({
     await requireWritableProfile(ctx)
 
     const match = await ctx.db.get(args.matchId)
-    if (match === null) throw new Error('MATCH_NOT_FOUND')
-    if (match.status !== 'completed') throw new Error('MATCH_NOT_COMPLETED')
-    if (match.participant2Id === undefined) throw new Error('MATCH_IS_BYE')
+    if (match === null) throw new ConvexError('MATCH_NOT_FOUND')
+    if (match.status !== 'completed') throw new ConvexError('MATCH_NOT_COMPLETED')
+    if (match.participant2Id === undefined) throw new ConvexError('MATCH_IS_BYE')
 
     const tournament = await ctx.db.get(match.tournamentId)
-    if (tournament === null) throw new Error('TOURNAMENT_NOT_FOUND')
+    if (tournament === null) throw new ConvexError('TOURNAMENT_NOT_FOUND')
     let pendingMatchCount = tournament.pendingMatchCount
 
     let nextMatchId = match.nextMatchId ?? null
@@ -456,7 +456,7 @@ export const undo = mutation({
       if (next === null) break
 
       if (next.status === 'completed' && !next.bye) {
-        throw new Error('MATCH_NEXT_COMPLETED')
+        throw new ConvexError('MATCH_NEXT_COMPLETED')
       }
 
       await ctx.db.patch(
@@ -541,9 +541,9 @@ export const removeTournament = mutation({
     const profile = await requireWritableProfile(ctx)
 
     const tournament = await ctx.db.get(args.tournamentId)
-    if (tournament === null) throw new Error('TOURNAMENT_NOT_FOUND')
+    if (tournament === null) throw new ConvexError('TOURNAMENT_NOT_FOUND')
     if (tournament.createdByProfileId !== profile._id && !profile.isAdmin) {
-      throw new Error('TOURNAMENT_NOT_ALLOWED')
+      throw new ConvexError('TOURNAMENT_NOT_ALLOWED')
     }
 
     const games = await ctx.db

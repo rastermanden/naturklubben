@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { mutation, query } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { gameIdValidator } from './tables/community'
@@ -58,20 +58,20 @@ function validateScore(
   durationSeconds: number,
 ) {
   if (!Number.isInteger(score) || score < 0 || score > SCORE_MAX) {
-    throw new Error('SCORE_OUT_OF_RANGE')
+    throw new ConvexError('SCORE_OUT_OF_RANGE')
   }
   if (!Number.isInteger(lines) || lines < 0 || lines > LINES_MAX) {
-    throw new Error('SCORE_LINES_OUT_OF_RANGE')
+    throw new ConvexError('SCORE_LINES_OUT_OF_RANGE')
   }
   if (!Number.isInteger(level) || level < 1 || level > LEVEL_MAX) {
-    throw new Error('SCORE_LEVEL_OUT_OF_RANGE')
+    throw new ConvexError('SCORE_LEVEL_OUT_OF_RANGE')
   }
   if (
     !Number.isInteger(durationSeconds) ||
     durationSeconds < 0 ||
     durationSeconds > DURATION_MAX
   ) {
-    throw new Error('SCORE_DURATION_OUT_OF_RANGE')
+    throw new ConvexError('SCORE_DURATION_OUT_OF_RANGE')
   }
 
   let plausible: boolean
@@ -106,7 +106,7 @@ function validateScore(
       break
   }
 
-  if (!plausible) throw new Error('SCORE_NOT_PLAUSIBLE')
+  if (!plausible) throw new ConvexError('SCORE_NOT_PLAUSIBLE')
 }
 
 /** Hvem er jeg? Bruges af siderne til at vise "dig" og til at afgøre, om der
@@ -233,9 +233,9 @@ export const remove = mutation({
     const profile = await requireWritableProfile(ctx)
 
     const score = await ctx.db.get(args.scoreId)
-    if (score === null) throw new Error('SCORE_NOT_FOUND')
+    if (score === null) throw new ConvexError('SCORE_NOT_FOUND')
     if (score.playerId !== profile._id && !profile.isAdmin) {
-      throw new Error('SCORE_NOT_ALLOWED')
+      throw new ConvexError('SCORE_NOT_ALLOWED')
     }
 
     await ctx.db.delete(score._id)

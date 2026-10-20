@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { internalMutation, mutation, query } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { requireAdmin, requireProfile, requireWritableProfile } from './authz'
@@ -54,15 +54,15 @@ function displayNameOf(profile: Doc<'profiles'>): string {
 function validateSlug(slug: string): string {
   const trimmed = slug.trim()
   if (!SLUG_PATTERN.test(trimmed) || trimmed.length > 60) {
-    throw new Error('BADGE_SLUG_INVALID')
+    throw new ConvexError('BADGE_SLUG_INVALID')
   }
   return trimmed
 }
 
 function validateName(name: string): string {
   const trimmed = name.trim()
-  if (trimmed.length === 0) throw new Error('BADGE_NAME_REQUIRED')
-  if (trimmed.length > 80) throw new Error('BADGE_NAME_TOO_LONG')
+  if (trimmed.length === 0) throw new ConvexError('BADGE_NAME_REQUIRED')
+  if (trimmed.length > 80) throw new ConvexError('BADGE_NAME_TOO_LONG')
   return trimmed
 }
 
@@ -74,24 +74,24 @@ function validateCrop(
   cropSize: number,
 ) {
   if (imageWidth <= 0 || imageHeight <= 0) {
-    throw new Error('BADGE_IMAGE_SIZE_INVALID')
+    throw new ConvexError('BADGE_IMAGE_SIZE_INVALID')
   }
   if (cropSize <= 0 || cropX < 0 || cropY < 0) {
-    throw new Error('BADGE_CROP_INVALID')
+    throw new ConvexError('BADGE_CROP_INVALID')
   }
   // Udsnittet skal ligge inden for originalen. Ellers ville trykfilen mangle
   // billede i kanten, præcis dér hvor knapmaskinen folder om.
   if (cropX + cropSize > imageWidth || cropY + cropSize > imageHeight) {
-    throw new Error('BADGE_CROP_OUTSIDE_IMAGE')
+    throw new ConvexError('BADGE_CROP_OUTSIDE_IMAGE')
   }
 }
 
 function validatePhysical(diameterMm: number, bleedMm: number) {
   if (diameterMm < 10 || diameterMm > 200) {
-    throw new Error('BADGE_DIAMETER_INVALID')
+    throw new ConvexError('BADGE_DIAMETER_INVALID')
   }
   if (bleedMm < 0 || bleedMm > 20) {
-    throw new Error('BADGE_BLEED_INVALID')
+    throw new ConvexError('BADGE_BLEED_INVALID')
   }
 }
 
@@ -333,7 +333,7 @@ export const createBadge = mutation({
     const slug = validateSlug(args.slug)
     const name = validateName(args.name)
     if (args.description !== undefined && args.description.length > 2000) {
-      throw new Error('BADGE_DESCRIPTION_TOO_LONG')
+      throw new ConvexError('BADGE_DESCRIPTION_TOO_LONG')
     }
     validateCrop(
       args.imageWidth,
@@ -348,7 +348,7 @@ export const createBadge = mutation({
       .query('badges')
       .withIndex('by_slug', (q) => q.eq('slug', slug))
       .unique()
-    if (taken !== null) throw new Error('BADGE_SLUG_TAKEN')
+    if (taken !== null) throw new ConvexError('BADGE_SLUG_TAKEN')
 
     const now = Date.now()
     return await ctx.db.insert('badges', {
@@ -404,7 +404,7 @@ export const updateBadge = mutation({
     await requireAdmin(ctx)
 
     const badge = await ctx.db.get(args.badgeId)
-    if (badge === null) throw new Error('BADGE_NOT_FOUND')
+    if (badge === null) throw new ConvexError('BADGE_NOT_FOUND')
 
     const slug = args.slug === undefined ? badge.slug : validateSlug(args.slug)
     if (slug !== badge.slug) {
@@ -413,7 +413,7 @@ export const updateBadge = mutation({
         .withIndex('by_slug', (q) => q.eq('slug', slug))
         .unique()
       if (taken !== null && taken._id !== badge._id) {
-        throw new Error('BADGE_SLUG_TAKEN')
+        throw new ConvexError('BADGE_SLUG_TAKEN')
       }
     }
 
@@ -423,15 +423,15 @@ export const updateBadge = mutation({
         ? badge.description
         : args.description.trim() || undefined
     if (description !== undefined && description.length > 2000) {
-      throw new Error('BADGE_DESCRIPTION_TOO_LONG')
+      throw new ConvexError('BADGE_DESCRIPTION_TOO_LONG')
     }
 
     if (args.imageStorageId !== undefined) {
       if (args.imageWidth === undefined || args.imageHeight === undefined) {
-        throw new Error('BADGE_IMAGE_INCOMPLETE')
+        throw new ConvexError('BADGE_IMAGE_INCOMPLETE')
       }
       if (args.imageMimeType === undefined) {
-        throw new Error('BADGE_IMAGE_INCOMPLETE')
+        throw new ConvexError('BADGE_IMAGE_INCOMPLETE')
       }
     }
 
@@ -497,8 +497,8 @@ export const removeBadge = mutation({
     await requireAdmin(ctx)
 
     const badge = await ctx.db.get(args.badgeId)
-    if (badge === null) throw new Error('BADGE_NOT_FOUND')
-    if (badge.awardedCount > 0) throw new Error('BADGE_DELETE_AWARDED')
+    if (badge === null) throw new ConvexError('BADGE_NOT_FOUND')
+    if (badge.awardedCount > 0) throw new ConvexError('BADGE_DELETE_AWARDED')
 
     const nominations = await ctx.db
       .query('badgeNominations')
@@ -542,17 +542,17 @@ export const nominate = mutation({
     const me = await requireWritableProfile(ctx)
 
     const reason = args.reason.trim()
-    if (reason.length === 0) throw new Error('BADGE_REASON_REQUIRED')
-    if (reason.length > 2000) throw new Error('BADGE_REASON_TOO_LONG')
+    if (reason.length === 0) throw new ConvexError('BADGE_REASON_REQUIRED')
+    if (reason.length > 2000) throw new ConvexError('BADGE_REASON_TOO_LONG')
 
-    if (args.nomineeId === me._id) throw new Error('BADGE_SELF_NOMINATION')
+    if (args.nomineeId === me._id) throw new ConvexError('BADGE_SELF_NOMINATION')
 
     const badge = await ctx.db.get(args.badgeId)
-    if (badge === null) throw new Error('BADGE_NOT_FOUND')
-    if (!badge.isActive) throw new Error('BADGE_INACTIVE')
+    if (badge === null) throw new ConvexError('BADGE_NOT_FOUND')
+    if (!badge.isActive) throw new ConvexError('BADGE_INACTIVE')
 
     const nominee = await ctx.db.get(args.nomineeId)
-    if (nominee === null) throw new Error('BADGE_NOMINEE_NOT_FOUND')
+    if (nominee === null) throw new ConvexError('BADGE_NOMINEE_NOT_FOUND')
 
     const alreadyAwarded = await ctx.db
       .query('memberBadges')
@@ -560,7 +560,7 @@ export const nominate = mutation({
         q.eq('badgeId', badge._id).eq('profileId', nominee._id),
       )
       .unique()
-    if (alreadyAwarded !== null) throw new Error('BADGE_ALREADY_AWARDED')
+    if (alreadyAwarded !== null) throw new ConvexError('BADGE_ALREADY_AWARDED')
 
     // Det delvist unikke indeks fra Postgres findes ikke her, så "én åben
     // indstilling ad gangen" tjekkes her. Mutationen er serialiserbar, så to
@@ -572,7 +572,7 @@ export const nominate = mutation({
       )
       .take(10)
     if (existing.some((row) => row.status === 'pending')) {
-      throw new Error('BADGE_ALREADY_PENDING')
+      throw new ConvexError('BADGE_ALREADY_PENDING')
     }
 
     const now = Date.now()
@@ -583,7 +583,7 @@ export const nominate = mutation({
       )
       .take(NOMINATIONS_PER_HOUR)
     if (lastHour.length >= NOMINATIONS_PER_HOUR) {
-      throw new Error('BADGE_NOMINATE_RATE_LIMITED')
+      throw new ConvexError('BADGE_NOMINATE_RATE_LIMITED')
     }
     const lastDay = await ctx.db
       .query('badgeNominations')
@@ -592,7 +592,7 @@ export const nominate = mutation({
       )
       .take(NOMINATIONS_PER_DAY)
     if (lastDay.length >= NOMINATIONS_PER_DAY) {
-      throw new Error('BADGE_NOMINATE_RATE_LIMITED')
+      throw new ConvexError('BADGE_NOMINATE_RATE_LIMITED')
     }
 
     return await ctx.db.insert('badgeNominations', {
@@ -633,16 +633,16 @@ export const vote = mutation({
 
     const comment = args.comment?.trim() || undefined
     if (comment !== undefined && comment.length > 2000) {
-      throw new Error('BADGE_COMMENT_TOO_LONG')
+      throw new ConvexError('BADGE_COMMENT_TOO_LONG')
     }
 
     const nomination = await ctx.db.get(args.nominationId)
-    if (nomination === null) throw new Error('BADGE_NOMINATION_NOT_FOUND')
+    if (nomination === null) throw new ConvexError('BADGE_NOMINATION_NOT_FOUND')
     if (nomination.status !== 'pending') {
-      throw new Error('BADGE_VOTE_ALREADY_RESOLVED')
+      throw new ConvexError('BADGE_VOTE_ALREADY_RESOLVED')
     }
     if (nomination.nominatedById === admin._id) {
-      throw new Error('BADGE_VOTE_NOMINATOR')
+      throw new ConvexError('BADGE_VOTE_NOMINATOR')
     }
 
     const existing = await ctx.db
@@ -651,7 +651,7 @@ export const vote = mutation({
         q.eq('nominationId', nomination._id).eq('adminId', admin._id),
       )
       .unique()
-    if (existing !== null) throw new Error('BADGE_VOTE_ALREADY_VOTED')
+    if (existing !== null) throw new ConvexError('BADGE_VOTE_ALREADY_VOTED')
 
     const now = Date.now()
     await ctx.db.insert('badgeNominationApprovals', {
@@ -683,7 +683,7 @@ export const vote = mutation({
     }
 
     const badge = await ctx.db.get(nomination.badgeId)
-    if (badge === null) throw new Error('BADGE_NOT_FOUND')
+    if (badge === null) throw new ConvexError('BADGE_NOT_FOUND')
 
     await ctx.db.patch(nomination._id, {
       status: 'approved',
@@ -745,9 +745,9 @@ export const claimProduction = mutation({
     const admin = await requireAdmin(ctx)
 
     const production = await ctx.db.get(args.productionId)
-    if (production === null) throw new Error('BADGE_PRODUCTION_NOT_FOUND')
+    if (production === null) throw new ConvexError('BADGE_PRODUCTION_NOT_FOUND')
     if (production.status === 'done') {
-      throw new Error('BADGE_PRODUCTION_ALREADY_DONE')
+      throw new ConvexError('BADGE_PRODUCTION_ALREADY_DONE')
     }
     // To admins må ikke tro, at de hver står med opgaven. Den, der tog den
     // først, ejer den.
@@ -755,7 +755,7 @@ export const claimProduction = mutation({
       production.claimedById !== undefined &&
       production.claimedById !== admin._id
     ) {
-      throw new Error('BADGE_PRODUCTION_CLAIMED_BY_OTHER')
+      throw new ConvexError('BADGE_PRODUCTION_CLAIMED_BY_OTHER')
     }
 
     await ctx.db.patch(production._id, {
@@ -774,9 +774,9 @@ export const completeProduction = mutation({
     const admin = await requireAdmin(ctx)
 
     const production = await ctx.db.get(args.productionId)
-    if (production === null) throw new Error('BADGE_PRODUCTION_NOT_FOUND')
+    if (production === null) throw new ConvexError('BADGE_PRODUCTION_NOT_FOUND')
     if (production.status === 'done') {
-      throw new Error('BADGE_PRODUCTION_ALREADY_DONE')
+      throw new ConvexError('BADGE_PRODUCTION_ALREADY_DONE')
     }
 
     const now = Date.now()
@@ -810,7 +810,7 @@ export const claimPrint = internalMutation({
   args: { badgeId: v.id('badges'), actorProfileId: v.id('profiles') },
   handler: async (ctx, args) => {
     const actor = await ctx.db.get(args.actorProfileId)
-    if (actor === null || !actor.isAdmin) throw new Error('NOT_ADMIN')
+    if (actor === null || !actor.isAdmin) throw new ConvexError('NOT_ADMIN')
 
     const badge = await ctx.db.get(args.badgeId)
     if (badge === null) return null
@@ -867,7 +867,7 @@ export const completePrint = internalMutation({
   },
   handler: async (ctx, args) => {
     if (args.succeeded && args.printStorageId === undefined) {
-      throw new Error('BADGE_PRINT_FILE_REQUIRED')
+      throw new ConvexError('BADGE_PRINT_FILE_REQUIRED')
     }
 
     const badge = await ctx.db.get(args.badgeId)
