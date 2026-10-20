@@ -49,6 +49,13 @@ export const memberTables = {
    */
   allowedEmails: defineTable({
     email: v.string(),
+    /**
+     * Bootstrapper den første administrator: den, der senere opretter en konto
+     * med denne adresse, får `isAdmin` med det samme (se
+     * `members.claimProfile`). Samme rolle som `allowed_emails.is_admin` i den
+     * gamle app, og den holdes i sync af `members.setAdmin`.
+     */
+    isAdmin: v.optional(v.boolean()),
   }).index('by_email', ['email']),
 
   /** Revisionsspor for "gør X til admin / fjern admin". */
