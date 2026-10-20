@@ -1,0 +1,95 @@
+import { formatDuration } from './leaderboard'
+import { rankName } from './kaper/engine'
+import { className } from './sti/engine'
+import { className as fugletraekClass } from './fugletraek/engine'
+import type { GameId, GameScore } from './types'
+
+export interface GameDefinition {
+  id: GameId
+  title: string
+  /** Én linje om, hvad spillet går ud på -- ikke en manual. */
+  tagline: string
+  path: string
+  /** Et tegn frem for et billede: ingen filer at hente, virker i begge temaer. */
+  symbol: string
+  /**
+   * Linjen under navnet på resultatlisten. Kolonnerne i `game_scores` er de
+   * samme for alle spil, men de betyder noget forskelligt: `lines` er rækker i
+   * Tetris, træk i Kaptajn Kaper og poster i Stifinderen, og niveauet dér er
+   * en rang eller en baneklasse. 2048 bruger kun `score` og
+   * `duration_seconds`.
+   */
+  describeScore: (score: GameScore) => string
+}
+
+/**
+ * Spillene i klubben. Listen er ét sted, så en ny leg kun skal skrives ind her
+ * for at dukke op på oversigten -- og i databasens `game_scores_game_known`.
+ */
+export const games: readonly GameDefinition[] = [
+  {
+    id: 'tetris',
+    title: 'Tetris',
+    tagline:
+      'Klassikeren: drej brikkerne på plads, fyld rækkerne ud, og se hvor længe du kan holde til det.',
+    path: '/spil/tetris',
+    symbol: '🟦',
+    describeScore: (score) =>
+      `${score.lines} rækker · niveau ${score.level} · ${formatDuration(score.durationSeconds)}`,
+  },
+  {
+    id: 'kaper',
+    title: 'Kaptajn Kaper i Kattegat',
+    tagline:
+      "Kaperbrev fra kongen, engelske skibe i Kattegat og en komtesse, der ikke venter evigt. Fra 1980'ernes hjemmecomputer.",
+    path: '/spil/kaper',
+    symbol: '⛵',
+    describeScore: (score) =>
+      `${score.lines} træk · ${rankName(score.level)} · ${formatDuration(score.durationSeconds)}`,
+  },
+  {
+    id: '2048',
+    title: '2048',
+    tagline:
+      'Skub brikkerne sammen, to ens bliver til én -- og se, om du kan nå 2048. Eller længere.',
+    path: '/spil/2048',
+    symbol: '🔢',
+    describeScore: (score) => formatDuration(score.durationSeconds),
+  },
+  {
+    id: 'naturquiz',
+    title: 'Naturquiz',
+    tagline:
+      'Genkend fuglen, planten eller sporet på billedet -- ti spørgsmål, point for fart og streak.',
+    path: '/spil/naturquiz',
+    symbol: '🌿',
+    describeScore: (score) =>
+      `${score.lines}/10 rigtige · ${formatDuration(score.durationSeconds)}`,
+  },
+  {
+    id: 'sti',
+    title: 'Stifinderen',
+    tagline:
+      'Gå posterne i rækkefølge. Sti er hurtig, mose er langsom, og den hurtigste rute vinder.',
+    path: '/spil/sti',
+    symbol: '🧭',
+    describeScore: (score) =>
+      `${score.lines} poster · ${className(score.level)} · terræn ${formatDuration(score.durationSeconds)}`,
+  },
+  {
+    id: 'fugletraek',
+    title: 'Fugletræk',
+    tagline:
+      'Vend kortene to ad gangen og find parrene af danske dyr. Færre vendinger og kortere tid giver flere point.',
+    path: '/spil/fugletraek',
+    symbol: '🐦',
+    describeScore: (score) =>
+      `${score.lines} vendinger · ${fugletraekClass(score.level)} · ${formatDuration(score.durationSeconds)}`,
+  },
+]
+
+export function gameById(id: GameId): GameDefinition {
+  const game = games.find((candidate) => candidate.id === id)
+  if (!game) throw new Error(`Ukendt spil: ${id}`)
+  return game
+}
