@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom'
 
 /**
- * Kvitteringen efter en gennemført kontosletning. Selve sletningen hører til
- * en senere slice; siden findes, fordi den er landingspunktet for
- * Edge Function-flowet og skal kunne linkes til.
+ * Kvitteringen efter en kontosletning.
+ *
+ * Siden er offentlig med vilje: medlemmet er logget ud, før siden vises --
+ * ellers ville en beskyttet rute sende vedkommende til forsiden, inden
+ * kvitteringen blev læst. Der er intet på siden, der kræver en session.
  */
-export default function AccountDeletedPage() {
+function AccountDeletedPage() {
   return (
     <main className="mx-auto flex min-h-[70svh] max-w-lg flex-col justify-center gap-4 p-6 text-center">
       <h1 className="text-2xl font-semibold text-ink-body">
@@ -22,3 +24,5 @@ export default function AccountDeletedPage() {
     </main>
   )
 }
+
+export default AccountDeletedPage
