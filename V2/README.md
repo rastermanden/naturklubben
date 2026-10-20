@@ -7,19 +7,43 @@ uændret, og `main`-deployet peger stadig på den.**
 
 ## Status
 
-Fundamentet er lagt. Intet domæne er færdigportet endnu, og **der er ikke kørt
-et build eller en test mod et rigtigt Convex-deployment** — se "Verifikation".
+Alle domæner er portet og integreret. **Der er stadig ikke kørt et build eller
+en test mod et rigtigt Convex-deployment** — se "Verifikation".
 
 | Del | Status |
 | --- | --- |
 | Værktøjskæde (Vite, React, TypeScript, Tailwind, Vitest) | på plads |
-| `convex/schema.ts` + domænefiler i `convex/tables/` | ramme på plads |
+| `convex/schema.ts` + 6 domænefiler i `convex/tables/` | på plads |
 | Autorisationslag (`convex/authz.ts`) | på plads |
 | Convex Auth (adgangskode) | konfigureret, ikke afprøvet |
-| Skema for medlemmer, allowlist, admin-roller | skrevet |
-| Kalender, chat, galleri, fællesskab (skema + funktioner + sider) | ikke portet |
-| Push, cron, offentlig iCal-feed | ikke portet |
-| CI/deploy for V2 | workflow tilføjet, kræver secrets |
+| Medlemmer, allowlist, admin-roller | portet |
+| Kalender, aktiviteter, venteliste, iCal-feed | portet |
+| Chat: beskeder, reaktioner, afstemninger, søgning, offline-kø | portet (søgning og presence er tilnærmelser, se nedenfor) |
+| Galleri: billeder, albums, kommentarer, optimering | portet undtagen selve billedbehandlingen |
+| Fællesskab: badges, naturlog, spillenes scorer, turneringer | portet |
+| Notifikationer, nyheder, prøvemedlemskab, konto | portet; push kan ikke sendes endnu |
+| Kontosletning på tværs af alle domæner + dataudlevering | portet, med `account.test.ts` |
+| Cron (5 jobber) | portet |
+| CI/deploy + PR-preview | workflows tilføjet, kræver secrets |
+
+Tre ting er **bevidst ikke** færdige, og de står her fordi de er valg, ikke
+glemsel:
+
+1. **Push kan ikke sendes.** Alt omkring det er portet — modtagere,
+   præferencer, leveringslog, VAPID-nøgler, forsøgshegn — men selve
+   Web Push-krypteringen kræver `web-push` og en Node-action. Indtil da kaster
+   `sendWebPush`, og en nyhed eller et ansøgningssvar ender som `failed` i
+   outboxen med sit forsøgsnummer bevaret.
+2. **Billedbehandling mangler.** Originalen gemmes og kan hentes; der laves
+   ingen nedskaleret webudgave eller thumbnail, fordi det kræver en Node-action
+   med en billedpakke. `ready` betyder derfor "originalen er hentbar".
+3. **Kontosletningen læser hele tabeller.** `messages`, `pollVotes`,
+   `messageReactions`, `eventTasks`, `chatPolls` og `photoModerationLog` har
+   ikke indeks på profil-id, så oprydningen er en fuld gennemlæsning pr.
+   slettet konto. Det holder i en klub af denne størrelse, men en Convex-mutation
+   har en grænse for hvor meget den må læse. Kommer klubben derop, skal
+   oprydningen deles op i batches med `ctx.scheduler`, og tabellerne have
+   indeks på `profileId`/`authorId`.
 
 ## Kom i gang
 
