@@ -4,6 +4,7 @@ import { memberTables } from './tables/members'
 import { calendarTables } from './tables/calendar'
 import { chatTables } from './tables/chat'
 import { galleryTables } from './tables/gallery'
+import { notificationTables } from './tables/notifications'
 import { communityTables } from './tables/community'
 
 /**
@@ -24,5 +25,6 @@ export default defineSchema({
   ...calendarTables,
   ...chatTables,
   ...galleryTables,
+  ...notificationTables,
   ...communityTables,
 })
