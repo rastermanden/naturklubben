@@ -1,3 +1,4 @@
+import { ConvexError } from 'convex/values'
 import { getAuthUserId } from '@convex-dev/auth/server'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
@@ -22,6 +23,23 @@ import type { Doc, Id } from './_generated/dataModel'
  */
 
 type Ctx = QueryCtx | MutationCtx
+
+/**
+ * Hvor længe en sletningsreservation regnes som frisk. Samme 15 minutter som
+ * `account_accepts_writes()` og `reserve_account_deletion()` i den gamle app:
+ * en strandet reservation fra et afbrudt sletningsforsøg må ikke spærre
+ * kontoen for evigt.
+ */
+const DELETION_RESERVATION_MS = 15 * 60 * 1000
+
+/**
+ * Fejlkoderne kastes som `ConvexError`, ikke som `Error`.
+ *
+ * Convex slører beskeden på en almindelig fejl i produktion ("Server Error"),
+ * og så ville klienten ikke kunne oversætte den til en dansk sætning. En
+ * `ConvexError`'s `data` når derimod frem til klienten uændret -- se
+ * `V2/src/features/auth/authErrors.ts`.
+ */
 
 /** Auth-brugerens id, eller null hvis ingen er logget ind. */
 export async function currentUserId(ctx: Ctx): Promise<Id<'users'> | null> {
@@ -53,7 +71,7 @@ export async function currentProfile(
 export async function requireProfile(ctx: Ctx): Promise<Doc<'profiles'>> {
   const profile = await currentProfile(ctx)
   if (profile === null) {
-    throw new Error('NOT_A_MEMBER')
+    throw new ConvexError('NOT_A_MEMBER')
   }
   return profile
 }
@@ -63,12 +81,22 @@ export async function requireProfile(ctx: Ctx): Promise<Doc<'profiles'>> {
  * der skriver: den gamle app spærrede profilopdateringer, mens en sletning var
  * reserveret, og den spærring skal bestå.
  */
+/**
+ * Kræver et medlem, der ikke er på vej til at blive slettet. Bruges af alt,
+ * der skriver: den gamle app spærrede skrivninger, mens en sletning var
+ * reserveret, og den spærring skal bestå -- men kun så længe reservationen er
+ * frisk (15 minutter). Er den ældre, er sletningen aldrig blevet gennemført,
+ * og medlemmet skal kunne bruge appen igen.
+ */
 export async function requireWritableProfile(
   ctx: Ctx,
 ): Promise<Doc<'profiles'>> {
   const profile = await requireProfile(ctx)
-  if (profile.deletionReservedAt !== undefined) {
-    throw new Error('ACCOUNT_DELETION_RESERVED')
+  if (
+    profile.deletionReservedAt !== undefined &&
+    Date.now() - profile.deletionReservedAt < DELETION_RESERVATION_MS
+  ) {
+    throw new ConvexError('ACCOUNT_DELETION_RESERVED')
   }
   return profile
 }
@@ -77,7 +105,7 @@ export async function requireWritableProfile(
 export async function requireAdmin(ctx: Ctx): Promise<Doc<'profiles'>> {
   const profile = await requireProfile(ctx)
   if (!profile.isAdmin) {
-    throw new Error('NOT_ADMIN')
+    throw new ConvexError('NOT_ADMIN')
   }
   return profile
 }
