@@ -1,0 +1,87 @@
+name: Deploy V2 (Convex) to GitHub Pages
+
+# Bevidst kun manuel. V2 skal ikke kunne erstatte den nuværende app ved et
+# uheld: den kører, når nogen vælger den i Actions -> "Run workflow", og den
+# rører ikke produktionsroden, medmindre man eksplicit beder om det.
+on:
+  workflow_dispatch:
+    inputs:
+      base_path:
+        description: 'Sti på GitHub Pages. Brug /naturklubben/ for at lægge V2 på produktions-URL-en.'
+        required: true
+        default: /naturklubben/v2/
+      publish_to_root:
+        description: 'Skriv til gh-pages-roden i stedet for v2/-undermappen (overskriver den nuværende apps index.html).'
+        required: true
+        type: boolean
+        default: false
+      deploy_backend:
+        description: 'Kør også `npx convex deploy` (kræver CONVEX_DEPLOY_KEY).'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Samme grund som i deploy.yml: versionsstrengen bygges med
+          # `git describe --tags`, og en shallow checkout uden tags giver altid
+          # den bare commit-sha.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: V2/package-lock.json
+
+      - name: Install
+        working-directory: V2
+        run: npm ci
+
+      # Backend først: frontend-buildet skal ramme et deployment, hvis
+      # funktioner allerede svarer. Er nøglen ikke sat, fejler vi hellere end at
+      # udgive en app, der ikke kan hente data.
+      - name: Deploy Convex functions
+        if: ${{ inputs.deploy_backend }}
+        working-directory: V2
+        run: npx convex deploy
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+
+      - name: Build
+        working-directory: V2
+        run: npm run build
+        env:
+          VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL || secrets.VITE_CONVEX_URL }}
+          # HTTP-ruterne (iCal, gæsteformular, prøveansøgning) ligger på
+          # .convex.site. Klienten udleder den af VITE_CONVEX_URL, hvis den ikke
+          # er sat, men på produktion sættes den eksplicit, så et skift af
+          # vært ikke afhænger af en streng-erstatning.
+          VITE_CONVEX_SITE_URL: ${{ vars.VITE_CONVEX_SITE_URL || secrets.VITE_CONVEX_SITE_URL }}
+          VITE_BASE_PATH: ${{ inputs.base_path }}
+
+      - name: Deploy to Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: V2/dist
+          # To skrivere til samme branch (den nuværende apps deploy.yml og denne)
+          # må ikke overskrive hinandens filer, og et afvist push skal hentes og
+          # prøves igen -- se kommentaren i deploy.yml.
+          clean: false
+          force: false
+          attempt-limit: 5
+          target-folder: ${{ inputs.publish_to_root && '' || 'v2' }}
+          commit-message: 'deploy(v2): ${{ github.sha }}'
