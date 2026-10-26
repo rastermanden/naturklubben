@@ -1,0 +1,1 @@
+import{r as e}from"./jsx-runtime-BX5dh3L7.js";import{t}from"./react-DpvdKi1d.js";var n=e(t(),1);function r(e){let[t,r]=(0,n.useState)(0);return(0,n.useLayoutEffect)(()=>{t>0&&e.current?.focus()},[t,e]),(0,n.useCallback)(()=>{document.activeElement!==e.current&&r(e=>e+1)},[e])}export{r as t};
