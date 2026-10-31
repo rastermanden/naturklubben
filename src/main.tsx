@@ -10,6 +10,7 @@ import { AuthProvider } from './features/auth/AuthProvider'
 import { ThemeProvider } from './features/theme/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { installGlobalErrorReporting } from './lib/errorReporting'
+import { SiteMovedNotice } from './features/siteMove/SiteMovedNotice'
 
 // Skal ske før React Router læser adressen -- ellers ser den rod-ruten i
 // stedet for den sti, brugeren faktisk bad om (se lib/spaRedirect.ts).
@@ -19,6 +20,8 @@ restoreSpaRedirect()
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
+      {/* Uden for resten af appen, så beskeden vises, selv hvis appen fejler. */}
+      <SiteMovedNotice />
       <ErrorBoundary variant="app" reportSource="react-global">
         <QueryClientProvider client={queryClient}>
           <BrowserRouter basename={import.meta.env.BASE_URL}>
