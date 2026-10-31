@@ -140,8 +140,10 @@ Supabase CLI'en ikke skal læse den ved deploy.
 - Fælles VAPID- og Web Push-kode ligger i `supabase/functions/_shared/`, så chat og
   prøvemedlemskaber bruger præcis samme afsendernøgle og krypteringskode.
 - Fælles CORS-håndtering ligger i `supabase/functions/_shared/cors.ts`. Den tillader
-  appens GitHub Pages-origin (`https://rastermanden.github.io`), som både produktion
-  og alle `/naturklubben/pr-preview/pr-<nr>/`-previews deler, samt localhost/loopback
+  appens origin (`https://naturklubben.dk`), som både produktion og alle
+  `/pr-preview/pr-<nr>/`-previews deler, og den gamle GitHub Pages-origin
+  (`https://rastermanden.github.io`), så den installerede app dér virker, mens
+  medlemmerne flytter over. Dertil localhost/loopback
   på vilkårlige porte til lokal udvikling. Requests uden `Origin` forbliver tilladt
   til kalenderklienter, database-hooks og tests; browserrequests fra andre origins
   afvises med 403, også før den egentlige function-handler kører. Eventuelle senere
@@ -800,10 +802,10 @@ leveringsstatus at vise eller genforsøge; kladden er bygget lokalt i klienten
 Supabase afgør ud fra to projektindstillinger, hvor et link i en bekræftelses- eller
 nulstillingsmail må sende folk hen:
 
-| Indstilling                      | Værdi                                                                        |
-| -------------------------------- | ---------------------------------------------------------------------------- |
-| Site URL                         | `https://rastermanden.github.io/naturklubben`                                |
-| Redirect URLs (`uri_allow_list`) | `https://rastermanden.github.io/naturklubben/**`, `http://localhost:5173/**` |
+| Indstilling                      | Værdi                                                    |
+| -------------------------------- | -------------------------------------------------------- |
+| Site URL                         | `https://naturklubben.dk`                                |
+| Redirect URLs (`uri_allow_list`) | `https://naturklubben.dk/**`, `http://localhost:5173/**` |
 
 De sættes **ikke** i hånden i dashboardet: `.github/workflows/sync-auth-config.yml`
 skubber dem til Management API'et ved hver push til `main` (og kan køres manuelt med
@@ -813,13 +815,13 @@ Workflowet bruger de samme `SUPABASE_ACCESS_TOKEN`/`SUPABASE_PROJECT_REF`-secret
 function-deployet.
 
 Hvorfor det er nødvendigt: klienten beder selv om at komme tilbage til
-`.../naturklubben/velkommen` (`emailRedirectTo` i `src/pages/SignupPage.tsx`), men
+`https://naturklubben.dk/velkommen` (`emailRedirectTo` i `src/pages/SignupPage.tsx`), men
 Supabase ignorerer et `emailRedirectTo`, der ikke matcher listen, og bruger Site URL i
-stedet. Stod Site URL til roden af domænet, endte alle nye medlemmer på GitHubs
-"There isn't a GitHub Pages site here"-404 i stedet for en kvittering.
+stedet. Dengang appen lå under `rastermanden.github.io/naturklubben/`, betød en Site URL
+uden stien, at alle nye medlemmer endte på GitHubs 404 i stedet for en kvittering.
 
-Wildcarden `/naturklubben/**` dækker også PR-previewenes kopier af appen
-(`/naturklubben/pr-preview/pr-<nr>/velkommen`), så signup-flowet kan afprøves på et
+Wildcarden `/**` dækker også PR-previewenes kopier af appen
+(`/pr-preview/pr-<nr>/velkommen`), så signup-flowet kan afprøves på et
 preview-link -- mod previewets egen database.
 
 ### Bekræftelsesmailen på et PR-preview

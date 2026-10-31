@@ -21,8 +21,8 @@ cp .env.example .env.local   # udfyld med værdier fra Supabase, se AGENTS.md/is
 npm run dev
 ```
 
-Appen kører som udgangspunkt på `http://localhost:5173/naturklubben/` (bemærk sti-delen —
-den matcher produktionens GitHub Pages-sti).
+Appen kører som udgangspunkt på `http://localhost:5173/` -- samme sti som produktionen på
+`https://naturklubben.dk/`.
 
 ## Andre kommandoer
 

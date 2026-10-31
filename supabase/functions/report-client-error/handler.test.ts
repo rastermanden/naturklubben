@@ -7,7 +7,7 @@ const endpoint = 'https://project.supabase.co/functions/v1/report-client-error'
 const validReport: ClientErrorReport = {
   source: 'react-route',
   message: 'render failed',
-  url: 'https://rastermanden.github.io/naturklubben/chat',
+  url: 'https://naturklubben.dk/chat',
   userAgent: 'Test browser',
   occurredAt: '2026-08-23T19:00:00.000Z',
 }
@@ -18,7 +18,7 @@ function request(body: unknown) {
     headers: {
       'CF-Connecting-IP': '192.0.2.10',
       'Content-Type': 'application/json',
-      Origin: 'https://rastermanden.github.io',
+      Origin: 'https://naturklubben.dk',
     },
     body: JSON.stringify(body),
   })

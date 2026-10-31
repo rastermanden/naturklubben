@@ -3,7 +3,8 @@
 `CLAUDE.md` importerer denne fil med `@AGENTS.md`. Ret kun her. Claude Code læser
 `CLAUDE.md`, og de andre coding agents læser `AGENTS.md`, så begge får samme tekst.
 
-Medlemsapp for Naturklubben. Frontend hostes statisk på GitHub Pages, backend er Supabase
+Medlemsapp for Naturklubben på `https://naturklubben.dk`. Frontend hostes statisk på GitHub
+Pages med eget domæne (`public/CNAME`), backend er Supabase
 (Postgres, Auth, Storage, Realtime, Edge Functions). Se GitHub-issue #1 for det fulde
 epos/plan og #2–#15 for de nedbrudte delopgaver.
 
@@ -94,10 +95,10 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
 
 - Al frontend-udvikling sker som almindelig kode (Vite/React/TypeScript), committes og
   pushes/åbnes som PR.
-- Hver PR får automatisk et preview-link på GitHub Pages (`pr-preview/pr-<nr>/`) via
+- Hver PR får automatisk et preview-link på `naturklubben.dk/pr-preview/pr-<nr>/` via
   CI/CD-workflowet i #5. Intet manuelt deploy-trin.
-- Ved merge til `main` deployer samme CI/CD-workflow automatisk til den offentlige
-  GitHub Pages-URL.
+- Ved merge til `main` deployer samme CI/CD-workflow automatisk til
+  `https://naturklubben.dk`.
 - **Rører PR'en `supabase/`, bygges preview'et mod PR'ens egen Supabase Preview Branch**,
   ikke mod produktion. `pr-preview.yml` slår branchen op i Supabase's Management API ud fra
   branch-navn/PR-nummer og bygger med dens URL og publishable key. Så de to preview-lag
