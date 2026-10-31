@@ -225,10 +225,13 @@ jobs:
         # er tomme.
         run: npm run build
         env:
-          VITE_BASE_PATH: /naturklubben/pr-preview/pr-${{ github.event.number }}/
+          VITE_BASE_PATH: /pr-preview/pr-${{ github.event.number }}/
 
       # Håndterer både deploy (åbnet/opdateret PR) og oprydning (lukket PR)
       # automatisk ud fra event-typen ovenfor.
       - uses: rossjrw/pr-preview-action@v1
         with:
           source-dir: ./dist
+          # Sitet har eget domæne (public/CNAME); uden dette skriver actionen
+          # preview-linket som rastermanden.github.io/naturklubben/...
+          pages-base-url: naturklubben.dk

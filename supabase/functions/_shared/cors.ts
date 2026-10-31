@@ -1,4 +1,10 @@
-const PRODUCTION_ORIGIN = 'https://rastermanden.github.io'
+// naturklubben.dk er appens adresse. Den gamle GitHub Pages-adresse står her
+// stadig, så den installerede app på rastermanden.github.io virker, mens
+// medlemmerne flytter over; den kan fjernes, når ingen bruger den længere.
+const PRODUCTION_ORIGINS = new Set([
+  'https://naturklubben.dk',
+  'https://rastermanden.github.io',
+])
 const DEFAULT_ALLOWED_HEADERS =
   'authorization, x-client-info, apikey, content-type'
 
@@ -36,7 +42,7 @@ export function isAllowedCorsOrigin(
   const url = exactOrigin(origin)
   if (!url) return false
 
-  if (origin === PRODUCTION_ORIGIN) return true
+  if (PRODUCTION_ORIGINS.has(origin)) return true
 
   if (
     (url.protocol === 'http:' || url.protocol === 'https:') &&
