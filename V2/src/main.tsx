@@ -7,6 +7,8 @@ import App from './App.tsx'
 import { ThemeProvider } from './features/theme/ThemeProvider'
 import { convex } from './lib/convexClient'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
+import { installInstallPromptCapture } from './features/pwa/installPrompt'
+import { isPreviewDeployment } from './features/pwa/previewInstall'
 import { clearStalePreviewServiceWorker } from './lib/previewServiceWorker'
 import { restoreSpaRedirect } from './lib/spaRedirect'
 
@@ -16,6 +18,18 @@ restoreSpaRedirect()
 // Et ældre preview kan have en service worker på samme sti. Den afregistreres
 // her, og public/sw.js overtager, hvis browseren stadig har den gamle.
 clearStalePreviewServiceWorker()
+if (!isPreviewDeployment()) {
+  installInstallPromptCapture()
+  const manifest = document.createElement('link')
+  manifest.rel = 'manifest'
+  manifest.href = `${import.meta.env.BASE_URL}manifest.webmanifest`
+  document.head.appendChild(manifest)
+  if ('serviceWorker' in navigator) {
+    void navigator.serviceWorker.register(
+      `${import.meta.env.BASE_URL}sw-prod.js`,
+    )
+  }
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

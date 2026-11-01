@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from 'react'
+import { usePaginatedQuery } from 'convex/react'
+import { api } from '../../../convex/_generated/api'
 import type { Doc } from '../../../convex/_generated/dataModel'
+import { PositionMapPicker } from './map'
 import {
   NOTES_MAX_LENGTH,
   SPECIES_MAX_LENGTH,
@@ -36,6 +39,12 @@ export function ObservationForm({
   const [draft, setDraft] = useState(() => draftFromObservation(editing))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [photoId, setPhotoId] = useState(editing?.photoId ?? '')
+  const photos = usePaginatedQuery(
+    api.gallery.listPhotos,
+    {},
+    { initialNumItems: 30 },
+  )
 
   function setField<K extends keyof ObservationDraft>(
     key: K,
@@ -70,10 +79,15 @@ export function ObservationForm({
     setBusy(true)
     setError(null)
     try {
+      const linked = photoId === '' ? undefined : photoId
       if (editing) {
-        await update({ observationId: editing._id, ...validation.input })
+        await update({
+          observationId: editing._id,
+          ...validation.input,
+          photoId: linked,
+        })
       } else {
-        await add(validation.input)
+        await add({ ...validation.input, photoId: linked })
       }
       onDone()
     } catch (cause) {
@@ -136,6 +150,34 @@ export function ObservationForm({
           rows={3}
           className="rounded-lg border border-line px-3 py-2 text-ink"
         />
+      </label>
+
+      <PositionMapPicker
+        position={
+          hasPosition
+            ? { lat: draft.latitude ?? 0, lng: draft.longitude ?? 0 }
+            : null
+        }
+        onChange={(position) => {
+          setField('latitude', position.lat)
+          setField('longitude', position.lng)
+        }}
+      />
+
+      <label className="flex flex-col gap-1 text-sm text-ink-muted">
+        Billede fra galleriet
+        <select
+          value={photoId}
+          onChange={(event) => setPhotoId(event.target.value)}
+          className="min-h-11 rounded-lg border border-line px-3 py-2 text-ink"
+        >
+          <option value="">Intet billede</option>
+          {photos.results.map((photo) => (
+            <option key={photo.id} value={photo.id}>
+              {photo.caption?.trim() || 'Billede uden tekst'}
+            </option>
+          ))}
+        </select>
       </label>
 
       <div className="flex flex-wrap items-center gap-2 text-sm">

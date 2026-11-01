@@ -38,10 +38,15 @@ function BadgeRow({ imageUrl, badgeName, badgeSlug }: BadgeRowProps) {
 }
 
 /** Den indloggedes egne badges. */
-export function MyBadgeShowcase() {
+export function MyBadgeShowcase({ emptyText }: { emptyText?: string }) {
   const badges = useMyBadges()
 
-  if (badges === undefined || badges.length === 0) return null
+  if (badges === undefined) return null
+  if (badges.length === 0) {
+    return emptyText ? (
+      <p className="text-sm text-ink-subtle">{emptyText}</p>
+    ) : null
+  }
 
   return (
     <section className="flex flex-col gap-2">

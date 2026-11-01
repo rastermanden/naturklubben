@@ -12,6 +12,9 @@ import { api } from '../../convex/_generated/api'
 import { Avatar } from '../components/Avatar'
 import { toFriendlyMemberError } from '../features/auth/authErrors'
 import { useCurrentProfile } from '../features/auth/useCurrentProfile'
+import { MyBadgeShowcase } from '../features/badges/BadgeShowcase'
+import { NotificationToggle } from '../features/notifications/NotificationToggle'
+import { NotificationTypePreferences } from '../features/notifications/NotificationTypePreferences'
 import { CausesField } from '../features/profile/CausesField'
 import { PronounsField } from '../features/profile/PronounsField'
 import { normalizeCauses } from '../features/profile/causes'
@@ -304,10 +307,12 @@ export default function ProfilePage() {
             Notifikationer
           </h2>
           <p className="text-sm text-ink-subtle">
-            Chattens notifikationer vælger du på chatsiden, når den er portet.
-            Her styrer du beskeden om nye ting i appen.
+            Valgene er dine egne og følger dig på tværs af telefon og computer.
+            Chattens notifikationer vælger du på chatsiden.
           </p>
         </div>
+        <NotificationToggle />
+        <NotificationTypePreferences isAdmin={profile?.isAdmin === true} />
         <label className="flex items-start gap-3 text-sm text-ink-body">
           <input
             type="checkbox"
@@ -321,6 +326,17 @@ export default function ProfilePage() {
             Send mig en notifikation, når der kommer noget nyt i appen.
           </span>
         </label>
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface-sunken p-4">
+        <div>
+          <h2 className="font-medium text-ink-body">Mine badges</h2>
+          <p className="text-sm text-ink-subtle">
+            Badges tildeles, når to administratorer har godkendt en indstilling
+            fra et andet medlem.
+          </p>
+        </div>
+        <MyBadgeShowcase emptyText="Du har ingen badges endnu." />
       </section>
 
       <SignOutSection />

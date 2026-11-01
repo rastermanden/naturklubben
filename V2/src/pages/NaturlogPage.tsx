@@ -1,73 +1,125 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Doc } from '../../convex/_generated/dataModel'
+import { ObservationCard } from '../features/naturlog/ObservationCard'
 import { ObservationForm } from '../features/naturlog/ObservationForm'
+import { filterObservations } from '../features/naturlog/observationInput'
+import { observationsInYear } from '../features/naturlog/summary'
+import type { Observation } from '../features/naturlog/types'
 import {
-  formatObservedOn,
-  formatPosition,
-  mapLinkFor,
-  matchesSearch,
-} from '../features/naturlog/observationDraft'
+  ObservationMap,
+  SpeciesOverview,
+  DEFAULT_ZOOM,
+  DENMARK_CENTER,
+  type MapView,
+} from '../features/naturlog/map'
 import {
   observationErrorMessage,
   useObservationActions,
   useObservations,
 } from '../features/naturlog/useObservations'
 
-/**
- * Naturloggen: hvad klubben har set, nyeste først -- og en formular til at
- * skrive det næste fund.
- *
- * Siden er den samme som før, men uden billedvalg: galleriet er ikke portet til
- * V2 endnu, så der er ingen billeder at vælge imellem. Søgningen foregår i
- * klienten over de hentede rækker, fordi Convex ikke har `ilike`.
- */
+type Tab = 'liste' | 'kort' | 'arter'
+
+function toView(
+  row: Doc<'observations'> & {
+    photo: Observation['photo']
+    isOwn: boolean
+    canDelete: boolean
+  },
+): Observation {
+  return {
+    id: row._id,
+    species: row.species,
+    location: row.location ?? null,
+    observed_on: row.observedOn,
+    notes: row.notes ?? null,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
+    photo_id: row.photoId ?? null,
+    photo: row.photo,
+    created_by: row.createdById ?? null,
+    observer: {
+      id: row.createdById ?? '',
+      full_name: row.createdByName,
+    },
+    created_at: new Date(row.createdAt).toISOString(),
+    updated_at: new Date(row.updatedAt).toISOString(),
+  }
+}
+
 export default function NaturlogPage() {
-  const observations = useObservations()
+  const rows = useObservations()
   const { remove } = useObservationActions()
   const [query, setQuery] = useState('')
   const [writing, setWriting] = useState(false)
   const [editing, setEditing] = useState<Doc<'observations'> | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('liste')
+  const [chosenYear, setChosenYear] = useState<number | 'alle' | null>(null)
+  const [mapView, setMapView] = useState<MapView>({
+    center: DENMARK_CENTER,
+    zoom: DEFAULT_ZOOM,
+  })
 
-  const visible = (observations ?? []).filter((observation) =>
-    matchesSearch(observation, query),
+  const observations = useMemo(
+    () => (rows ?? []).map((row) => toView(row)),
+    [rows],
   )
+  const visible = filterObservations(observations, query)
+  const years = useMemo(
+    () =>
+      [
+        ...new Set(observations.map((item) => item.observed_on.slice(0, 4))),
+      ].sort((a, b) => b.localeCompare(a)),
+    [observations],
+  )
+  const year =
+    chosenYear === 'alle'
+      ? null
+      : (chosenYear ?? (years.length > 0 ? Number(years[0]) : null))
+  const yearObservations = year ? observationsInYear(visible, year) : visible
 
   function closeForm() {
     setWriting(false)
     setEditing(null)
   }
 
-  async function deleteObservation(observation: Doc<'observations'>) {
-    const question = `Vil du slette fundet af ${observation.species}?`
-    if (!window.confirm(question)) return
+  async function deleteObservation(observation: Observation) {
+    if (
+      !window.confirm(`Vil du slette "${observation.species}" fra naturloggen?`)
+    ) {
+      return
+    }
     setError(null)
     try {
-      await remove({ observationId: observation._id })
+      await remove({
+        observationId: observation.id as Doc<'observations'>['_id'],
+      })
     } catch (cause) {
       setError(observationErrorMessage(cause))
     }
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-ink-body">Naturlog</h1>
-        <p className="text-ink-subtle">
-          Hvad har du set? Skriv art, sted og dato -- gerne med en note og din
-          position. Hele klubben kan se loggen.
-        </p>
+    <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-ink-body">Naturlog</h1>
+          <p className="text-ink-subtle">
+            Hvad har vi set derude? Skriv arten, stedet og datoen -- og læg
+            gerne et billede ved.
+          </p>
+        </div>
+        {!writing && editing === null && (
+          <button
+            type="button"
+            onClick={() => setWriting(true)}
+            className="min-h-11 shrink-0 rounded-lg bg-accent-soft px-4 py-2 font-medium text-white"
+          >
+            Ny observation
+          </button>
+        )}
       </div>
-
-      {!writing && editing === null && (
-        <button
-          type="button"
-          onClick={() => setWriting(true)}
-          className="min-h-11 self-start rounded-lg bg-accent px-4 py-2 font-medium text-on-accent"
-        >
-          Skriv i loggen
-        </button>
-      )}
 
       {(writing || editing !== null) && (
         <ObservationForm
@@ -77,13 +129,66 @@ export default function NaturlogPage() {
         />
       )}
 
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
+      <div
+        role="tablist"
+        aria-label="Visning af naturloggen"
+        className="flex gap-1 self-start rounded-lg border border-line-strong bg-surface p-1"
+      >
+        {(
+          [
+            ['liste', 'Liste'],
+            ['kort', 'Kort'],
+            ['arter', 'Arter'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={tab === value}
+            onClick={() => setTab(value)}
+            className={`rounded px-3 py-1.5 text-sm font-medium ${
+              tab === value
+                ? 'bg-accent-soft text-white'
+                : 'text-ink-muted hover:text-ink-body'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab !== 'liste' && years.length > 0 && (
+        <label className="flex items-center gap-2 text-sm text-ink-subtle">
+          År
+          <select
+            aria-label="År"
+            value={year === null ? '' : String(year)}
+            onChange={(event) =>
+              setChosenYear(
+                event.target.value === '' ? 'alle' : Number(event.target.value),
+              )
+            }
+            className="rounded border border-line-strong bg-surface px-2 py-1.5 text-ink"
+          >
+            <option value="">Alle år</option>
+            {years.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      <label className="flex flex-col gap-1 text-sm text-ink-body">
         Søg i loggen
         <input
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          className="min-h-11 rounded-lg border border-line px-3 py-2 text-ink"
+          placeholder="Art, sted eller noter"
+          className="rounded border border-line-strong px-3 py-2 text-base text-ink"
         />
       </label>
 
@@ -93,84 +198,55 @@ export default function NaturlogPage() {
         </p>
       )}
 
-      {observations === undefined && (
-        <p className="text-ink-subtle">Henter loggen…</p>
+      {rows === undefined && (
+        <p className="text-ink-subtle">Henter naturloggen…</p>
       )}
 
-      {observations !== undefined && visible.length === 0 && (
-        <p className="rounded-xl border border-line-soft bg-surface px-4 py-8 text-center text-ink-subtle">
-          {query
-            ? 'Ingen fund passer på søgningen.'
-            : 'Loggen er tom endnu. Den første, der skriver, står øverst.'}
-        </p>
+      {rows !== undefined && observations.length === 0 && (
+        <div className="rounded-xl border border-line-soft bg-surface px-4 py-12 text-center text-ink-subtle">
+          Naturloggen er tom endnu. Vær den første til at skrive, hvad du har
+          set.
+        </div>
       )}
 
-      <ul className="flex flex-col gap-3">
-        {visible.map((observation) => (
-          <li
-            key={observation._id}
-            className="flex flex-col gap-2 rounded-xl border border-line-soft bg-surface p-4"
-          >
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-lg font-semibold text-ink-body">
-                {observation.species}
-              </h2>
-              <time
-                dateTime={observation.observedOn}
-                className="text-sm text-ink-subtle"
-              >
-                {formatObservedOn(observation.observedOn)}
-              </time>
-            </div>
+      {tab === 'liste' && visible.length > 0 && (
+        <ul className="flex flex-col gap-3">
+          {visible.map((observation) => {
+            const row = rows?.find((item) => item._id === observation.id)
+            return (
+              <ObservationCard
+                key={observation.id}
+                observation={observation}
+                canEdit={row?.isOwn === true}
+                canDelete={row?.canDelete === true}
+                deleting={false}
+                onEdit={() => {
+                  if (row) setEditing(row)
+                }}
+                onDelete={(item) => void deleteObservation(item)}
+                onOpenPhoto={() => undefined}
+              />
+            )
+          })}
+        </ul>
+      )}
 
-            {observation.location && (
-              <p className="text-sm text-ink-muted">{observation.location}</p>
-            )}
+      {tab === 'kort' && rows !== undefined && (
+        <ObservationMap
+          observations={yearObservations}
+          view={mapView}
+          onViewChange={setMapView}
+          emptyMessage={
+            yearObservations.length === 0 && year !== null
+              ? `Ingen observationer fra ${year} matcher.`
+              : undefined
+          }
+        />
+      )}
 
-            {observation.notes && (
-              <p className="whitespace-pre-line text-ink-body">
-                {observation.notes}
-              </p>
-            )}
-
-            {observation.latitude !== undefined &&
-              observation.longitude !== undefined && (
-                <a
-                  href={mapLinkFor(observation.latitude, observation.longitude)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="self-start text-sm text-ink-muted underline"
-                >
-                  {formatPosition(observation.latitude, observation.longitude)}
-                </a>
-              )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-ink-subtle">
-              <span>{observation.createdByName}</span>
-              <span className="flex gap-3">
-                {observation.isOwn && (
-                  <button
-                    type="button"
-                    onClick={() => setEditing(observation)}
-                    className="underline"
-                  >
-                    Ret
-                  </button>
-                )}
-                {observation.canDelete && (
-                  <button
-                    type="button"
-                    onClick={() => void deleteObservation(observation)}
-                    className="underline"
-                  >
-                    Slet
-                  </button>
-                )}
-              </span>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
+      {tab === 'arter' && visible.length > 0 && (
+        <SpeciesOverview observations={yearObservations} year={year} />
+      )}
+    </main>
   )
 }

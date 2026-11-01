@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useConvexAuth } from 'convex/react'
+import { InstallAppButton } from './InstallAppButton'
 import { ThemeToggle } from '../features/theme/ThemeToggle'
 import { navLinkIsActive, type NavLinkItem } from './Navbar'
 
@@ -104,6 +105,7 @@ export function BurgerMenu({
 
         <div className="flex shrink-0 flex-col gap-0.5 border-t border-line-soft pt-3">
           <ThemeToggle className="mb-2" />
+          <InstallAppButton className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-base text-ink-muted" />
           {!isAuthenticated && (
             <NavLink
               to="/login"

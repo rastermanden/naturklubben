@@ -5,6 +5,8 @@ const uploadAvatar = vi.hoisted(() => vi.fn())
 
 vi.mock('convex/react', () => ({
   useMutation: () => vi.fn(),
+  useAction: () => vi.fn(),
+  useQuery: () => [],
 }))
 
 vi.mock('@convex-dev/auth/react', () => ({

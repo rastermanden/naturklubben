@@ -1,6 +1,7 @@
 import { ConvexError, v } from 'convex/values'
 import { mutation, query } from './_generated/server'
-import type { Doc } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
+import type { QueryCtx } from './_generated/server'
 import { requireProfile, requireWritableProfile } from './authz'
 
 /**
@@ -102,6 +103,20 @@ function validateContent(input: ObservationContent): ObservationContent {
   }
 }
 
+async function photoView(ctx: QueryCtx, photoId: string | undefined) {
+  if (photoId === undefined) return null
+  const photo = await ctx.db.get(photoId as Id<'photos'>)
+  if (photo === null || !('storageId' in photo)) return null
+  const fileId = photo.thumbnailStorageId ?? photo.storageId
+  const url = await ctx.storage.getUrl(fileId)
+  return {
+    id: photo._id,
+    caption: photo.caption ?? null,
+    thumbnailUrl: url,
+    displayUrl: url,
+  }
+}
+
 function displayNameOf(profile: Doc<'profiles'>): string {
   const name = profile.fullName?.trim()
   return name && name.length > 0 ? name : 'Unavngivet medlem'
@@ -123,12 +138,18 @@ export const list = query({
       .order('desc')
       .take(LIST_LIMIT)
 
-    return observations.map((observation) => ({
-      ...observation,
-      isOwn: observation.createdById === profile._id,
-      canDelete:
-        observation.createdById === profile._id || profile.isAdmin === true,
-    }))
+    return await Promise.all(
+      observations.map(async (observation) => {
+        const photo = await photoView(ctx, observation.photoId)
+        return {
+          ...observation,
+          photo,
+          isOwn: observation.createdById === profile._id,
+          canDelete:
+            observation.createdById === profile._id || profile.isAdmin === true,
+        }
+      }),
+    )
   },
 })
 
@@ -175,6 +196,7 @@ export const update = mutation({
     notes: v.optional(v.string()),
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
+    photoId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const profile = await requireWritableProfile(ctx)
@@ -196,6 +218,7 @@ export const update = mutation({
 
     await ctx.db.patch(observation._id, {
       ...content,
+      photoId: args.photoId ?? observation.photoId,
       updatedAt: Date.now(),
     })
   },

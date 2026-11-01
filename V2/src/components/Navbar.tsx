@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useConvexAuth } from 'convex/react'
 import { useCurrentProfile } from '../features/auth/useCurrentProfile'
 import { BurgerMenu } from './BurgerMenu'
+import { InstallAppButton } from './InstallAppButton'
 
 export interface NavLinkItem {
   to: string
@@ -105,6 +106,7 @@ export function Navbar() {
             {link.label}
           </NavLink>
         ))}
+        <InstallAppButton className="rounded border border-line-strong px-3 py-1 text-ink-muted" />
         {!isAuthenticated && (
           <NavLink
             to="/login"

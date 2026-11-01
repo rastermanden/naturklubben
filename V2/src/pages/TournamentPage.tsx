@@ -1,6 +1,12 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
-import { gamesToWin, rulesSummary } from '../../convex/rules'
+import { rulesSummary } from '../../convex/rules'
+import { BracketView } from '../features/tournament/BracketView'
+import { MatchCard } from '../features/tournament/MatchCard'
+import { PinkShorts } from '../features/tournament/PinkShorts'
+import { StandingsTable } from '../features/tournament/StandingsTable'
+import type { TournamentMatch } from '../features/tournament/types'
 import {
   tournamentErrorMessage,
   useParticipantCandidates,
@@ -30,13 +36,13 @@ const dateFormatter = new Intl.DateTimeFormat('da-DK', {
 })
 
 function formatLabel(format: Doc<'tournaments'>['format']): string {
-  return format === 'round_robin' ? 'Alle mod alle' : 'Udslagsrunder'
+  return format === 'round_robin' ? 'Alle-mod-alle' : 'Udslagsrunder'
 }
 
 function statusLabel(status: Doc<'tournaments'>['status']): string {
-  if (status === 'completed') return 'Færdig'
+  if (status === 'completed') return 'Afsluttet'
   if (status === 'in_progress') return 'I gang'
-  return 'Klar til start'
+  return 'Under opsætning'
 }
 
 interface CreateFormProps {
@@ -90,7 +96,7 @@ function CreateTournamentForm({ onCreated }: CreateFormProps) {
           }
           className="min-h-11 rounded-lg border border-line px-3 py-2 text-ink"
         >
-          <option value="round_robin">Alle mod alle</option>
+          <option value="round_robin">Alle-mod-alle</option>
           <option value="single_elimination">Udslagsrunder</option>
         </select>
       </label>
@@ -139,168 +145,62 @@ function CreateTournamentForm({ onCreated }: CreateFormProps) {
   )
 }
 
-interface StandingRow {
-  participantId: string
-  displayName: string
-  seed: number
-  played: number
-  won: number
-  lost: number
-  gamesWon: number
-  gamesLost: number
-  isSharedLeader: boolean
+function toViewMatch(match: Doc<'tournamentMatches'>): TournamentMatch {
+  return {
+    id: match._id,
+    tournament_id: match.tournamentId,
+    round: match.round,
+    match_index: match.matchIndex,
+    participant1_id: match.participant1Id ?? null,
+    participant2_id: match.participant2Id ?? null,
+    winner_id: match.winnerId ?? null,
+    status: match.status,
+    next_match_id: match.nextMatchId ?? null,
+    next_match_slot:
+      match.nextMatchSlot === 1 || match.nextMatchSlot === 2
+        ? match.nextMatchSlot
+        : null,
+    bye: match.bye,
+    best_of: match.bestOf,
+  }
 }
 
-function StandingsTable({ standings }: { standings: StandingRow[] }) {
+function canUndoMatch(
+  match: TournamentMatch,
+  matchesById: Map<string, TournamentMatch>,
+): boolean {
+  if (match.status !== 'completed' || match.participant2_id === null) {
+    return false
+  }
+  let current = match
+  while (current.next_match_id) {
+    const nextMatch = matchesById.get(current.next_match_id)
+    if (!nextMatch || nextMatch.status !== 'completed') return true
+    if (!nextMatch.bye) return false
+    current = nextMatch
+  }
+  return true
+}
+
+function joinNames(names: string[]) {
+  if (names.length <= 1) return names.join('')
+  return `${names.slice(0, -1).join(', ')} og ${names.at(-1)}`
+}
+
+function WinnerBanner({ names }: { names: string[] }) {
+  const text =
+    names.length === 1
+      ? `${names[0]} vandt turneringen!`
+      : `Delt førsteplads: ${joinNames(names)}!`
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-line text-left text-ink-muted">
-            <th className="py-2 pr-3">#</th>
-            <th className="py-2 pr-3">Deltager</th>
-            <th className="py-2 pr-3 text-right">Kampe</th>
-            <th className="py-2 pr-3 text-right">Vundet</th>
-            <th className="py-2 pr-3 text-right">Tabt</th>
-            <th className="py-2 text-right">Spil</th>
-          </tr>
-        </thead>
-        <tbody>
-          {standings.map((standing, index) => (
-            <tr
-              key={standing.participantId}
-              className="border-b border-line-soft last:border-b-0"
-            >
-              <td className="py-2 pr-3 tabular-nums text-ink-subtle">
-                {standing.isSharedLeader ? '🏆' : index + 1}
-              </td>
-              <td className="py-2 pr-3 text-ink-body">
-                {standing.displayName}
-              </td>
-              <td className="py-2 pr-3 text-right tabular-nums">
-                {standing.played}
-              </td>
-              <td className="py-2 pr-3 text-right tabular-nums">
-                {standing.won}
-              </td>
-              <td className="py-2 pr-3 text-right tabular-nums">
-                {standing.lost}
-              </td>
-              <td className="py-2 text-right tabular-nums">
-                {standing.gamesWon}–{standing.gamesLost}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {standings.some((standing) => standing.isSharedLeader) && (
-        <p className="pt-2 text-sm text-ink-subtle">
-          Flere står lige — de deler førstepladsen, indtil nogen vinder.
-        </p>
-      )}
+    <div
+      role="status"
+      className="rounded-xl border border-accent-soft bg-surface-raised p-6 text-center"
+    >
+      <PinkShorts className="mx-auto h-12 w-auto" />
+      <p className="mt-2 text-lg font-semibold text-ink-body">{text}</p>
     </div>
-  )
-}
-
-interface MatchCardProps {
-  match: Doc<'tournamentMatches'>
-  names: Map<string, string>
-  onRecord: (
-    matchId: Id<'tournamentMatches'>,
-    gameWinnerIds: Id<'tournamentParticipants'>[],
-  ) => Promise<void>
-  onUndo: (matchId: Id<'tournamentMatches'>) => Promise<void>
-}
-
-function MatchCard({ match, names, onRecord, onUndo }: MatchCardProps) {
-  const [tapped, setTapped] = useState<Id<'tournamentParticipants'>[]>([])
-  const needed = gamesToWin(match.bestOf)
-
-  function label(participantId: Id<'tournamentParticipants'> | undefined) {
-    if (participantId === undefined) return 'Venter'
-    return names.get(participantId) ?? 'Ukendt'
-  }
-
-  async function tap(participantId: Id<'tournamentParticipants'>) {
-    const next = [...tapped, participantId]
-    const wins = next.filter((id) => id === participantId).length
-    if (wins >= needed) {
-      setTapped([])
-      await onRecord(match._id, next)
-      return
-    }
-    if (next.length >= match.bestOf) {
-      // Flere spil, end kampen går over, kan ikke afgøre den; start forfra.
-      setTapped([])
-      return
-    }
-    setTapped(next)
-  }
-
-  const waiting =
-    match.status === 'pending' &&
-    (match.participant1Id === undefined || match.participant2Id === undefined)
-
-  return (
-    <li className="flex flex-col gap-2 rounded-xl border border-line-soft bg-surface p-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="font-medium text-ink-body">
-          {label(match.participant1Id)} — {label(match.participant2Id)}
-        </span>
-        <span className="shrink-0 text-xs text-ink-subtle">
-          Bedst af {match.bestOf}
-        </span>
-      </div>
-
-      {match.bye && (
-        <p className="text-sm text-ink-subtle">Bye — går direkte videre</p>
-      )}
-
-      {!match.bye && match.status === 'completed' && (
-        <p className="text-sm text-ink-body">Vinder: {label(match.winnerId)}</p>
-      )}
-
-      {!match.bye && waiting && (
-        <p className="text-sm text-ink-subtle">Mangler en deltager.</p>
-      )}
-
-      {!match.bye &&
-        match.status === 'pending' &&
-        match.participant1Id !== undefined &&
-        match.participant2Id !== undefined && (
-          <>
-            <p className="text-sm text-ink-subtle">
-              Tryk på vinderen af hvert spil.
-              {tapped.length > 0 &&
-                ` Spil ${tapped.length + 1} af højst ${match.bestOf}:`}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {[match.participant1Id, match.participant2Id].map(
-                (participantId) => (
-                  <button
-                    key={participantId}
-                    type="button"
-                    onClick={() => void tap(participantId)}
-                    className="min-h-11 rounded-lg border border-line px-3 py-2 text-ink-body"
-                  >
-                    {label(participantId)}
-                  </button>
-                ),
-              )}
-            </div>
-          </>
-        )}
-
-      {!match.bye && match.status === 'completed' && (
-        <button
-          type="button"
-          onClick={() => void onUndo(match._id)}
-          className="self-start text-sm text-ink-subtle underline"
-        >
-          Fortryd resultatet
-        </button>
-      )}
-    </li>
   )
 }
 
@@ -315,37 +215,40 @@ export default function TournamentPage() {
   const currentId = selectedId ?? tournaments?.[0]?._id
   const detail = useTournament(currentId)
 
-  const names = new Map<string, string>()
-  for (const participant of detail?.participants ?? []) {
-    names.set(participant._id as string, participant.displayName)
-  }
+  const nameFor = (participantId: string) =>
+    detail?.participants.find(
+      (participant) => participant._id === participantId,
+    )?.displayName ?? 'Ukendt deltager'
 
-  const rounds = new Map<number, Doc<'tournamentMatches'>[]>()
-  for (const match of detail?.matches ?? []) {
-    const list = rounds.get(match.round) ?? []
-    list.push(match)
-    rounds.set(match.round, list)
-  }
-  const roundNumbers = [...rounds.keys()].sort((a, b) => a - b)
+  const viewMatches = (detail?.matches ?? []).map(toViewMatch)
+  const matchesById = new Map(viewMatches.map((match) => [match.id, match]))
+  const [recordingId, setRecordingId] = useState<string | null>(null)
+  const [undoingId, setUndoingId] = useState<string | null>(null)
 
   async function handleRecord(
     matchId: Id<'tournamentMatches'>,
     gameWinnerIds: Id<'tournamentParticipants'>[],
   ) {
     setError(null)
+    setRecordingId(matchId)
     try {
       await record({ matchId, gameWinnerIds })
     } catch (cause) {
       setError(tournamentErrorMessage(cause))
+    } finally {
+      setRecordingId(null)
     }
   }
 
   async function handleUndo(matchId: Id<'tournamentMatches'>) {
     setError(null)
+    setUndoingId(matchId)
     try {
       await undo({ matchId })
     } catch (cause) {
       setError(tournamentErrorMessage(cause))
+    } finally {
+      setUndoingId(null)
     }
   }
 
@@ -364,13 +267,28 @@ export default function TournamentPage() {
 
   const roundRobin = detail?.tournament.format === 'round_robin'
 
+  const leaderNames = (detail?.standings ?? [])
+    .filter((standing) => standing.isSharedLeader)
+    .map((standing) => standing.displayName)
+  const playable = viewMatches.filter(
+    (match) =>
+      match.status === 'pending' &&
+      match.participant1_id !== null &&
+      match.participant2_id !== null,
+  )
+  const undoable = viewMatches.filter((match) =>
+    canUndoMatch(match, matchesById),
+  )
+
   return (
-    <div className="flex flex-col gap-6">
+    <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
+      <Link to="/aktiviteter" className="text-sm text-accent-soft underline">
+        ← Aktiviteter
+      </Link>
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-ink-body">Turnering</h1>
+        <h1 className="text-2xl font-semibold text-ink-body">BTG turnering</h1>
         <p className="text-ink-subtle">
-          Bøssetennisgolf for hele klubben. Opret en turnering, vælg deltagerne,
-          og tast resultater ind, mens I spiller.
+          Hold styr på kampe, resultater og stilling til klubbens turneringer.
         </p>
       </div>
 
@@ -418,9 +336,12 @@ export default function TournamentPage() {
                     {formatLabel(tournament.format)} ·{' '}
                     {tournament.participantCount} deltagere
                   </span>
-                  <span className="shrink-0 text-xs text-ink-subtle">
+                  <span className="flex shrink-0 items-center gap-2 text-xs text-ink-subtle">
                     {statusLabel(tournament.status)} ·{' '}
                     {dateFormatter.format(new Date(tournament.createdAt))}
+                    {tournament.status === 'completed' && (
+                      <PinkShorts className="h-6 w-auto" />
+                    )}
                   </span>
                 </button>
               </li>
@@ -440,50 +361,125 @@ export default function TournamentPage() {
       )}
 
       {detail !== undefined && (
-        <section className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-xl font-semibold text-ink-body">
-              {formatLabel(detail.tournament.format)}
-            </h2>
-            <span className="text-sm text-ink-subtle">
-              {statusLabel(detail.tournament.status)}
-            </span>
+        <section className="flex flex-col gap-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-semibold text-ink-body">
+                {formatLabel(detail.tournament.format)}
+              </h2>
+              <p className="text-ink-subtle">
+                {statusLabel(detail.tournament.status)} ·{' '}
+                {detail.participants.length} deltagere
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleRemove(detail.tournament._id)}
+              className="min-h-11 rounded-lg border border-danger-line-strong px-4 py-2 text-sm text-danger"
+            >
+              Nulstil turnering
+            </button>
           </div>
 
-          <p className="rounded-xl border border-line-soft bg-surface-sunken p-3 text-sm text-ink-muted">
-            {rulesSummary(detail.tournament.format)}
-          </p>
+          <div className="rounded-xl border border-line-soft bg-surface-sunken p-4">
+            <h3 className="text-sm font-medium text-ink-body">Regler</h3>
+            <p className="mt-1 text-sm text-ink-subtle">
+              {rulesSummary(detail.tournament.format)}
+            </p>
+          </div>
 
-          {roundRobin && <StandingsTable standings={detail.standings} />}
-
-          {roundNumbers.map((round) => (
-            <div key={round} className="flex flex-col gap-2">
-              <h3 className="text-lg font-semibold text-ink-body">
-                {roundRobin ? 'Kampe' : `Runde ${round}`}
-              </h3>
-              <ul className="flex flex-col gap-2">
-                {(rounds.get(round) ?? []).map((match) => (
+          {roundRobin ? (
+            <>
+              <StandingsTable
+                standings={detail.standings}
+                nameFor={nameFor}
+                leaderIds={
+                  detail.tournament.status === 'completed'
+                    ? new Set(
+                        detail.standings
+                          .filter((standing) => standing.isSharedLeader)
+                          .map((standing) => standing.participantId),
+                      )
+                    : new Set()
+                }
+              />
+              <div className="flex flex-col gap-3">
+                <h3 className="text-lg font-medium text-ink-body">Kampe</h3>
+                {viewMatches.map((match) => (
                   <MatchCard
-                    key={match._id}
+                    key={match.id}
                     match={match}
-                    names={names}
-                    onRecord={handleRecord}
-                    onUndo={handleUndo}
+                    nameFor={nameFor}
+                    onRecordResult={(gameWinnerIds) =>
+                      void handleRecord(
+                        match.id as Id<'tournamentMatches'>,
+                        gameWinnerIds as Id<'tournamentParticipants'>[],
+                      )
+                    }
+                    submitting={recordingId === match.id}
+                    canUndo={canUndoMatch(match, matchesById)}
+                    onUndo={() =>
+                      void handleUndo(match.id as Id<'tournamentMatches'>)
+                    }
+                    undoing={undoingId === match.id}
                   />
                 ))}
-              </ul>
-            </div>
-          ))}
-
-          <button
-            type="button"
-            onClick={() => void handleRemove(detail.tournament._id)}
-            className="min-h-11 self-start rounded-lg border border-danger-line px-4 py-2 text-sm text-danger"
-          >
-            Slet turneringen
-          </button>
+              </div>
+              {detail.tournament.status === 'completed' &&
+                leaderNames.length > 0 && <WinnerBanner names={leaderNames} />}
+            </>
+          ) : (
+            <>
+              <BracketView matches={viewMatches} nameFor={nameFor} />
+              {playable.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <h3 className="text-lg font-medium text-ink-body">
+                    Kampe klar til at spille
+                  </h3>
+                  {playable.map((match) => (
+                    <MatchCard
+                      key={match.id}
+                      match={match}
+                      nameFor={nameFor}
+                      onRecordResult={(gameWinnerIds) =>
+                        void handleRecord(
+                          match.id as Id<'tournamentMatches'>,
+                          gameWinnerIds as Id<'tournamentParticipants'>[],
+                        )
+                      }
+                      submitting={recordingId === match.id}
+                      canUndo={false}
+                      onUndo={() => undefined}
+                      undoing={false}
+                    />
+                  ))}
+                </div>
+              )}
+              {undoable.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <h3 className="text-lg font-medium text-ink-body">
+                    Seneste resultater
+                  </h3>
+                  {undoable.map((match) => (
+                    <MatchCard
+                      key={match.id}
+                      match={match}
+                      nameFor={nameFor}
+                      onRecordResult={() => undefined}
+                      submitting={false}
+                      canUndo
+                      onUndo={() =>
+                        void handleUndo(match.id as Id<'tournamentMatches'>)
+                      }
+                      undoing={undoingId === match.id}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </section>
       )}
-    </div>
+    </main>
   )
 }
