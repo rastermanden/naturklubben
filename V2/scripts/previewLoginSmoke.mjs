@@ -192,31 +192,33 @@ async function runOnce() {
         'Kalenderen, aktiviteterne og de andre medlemmer er åbne for dig.',
       ],
     ]
-    for (const [route, text] of reloads) {
-      console.log(`genindlæser /${route}`)
-      let response
-      try {
-        // load frem for networkidle: Convex' websocket lukker aldrig,
-        // så en venten på netværksro timer ud.
-        response = await page.goto(`${base}${route}`, {
-          waitUntil: 'load',
-          timeout: 20000,
-        })
-      } catch (error) {
-        const wrapped = new Error(
-          `Navigation fejlede på /${route}: ${error instanceof Error ? error.message : error}`,
-        )
-        wrapped.fatal = true
-        throw wrapped
+    try {
+      for (const [route, text] of reloads) {
+        const stamp = String(Date.now())
+        console.log(`genindlæser /${route}`)
+        await Promise.all([
+          page.waitForFunction(
+            (expected, token, requireToken) => {
+              const body = document.body?.innerText ?? ''
+              const arrived =
+                !requireToken || window.location.search.includes(token)
+              return (
+                arrived && body.includes(expected) && body.includes('Log ud')
+              )
+            },
+            { timeout: 20000 },
+            text,
+            stamp,
+            route !== 'login',
+          ),
+          page.evaluate((url) => {
+            window.location.assign(url)
+          }, `${base}${route}?reload=${stamp}`),
+        ])
       }
-      console.log(
-        `svar ${response === null ? 'intet' : response.status()} ${page.url()}`,
-      )
-      if (response !== null && response.status() >= 400) {
-        throw new Error(`HTTP ${response.status()} på /${route}`)
-      }
-      await assertText(page, text)
-      await assertText(page, 'Log ud')
+    } catch (error) {
+      if (error && typeof error === 'object') error.fatal = true
+      throw error
     }
     if (document404s.length > 0) {
       throw new Error(`Dokument-404: ${document404s.join(', ')}`)
