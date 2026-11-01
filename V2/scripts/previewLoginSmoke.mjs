@@ -106,6 +106,7 @@ async function runOnce() {
   try {
     const page = await browser.newPage()
     page.setDefaultTimeout(20000)
+    await page.setCacheEnabled(false)
     await page.setViewport({ width: 1280, height: 800 })
     page.on('request', (request) => {
       try {
@@ -121,7 +122,9 @@ async function runOnce() {
 
     // Index-filen findes. Dybe links går gennem rodens 404, så vi klikker os
     // rundt i appen i stedet.
-    await open(page, base)
+    // Uden et unikt query-parameter kan Pages' CDN blive ved med at svare
+    // med et op til ti minutter gammelt index.
+    await open(page, `${base}?cb=${Date.now()}`)
     await assertText(page, 'V2 ·', 8000)
     await clickText(page, 'Se aktiviteter')
     await assertText(page, 'Skovtur')
@@ -150,7 +153,17 @@ async function runOnce() {
             '#login-error',
             (el) => el.textContent ?? '',
           )
-          const loginError = new Error(`Login afvist: ${redact(text)}`)
+          const emailLen = await page.$eval(
+            '#login-email',
+            (el) => el.value.length,
+          )
+          const passwordLen = await page.$eval(
+            '#login-password',
+            (el) => el.value.length,
+          )
+          const loginError = new Error(
+            `Login afvist: ${redact(text)} (feltlængder ${emailLen}/${passwordLen}, forventet ${email.length}/${password.length})`,
+          )
           loginError.fatal = true
           reject(loginError)
         },
