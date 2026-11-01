@@ -632,7 +632,7 @@ export const removeSubscription = internalMutation({
 })
 
 /**
- * Erstatter pg_cron-jobbet `enqueue-event-reminders` (`*/15 * * * *`): find de
+ * Erstatter pg_cron-jobbet `enqueue-event-reminders` (hvert 15. minut): find de
  * begivenheder, der starter i morgen efter kl. 17, og bed om en påmindelse.
  *
  * **Hvad der er portet:** vinduet, oprydningen i leveringsloggen og

@@ -765,7 +765,7 @@ export const reject = mutation({
 // ---------------------------------------------------------------------------
 
 /**
- * Erstatter pg_cron-jobbet `retry-probation-notifications` (`*/5 * * * *`).
+ * Erstatter pg_cron-jobbet `retry-probation-notifications` (hvert 5. minut).
  * Finder ansøgninger, hvis svar aldrig nåede frem -- eller hvis kørsel døde
  * midt i kaldet -- og lægger en ny afsendelse i køen. Outboxens forsøgsgrænse
  * og `claimNotification` gør et ekstra kald harmløst.
