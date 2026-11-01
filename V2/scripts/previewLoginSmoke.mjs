@@ -197,28 +197,20 @@ async function runOnce() {
     ]
     try {
       for (const [route, text] of reloads) {
-        const stamp = String(Date.now())
         console.log(`genindlæser /${route}`)
-        await Promise.all([
-          page.waitForFunction(
-            (expected, token, isLogin) => {
-              const body = document.body?.innerText ?? ''
-              const arrived = isLogin
-                ? !window.location.pathname.endsWith('/login') &&
-                  !window.location.pathname.endsWith('/login/')
-                : window.location.hash.includes(token)
-              return arrived && body.includes(expected)
-            },
-            { timeout: 20000 },
-            text,
-            stamp,
-            route === 'login',
-          ),
-          page.evaluate((url) => {
-            window.location.assign(url)
-          }, `${base}${route}#r=${stamp}`),
-        ])
-        const loggedOut = await page.evaluate(
+        // Ny fane i samme browser: localStorage (sessionen) følger med,
+        // uden at den åbne Convex-websocket kan hænge navigationen.
+        const next = await browser.newPage()
+        await next.setViewport({ width: 1280, height: 800 })
+        const response = await next.goto(`${base}${route}`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 20000,
+        })
+        if (response !== null && response.status() >= 400) {
+          throw new Error(`HTTP ${response.status()} på /${route}`)
+        }
+        await assertText(next, text)
+        const loggedOut = await next.evaluate(
           () =>
             document.body?.innerText.includes('Log ind for at se kalender') ??
             false,
@@ -226,18 +218,9 @@ async function runOnce() {
         if (loggedOut) {
           throw new Error(`Sessionen manglede efter genindlæs af /${route}`)
         }
+        await next.close()
       }
     } catch (error) {
-      const info = await page
-        .evaluate(() => ({
-          href: window.location.href,
-          text: (document.body?.innerText ?? '').slice(0, 240),
-          keys: Object.keys(window.localStorage).map((key) => key.slice(0, 48)),
-        }))
-        .catch(() => ({ href: 'væk', text: '', keys: [] }))
-      console.log(
-        `side ${info.href} | ${info.text.replaceAll('\n', ' | ')} | nøgler ${info.keys.join(',')}`,
-      )
       if (error && typeof error === 'object') error.fatal = true
       throw error
     }
