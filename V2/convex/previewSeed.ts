@@ -64,20 +64,6 @@ export function normalizePreviewPassword(value: string | undefined): string {
   return (value ?? '').replace(/[\r\n]+$/g, '')
 }
 
-/** Kort kontrolsum, så CI kan sammenligne strenge uden at skrive dem ud. */
-export async function previewCredentialFingerprint(
-  value: string,
-): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(value),
-  )
-  return [...new Uint8Array(digest)]
-    .slice(0, 4)
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
-}
-
 export function assertPreviewSeedAllowed(input: {
   previewSeed: string | undefined
   cloudUrl: string | undefined
@@ -224,14 +210,8 @@ export const applySample = internalMutation({
 
 export const ensure = internalAction({
   args: {},
-  returns: v.object({
-    ok: v.literal(true),
-    emailFp: v.string(),
-    passwordFp: v.string(),
-  }),
-  handler: async (
-    ctx,
-  ): Promise<{ ok: true; emailFp: string; passwordFp: string }> => {
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx): Promise<{ ok: true }> => {
     assertAllowedOnThisDeployment()
 
     const email = normalizePreviewEmail(env.PREVIEW_TEST_EMAIL)
@@ -283,10 +263,6 @@ export const ensure = internalAction({
     }
 
     await ctx.runMutation(internal.previewSeed.applySample, { userId })
-    return {
-      ok: true,
-      emailFp: await previewCredentialFingerprint(email),
-      passwordFp: await previewCredentialFingerprint(password),
-    }
+    return { ok: true }
   },
 })

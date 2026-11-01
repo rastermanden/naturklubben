@@ -157,7 +157,7 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
 
 - **Hvert PR-preview af V2 har én testbruger.** `pr-preview-v2.yml` kalder den interne action `previewSeed:ensure` efter `npx convex deploy --preview-name pr-<nr>`. Findes brugeren ikke, oprettes den via Convex Auths adgangskode-provider; ellers genbruges den. Derefter lægges et par aktiviteter og en offentlig tur ind, så appen kan prøves.
 - Adresse og adgangskode er repo-secrets `PREVIEW_TEST_EMAIL` og `PREVIEW_TEST_PASSWORD`. Workflowet sætter dem på preview-deploymentet via stdin (`npx convex env set`), aldrig som argumenter og aldrig i loggen. Actionen kører kun, når `PREVIEW_SEED` er `1`.
-- Seedet må ikke ramme produktion. Workflowet afviser en deploy-nøgle, der starter med `prod:`, og actionen nægter, hvis `CONVEX_CLOUD_URL` er produktions-deploymentet `quaint-parakeet-652`. `deploy-v2.yml` kalder det ikke.
+- Seedet må ikke ramme produktion. Workflowet afviser en deploy-nøgle, der starter med `prod:`, og actionen nægter, hvis `CONVEX_CLOUD_URL` er produktions-deploymentet `quaint-parakeet-652`. `deploy-v2.yml` kalder det ikke. Samme trin sætter `JWT_PRIVATE_KEY` og `JWKS` på previewet, hvis de mangler: Convex Auth kan ellers ikke udstede en session, og nøglerne følger ikke med fra produktion.
 - Frontend-buildet får previewets URL som `VITE_CONVEX_URL` fra deployet. Workflowet fejler, hvis den byggede bundle peger på produktions-deploymentet.
 - **Rører PR'en `V2/`, udgiver `pr-preview.yml` ikke til `pr-preview/pr-<nr>/`.** De to workflows skriver den samme mappe. At vente på V1 og lægge V2 ovenpå taber, når V1's push til `gh-pages` lander bagefter. V1 springer derfor build og deploy over; kun V2 ender på stien. Ved lukning rydder begge workflows stadig op.
 

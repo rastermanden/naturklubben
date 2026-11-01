@@ -153,37 +153,7 @@ async function runOnce() {
             const code = el.getAttribute('data-code') ?? ''
             return `${code}: ${el.textContent ?? ''}`
           })
-          const fieldFp = await page.evaluate(async () => {
-            async function fp(value) {
-              const digest = await crypto.subtle.digest(
-                'SHA-256',
-                new TextEncoder().encode(value),
-              )
-              return [...new Uint8Array(digest)]
-                .slice(0, 4)
-                .map((byte) => byte.toString(16).padStart(2, '0'))
-                .join('')
-            }
-            return {
-              email: await fp(document.querySelector('#login-email').value),
-              password: await fp(
-                document.querySelector('#login-password').value,
-              ),
-            }
-          })
-          async function fp(value) {
-            const digest = await crypto.subtle.digest(
-              'SHA-256',
-              new TextEncoder().encode(value),
-            )
-            return [...new Uint8Array(digest)]
-              .slice(0, 4)
-              .map((byte) => byte.toString(16).padStart(2, '0'))
-              .join('')
-          }
-          const loginError = new Error(
-            `Login afvist: ${redact(text)} (felt ${fieldFp.email}/${fieldFp.password}, forventet ${await fp(email)}/${await fp(password)}, værter ${[...hosts].join(' ') || 'ingen'})`,
-          )
+          const loginError = new Error(`Login afvist: ${redact(text)}`)
           loginError.fatal = true
           reject(loginError)
         },

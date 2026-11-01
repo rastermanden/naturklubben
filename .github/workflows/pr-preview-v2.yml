@@ -128,6 +128,9 @@ jobs:
           printf '%s' "$PREVIEW_TEST_EMAIL" | npx convex env set PREVIEW_TEST_EMAIL --preview-name "$preview"
           printf '%s' "$PREVIEW_TEST_PASSWORD" | npx convex env set PREVIEW_TEST_PASSWORD --preview-name "$preview"
           npx convex run previewSeed:ensure '{}' --preview-name "$preview"
+          # Login kan først udstede en session, når Convex Auth har et
+          # nøglepar på selve previewet. Prod-nøglerne følger ikke med.
+          node scripts/ensurePreviewAuthKeys.mjs "$preview"
 
       # `pr-preview.yml` udgiver ikke, når PR'en rører V2/. Derfor er der
       # ingen venten på V1: den kørsel pushede alligevel til gh-pages efter
