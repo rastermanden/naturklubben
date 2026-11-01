@@ -1,1 +1,0 @@
-var e=3600,t=24*e,n=7*t,r=30*t,i=365*t;function a(a){let o=(Date.now()-new Date(a).getTime())/1e3;return o<60?`nu`:o<e?`${Math.floor(o/60)} min`:o<t?`${Math.floor(o/e)} t`:o<n?`${Math.floor(o/t)} d`:o<r?`${Math.floor(o/n)} u`:o<i?`${Math.floor(o/r)} md`:`${Math.floor(o/i)} år`}export{a as t};
