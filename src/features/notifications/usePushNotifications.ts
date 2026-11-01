@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabaseClient'
+import { isIosDevice, isStandaloneDisplay } from '../pwa/platform'
 
 /**
  * Hvorfor notifikationer ikke kan slås til lige nu -- eller null, hvis de kan.
@@ -34,23 +35,6 @@ export class PushSetupError extends Error {
     this.name = 'PushSetupError'
     this.reason = reason
   }
-}
-
-function isIosSafari() {
-  const ua = navigator.userAgent
-  // iPadOS 13+ melder sig som Mac, men har touch -- derfor maxTouchPoints.
-  return (
-    /iPad|iPhone|iPod/.test(ua) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-  )
-}
-
-function isStandalone() {
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    // Safaris egen, ikke-standardiserede variant.
-    (navigator as Navigator & { standalone?: boolean }).standalone === true
-  )
 }
 
 function pushApiAvailable() {
@@ -120,7 +104,7 @@ export async function prepareBrowserPushSubscription(
 ): Promise<BrowserPushSubscription> {
   if (!pushApiAvailable()) {
     throw new PushSetupError(
-      isIosSafari() && !isStandalone() ? 'needs-install' : 'unsupported',
+      isIosDevice() && !isStandaloneDisplay() ? 'needs-install' : 'unsupported',
     )
   }
   if (Notification.permission === 'denied') {
@@ -179,7 +163,7 @@ export function usePushNotifications(userId: string) {
           setStatus({
             state: 'unavailable',
             reason:
-              isIosSafari() && !isStandalone()
+              isIosDevice() && !isStandaloneDisplay()
                 ? 'needs-install'
                 : 'unsupported',
           })
