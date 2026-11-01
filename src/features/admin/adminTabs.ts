@@ -22,6 +22,8 @@ export const ADMIN_TABS = [
   // Indholdet på de offentlige sider. Aktiviteterne kunne før kun ændres
   // med en migration.
   { id: 'aktiviteter', label: 'Aktiviteter' },
+  // Datoafstemninger: "hvornår kan vi?" til den næste tur (#288).
+  { id: 'datoer', label: 'Find en dato' },
   { id: 'adgang', label: 'Adgang' },
   {
     id: 'indstillinger',

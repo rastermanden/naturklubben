@@ -6,6 +6,13 @@ import { parseMaxParticipants } from './waitlist'
 
 interface EventFormProps {
   event?: CalendarEvent
+  /**
+   * Udfylder en *ny* begivenhed på forhånd -- fx fra den dato, en
+   * datoafstemning endte på (#288). Ignoreres, når `event` er sat.
+   */
+  initialValues?: Partial<
+    Pick<EventInput, 'title' | 'description' | 'start_at' | 'end_at'>
+  >
   submitting: boolean
   error: string | null
   onSubmit: (input: EventInput) => void
@@ -21,16 +28,18 @@ function toLocalDateTime(isoDate?: string | null) {
 
 export function EventForm({
   event,
+  initialValues,
   submitting,
   error,
   onSubmit,
   onCancel,
 }: EventFormProps) {
-  const [title, setTitle] = useState(event?.title ?? '')
-  const [description, setDescription] = useState(event?.description ?? '')
+  const initial = event ?? initialValues
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [description, setDescription] = useState(initial?.description ?? '')
   const [location, setLocation] = useState(event?.location ?? '')
-  const [startAt, setStartAt] = useState(toLocalDateTime(event?.start_at))
-  const [endAt, setEndAt] = useState(toLocalDateTime(event?.end_at))
+  const [startAt, setStartAt] = useState(toLocalDateTime(initial?.start_at))
+  const [endAt, setEndAt] = useState(toLocalDateTime(initial?.end_at))
   const [isPublic, setIsPublic] = useState(event?.is_public ?? false)
   const [maxParticipants, setMaxParticipants] = useState(
     event?.max_participants?.toString() ?? '',

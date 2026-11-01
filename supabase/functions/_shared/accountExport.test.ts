@@ -95,6 +95,22 @@ function repository(overrides: Partial<AccountExportRepository> = {}) {
         },
       ]
     },
+    getDatePollVotes: async (id) => {
+      seenUserIds.push(id)
+      return [
+        {
+          option_id: 'date-option-1',
+          answer: 'yes',
+          updated_at: '2026-08-04T10:00:00.000Z',
+          option: {
+            id: 'date-option-1',
+            starts_at: '2026-09-05T08:00:00.000Z',
+            ends_at: null,
+            poll: { id: 'date-poll-1', title: 'Svampetur' },
+          },
+        },
+      ]
+    },
     getPhotoComments: async (id) => {
       seenUserIds.push(id)
       return [
@@ -156,6 +172,7 @@ Deno.test(
       userId,
       userId,
       userId,
+      userId,
     ])
     assertEquals(body.account.email, 'medlem@example.com')
     assertEquals(body.messages[0].content, 'Hej')
@@ -194,6 +211,19 @@ Deno.test(
         created_at: '2026-08-03T10:00:00.000Z',
         poll: { id: 'poll-1', question: 'Hvor skal vi hen på lørdag?' },
         option: { id: 'option-1', label: 'Skoven' },
+      },
+    ])
+    assertEquals(body.date_poll_votes, [
+      {
+        option_id: 'date-option-1',
+        answer: 'yes',
+        updated_at: '2026-08-04T10:00:00.000Z',
+        option: {
+          id: 'date-option-1',
+          starts_at: '2026-09-05T08:00:00.000Z',
+          ends_at: null,
+          poll: { id: 'date-poll-1', title: 'Svampetur' },
+        },
       },
     ])
     assertEquals(body.observations, [

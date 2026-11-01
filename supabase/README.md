@@ -330,7 +330,8 @@ afstemning direkte i chatten. Alt om selve afstemningen ejes af databasen:
 - `poll_votes` tæller ikke stemmer ved kontosletning -- `user_id` kaskaderer,
   så en slettet kontos stemmer forsvinder med den, mens `polls.created_by`
   (som `messages.user_id`) nulstilles i stedet, så afstemningen og de andres
-  stemmer består. `export-account` tager `poll_votes` med i dataudleveringen.
+  stemmer består. `export-account` tager `poll_votes` med i dataudleveringen
+  -- og admins' svar i datoafstemningerne (#288) som `date_poll_votes`.
 - `supabase/tests/rls/18_chat_polls.sql` måler, at kun opretteren kan gøre sin
   egen besked til en afstemning, at et ikke-medlem (anonym eller et medlem
   uden adgang til rummet) hverken kan se eller stemme, at en ny stemme
