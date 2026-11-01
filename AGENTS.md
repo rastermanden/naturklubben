@@ -141,6 +141,18 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
   `VITE_SUPABASE_PUBLISHABLE_KEY` er tomme, og `vite.config.ts` afviser at udgive en
   app-løs bundle.
 
+## Ajour med `main`
+
+- **Før du verificerer, tester, bygger et preview af eller melder status på en
+  PR eller branch, så tjek altid, om den er bagud for `main`.** Kør fx
+  `git fetch origin && git rev-list --count HEAD..origin/main`. Er tallet over
+  0, så merge seneste `main` ind først (rebase, hvis branchen ikke er delt) og
+  kør tjekkene igen. En forældet branch kan give misvisende resultater — fx den
+  gamle `/naturklubben/`-base path, efter flytningen til naturklubben.dk.
+- **Reglen gælder også, når en agent tager en eksisterende branch op.** Bring
+  den ajour med `main`, før der verificeres, testes, bygges preview eller
+  meldes status.
+
 ## Nye funktioner meldes til medlemmerne
 
 - **Hver ny funktion, medlemmerne kan mærke, tager sin egen nyhed med.** Nyheden er en
