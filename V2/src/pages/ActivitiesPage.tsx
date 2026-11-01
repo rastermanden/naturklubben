@@ -69,7 +69,7 @@ function ActivitiesPage() {
               <ClubLinkCard
                 to="/naturlog"
                 title="Naturlog"
-                description="Hvad har vi set derude? Skriv arten, stedet og datoen."
+                description="Hvad har vi set derude? Skriv arten, stedet og datoen -- og læg gerne et billede ved."
               />
               <ClubLinkCard
                 to="/spil"

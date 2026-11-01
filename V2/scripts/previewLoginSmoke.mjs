@@ -185,7 +185,7 @@ async function runOnce() {
     // Direkte indlæsning, ikke et klik: GitHub Pages skal svare 200, og
     // sessionen skal stadig være der bagefter.
     const reloads = [
-      ['', 'Kalenderen, aktiviteterne og de andre medlemmer er åbne for dig.'],
+      ['', 'Gå til kalender'],
       ['kalender', 'Preview-tur'],
       ['aktiviteter', 'Skovtur'],
       ['spil', '7-kabale'],
@@ -195,10 +195,7 @@ async function runOnce() {
       ['chat', 'Hej fra previewet. Skoven er grøn i dag.'],
       ['profil', 'Min profil'],
       ['medlemmer', 'Medlemmer'],
-      [
-        'login',
-        'Kalenderen, aktiviteterne og de andre medlemmer er åbne for dig.',
-      ],
+      ['login', 'Gå til kalender'],
     ]
     try {
       for (const [route, text] of reloads) {
@@ -239,7 +236,7 @@ async function runOnce() {
         }
         const loggedOut = await next.evaluate(
           () =>
-            document.body?.innerText.includes('Log ind for at se kalender') ??
+            document.body?.innerText.includes('Ansøg om prøvemedlemskab') ??
             false,
         )
         if (loggedOut) {

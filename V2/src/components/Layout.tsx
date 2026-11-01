@@ -1,38 +1,51 @@
+import { useLocation } from 'react-router-dom'
 import { Outlet } from 'react-router-dom'
-import { appBuildDate, appVersion, formatAppVersion } from '../lib/appVersion'
+import { useConvexAuth } from 'convex/react'
 import { FeatureAnnouncementBanner } from '../features/announcements/FeatureAnnouncementBanner'
+import { PronounsReminder } from '../features/profile/PronounsReminder'
 import { AppErrorBoundary } from './AppErrorBoundary'
+import { Footer } from './Footer'
 import { Navbar } from './Navbar'
 
 /**
- * Den ydre ramme: header, indhold, footer.
- *
- * Headeren er `Navbar` fra auth-slicen, så menuen, burger-skuffen og "log
- * ind/ud" er de samme på alle sider. Farverne er de semantiske
- * (`bg-surface`, `text-ink-muted`), så den mørke tilstand virker fra første
- * dag.
+ * Samme ramme som den nuværende app: header, indhold i sidernes egen bredde,
+ * footer. Chatten fylder skærmen, så footeren udelades der.
  */
 export function Layout() {
+  const { isAuthenticated } = useConvexAuth()
+  const { pathname } = useLocation()
+  const keepsContentInViewport =
+    pathname === '/chat' || pathname === '/admin/chat'
+
   return (
-    <div className="flex min-h-dvh flex-col bg-app text-ink-body">
+    <div
+      className={`flex flex-col ${
+        keepsContentInViewport ? 'h-dvh overflow-hidden' : 'min-h-svh'
+      }`}
+    >
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded focus:bg-surface focus:px-4 focus:py-3 focus:font-medium focus:text-ink"
+      >
+        Spring til indhold
+      </a>
       <Navbar />
 
-      {/* Banneret monteres her og ikke på en side: det er også det, der beder
-          serveren om at sende nyhedsnotifikationen, så det skal køre, uanset
-          hvilken side medlemmet åbner. */}
-      <AppErrorBoundary>
-        <FeatureAnnouncementBanner />
-      </AppErrorBoundary>
-
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
+      <div
+        id="main-content"
+        tabIndex={-1}
+        className={`flex-1 ${
+          keepsContentInViewport ? 'flex min-h-0 flex-col overflow-hidden' : ''
+        }`}
+      >
         <AppErrorBoundary>
+          <FeatureAnnouncementBanner />
+          {isAuthenticated && <PronounsReminder />}
           <Outlet />
         </AppErrorBoundary>
-      </main>
+      </div>
 
-      <footer className="border-t border-line-soft px-4 py-3 text-center text-sm text-ink-subtle">
-        Version {formatAppVersion(appVersion, appBuildDate)}
-      </footer>
+      {!keepsContentInViewport && <Footer />}
     </div>
   )
 }

@@ -31,7 +31,7 @@ export function navLinkIsActive(
  * Naturlog og Spil ligger under Aktiviteter, ikke som egne punkter.
  */
 export const navLinks: readonly NavLinkItem[] = [
-  { to: '/', label: 'Forsiden' },
+  { to: '/', label: 'Forside' },
   {
     to: '/aktiviteter',
     label: 'Aktiviteter',
@@ -42,7 +42,7 @@ export const navLinks: readonly NavLinkItem[] = [
   { to: '/chat', label: 'Chat', requiresAuth: true },
   { to: '/medlemmer', label: 'Medlemmer', requiresAuth: true },
   { to: '/nyheder', label: 'Nyheder', requiresAuth: true },
-  { to: '/profil', label: 'Min profil', requiresAuth: true },
+  { to: '/profil', label: 'Profil', requiresAuth: true },
   { to: '/admin', label: 'Admin', requiresAuth: true, requiresAdmin: true },
   {
     to: '/admin/chat',
@@ -53,8 +53,8 @@ export const navLinks: readonly NavLinkItem[] = [
 ]
 
 const desktopLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `flex min-h-11 items-center rounded px-3 py-2 text-sm ${
-    isActive ? 'bg-surface-raised text-ink' : 'text-ink-muted hover:text-ink'
+  `rounded px-2 py-1 ${
+    isActive ? 'font-medium text-ink-body' : 'text-ink-muted'
   }`
 
 /**
@@ -82,54 +82,62 @@ export function Navbar() {
   )
 
   return (
-    <header className="border-b border-line bg-surface px-4 py-2">
-      <div className="mx-auto flex w-full max-w-3xl items-center gap-4">
-        <Link to="/" className="text-lg font-semibold text-ink">
-          Naturklubben
-        </Link>
+    <header
+      className="sticky top-0 z-30 flex shrink-0 items-center justify-between border-b border-line-soft bg-surface px-4 py-3"
+      style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+    >
+      <Link to="/" className="text-lg font-semibold text-ink-body">
+        Naturklubben
+      </Link>
 
-        <nav aria-label="Hovedmenu" className="ml-auto hidden md:block">
-          <ul className="flex items-center gap-1">
-            {visibleLinks.map((link) => (
-              <li key={link.to}>
-                <NavLink
-                  to={link.to}
-                  end={link.to === '/'}
-                  className={({ isActive }) =>
-                    desktopLinkClass({
-                      isActive: navLinkIsActive(link, pathname, isActive),
-                    })
-                  }
-                >
-                  {link.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        <div className="ml-auto flex items-center gap-2 md:ml-0">
-          {!isAuthenticated && (
-            <NavLink
-              to="/login"
-              className="hidden min-h-11 items-center rounded px-3 py-2 text-sm text-ink-muted md:flex"
-            >
-              Log ind
-            </NavLink>
-          )}
-
-          <button
-            ref={menuButtonRef}
-            type="button"
-            aria-label="Åbn menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen(true)}
-            className="flex h-11 w-11 items-center justify-center rounded text-2xl text-ink-body md:hidden"
+      <nav className="hidden items-center gap-4 md:flex">
+        {visibleLinks.map((link) => (
+          <NavLink
+            key={link.to}
+            to={link.to}
+            end={link.to === '/'}
+            className={({ isActive }) =>
+              desktopLinkClass({
+                isActive: navLinkIsActive(link, pathname, isActive),
+              })
+            }
           >
-            ☰
-          </button>
-        </div>
-      </div>
+            {link.label}
+          </NavLink>
+        ))}
+        {!isAuthenticated && (
+          <NavLink
+            to="/login"
+            className="rounded px-2 py-1 text-ink-muted underline"
+          >
+            Log ind
+          </NavLink>
+        )}
+      </nav>
+
+      <button
+        ref={menuButtonRef}
+        type="button"
+        onClick={() => setMenuOpen(true)}
+        aria-label="Åbn menu"
+        aria-expanded={menuOpen}
+        className="flex h-11 w-11 items-center justify-center rounded text-ink-body md:hidden"
+      >
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M4 6h16M4 12h16M4 18h16"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
+      </button>
 
       <BurgerMenu
         open={menuOpen}
