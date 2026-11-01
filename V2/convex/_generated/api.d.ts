@@ -27,6 +27,7 @@ import type * as notifications from "../notifications.js";
 import type * as observations from "../observations.js";
 import type * as planTypes from "../planTypes.js";
 import type * as probation from "../probation.js";
+import type * as previewSeed from "../previewSeed.js";
 import type * as push from "../push.js";
 import type * as pushSend from "../pushSend.js";
 import type * as roundRobin from "../roundRobin.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   observations: typeof observations;
   planTypes: typeof planTypes;
   probation: typeof probation;
+  previewSeed: typeof previewSeed;
   push: typeof push;
   pushSend: typeof pushSend;
   roundRobin: typeof roundRobin;

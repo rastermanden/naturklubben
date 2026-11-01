@@ -35,6 +35,9 @@ type Env = {
   readonly VAPID_PRIVATE_KEY: string | undefined;
   readonly VAPID_PUBLIC_KEY: string | undefined;
   readonly VAPID_SUBJECT: string | undefined;
+  readonly PREVIEW_SEED: string | undefined;
+  readonly PREVIEW_TEST_EMAIL: string | undefined;
+  readonly PREVIEW_TEST_PASSWORD: string | undefined;
 };
 
 /**

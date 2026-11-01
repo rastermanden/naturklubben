@@ -153,6 +153,13 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
   den ajour med `main`, før der verificeres, testes, bygges preview eller
   meldes status.
 
+## V2-previewets testbruger
+
+- **Hvert PR-preview af V2 har én testbruger.** `pr-preview-v2.yml` kalder den interne action `previewSeed:ensure` efter `npx convex deploy --preview-name pr-<nr>`. Findes brugeren ikke, oprettes den via Convex Auths adgangskode-provider; ellers genbruges den. Derefter lægges et par aktiviteter og en offentlig tur ind, så appen kan prøves.
+- Adresse og adgangskode er repo-secrets `PREVIEW_TEST_EMAIL` og `PREVIEW_TEST_PASSWORD`. Workflowet sætter dem på preview-deploymentet via stdin (`npx convex env set`), aldrig som argumenter og aldrig i loggen. Actionen kører kun, når `PREVIEW_SEED` er `1`.
+- Seedet må ikke ramme produktion. Workflowet afviser en deploy-nøgle, der starter med `prod:`, og actionen nægter, hvis `CONVEX_CLOUD_URL` er produktions-deploymentet `quaint-parakeet-652`. `deploy-v2.yml` kalder det ikke.
+- Frontend-buildet får previewets URL som `VITE_CONVEX_URL` fra deployet. Workflowet fejler, hvis den byggede bundle peger på produktions-deploymentet.
+
 ## Nye funktioner meldes til medlemmerne
 
 - **Hver ny funktion, medlemmerne kan mærke, tager sin egen nyhed med.** Nyheden er en

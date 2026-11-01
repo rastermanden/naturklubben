@@ -14,6 +14,13 @@ const app = defineApp({
     VAPID_SUBJECT: v.optional(v.string()),
     VAPID_PUBLIC_KEY: v.optional(v.string()),
     VAPID_PRIVATE_KEY: v.optional(v.string()),
+    /**
+     * Kun preview-deploymentet. `previewSeed:ensure` nægter at oprette
+     * testbrugeren, medmindre denne er præcis `1`. Sættes ikke i produktion.
+     */
+    PREVIEW_SEED: v.optional(v.string()),
+    PREVIEW_TEST_EMAIL: v.optional(v.string()),
+    PREVIEW_TEST_PASSWORD: v.optional(v.string()),
   },
 })
 

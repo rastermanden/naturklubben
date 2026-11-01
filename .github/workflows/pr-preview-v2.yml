@@ -18,8 +18,9 @@ name: PR Preview V2 (Convex)
 # - Preview-deployments er en **beta-funktion** hos Convex og ryddes automatisk
 #   efter 5 dage (14 på de betalte planer). En gammel PRs preview kan altså være
 #   væk, selv om PR'en stadig er åben.
-# - Deploymentet starter **tomt**. Der er ingen kopi af produktionsdata, og
-#   ingen brugere -- skal et preview testes logget ind, oprettes en bruger der.
+# - Deploymentet starter **tomt**. Der er ingen kopi af produktionsdata.
+#   Efter deploy kører `previewSeed:ensure`, som opretter testbrugeren fra
+#   repo-secrets (se AGENTS.md). Det kører aldrig mod produktion.
 # - PR'er fra forks får ingen secrets og kan derfor ikke bygge et preview, og
 #   PR'er fra Copilot coding agent skal have deres workflows godkendt manuelt.
 #   Det er samme begrænsning som i `pr-preview.yml`.
@@ -74,6 +75,59 @@ jobs:
             --cmd 'npm run build' \
             --cmd-url-env-var-name VITE_CONVEX_URL
 
+      # VITE_CONVEX_URL inlines i bundlen af deployet ovenfor. Den skal være
+      # previewets vært, ikke produktion (quaint-parakeet-652 har intet skema).
+      - if: github.event.action != 'closed'
+        name: Tjek at buildet peger på preview-deploymentet
+        working-directory: V2
+        run: |
+          set -euo pipefail
+          mapfile -t hosts < <(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u || true)
+          if [ "${#hosts[@]}" -eq 0 ]; then
+            echo "Ingen Convex-vært i dist/assets. Buildet har ikke fået VITE_CONVEX_URL."
+            exit 1
+          fi
+          echo "Convex-værter i preview-buildet:"
+          printf '%s\n' "${hosts[@]}"
+          if [ "${#hosts[@]}" -ne 1 ]; then
+            echo "Preview-buildet indeholder mere end én Convex-vært."
+            exit 1
+          fi
+          if [[ "${hosts[0]}" == *quaint-parakeet-652* ]]; then
+            echo "Preview-buildet peger på produktions-deploymentet."
+            exit 1
+          fi
+
+      # Hemmelighederne sættes via stdin. `env set` uden --secret skriver kun
+      # navnet i loggen. `convex run` skriver funktionens returværdi, som er
+      # `{ ok: true }` og ikke indeholder adressen eller adgangskoden.
+      # --preview-run duer ikke her: den kører kun, første gang deploymentet
+      # oprettes, og et eksisterende preview skal seede på hvert push.
+      - if: github.event.action != 'closed'
+        name: Opret testbruger på preview-deploymentet
+        working-directory: V2
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
+          PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CONVEX_DEPLOY_KEY}" ]; then
+            echo "Mangler preview-nøgle."
+            exit 1
+          fi
+          case "${CONVEX_DEPLOY_KEY}" in
+            prod:*)
+              echo "Afviser prod-nøgle. Seed kører kun mod preview."
+              exit 1
+              ;;
+          esac
+          preview="pr-${{ github.event.number }}"
+          npx convex env set PREVIEW_SEED 1 --preview-name "$preview"
+          printf '%s' "$PREVIEW_TEST_EMAIL" | npx convex env set PREVIEW_TEST_EMAIL --preview-name "$preview"
+          printf '%s' "$PREVIEW_TEST_PASSWORD" | npx convex env set PREVIEW_TEST_PASSWORD --preview-name "$preview"
+          npx convex run previewSeed:ensure '{}' --preview-name "$preview"
+
       # Begge preview-workflows skriver den samme mappe `pr-preview/pr-<nr>/`.
       # Den gamle apps build er langsommere og ville ellers overskrive V2,
       # når en PR rører begge. Vent, til den er færdig, og læg V2 ovenpå.
@@ -112,3 +166,19 @@ jobs:
           # Sitet har eget domæne (public/CNAME); uden dette skriver actionen
           # preview-linket som rastermanden.github.io/naturklubben/...
           pages-base-url: naturklubben.dk
+
+      # Bekræfter, at det udgivne preview kan logge ind med den seedede bruger
+      # og viser prøvedata. Puppeteer hentes kun til dette trin.
+      - if: github.event.action != 'closed'
+        name: Log ind som testbruger
+        env:
+          PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
+          PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+          PREVIEW_PATH: /pr-preview/pr-${{ github.event.number }}/
+          PUPPETEER_REQUIRE_FROM: /tmp/preview-smoke/package.json
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/preview-smoke
+          npm init -y --prefix /tmp/preview-smoke >/dev/null
+          npm install --prefix /tmp/preview-smoke --silent puppeteer@24.15.0
+          node V2/scripts/previewLoginSmoke.mjs
