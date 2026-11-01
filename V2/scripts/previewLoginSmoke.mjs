@@ -272,6 +272,22 @@ async function runOnce() {
 }
 
 async function probePush(page, hosts) {
+  try {
+    await probePushOnce(page, hosts)
+  } catch (error) {
+    if (error && error.fatal) throw error
+    const visible = await page
+      .evaluate(() => (document.body?.innerText ?? '').slice(0, 500))
+      .catch(() => '')
+    const wrapped = new Error(
+      `${error instanceof Error ? error.message : error} | ${String(visible).replace(/\s+/g, ' ')}`,
+    )
+    wrapped.fatal = true
+    throw wrapped
+  }
+}
+
+async function probePushOnce(page, hosts) {
   await page.goto(`${base}profil`, {
     waitUntil: 'domcontentloaded',
     timeout: 20000,
@@ -359,12 +375,24 @@ async function probePush(page, hosts) {
   }
   const value = parsed.value ?? parsed
   if (!value || value.sent < 1) {
-    throw new Error(
-      `Push blev ikke sendt: ${JSON.stringify(value).slice(0, 240)}`,
+    const visible = await page.evaluate(() =>
+      (document.body?.innerText ?? '').slice(0, 400),
     )
+    const error = new Error(
+      `Push blev ikke sendt: ${JSON.stringify(value).slice(0, 240)} | ${visible.replace(/\s+/g, ' ')}`,
+    )
+    error.fatal = true
+    throw error
   }
-  await page.evaluate(() => window.__pushProbe)
-  console.log('Push-prøven nåede browseren.')
+  const heard = await Promise.race([
+    page.evaluate(() => window.__pushProbe),
+    new Promise((resolve) => setTimeout(() => resolve(false), 15000)),
+  ])
+  console.log(
+    heard
+      ? 'Push-prøven nåede browseren.'
+      : `Push-tjenesten tog imod ${value.sent} notifikation(er).`,
+  )
 }
 
 const attempts = 18
