@@ -59,6 +59,12 @@ export const ANNOUNCEMENTS = [
     path: 'profil',
   },
   {
+    slug: 'spil-7-kabale',
+    title: 'Nyt spil: 7-kabale',
+    body: 'Den klassiske kabale ligger under Spil. Læg kortene i syv rækker, træk fra bunken, og byg de fire grundbunker fra es til konge.',
+    path: 'spil/kabale',
+  },
+  {
     slug: 'naturlog',
     title: 'Skriv, hvad du har set',
     body: 'Naturloggen ligger under Aktiviteter. Skriv art, sted og dato, så de andre kan se fundet.',

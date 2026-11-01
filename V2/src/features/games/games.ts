@@ -2,6 +2,7 @@ import { formatDuration } from './leaderboard'
 import { rankName } from './kaper/engine'
 import { className } from './sti/engine'
 import { className as fugletraekClass } from './fugletraek/engine'
+import { drawName } from './kabale/engine'
 import type { GameId, GameScore } from './types'
 
 export interface GameDefinition {
@@ -85,6 +86,16 @@ export const games: readonly GameDefinition[] = [
     symbol: '🐦',
     describeScore: (score) =>
       `${score.lines} vendinger · ${fugletraekClass(score.level)} · ${formatDuration(score.durationSeconds)}`,
+  },
+  {
+    id: 'kabale',
+    title: '7-kabale',
+    tagline:
+      'Syv rækker, en bunke og fire grundbunker. Læg alle kortene hjem, fra es til konge.',
+    path: '/spil/kabale',
+    symbol: '🃏',
+    describeScore: (score) =>
+      `${score.lines} træk · ${drawName(score.level)} · ${formatDuration(score.durationSeconds)}`,
   },
 ]
 

@@ -29,6 +29,7 @@ export const spaIndexPaths = [
   'spil',
   'spil/2048',
   'spil/fugletraek',
+  'spil/kabale',
   'spil/kaper',
   'spil/naturquiz',
   'spil/sti',

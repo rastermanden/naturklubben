@@ -65,11 +65,18 @@ function ActivitiesPage() {
             description="Hold styr på kampe, resultater og stilling til klubbens bøssetennisgolf-turneringer."
           />
           {profile && (
-            <ClubLinkCard
-              to="/naturlog"
-              title="Naturlog"
-              description="Hvad har vi set derude? Skriv arten, stedet og datoen."
-            />
+            <>
+              <ClubLinkCard
+                to="/naturlog"
+                title="Naturlog"
+                description="Hvad har vi set derude? Skriv arten, stedet og datoen."
+              />
+              <ClubLinkCard
+                to="/spil"
+                title="Spil"
+                description="Lidt at give sig til, når regnen sætter ind. Dit bedste resultat ryger på klubbens liste."
+              />
+            </>
           )}
         </ul>
 

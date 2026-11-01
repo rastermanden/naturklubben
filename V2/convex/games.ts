@@ -104,6 +104,11 @@ function validateScore(
         (level === 2 && lines >= 8 && score <= 3600) ||
         (level === 3 && lines >= 10 && score <= 6000)
       break
+    case 'kabale':
+      // `lines` er træk, `level` er 1 eller 3 kort fra bunken. Loftet er
+      // SCORE_CAP i kabale-motoren.
+      plausible = (level === 1 || level === 3) && lines >= 1 && score <= 2000
+      break
   }
 
   if (!plausible) throw new ConvexError('SCORE_NOT_PLAUSIBLE')

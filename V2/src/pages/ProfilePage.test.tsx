@@ -7,6 +7,14 @@ vi.mock('convex/react', () => ({
   useMutation: () => vi.fn(),
 }))
 
+vi.mock('@convex-dev/auth/react', () => ({
+  useAuthActions: () => ({ signOut: vi.fn() }),
+}))
+
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+}))
+
 vi.mock('../features/auth/useCurrentProfile', () => ({
   useCurrentProfile: () => ({
     isLoading: false,

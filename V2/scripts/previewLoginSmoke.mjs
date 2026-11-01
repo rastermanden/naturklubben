@@ -188,6 +188,8 @@ async function runOnce() {
       ['', 'Kalenderen, aktiviteterne og de andre medlemmer er åbne for dig.'],
       ['kalender', 'Preview-tur'],
       ['aktiviteter', 'Skovtur'],
+      ['spil', '7-kabale'],
+      ['spil/kabale', 'Sådan spiller du'],
       ['billeder', 'Uden begivenhed'],
       ['naturlog', 'Rød ræv'],
       ['chat', 'Hej fra previewet. Skoven er grøn i dag.'],
@@ -213,6 +215,10 @@ async function runOnce() {
           throw new Error(`HTTP ${response.status()} på /${route}`)
         }
         await assertText(next, text)
+        if (route === 'aktiviteter') {
+          await assertText(next, 'Naturlog')
+          await assertText(next, 'Spil')
+        }
         if (route === 'profil') {
           await next.waitForSelector('#fullName', { timeout: 20000 })
           const name = await next.$eval('#fullName', (input) => input.value)

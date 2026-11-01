@@ -5,6 +5,7 @@ import schema from './schema'
 import {
   PREVIEW_ACTIVITIES,
   PREVIEW_CHAT_TEXT,
+  PREVIEW_KABALE_SCORE,
   PREVIEW_OBSERVATION_SPECIES,
   PREVIEW_PHOTO_CAPTION,
   PREVIEW_EVENT_TITLE,
@@ -120,6 +121,19 @@ describe('writePreviewSample', () => {
       ctx.db.query('messages').collect(),
     )
     expect(messages).toHaveLength(1)
+    const scores = await t.run(async (ctx) =>
+      ctx.db.query('gameScores').collect(),
+    )
+    expect(scores).toEqual([
+      expect.objectContaining({
+        game: 'kabale',
+        score: PREVIEW_KABALE_SCORE,
+        lines: 40,
+        level: 1,
+        playerId: rows.profiles[0]!._id,
+      }),
+    ])
+
     const observations = await t.run(async (ctx) =>
       ctx.db.query('observations').collect(),
     )

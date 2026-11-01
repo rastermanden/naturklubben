@@ -57,6 +57,9 @@ export const PREVIEW_PHOTO_CAPTION = 'Et blad fra previewet'
 
 export const PREVIEW_OBSERVATION_SPECIES = 'Rød ræv'
 
+/** Et vundet prøveparti: træk 1, 40 træk, under kabalens loft. */
+export const PREVIEW_KABALE_SCORE = 120
+
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000
 
@@ -200,6 +203,25 @@ export async function writePreviewSample(
       startAt,
       endAt: endsAt,
       endsAt,
+    })
+  }
+
+  const existingKabale = await ctx.db
+    .query('gameScores')
+    .withIndex('by_player_game_score', (q) =>
+      q.eq('playerId', profileId).eq('game', 'kabale'),
+    )
+    .first()
+  if (existingKabale === null) {
+    await ctx.db.insert('gameScores', {
+      game: 'kabale',
+      playerId: profileId,
+      playerName: PREVIEW_MEMBER_NAME,
+      score: PREVIEW_KABALE_SCORE,
+      lines: 40,
+      level: 1,
+      durationSeconds: 180,
+      createdAt: Date.now(),
     })
   }
 

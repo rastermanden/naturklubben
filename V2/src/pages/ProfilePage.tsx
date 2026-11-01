@@ -5,6 +5,8 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuthActions } from '@convex-dev/auth/react'
 import { useMutation } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import { Avatar } from '../components/Avatar'
@@ -320,6 +322,43 @@ export default function ProfilePage() {
           </span>
         </label>
       </section>
+
+      <SignOutSection />
     </main>
+  )
+}
+
+function SignOutSection() {
+  const { signOut } = useAuthActions()
+  const navigate = useNavigate()
+  const [signingOut, setSigningOut] = useState(false)
+
+  async function handleSignOut() {
+    setSigningOut(true)
+    try {
+      await signOut()
+      navigate('/')
+    } finally {
+      setSigningOut(false)
+    }
+  }
+
+  return (
+    <section
+      aria-labelledby="profile-sign-out-heading"
+      className="flex flex-col gap-3 rounded-lg border border-line bg-surface-sunken p-4"
+    >
+      <h2 id="profile-sign-out-heading" className="font-medium text-ink-body">
+        Log ud
+      </h2>
+      <button
+        type="button"
+        onClick={() => void handleSignOut()}
+        disabled={signingOut}
+        className="min-h-11 self-start rounded border border-line-strong px-4 py-2 font-medium text-ink-body disabled:opacity-60"
+      >
+        {signingOut ? 'Logger ud…' : 'Log ud'}
+      </button>
+    </section>
   )
 }

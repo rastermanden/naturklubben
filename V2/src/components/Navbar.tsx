@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
-import { useAuthActions } from '@convex-dev/auth/react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useConvexAuth } from 'convex/react'
 import { useCurrentProfile } from '../features/auth/useCurrentProfile'
 import { BurgerMenu } from './BurgerMenu'
@@ -12,6 +11,19 @@ export interface NavLinkItem {
   requiresAuth?: boolean
   /** Skjules for alle andre end administratorer. */
   requiresAdmin?: boolean
+  /** Undersider, der også markerer punktet -- Naturlog og Spil under Aktiviteter. */
+  alsoActiveFor?: readonly string[]
+}
+
+export function navLinkIsActive(
+  link: NavLinkItem,
+  pathname: string,
+  routerIsActive: boolean,
+): boolean {
+  if (routerIsActive) return true
+  return (link.alsoActiveFor ?? []).some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  )
 }
 
 /**
@@ -20,13 +32,24 @@ export interface NavLinkItem {
  */
 export const navLinks: readonly NavLinkItem[] = [
   { to: '/', label: 'Forsiden' },
-  { to: '/aktiviteter', label: 'Aktiviteter' },
+  {
+    to: '/aktiviteter',
+    label: 'Aktiviteter',
+    alsoActiveFor: ['/naturlog', '/spil'],
+  },
   { to: '/kalender', label: 'Kalender', requiresAuth: true },
   { to: '/billeder', label: 'Billeder', requiresAuth: true },
   { to: '/chat', label: 'Chat', requiresAuth: true },
   { to: '/medlemmer', label: 'Medlemmer', requiresAuth: true },
+  { to: '/nyheder', label: 'Nyheder', requiresAuth: true },
   { to: '/profil', label: 'Min profil', requiresAuth: true },
   { to: '/admin', label: 'Admin', requiresAuth: true, requiresAdmin: true },
+  {
+    to: '/admin/chat',
+    label: 'Admin-chat',
+    requiresAuth: true,
+    requiresAdmin: true,
+  },
 ]
 
 const desktopLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -48,7 +71,7 @@ const desktopLinkClass = ({ isActive }: { isActive: boolean }) =>
 export function Navbar() {
   const { isAuthenticated } = useConvexAuth()
   const { profile } = useCurrentProfile()
-  const { signOut } = useAuthActions()
+  const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -72,7 +95,11 @@ export function Navbar() {
                 <NavLink
                   to={link.to}
                   end={link.to === '/'}
-                  className={desktopLinkClass}
+                  className={({ isActive }) =>
+                    desktopLinkClass({
+                      isActive: navLinkIsActive(link, pathname, isActive),
+                    })
+                  }
                 >
                   {link.label}
                 </NavLink>
@@ -82,15 +109,7 @@ export function Navbar() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2 md:ml-0">
-          {isAuthenticated ? (
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="hidden min-h-11 rounded px-3 py-2 text-sm text-ink-muted md:block"
-            >
-              Log ud
-            </button>
-          ) : (
+          {!isAuthenticated && (
             <NavLink
               to="/login"
               className="hidden min-h-11 items-center rounded px-3 py-2 text-sm text-ink-muted md:flex"

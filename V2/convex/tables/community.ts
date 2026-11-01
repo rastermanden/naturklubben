@@ -36,6 +36,7 @@ export const gameIdValidator = v.union(
   v.literal('naturquiz'),
   v.literal('sti'),
   v.literal('fugletraek'),
+  v.literal('kabale'),
 )
 
 export const communityTables = {

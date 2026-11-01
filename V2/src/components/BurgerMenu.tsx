@@ -1,8 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react'
-import { NavLink } from 'react-router-dom'
-import { useAuthActions } from '@convex-dev/auth/react'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useConvexAuth } from 'convex/react'
-import type { NavLinkItem } from './Navbar'
+import { navLinkIsActive, type NavLinkItem } from './Navbar'
 
 interface BurgerMenuProps {
   open: boolean
@@ -26,7 +25,7 @@ export function BurgerMenu({
   links,
 }: BurgerMenuProps) {
   const { isAuthenticated } = useConvexAuth()
-  const { signOut } = useAuthActions()
+  const { pathname } = useLocation()
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -61,14 +60,14 @@ export function BurgerMenu({
         aria-modal="true"
         aria-label="Navigation"
         tabIndex={-1}
-        className="fixed inset-y-0 right-0 z-50 flex w-72 max-w-[85vw] flex-col gap-2 bg-surface p-4 shadow-xl md:hidden"
+        className="fixed inset-y-0 right-0 z-50 flex w-72 max-w-[85vw] flex-col gap-2 overflow-y-auto overscroll-contain bg-surface p-4 shadow-xl md:hidden"
         style={{
           paddingTop: 'max(1rem, env(safe-area-inset-top))',
           paddingRight: 'max(1rem, env(safe-area-inset-right))',
           paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
         }}
       >
-        <div className="flex justify-end">
+        <div className="flex shrink-0 justify-end">
           <button
             type="button"
             onClick={onClose}
@@ -79,7 +78,10 @@ export function BurgerMenu({
           </button>
         </div>
 
-        <nav className="flex flex-col gap-1">
+        <nav
+          aria-label="Menupunkter"
+          className="flex min-h-40 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain"
+        >
           {links.map((link) => (
             <NavLink
               key={link.to}
@@ -87,8 +89,8 @@ export function BurgerMenu({
               end={link.to === '/'}
               onClick={onClose}
               className={({ isActive }) =>
-                `flex min-h-11 items-center rounded px-3 py-2 text-lg ${
-                  isActive
+                `flex min-h-11 shrink-0 items-center rounded px-3 py-2 text-base ${
+                  navLinkIsActive(link, pathname, isActive)
                     ? 'bg-surface-raised text-ink-body'
                     : 'text-ink-muted'
                 }`
@@ -99,23 +101,12 @@ export function BurgerMenu({
           ))}
         </nav>
 
-        <div className="mt-auto flex flex-col gap-1 border-t border-line-soft pt-4">
-          {isAuthenticated ? (
-            <button
-              type="button"
-              onClick={async () => {
-                await signOut()
-                onClose()
-              }}
-              className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-lg text-ink-muted"
-            >
-              Log ud
-            </button>
-          ) : (
+        <div className="flex shrink-0 flex-col gap-0.5 border-t border-line-soft pt-3">
+          {!isAuthenticated && (
             <NavLink
               to="/login"
               onClick={onClose}
-              className="flex min-h-11 items-center rounded px-3 py-2 text-lg text-ink-muted"
+              className="flex min-h-11 items-center rounded px-3 py-2 text-base text-ink-muted"
             >
               Log ind
             </NavLink>
