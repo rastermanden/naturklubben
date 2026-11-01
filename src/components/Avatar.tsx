@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { readableTextColor } from '../lib/colorContrast'
 
 const sizeClasses = {
+  // Til læsekvitteringerne i chatten (#294): kun ét bogstav og en kant, så
+  // de kan stå tæt uden at flyde sammen.
+  xs: 'h-5 w-5 text-[0.6rem] ring-2 ring-surface',
   sm: 'h-7 w-7 text-xs',
   md: 'h-8 w-8 text-xs',
   lg: 'h-16 w-16 text-xl',
@@ -43,7 +46,7 @@ export function Avatar({
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
-    .slice(0, 2)
+    .slice(0, size === 'xs' ? 1 : 2)
     .map((part) => part[0]!.toUpperCase())
     .join('')
 

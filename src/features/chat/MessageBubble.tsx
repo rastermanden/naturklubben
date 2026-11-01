@@ -9,6 +9,7 @@ import { splitMentions } from './mentions'
 import type { MentionMember } from './mentions'
 import type { PollSummary } from './polls'
 import type { ReactionSummary } from './reactions'
+import { ReadByAvatars, type Reader } from './ReadByAvatars'
 import type { Message } from './useMessages'
 import { CauseMarks } from '../profile/CauseMarks'
 import { displayPronouns } from '../profile/pronouns'
@@ -105,6 +106,7 @@ export function MessageBubble({
   onClosePoll,
   isVotingPoll = false,
   isClosingPoll = false,
+  readers = [],
 }: {
   message: Message
   author: ProfileSummary | undefined
@@ -127,6 +129,8 @@ export function MessageBubble({
   onClosePoll?: (message: Message) => void
   isVotingPoll?: boolean
   isClosingPoll?: boolean
+  /** Dem, der senest har læst netop denne besked (#294). */
+  readers?: readonly Reader[]
 }) {
   const [, forceUpdate] = useState(0)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -187,162 +191,170 @@ export function MessageBubble({
         />
       )}
       <div
-        className={
-          isAction
-            ? 'max-w-[85%] rounded-full px-4 py-1.5'
-            : 'max-w-[75%] rounded-2xl px-3 py-1.5'
-        }
-        style={
-          isAction
-            ? undefined
-            : {
-                backgroundColor: isOwn ? color : color + '22',
-                color: textColor,
-              }
-        }
+        className={`flex min-w-0 flex-col ${
+          isAction ? 'max-w-[85%] items-center' : 'max-w-[75%]'
+        } ${isOwn ? 'items-end' : 'items-start'}`}
       >
-        {/* Navn, tidspunkt, "Du er nævnt" og handlingerne stod før på hver
+        <div
+          className={
+            isAction
+              ? 'max-w-full rounded-full px-4 py-1.5'
+              : 'max-w-full rounded-2xl px-3 py-1.5'
+          }
+          style={
+            isAction
+              ? undefined
+              : {
+                  backgroundColor: isOwn ? color : color + '22',
+                  color: textColor,
+                }
+          }
+        >
+          {/* Navn, tidspunkt, "Du er nævnt" og handlingerne stod før på hver
             sin række: en besked på tre ord fyldte fem linjer, og de tre
             knapper alene 44 px. Nu deler de én linje, hvor knapperne er
             ikoner med samme navne til skærmlæseren som før. */}
-        <div
-          className={`mb-0.5 flex flex-wrap items-center gap-x-1.5 text-xs ${
-            isAction
-              ? 'justify-center'
-              : isOwn
-                ? 'flex-row-reverse text-right'
-                : ''
-          }`}
-        >
-          {!isAction && <span className="font-medium">{name}</span>}
-          {!isAction && pronouns && (
-            <span className="opacity-70">{pronouns}</span>
-          )}
-          {!isAction && !isFormerMember && (
-            <CauseMarks causes={author?.causes} className="text-xs" />
-          )}
-          {/* Kort form på skærmen, præcist tidspunkt til den, der peger på
-              det -- og til skærmlæseren, som ellers ville læse "6 d" op. */}
-          <time
-            dateTime={displayTimestamp}
-            title={fullTimestamp}
-            aria-label={fullTimestamp}
-            className="opacity-70"
-          >
-            {formatRelativeTime(displayTimestamp)}
-          </time>
-          {isMentioned && !isDeleted && (
-            <span
-              className={`font-semibold ${isAction ? 'text-ink-muted' : ''}`}
-            >
-              Du er nævnt
-            </span>
-          )}
-          {!isDeleted && (
-            <span className="flex items-center">
-              <button
-                type="button"
-                onClick={() => onReply(message)}
-                aria-label={`Svar på besked fra ${name}`}
-                title="Svar"
-                className={ACTION_BUTTON_CLASS}
-              >
-                <span aria-hidden="true">↩︎</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPickerOpen((open) => !open)}
-                aria-expanded={pickerOpen}
-                aria-label={`Reagér på besked fra ${name}`}
-                title="Reagér"
-                className={ACTION_BUTTON_CLASS}
-              >
-                <span aria-hidden="true">☺︎</span>
-              </button>
-              {canDelete && onDelete && (
-                <button
-                  type="button"
-                  onClick={() => onDelete(message)}
-                  disabled={isDeleting}
-                  aria-label={`Slet besked fra ${name}`}
-                  title={isDeleting ? 'Sletter…' : 'Slet'}
-                  className={ACTION_BUTTON_CLASS}
-                >
-                  <span aria-hidden="true">{isDeleting ? '…' : '×'}</span>
-                </button>
-              )}
-            </span>
-          )}
-        </div>
-        {!isAction && message.reply_to_message_id && (
-          <blockquote
-            className={`mb-2 rounded-lg border-l-4 px-3 py-2 text-sm ${
-              isOwn
-                ? 'border-quote-own-line bg-quote-own'
-                : 'border-quote-line bg-quote'
+          <div
+            className={`mb-0.5 flex flex-wrap items-center gap-x-1.5 text-xs ${
+              isAction
+                ? 'justify-center'
+                : isOwn
+                  ? 'flex-row-reverse text-right'
+                  : ''
             }`}
           >
-            <p className="text-xs font-semibold">{replyName}</p>
-            <p className="line-clamp-2 opacity-80">
-              {replyWasDeleted
-                ? 'Beskeden er slettet.'
-                : replyExcerpt || 'Den oprindelige besked er ikke tilgængelig.'}
-            </p>
-          </blockquote>
-        )}
-        {isDeleted ? (
-          <div className="py-1 text-sm italic opacity-75">
-            <p>Beskeden er slettet.</p>
-            {wasDeletedByAdmin && <p>Slettet af en administrator.</p>}
-          </div>
-        ) : isAction ? (
-          <p className="text-center text-sm italic text-ink-muted">
-            <span aria-hidden="true">* </span>
-            <span className="font-medium">{name}</span>{' '}
-            <MessageText
-              content={message.content}
-              mentions={message.mentions}
-              members={members}
-            />
-          </p>
-        ) : (
-          <p className="whitespace-pre-wrap break-words">
-            <MessageText
-              content={message.content}
-              mentions={message.mentions}
-              members={members}
-            />
-          </p>
-        )}
-        {!isDeleted && poll && (
-          <PollCard
-            poll={poll}
-            canClose={Boolean(canDelete)}
-            isVoting={isVotingPoll}
-            isClosing={isClosingPoll}
-            onVote={(optionId) => onVotePoll?.(message, optionId)}
-            onClose={() => onClosePoll?.(message)}
-          />
-        )}
-        {!isDeleted && (
-          <>
-            {pickerOpen && (
-              <ReactionPicker
-                summaries={reactions}
-                onToggle={(emoji) => {
-                  onToggleReaction(message, emoji)
-                  setPickerOpen(false)
-                }}
-              />
+            {!isAction && <span className="font-medium">{name}</span>}
+            {!isAction && pronouns && (
+              <span className="opacity-70">{pronouns}</span>
             )}
-
-            <MessageReactions
-              summaries={reactions}
-              isOwn={isOwn}
-              onToggle={(emoji) => onToggleReaction(message, emoji)}
+            {!isAction && !isFormerMember && (
+              <CauseMarks causes={author?.causes} className="text-xs" />
+            )}
+            {/* Kort form på skærmen, præcist tidspunkt til den, der peger på
+              det -- og til skærmlæseren, som ellers ville læse "6 d" op. */}
+            <time
+              dateTime={displayTimestamp}
+              title={fullTimestamp}
+              aria-label={fullTimestamp}
+              className="opacity-70"
+            >
+              {formatRelativeTime(displayTimestamp)}
+            </time>
+            {isMentioned && !isDeleted && (
+              <span
+                className={`font-semibold ${isAction ? 'text-ink-muted' : ''}`}
+              >
+                Du er nævnt
+              </span>
+            )}
+            {!isDeleted && (
+              <span className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => onReply(message)}
+                  aria-label={`Svar på besked fra ${name}`}
+                  title="Svar"
+                  className={ACTION_BUTTON_CLASS}
+                >
+                  <span aria-hidden="true">↩︎</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen((open) => !open)}
+                  aria-expanded={pickerOpen}
+                  aria-label={`Reagér på besked fra ${name}`}
+                  title="Reagér"
+                  className={ACTION_BUTTON_CLASS}
+                >
+                  <span aria-hidden="true">☺︎</span>
+                </button>
+                {canDelete && onDelete && (
+                  <button
+                    type="button"
+                    onClick={() => onDelete(message)}
+                    disabled={isDeleting}
+                    aria-label={`Slet besked fra ${name}`}
+                    title={isDeleting ? 'Sletter…' : 'Slet'}
+                    className={ACTION_BUTTON_CLASS}
+                  >
+                    <span aria-hidden="true">{isDeleting ? '…' : '×'}</span>
+                  </button>
+                )}
+              </span>
+            )}
+          </div>
+          {!isAction && message.reply_to_message_id && (
+            <blockquote
+              className={`mb-2 rounded-lg border-l-4 px-3 py-2 text-sm ${
+                isOwn
+                  ? 'border-quote-own-line bg-quote-own'
+                  : 'border-quote-line bg-quote'
+              }`}
+            >
+              <p className="text-xs font-semibold">{replyName}</p>
+              <p className="line-clamp-2 opacity-80">
+                {replyWasDeleted
+                  ? 'Beskeden er slettet.'
+                  : replyExcerpt ||
+                    'Den oprindelige besked er ikke tilgængelig.'}
+              </p>
+            </blockquote>
+          )}
+          {isDeleted ? (
+            <div className="py-1 text-sm italic opacity-75">
+              <p>Beskeden er slettet.</p>
+              {wasDeletedByAdmin && <p>Slettet af en administrator.</p>}
+            </div>
+          ) : isAction ? (
+            <p className="text-center text-sm italic text-ink-muted">
+              <span aria-hidden="true">* </span>
+              <span className="font-medium">{name}</span>{' '}
+              <MessageText
+                content={message.content}
+                mentions={message.mentions}
+                members={members}
+              />
+            </p>
+          ) : (
+            <p className="whitespace-pre-wrap break-words">
+              <MessageText
+                content={message.content}
+                mentions={message.mentions}
+                members={members}
+              />
+            </p>
+          )}
+          {!isDeleted && poll && (
+            <PollCard
+              poll={poll}
+              canClose={Boolean(canDelete)}
+              isVoting={isVotingPoll}
+              isClosing={isClosingPoll}
+              onVote={(optionId) => onVotePoll?.(message, optionId)}
+              onClose={() => onClosePoll?.(message)}
             />
-          </>
-        )}
+          )}
+          {!isDeleted && (
+            <>
+              {pickerOpen && (
+                <ReactionPicker
+                  summaries={reactions}
+                  onToggle={(emoji) => {
+                    onToggleReaction(message, emoji)
+                    setPickerOpen(false)
+                  }}
+                />
+              )}
+
+              <MessageReactions
+                summaries={reactions}
+                isOwn={isOwn}
+                onToggle={(emoji) => onToggleReaction(message, emoji)}
+              />
+            </>
+          )}
+        </div>
+        <ReadByAvatars readers={readers} isOwn={isOwn} />
       </div>
     </li>
   )

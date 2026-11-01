@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createQueuedMessage,
@@ -8,6 +14,7 @@ import type { Message } from '../features/chat/useMessages'
 import ChatPage from './ChatPage'
 
 const mocks = vi.hoisted(() => ({
+  readPositions: [] as unknown[],
   mutate: vi.fn(),
   toggleReaction: vi.fn(),
   reactions: [] as { message_id: string; user_id: string; emoji: string }[],
@@ -105,6 +112,11 @@ vi.mock('../features/chat/useMessages', () => ({
   }),
 }))
 
+// Læsekvitteringerne (#294) har deres egne tests og ville ellers trække den
+// rigtige supabaseClient.ts med ind.
+vi.mock('../features/chat/useReadReceipts', () => ({
+  useReadReceipts: () => ({ positions: mocks.readPositions }),
+}))
 vi.mock('../features/chat/useReactions', () => ({
   useReactions: () => ({
     reactions: mocks.reactions,
@@ -1054,5 +1066,49 @@ describe('ChatPage offline-kø (#219)', () => {
     )
     expect(mocks.sendMutateAsync).not.toHaveBeenCalled()
     expect(mocks.createPollMutateAsync).not.toHaveBeenCalled()
+  })
+})
+
+describe('ChatPage: læsekvitteringer (#294)', () => {
+  afterEach(() => {
+    mocks.readPositions = []
+  })
+
+  it('viser hvem der har læst under den seneste besked, de har læst', () => {
+    mocks.messages = [
+      ...mocks.messages,
+      {
+        id: 'message-2',
+        user_id: 'current-member',
+        content: 'Ja, kl. 10',
+        mentions: [],
+        created_at: '2026-08-23T12:05:00.000Z',
+        deleted_at: null,
+        deleted_by: null,
+        reply_to_message_id: null,
+        reply_to: null,
+      },
+    ]
+    mocks.readPositions = [
+      {
+        user_id: 'other-member',
+        room: 'general',
+        last_read_message_id: 'message-2',
+        last_read_at: '2026-08-23T12:05:00.000Z',
+      },
+    ]
+    render(<ChatPage />)
+
+    const log = screen.getByRole('log', { name: 'Beskeder' })
+    const second = log.querySelector('[data-message-id="message-2"]')!
+    const first = log.querySelector('[data-message-id="message-1"]')!
+    expect(
+      within(second as HTMLElement).getByRole('button', {
+        name: /^Set af /,
+      }),
+    ).toBeTruthy()
+    expect(
+      within(first as HTMLElement).queryByRole('button', { name: /^Set af / }),
+    ).toBeNull()
   })
 })
