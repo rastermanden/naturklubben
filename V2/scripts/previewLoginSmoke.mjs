@@ -149,10 +149,10 @@ async function runOnce() {
       page.waitForSelector('#login-error', { timeout: 30000 }).then(
         async () => {
           if (settled) return
-          const text = await page.$eval(
-            '#login-error',
-            (el) => el.textContent ?? '',
-          )
+          const text = await page.$eval('#login-error', (el) => {
+            const code = el.getAttribute('data-code') ?? ''
+            return `${code}: ${el.textContent ?? ''}`
+          })
           const fieldFp = await page.evaluate(async () => {
             async function fp(value) {
               const digest = await crypto.subtle.digest(

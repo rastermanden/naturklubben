@@ -20,6 +20,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [errorCodeRaw, setErrorCodeRaw] = useState<string | null>(null)
   const [errorField, setErrorField] = useState<'email' | 'password' | null>(
     null,
   )
@@ -36,6 +37,7 @@ export default function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    setErrorCodeRaw(null)
     setErrorField(null)
     setSubmitting(true)
 
@@ -65,6 +67,7 @@ export default function LoginPage() {
             : null
 
       setError(toFriendlyAuthError(signInError))
+      setErrorCodeRaw(errorCode(signInError))
       setErrorField(field)
       if (field === 'password') passwordRef.current?.focus()
       if (field === 'email') emailRef.current?.focus()
@@ -117,6 +120,7 @@ export default function LoginPage() {
         {error && (
           <p
             id="login-error"
+            data-code={errorCodeRaw ?? ''}
             role={errorField ? undefined : 'alert'}
             className="text-sm text-danger"
           >
