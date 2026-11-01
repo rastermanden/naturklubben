@@ -152,17 +152,22 @@ jobs:
           set -euo pipefail
           host=$(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123')
           url="https://naturklubben.dk/pr-preview/pr-${{ github.event.number }}/"
+          # GitHub Pages cacher i op til 10 minutter. Et query-parameter
+          # rammer en ny cache-nøgle, så vi ikke bliver ved med at se V1.
           for attempt in $(seq 1 18); do
-            html=$(curl -fsS "$url" || true)
+            cb=$(date +%s)
+            html=$(curl -fsS "$url?cb=$cb" || true)
             js=$(printf '%s' "$html" | grep -oE 'assets/index-[^"]+\.js' | head -1 || true)
             if [ -n "${js:-}" ]; then
-              body=$(curl -fsS "$url$js" || true)
+              body=$(curl -fsS "$url$js?cb=$cb" || true)
               if printf '%s' "$body" | grep -F -q "$host" && ! printf '%s' "$body" | grep -F -q 'supabase.co'; then
                 echo "Live bundle $js peger på $host og ikke på Supabase."
                 exit 0
               fi
+              echo "Live bundle $js er endnu ikke V2 (forsøg $attempt)."
+            else
+              echo "Ingen index-bundle endnu (forsøg $attempt)."
             fi
-            echo "Live bundle er endnu ikke V2 (forsøg $attempt)."
             sleep 10
           done
           echo "Previewet peger ikke på $host."
