@@ -4,7 +4,7 @@
  * GitHub Pages kan ikke servere en SPA'ens index.html for vilkårlige stier, så
  * 404-siden sender browseren videre til app'ens rod med den oprindelige sti i
  * `?spa-path=`. Her pakkes den ud igen og skrives tilbage i adresselinjen, før
- * React Router læser den -- så `/naturklubben/velkommen` åbner
+ * React Router læser den -- så `/velkommen` åbner
  * bekræftelsessiden, uanset om stien bliver skrevet ind, delt som link eller
  * klikket i en mail.
  *

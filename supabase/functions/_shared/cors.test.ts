@@ -4,16 +4,14 @@ import { handleCors, isAllowedCorsOrigin } from './cors.ts'
 const endpoint = 'https://project.supabase.co/functions/v1/example'
 
 Deno.test(
-  'CORS: produktion og alle GitHub Pages-preview-stier deler en tilladt origin',
+  'CORS: produktion og alle PR-preview-stier på naturklubben.dk deler en tilladt origin',
   () => {
-    assert.equal(isAllowedCorsOrigin('https://rastermanden.github.io'), true)
+    assert.equal(isAllowedCorsOrigin('https://naturklubben.dk'), true)
 
     const request = new Request(endpoint, {
       method: 'OPTIONS',
       headers: {
-        Origin: new URL(
-          'https://rastermanden.github.io/naturklubben/pr-preview/pr-128/',
-        ).origin,
+        Origin: new URL('https://naturklubben.dk/pr-preview/pr-128/').origin,
       },
     })
     const result = handleCors(request, { methods: ['POST'] })
@@ -21,7 +19,7 @@ Deno.test(
     assert.equal(result.response?.status, 204)
     assert.equal(
       result.response?.headers.get('Access-Control-Allow-Origin'),
-      'https://rastermanden.github.io',
+      'https://naturklubben.dk',
     )
     assert.equal(
       result.response?.headers.get('Access-Control-Allow-Methods'),
@@ -31,7 +29,7 @@ Deno.test(
     const post = handleCors(
       new Request(endpoint, {
         method: 'POST',
-        headers: { Origin: 'https://rastermanden.github.io' },
+        headers: { Origin: 'https://naturklubben.dk' },
       }),
       {
         methods: ['POST'],
@@ -41,12 +39,22 @@ Deno.test(
     assert.equal(post.response, null)
     assert.equal(
       post.headers.get('Access-Control-Allow-Origin'),
-      'https://rastermanden.github.io',
+      'https://naturklubben.dk',
     )
     assert.equal(
       post.headers.get('Access-Control-Expose-Headers'),
       'Retry-After, X-Request-Id',
     )
+  },
+)
+
+Deno.test(
+  'CORS: den gamle GitHub Pages-adresse er stadig tilladt under flytningen',
+  () => {
+    assert.equal(isAllowedCorsOrigin('https://rastermanden.github.io'), true)
+    // Men kun præcis den -- ikke http eller et andet subdomæne.
+    assert.equal(isAllowedCorsOrigin('http://naturklubben.dk'), false)
+    assert.equal(isAllowedCorsOrigin('https://www.naturklubben.dk'), false)
   },
 )
 
@@ -76,6 +84,7 @@ Deno.test(
     for (const origin of [
       'https://example.com',
       'https://rastermanden.github.io.example.com',
+      'https://naturklubben.dk.example.com',
       'null',
     ]) {
       const result = handleCors(

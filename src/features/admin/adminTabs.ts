@@ -22,6 +22,8 @@ export const ADMIN_TABS = [
   // Indholdet på de offentlige sider. Aktiviteterne kunne før kun ændres
   // med en migration.
   { id: 'aktiviteter', label: 'Aktiviteter' },
+  // Datoafstemninger: "hvornår kan vi?" til den næste tur (#288).
+  { id: 'datoer', label: 'Find en dato' },
   { id: 'adgang', label: 'Adgang' },
   {
     id: 'indstillinger',
@@ -42,6 +44,11 @@ export function parseAdminTab(value: string | null): AdminTabId {
   return ADMIN_TABS.some((tab) => tab.id === value)
     ? (value as AdminTabId)
     : DEFAULT_ADMIN_TAB
+}
+
+/** Link til en bestemt fane i admin-panelet, fx fra kalenderen. */
+export function adminTabPath(tabId: AdminTabId) {
+  return `/admin?${new URLSearchParams({ [ADMIN_TAB_PARAM]: tabId })}`
 }
 
 /** DOM-id'er, der binder fane og panel sammen via aria-controls/-labelledby. */

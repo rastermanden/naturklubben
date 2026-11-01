@@ -5,6 +5,7 @@ import {
   SIGNED_URL_TTL_SECONDS,
   type AccountExportRepository,
   type AttendanceExport,
+  type DatePollVoteExport,
   type MessageExport,
   type ObservationExport,
   type PhotoCommentExport,
@@ -126,6 +127,35 @@ Deno.serve(async (req) => {
             ? (option[0] ?? null)
             : (option ?? null),
         })) satisfies PollVoteExport[]
+      })
+    },
+
+    async getDatePollVotes(userId) {
+      return collectPages(async (from, to) => {
+        const { data, error } = await supabase
+          .from('date_poll_votes')
+          .select(
+            'option_id, answer, updated_at, option:date_poll_options(id, starts_at, ends_at, poll:date_polls!date_poll_options_poll_id_fkey(id, title))',
+          )
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: true })
+          .order('option_id', { ascending: true })
+          .range(from, to)
+        queryError('Svar i datoafstemninger kunne ikke hentes', error)
+        return (data ?? []).map(({ option, ...vote }) => {
+          const one = Array.isArray(option) ? (option[0] ?? null) : option
+          return {
+            ...vote,
+            option: one
+              ? {
+                  ...one,
+                  poll: Array.isArray(one.poll)
+                    ? (one.poll[0] ?? null)
+                    : (one.poll ?? null),
+                }
+              : null,
+          }
+        }) as DatePollVoteExport[]
       })
     },
 

@@ -1,18 +1,31 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { useRef, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { BurgerMenu } from './BurgerMenu'
+import { navLinks } from './navLinks'
+
+const mocks = vi.hoisted(() => ({
+  session: null as object | null,
+  isAdmin: false,
+}))
 
 vi.mock('../features/auth/useAuth', () => ({
   useAuth: () => ({
-    session: null,
+    session: mocks.session,
     signOut: vi.fn().mockResolvedValue(undefined),
   }),
 }))
 
 vi.mock('../features/admin/useIsAdmin', () => ({
-  useIsAdmin: () => ({ isAdmin: false }),
+  useIsAdmin: () => ({ isAdmin: mocks.isAdmin }),
 }))
 
 vi.mock('./InstallAppButton', () => ({
@@ -29,6 +42,8 @@ vi.mock('../features/theme/ThemeToggle', () => ({
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  mocks.session = null
+  mocks.isAdmin = false
 })
 
 function Harness() {
@@ -97,5 +112,67 @@ describe('BurgerMenu', () => {
     act(() => handleChange?.({ matches: true } as MediaQueryListEvent))
 
     expect(screen.queryByRole('dialog')).toBe(null)
+  })
+
+  // jsdom har intet layout, så højden kan ikke måles her -- men det er netop
+  // klasserne, der afgør, om listen kan scrolles på en lav skærm (#283).
+  it('lader den lange admin-liste scrolle, mens knapperne bliver stående', () => {
+    mocks.session = { user: { id: 'admin-id' } }
+    mocks.isAdmin = true
+    render(
+      <MemoryRouter>
+        <Harness />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Åbn menu' }))
+
+    const list = screen.getByRole('navigation', { name: 'Menupunkter' })
+    expect(list.querySelectorAll('a')).toHaveLength(navLinks.length)
+    expect(list.className).toMatch(/\boverflow-y-auto\b/)
+    expect(list.className).toMatch(/\bflex-1\b/)
+    expect(list.className).toMatch(/\boverscroll-contain\b/)
+
+    // Hvert link er stadig mindst 44 px højt, så de er nemme at ramme.
+    for (const link of list.querySelectorAll('a')) {
+      expect(link.className).toMatch(/\bmin-h-11\b/)
+      expect(link.className).toMatch(/\bshrink-0\b/)
+    }
+
+    // Luk-knappen ligger uden for scroll-området.
+    expect(
+      list.contains(screen.getByRole('button', { name: 'Luk menu' })),
+    ).toBe(false)
+    // "Log ud" står på profilsiden (#285), ikke i menuen.
+    expect(screen.queryByRole('button', { name: 'Log ud' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Log ind' })).toBeNull()
+  })
+
+  it('viser "Log ind" for gæster -- men hverken Naturlog eller Spil (#285)', () => {
+    render(
+      <MemoryRouter>
+        <Harness />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Åbn menu' }))
+
+    expect(screen.getByRole('link', { name: 'Log ind' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Naturlog' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Spil' })).toBeNull()
+  })
+
+  it('markerer Aktiviteter som aktivt på et spil (#285)', () => {
+    mocks.session = { user: { id: 'member-id' } }
+    render(
+      <MemoryRouter initialEntries={['/spil/kabale']}>
+        <Harness />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Åbn menu' }))
+
+    const list = screen.getByRole('navigation', { name: 'Menupunkter' })
+    const activities = within(list).getByRole('link', { name: 'Aktiviteter' })
+    const calendar = within(list).getByRole('link', { name: 'Kalender' })
+    expect(activities.className).toMatch(/\bbg-surface-raised\b/)
+    expect(calendar.className).not.toMatch(/\bbg-surface-raised\b/)
   })
 })

@@ -27,6 +27,7 @@ import { BadgeCatalogSection } from '../features/badges/BadgeCatalogSection'
 import { BadgeNominationsSection } from '../features/badges/BadgeNominationsSection'
 import { BadgeProductionsSection } from '../features/badges/BadgeProductionsSection'
 import { useBadgeNominations } from '../features/badges/useBadgeNominations'
+import { DatePollsSection } from '../features/datePolls/DatePollsSection'
 import { useErrorFocus } from '../hooks/useErrorFocus'
 
 function AdminPage() {
@@ -195,7 +196,8 @@ function AdminPage() {
         <h1 className="text-2xl font-semibold text-ink-body">Admin</h1>
         <p className="text-ink-subtle">
           Her administrerer du medlemmer, adminroller, badges, ansøgninger,
-          klubbens aktiviteter og hvem der må oprette en bruger i Naturklubben.
+          klubbens aktiviteter, datoafstemninger og hvem der må oprette en
+          bruger i Naturklubben.
         </p>
       </div>
 
@@ -254,6 +256,10 @@ function AdminPage() {
 
       <AdminTabPanel tab="aktiviteter" activeTab={activeTab}>
         <ActivitiesSection />
+      </AdminTabPanel>
+
+      <AdminTabPanel tab="datoer" activeTab={activeTab}>
+        <DatePollsSection adminId={userId} />
       </AdminTabPanel>
 
       <AdminTabPanel tab="adgang" activeTab={activeTab}>

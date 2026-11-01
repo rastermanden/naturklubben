@@ -33,6 +33,7 @@ const TwentyFortyEightPage = lazy(() => import('./pages/TwentyFortyEightPage'))
 const NaturquizPage = lazy(() => import('./pages/NaturquizPage'))
 const StiPage = lazy(() => import('./pages/StiPage'))
 const FugletraekPage = lazy(() => import('./pages/FugletraekPage'))
+const KabalePage = lazy(() => import('./pages/KabalePage'))
 const TournamentPage = lazy(() => import('./pages/TournamentPage'))
 const SignupPage = lazy(() => import('./pages/SignupPage'))
 const WelcomePage = lazy(() => import('./pages/WelcomePage'))
@@ -88,6 +89,7 @@ const routeElements: Record<AppRoutePath, ReactNode> = {
   '/spil/fugletraek': (
     <ProtectedRoute>{loadRoute(<FugletraekPage />)}</ProtectedRoute>
   ),
+  '/spil/kabale': <ProtectedRoute>{loadRoute(<KabalePage />)}</ProtectedRoute>,
   '/aktiviteter/btg-turnering': (
     <ProtectedRoute>{loadRoute(<TournamentPage />)}</ProtectedRoute>
   ),

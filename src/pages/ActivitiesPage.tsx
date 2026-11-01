@@ -1,9 +1,39 @@
 import { Link } from 'react-router-dom'
 import { useActivities } from '../features/activities/useActivities'
 import { ActivityIcon } from '../features/activities/ActivityIcon'
+import { useAuth } from '../features/auth/useAuth'
+
+/** Et af klubbens egne steder i appen -- BTG, Naturlog, Spil. */
+function ClubLinkCard({
+  to,
+  title,
+  description,
+}: {
+  to: string
+  title: string
+  description: string
+}) {
+  return (
+    <li>
+      <Link
+        to={to}
+        className="flex min-h-11 items-center justify-between gap-4 rounded-2xl border border-line-soft bg-surface p-6 shadow-sm hover:bg-surface-sunken"
+      >
+        <span>
+          <span className="block text-xl font-semibold text-ink">{title}</span>
+          <span className="mt-1 block text-ink-muted">{description}</span>
+        </span>
+        <span aria-hidden="true" className="shrink-0 text-2xl text-ink-subtle">
+          →
+        </span>
+      </Link>
+    </li>
+  )
+}
 
 function ActivitiesPage() {
   const { data: activities, isPending, isError } = useActivities()
+  const { session } = useAuth()
 
   return (
     <main className="bg-surface-sunken/60 px-4 py-12 sm:px-6 sm:py-16">
@@ -21,28 +51,32 @@ function ActivitiesPage() {
           </p>
         </header>
 
-        <div className="mx-auto mt-10 max-w-2xl">
-          <Link
+        {/* Naturlog og Spil har ikke egne menupunkter, men står her (#285).
+            Begge sider kræver login, så kortene vises kun for medlemmer. */}
+        <ul
+          aria-label="Klubbens egne"
+          className="mx-auto mt-10 flex max-w-2xl flex-col gap-4"
+        >
+          <ClubLinkCard
             to="/aktiviteter/btg-turnering"
-            className="flex min-h-11 items-center justify-between gap-4 rounded-2xl border border-line-soft bg-surface p-6 shadow-sm hover:bg-surface-sunken"
-          >
-            <span>
-              <span className="block text-xl font-semibold text-ink">
-                BTG turnering
-              </span>
-              <span className="mt-1 block text-ink-muted">
-                Hold styr på kampe, resultater og stilling til klubbens
-                bøssetennisgolf-turneringer.
-              </span>
-            </span>
-            <span
-              aria-hidden="true"
-              className="shrink-0 text-2xl text-ink-subtle"
-            >
-              →
-            </span>
-          </Link>
-        </div>
+            title="BTG turnering"
+            description="Hold styr på kampe, resultater og stilling til klubbens bøssetennisgolf-turneringer."
+          />
+          {session && (
+            <>
+              <ClubLinkCard
+                to="/naturlog"
+                title="Naturlog"
+                description="Hvad har vi set derude? Skriv arten, stedet og datoen -- og læg gerne et billede ved."
+              />
+              <ClubLinkCard
+                to="/spil"
+                title="Spil"
+                description="Lidt at give sig til, når regnen sætter ind. Dit bedste resultat ryger på klubbens liste."
+              />
+            </>
+          )}
+        </ul>
 
         <section className="mt-10" aria-live="polite" aria-busy={isPending}>
           {isPending && (

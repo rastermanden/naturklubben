@@ -26,7 +26,7 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF || vars.SUPABASE_PROJECT_REF }}
           # Kan overstyres med en repo-variabel, hvis appen flytter adresse.
-          APP_URL: ${{ vars.APP_URL || 'https://rastermanden.github.io/naturklubben/' }}
+          APP_URL: ${{ vars.APP_URL || 'https://naturklubben.dk/' }}
         run: |
           set -uo pipefail
 

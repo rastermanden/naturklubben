@@ -30,7 +30,7 @@ declare const self: ServiceWorkerGlobalScope & {
 }
 
 // Service workeren udgives i roden af build-output og serveres derfor fra
-// app'ens base-path (/naturklubben/ i produktion). At udlede base'en af dens
+// app'ens base-path (/ i produktion). At udlede base'en af dens
 // egen URL frem for at inline den betyder, at filen er korrekt uanset hvilken
 // sti buildet er lagt under.
 const basePath = new URL('./', self.location.href).pathname
@@ -45,8 +45,8 @@ precacheAndRoute(self.__WB_MANIFEST)
 // en meningsfuld tilstand offline -- hver sides egne loading/fejl-tilstande
 // tager over for data, der ikke er hentet endnu.
 //
-// Produktions-service-workeren har scope /naturklubben/ og fanger derfor ALLE
-// navigationer derunder -- også /naturklubben/pr-preview/pr-<nr>/. Uden denne
+// Produktions-service-workeren har scope / og fanger derfor ALLE
+// navigationer på domænet -- også /pr-preview/pr-<nr>/. Uden denne
 // denylist besvarer NavigationRoute en preview-URL med produktionens egen
 // precachede index.html, så preview'ets index.html og bundle aldrig hentes:
 // previewet bliver hvidt for alle, der har været forbi forsiden én gang og

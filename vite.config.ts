@@ -4,10 +4,12 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// Produktion bygger til roden af GitHub Pages-sitet (/naturklubben/).
-// PR-preview-workflowet overstyrer denne til en pr-preview/pr-<nr>/-understi.
-const basePath = process.env.VITE_BASE_PATH ?? '/naturklubben/'
-const isProductionBuild = basePath === '/naturklubben/'
+// Produktion bygger til roden af naturklubben.dk (GitHub Pages med eget
+// domæne, se public/CNAME). PR-preview-workflowet overstyrer denne til en
+// pr-preview/pr-<nr>/-understi.
+const productionBasePath = '/'
+const basePath = process.env.VITE_BASE_PATH ?? productionBasePath
+const isProductionBuild = basePath === productionBasePath
 
 /** Kører en git-kommando og giver null, hvis git ikke kan svare. */
 function git(args: string[]): string | null {
@@ -97,7 +99,7 @@ function assertSupabaseEnv(mode: string) {
  * Udgiver en 404.html ved siden af index.html.
  *
  * GitHub Pages serverer kun filer, der findes: en direkte navigation til fx
- * /naturklubben/velkommen (skrevet ind, delt som link eller klikket i en mail
+ * /velkommen (skrevet ind, delt som link eller klikket i en mail
  * fra Supabase) findes ikke på disken og besvares med GitHubs egen
  * "There isn't a GitHub Pages site here"-404 -- appen bliver aldrig indlæst.
  * En 404.html får lov at overtage det svar, og herfra kan vi sende browseren

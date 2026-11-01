@@ -63,6 +63,11 @@ vi.mock('../features/badges/BadgeProductionsSection', () => ({
   BadgeProductionsSection: () => null,
 }))
 // Siden selv henter de åbne nomineringer for at kunne vise tallet på fanen.
+// Datoafstemningerne (#288) har deres egen test og trækker react-query og
+// Supabase med.
+vi.mock('../features/datePolls/DatePollsSection', () => ({
+  DatePollsSection: () => <h2>Find en dato</h2>,
+}))
 vi.mock('../features/badges/useBadgeNominations', () => ({
   useBadgeNominations: () => ({ data: [] }),
 }))
