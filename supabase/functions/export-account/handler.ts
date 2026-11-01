@@ -89,6 +89,20 @@ export interface PollVoteExport {
   } | null
 }
 
+/** Admins' svar i datoafstemninger (#288). */
+export interface DatePollVoteExport {
+  option_id: string
+  answer: 'yes' | 'maybe' | 'no'
+  updated_at: string
+  /** Kan være null, hvis datoen siden er forsvundet. */
+  option: {
+    id: string
+    starts_at: string
+    ends_at: string | null
+    poll: { id: string; title: string } | null
+  } | null
+}
+
 export interface PhotoCommentExport {
   id: string
   photo_id: string
@@ -116,6 +130,7 @@ export interface AccountExportRepository {
   getPhotos(userId: string): Promise<PhotoExport[]>
   getAttendance(userId: string): Promise<AttendanceExport[]>
   getPollVotes(userId: string): Promise<PollVoteExport[]>
+  getDatePollVotes(userId: string): Promise<DatePollVoteExport[]>
   getPhotoComments(userId: string): Promise<PhotoCommentExport[]>
   getObservations(userId: string): Promise<ObservationExport[]>
   getPhotoDownloadUrls(photo: PhotoExport): Promise<PhotoDownloadUrls>
@@ -187,6 +202,7 @@ export async function handleExportAccount(
       photos,
       attendance,
       pollVotes,
+      datePollVotes,
       photoComments,
       observations,
     ] = await Promise.all([
@@ -195,6 +211,7 @@ export async function handleExportAccount(
       repository.getPhotos(user.id),
       repository.getAttendance(user.id),
       repository.getPollVotes(user.id),
+      repository.getDatePollVotes(user.id),
       repository.getPhotoComments(user.id),
       repository.getObservations(user.id),
     ])
@@ -226,6 +243,7 @@ export async function handleExportAccount(
         photo_comments: photoComments,
         activity_registrations: attendance,
         poll_votes: pollVotes,
+        date_poll_votes: datePollVotes,
         observations,
       }),
       {
