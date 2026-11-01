@@ -1,6 +1,7 @@
 import {
   createAccount,
   modifyAccountCredentials,
+  retrieveAccount,
 } from '@convex-dev/auth/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
@@ -248,6 +249,17 @@ export const ensure = internalAction({
       )
       if (found === null) throw new Error('PREVIEW_SEED_FAILED')
       userId = found
+    }
+
+    try {
+      const retrieved = await retrieveAccount(ctx, {
+        provider: 'password',
+        account: { id: email, secret: password },
+      })
+      if (retrieved.user._id !== userId) throw new Error('PREVIEW_SEED_FAILED')
+    } catch (error) {
+      if (errorText(error) === 'PREVIEW_SEED_FAILED') throw error
+      throw new Error('PREVIEW_SEED_FAILED')
     }
 
     await ctx.runMutation(internal.previewSeed.applySample, { userId })

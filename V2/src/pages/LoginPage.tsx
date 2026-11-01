@@ -33,14 +33,24 @@ export default function LoginPage() {
     return <Navigate to={from} replace />
   }
 
-  async function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
     setErrorField(null)
     setSubmitting(true)
 
+    // Læs felterne fra formularen, ikke kun fra state. Autofyld og et
+    // programmatisk felt kan have en værdi, React endnu ikke har committet.
+    const data = new FormData(event.currentTarget)
+    const submittedEmail = String(data.get('email') ?? '')
+    const submittedPassword = String(data.get('password') ?? '')
+
     try {
-      await signIn('password', { email, password, flow: 'signIn' })
+      await signIn('password', {
+        email: submittedEmail,
+        password: submittedPassword,
+        flow: 'signIn',
+      })
     } catch (signInError) {
       // Convex Auth's tekst er engelsk og ikke en kontrakt, så feltet vælges
       // ud fra, hvad fejlen handler om -- ikke ud fra en fast streng.
@@ -72,6 +82,7 @@ export default function LoginPage() {
           E-mail
           <input
             id="login-email"
+            name="email"
             ref={emailRef}
             type="email"
             required
@@ -88,6 +99,7 @@ export default function LoginPage() {
           Adgangskode
           <input
             id="login-password"
+            name="password"
             ref={passwordRef}
             type="password"
             required
