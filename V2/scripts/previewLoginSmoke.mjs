@@ -196,10 +196,10 @@ async function runOnce() {
       console.log(`genindlæser /${route}`)
       let response
       try {
-        // commit frem for domcontentloaded: en åben websocket fra Convex
-        // kan ellers holde navigationen åben, til timeouten rammer.
+        // load frem for networkidle: Convex' websocket lukker aldrig,
+        // så en venten på netværksro timer ud.
         response = await page.goto(`${base}${route}`, {
-          waitUntil: 'commit',
+          waitUntil: 'load',
           timeout: 20000,
         })
       } catch (error) {
