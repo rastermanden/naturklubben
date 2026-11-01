@@ -32,9 +32,9 @@ type Env = {
   readonly CONVEX_SITE_URL: string;
   readonly CALENDAR_FEED_TOKEN: string | undefined;
   readonly RATE_LIMIT_HASH_SECRET: string | undefined;
-  readonly VAPID_SUBJECT: string | undefined;
-  readonly VAPID_PUBLIC_KEY: string | undefined;
   readonly VAPID_PRIVATE_KEY: string | undefined;
+  readonly VAPID_PUBLIC_KEY: string | undefined;
+  readonly VAPID_SUBJECT: string | undefined;
 };
 
 /**
