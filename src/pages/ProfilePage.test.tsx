@@ -16,6 +16,11 @@ vi.mock('../features/auth/useAuth', () => ({
 vi.mock('../features/account/DeleteAccountSection', () => ({
   DeleteAccountSection: () => null,
 }))
+// "Log ud" (#285) har sin egen test og bruger routeren til at sende folk til
+// forsiden bagefter -- den har denne test ingen af.
+vi.mock('../features/auth/SignOutSection', () => ({
+  SignOutSection: () => null,
+}))
 // Badge-vitrinen har sin egen test. Her ville den bare trække react-query og
 // Supabase med ind i en test om avatar-fejlbeskeden.
 vi.mock('../features/badges/BadgeShowcase', () => ({

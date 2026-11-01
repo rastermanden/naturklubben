@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { FeatureAnnouncementBanner } from '../features/announcements/FeatureAnnouncementBanner'
 import { useAuth } from '../features/auth/useAuth'
 import { PronounsReminder } from '../features/profile/PronounsReminder'
 import type { RouteMetadata } from '../routeMetadata'
-import { navLinks } from './navLinks'
+import { isNavLinkActive, navLinks } from './navLinks'
 import { BurgerMenu } from './BurgerMenu'
 import { Footer } from './Footer'
 import { InstallAppButton } from './InstallAppButton'
@@ -16,9 +16,8 @@ interface LayoutProps {
 }
 
 export function Layout({ routes }: LayoutProps) {
-  const { session, signOut } = useAuth()
+  const { session } = useAuth()
   const { isAdmin } = useIsAdmin()
-  const navigate = useNavigate()
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const burgerButtonRef = useRef<HTMLButtonElement>(null)
@@ -56,24 +55,14 @@ export function Layout({ routes }: LayoutProps) {
               key={link.to}
               to={link.to}
               className={({ isActive }) =>
-                `rounded px-2 py-1 ${isActive ? 'font-medium text-ink-body' : 'text-ink-muted'}`
+                `rounded px-2 py-1 ${isNavLinkActive(link, pathname, isActive) ? 'font-medium text-ink-body' : 'text-ink-muted'}`
               }
             >
               {link.label}
             </NavLink>
           ))}
-          {session ? (
-            <button
-              type="button"
-              onClick={async () => {
-                await signOut()
-                navigate('/')
-              }}
-              className="rounded px-2 py-1 text-ink-muted underline"
-            >
-              Log ud
-            </button>
-          ) : (
+          {/* "Log ud" står på profilsiden (#285). */}
+          {!session && (
             <NavLink
               to="/login"
               className="rounded px-2 py-1 text-ink-muted underline"
