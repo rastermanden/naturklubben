@@ -409,10 +409,11 @@ async function deleteAccount(ctx: MutationCtx, profileId: Id<'profiles'>) {
     }
   }
 
-  // 5. Galleriet: filerne i Convex' fillager, rækkerne, albumtallene,
-  //    kommentarerne og moderationsloggen. Bemærk, at avataren ikke har en
-  //    fil at slette: `profiles.avatarUrl` er en adresse, ikke et
-  //    `Id<'_storage'>` (se skemaet i `tables/members.ts`).
+  // 5. Galleriet og profilbilledet. Avataren er en fil i fillageret
+  //    (`avatarStorageId`), ikke kun en adresse.
+  if (profile.avatarStorageId !== undefined) {
+    await ctx.storage.delete(profile.avatarStorageId)
+  }
   await deleteMemberGallery(ctx, profileId)
 
   // 6. Kalenderen: tilmeldinger, opgaver og begivenhedernes ophav.

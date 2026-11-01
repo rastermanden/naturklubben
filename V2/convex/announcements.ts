@@ -59,6 +59,12 @@ export const ANNOUNCEMENTS = [
     path: 'profil',
   },
   {
+    slug: 'profilbillede',
+    title: 'Du kan nu sætte et profilbillede',
+    body: 'Åbn Min profil og tryk på billedet. Det gemmes med det samme, og de andre medlemmer kan se det.',
+    path: 'profil',
+  },
+  {
     slug: 'venteliste-push',
     title: 'Besked når du rykker op fra ventelisten',
     body: 'Står du på venteliste til en tur, og bliver der plads til dig, kan appen nu også sende dig en notifikation om det -- ikke kun en besked i chatten. Vælg selv til eller fra på din profil under "Notifikationer".',

@@ -56,6 +56,10 @@ describe('kontosletning', () => {
       const optimized = await ctx.storage.store(new Blob(['optimeret']))
       const badgeImage = await ctx.storage.store(new Blob(['badge']))
       const otherFile = await ctx.storage.store(new Blob(['andens fil']))
+      const avatar = await ctx.storage.store(
+        new Blob(['avatar'], { type: 'image/png' }),
+      )
+      await ctx.db.patch(member.profileId, { avatarStorageId: avatar })
 
       // --- Galleri ---------------------------------------------------------
       const photoId = await ctx.db.insert('photos', {
@@ -387,6 +391,7 @@ describe('kontosletning', () => {
 
       return {
         original,
+        avatar,
         optimized,
         badgeImage,
         otherPhotoId,
@@ -441,6 +446,7 @@ describe('kontosletning', () => {
         allowed: await ctx.db.query('allowedEmails').collect(),
         applications: await ctx.db.query('probationApplications').collect(),
         originalUrl: await ctx.storage.getUrl(ids.original),
+        avatarUrl: await ctx.storage.getUrl(ids.avatar),
         optimizedUrl: await ctx.storage.getUrl(ids.optimized),
         badgeUrl: await ctx.storage.getUrl(ids.badgeImage),
       }
@@ -448,6 +454,7 @@ describe('kontosletning', () => {
 
     // Profilen, auth-brugeren og alt det personlige er væk.
     expect(after.profile).toBeNull()
+    expect(after.avatarUrl).toBeNull()
     expect(after.user).toBeNull()
     expect(after.attendance).toHaveLength(0)
     expect(after.comments).toHaveLength(0)

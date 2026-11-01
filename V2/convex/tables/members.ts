@@ -18,7 +18,13 @@ export const memberTables = {
     /** Auth-brugeren (Convex Auth's `users`). 1:1. */
     userId: v.id('users'),
     fullName: v.optional(v.string()),
+    /**
+     * Adressen, de andre sider viser. Sættes kun af `members.saveAvatar`
+     * ud fra en fil i Convex' fillager -- ikke af klienten.
+     */
     avatarUrl: v.optional(v.string()),
+    /** Filen bag `avatarUrl`, så et nyt billede kan slette det gamle. */
+    avatarStorageId: v.optional(v.id('_storage')),
     isAdmin: v.boolean(),
     /** Boblefarve i chatten. Default som i den gamle app: #16a34a. */
     chatColor: v.string(),

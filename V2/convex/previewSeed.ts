@@ -88,6 +88,19 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** 1×1 PNG, så preview-profilen har et rigtigt billede i fillageret. */
+const PREVIEW_AVATAR_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
+function previewAvatarBlob(): Blob {
+  const binary = atob(PREVIEW_AVATAR_PNG_BASE64)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return new Blob([bytes], { type: 'image/png' })
+}
+
 /**
  * Medlemskab og prøvedata. Kaldes kun fra `applySample` (som har vagten) og
  * fra testen. Titlerne er stabile, så et nyt preview-build ikke lægger
@@ -180,6 +193,15 @@ export async function writePreviewSample(
       endAt: endsAt,
       endsAt,
     })
+  }
+
+  const profile = await ctx.db.get(profileId)
+  if (profile !== null && profile.avatarStorageId === undefined) {
+    const storageId = await ctx.storage.store(previewAvatarBlob())
+    const avatarUrl = await ctx.storage.getUrl(storageId)
+    if (avatarUrl !== null) {
+      await ctx.db.patch(profileId, { avatarStorageId: storageId, avatarUrl })
+    }
   }
 }
 

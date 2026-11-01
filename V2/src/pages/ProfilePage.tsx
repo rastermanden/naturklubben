@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import { Avatar } from '../components/Avatar'
@@ -8,6 +14,7 @@ import { CausesField } from '../features/profile/CausesField'
 import { PronounsField } from '../features/profile/PronounsField'
 import { normalizeCauses } from '../features/profile/causes'
 import { normalizePronouns } from '../features/profile/pronouns'
+import { uploadAvatar } from '../features/profile/uploadAvatar'
 import { readableTextColor } from '../features/theme/colorContrast'
 
 const PRESET_COLORS = [
@@ -31,22 +38,27 @@ type ProfileForm = {
 }
 
 /**
- * Min profil: navn, pronominer, hjertesager og chatfarve.
+ * Min profil: navn, pronominer, hjertesager, chatfarve og profilbillede.
  *
  * Formularen seedes én gang fra profilen (`form === null` som vagt), så en
  * igangværende rettelse ikke bliver overskrevet, hvis profilen opdateres fra
  * en anden fane. Efter et gem er det gemte og formularen det samme.
  *
- * To ting er bevidst ikke med endnu, se rapporten: valg af profilbillede
- * (kræver en upload-mutation til Convex' filstorage) og kontosletning
- * (hører til konto-slicen).
+ * Billedet gemmes med det samme, når filen er valgt. Browseren skalerer det
+ * ned, før det postes til Convex' fillager.
  */
 export default function ProfilePage() {
   const { profile, isLoading } = useCurrentProfile()
   const updateProfile = useMutation(api.members.updateProfile)
+  const generateAvatarUploadUrl = useMutation(
+    api.members.generateAvatarUploadUrl,
+  )
+  const saveAvatar = useMutation(api.members.saveAvatar)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState<ProfileForm | null>(null)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -96,6 +108,29 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.target
+    const file = input.files?.[0]
+    input.value = ''
+    if (!file) return
+
+    setSuccessMsg(null)
+    setErrorMsg(null)
+    setUploading(true)
+    try {
+      await uploadAvatar({
+        file,
+        generateUploadUrl: generateAvatarUploadUrl,
+        saveAvatar,
+      })
+      setSuccessMsg('Profilbilledet er gemt.')
+    } catch (uploadError) {
+      setErrorMsg(toFriendlyMemberError(uploadError))
+    } finally {
+      setUploading(false)
+    }
+  }
+
   async function handleFeatureNotifications(enabled: boolean) {
     setSuccessMsg(null)
     setErrorMsg(null)
@@ -117,21 +152,40 @@ export default function ProfilePage() {
       <div>
         <h1 className="text-2xl font-semibold text-ink-body">Min profil</h1>
         <p className="text-ink-subtle">
-          Tilpas dit navn, pronominer, hjertesager og farve.
+          Tilpas dit navn, pronominer, hjertesager, farve og billede.
         </p>
       </div>
 
       <form onSubmit={handleSave} className="flex flex-col gap-6">
         <div className="flex flex-col items-center gap-3">
-          <Avatar
-            name={displayName}
-            avatarUrl={profile?.avatarUrl ?? null}
-            color={form.chatColor}
-            size="xl"
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="group relative rounded-full disabled:opacity-60"
+            aria-label="Skift profilbillede"
+          >
+            <Avatar
+              name={displayName}
+              avatarUrl={profile?.avatarUrl ?? null}
+              color={form.chatColor}
+              size="xl"
+            />
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-black/70 text-sm text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+              {uploading ? 'Uploader…' : 'Skift'}
+            </span>
+          </button>
+          <input
+            id="profile-avatar"
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            aria-label="Vælg profilbillede"
+            className="sr-only"
+            onChange={(event) => void handleAvatarChange(event)}
           />
           <p className="text-xs text-ink-subtle">
-            Profilbillede kan endnu ikke skiftes i V2 -- det kræver
-            filstorage-upload, som ikke er portet.
+            Klik på billedet for at uploade et nyt foto.
           </p>
         </div>
 

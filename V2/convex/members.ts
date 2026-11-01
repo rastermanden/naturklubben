@@ -166,21 +166,8 @@ function normalizeChatColor(input: string): string {
   return value
 }
 
-/**
- * Billedadressen sættes af den slice, der uploader til Convex' filstorage, og
- * er derfor et argument herfra og ikke noget, profilsiden regner ud selv. Kun
- * http(s)-adresser accepteres, så et `javascript:`-link ikke kan gemmes som
- * avatar og køres i en andens browser.
- */
-function normalizeAvatarUrl(input: string | null): string | undefined {
-  if (input === null) return undefined
-  const value = input.trim()
-  if (value.length === 0) return undefined
-  if (!/^https?:\/\//.test(value)) {
-    throw new ConvexError('INVALID_PROFILE')
-  }
-  return value
-}
+/** Samme loft som den gamle avatars-bucket: 5 MB. Browseren skalerer ned før upload. */
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024
 
 function compareNames(
   left: string | undefined,
@@ -273,7 +260,6 @@ export const updateProfile = mutation({
   args: {
     fullName: v.optional(v.union(v.string(), v.null())),
     pronouns: v.optional(v.union(v.string(), v.null())),
-    avatarUrl: v.optional(v.union(v.string(), v.null())),
     causes: v.optional(v.array(v.string())),
     chatColor: v.optional(v.string()),
     chatNotificationPreference: v.optional(chatNotificationPreference),
@@ -285,7 +271,6 @@ export const updateProfile = mutation({
     const patch: {
       fullName?: string
       pronouns?: string
-      avatarUrl?: string
       causes?: string[]
       chatColor?: string
       chatNotificationPreference?: Doc<'profiles'>['chatNotificationPreference']
@@ -298,9 +283,6 @@ export const updateProfile = mutation({
     if (args.pronouns !== undefined) {
       // `undefined` i et patch fjerner feltet, så "ikke udfyldt" kan gemmes.
       patch.pronouns = normalizePronouns(args.pronouns)
-    }
-    if (args.avatarUrl !== undefined) {
-      patch.avatarUrl = normalizeAvatarUrl(args.avatarUrl)
     }
     if (args.causes !== undefined) {
       patch.causes = normalizeCauses(args.causes)
@@ -324,6 +306,61 @@ export const updateProfile = mutation({
       throw new ConvexError('PROFILE_NOT_FOUND')
     }
     return updated
+  },
+})
+
+/**
+ * Upload-URL til et profilbillede. Selve filen postes direkte til Convex'
+ * fillager; `saveAvatar` tjekker bagefter, at det er et billede under loftet.
+ */
+export const generateAvatarUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireWritableProfile(ctx)
+    return { uploadUrl: await ctx.storage.generateUploadUrl() }
+  },
+})
+
+/**
+ * Gemmer det uploadede profilbillede på kalderens egen profil og sletter
+ * det forrige. Klienten kan ikke sætte en vilkårlig adresse: URL'en kommer
+ * fra fillageret.
+ */
+export const saveAvatar = mutation({
+  args: { storageId: v.id('_storage') },
+  handler: async (ctx, args) => {
+    const profile = await requireWritableProfile(ctx)
+    if (profile.avatarStorageId === args.storageId) return null
+
+    const metadata = await ctx.db.system.get(args.storageId)
+    if (metadata === null) {
+      throw new ConvexError('AVATAR_UPLOAD_NOT_FOUND')
+    }
+    // En kastet fejl ruller også `storage.delete` tilbage. Derfor kommer
+    // afvisningen tilbage som data, så den dårlige fil faktisk bliver slettet.
+    if (!(metadata.contentType ?? '').startsWith('image/')) {
+      await ctx.storage.delete(args.storageId)
+      return { error: 'AVATAR_NOT_AN_IMAGE' as const }
+    }
+    if (metadata.size > MAX_AVATAR_BYTES) {
+      await ctx.storage.delete(args.storageId)
+      return { error: 'AVATAR_TOO_LARGE' as const }
+    }
+
+    const avatarUrl = await ctx.storage.getUrl(args.storageId)
+    if (avatarUrl === null) {
+      throw new ConvexError('AVATAR_UPLOAD_NOT_FOUND')
+    }
+
+    const previous = profile.avatarStorageId
+    await ctx.db.patch(profile._id, {
+      avatarStorageId: args.storageId,
+      avatarUrl,
+    })
+    if (previous !== undefined) {
+      await ctx.storage.delete(previous)
+    }
+    return null
   },
 })
 

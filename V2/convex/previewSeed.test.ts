@@ -99,6 +99,8 @@ describe('writePreviewSample', () => {
       fullName: PREVIEW_MEMBER_NAME,
       isAdmin: false,
     })
+    expect(rows.profiles[0]?.avatarStorageId).toBeDefined()
+    expect(rows.profiles[0]?.avatarUrl).toMatch(/^https?:/)
     expect(rows.activities.map((activity) => activity.title).sort()).toEqual(
       PREVIEW_ACTIVITIES.map((activity) => activity.title).sort(),
     )

@@ -31,6 +31,10 @@ const KNOWN_CODES: Record<string, string> = {
   NOT_ADMIN: 'Du har ikke længere adgang til denne handling.',
   PROFILE_NOT_FOUND: 'Profilen kunne ikke findes. Genindlæs siden.',
   PROFILE_NOT_CREATED: 'Profilen kunne ikke oprettes. Prøv igen om lidt.',
+  AVATAR_NOT_AN_IMAGE: 'Filen er ikke et billede.',
+  AVATAR_TOO_LARGE: 'Billedet er for stort (maks. 5 MB).',
+  AVATAR_UPLOAD_NOT_FOUND: 'Billedet kunne ikke gemmes. Prøv igen.',
+  AVATAR_ENCODE: 'Billedet kunne ikke behandles. Prøv et andet.',
 }
 
 /**

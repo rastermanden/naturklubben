@@ -216,6 +216,17 @@ async function runOnce() {
           if (name !== 'Preview-tester') {
             throw new Error(`Profilnavn var ${JSON.stringify(redact(name))}`)
           }
+          await next.waitForFunction(
+            () => {
+              const image = document.querySelector('img[alt="Preview-tester"]')
+              return (
+                image instanceof HTMLImageElement &&
+                image.complete &&
+                image.naturalWidth > 0
+              )
+            },
+            { timeout: 20000 },
+          )
         }
         const loggedOut = await next.evaluate(
           () =>
