@@ -1,20 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthActions } from '@convex-dev/auth/react'
-import { toFriendlyAuthError } from '../features/auth/authErrors'
+import { appUrl } from '../features/auth/authRedirect'
+import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
 
 /**
- * Glemt adgangskode.
- *
- * Convex Auth's nulstillingsflow er et engangskode-flow, ikke et link:
- * `signIn('password', { flow: 'reset' })` får backend'en til at sende en kode
- * til adressen, og koden tastes ind på `/ny-adgangskode` sammen med den nye
- * adgangskode.
- *
- * VIGTIGT -- opsætning mangler: `convex/auth.ts` bruger `Password` uden en
- * `sendVerificationRequest`, og der er ikke konfigureret nogen e-mailudbyder
- * på Convex-deploymentet. Derfor vil kaldet her fejle i praksis, og siden
- * viser fejlen i stedet for at påstå, at der er sendt en mail. Se rapporten.
+ * Glemt adgangskode. Mailen indeholder et link til `/ny-adgangskode`.
+ * En ukendt adresse får samme svar som en kendt, så siden ikke fortæller,
+ * hvem der er oprettet.
  */
 export default function ForgotPasswordPage() {
   const { signIn } = useAuthActions()
@@ -30,10 +23,25 @@ export default function ForgotPasswordPage() {
     setSubmitting(true)
 
     try {
-      await signIn('password', { email, flow: 'reset' })
+      await signIn('password', {
+        email,
+        flow: 'reset',
+        redirectTo: appUrl('ny-adgangskode'),
+      })
       setSubmitted(true)
     } catch (resetError) {
-      setError(toFriendlyAuthError(resetError))
+      const raw = errorCode(resetError)?.toLowerCase() ?? ''
+      // Ukendt adresse kaster, men svaret skal være det samme som når
+      // mailen er sendt.
+      if (
+        raw.includes('invalid') ||
+        raw.includes('could not find') ||
+        raw.includes('credentials')
+      ) {
+        setSubmitted(true)
+      } else {
+        setError(toFriendlyAuthError(resetError))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -46,17 +54,10 @@ export default function ForgotPasswordPage() {
           Tjek din e-mail
         </h1>
         <p className="text-ink-muted">
-          Hvis der findes en bruger med den e-mail, har vi sendt en kode til at
-          nulstille adgangskoden. Skriv koden og din nye adgangskode på næste
-          side.
+          Hvis der findes en bruger med den e-mail, har vi sendt et link til at
+          nulstille adgangskoden.
         </p>
-        <Link
-          to={`/ny-adgangskode?email=${encodeURIComponent(email)}`}
-          className="inline-flex min-h-11 items-center justify-center rounded bg-accent px-4 py-2 text-white"
-        >
-          Skriv koden
-        </Link>
-        <Link to="/login" className="text-sm text-ink-muted underline">
+        <Link to="/login" className="underline">
           Tilbage til login
         </Link>
       </main>
@@ -98,7 +99,7 @@ export default function ForgotPasswordPage() {
           disabled={submitting}
           className="min-h-11 rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
         >
-          {submitting ? 'Sender…' : 'Send nulstillingskode'}
+          {submitting ? 'Sender…' : 'Send nulstillingslink'}
         </button>
       </form>
 

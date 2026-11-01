@@ -11,6 +11,7 @@
 import type * as account from "../account.js";
 import type * as announcements from "../announcements.js";
 import type * as auth from "../auth.js";
+import type * as authEmail from "../authEmail.js";
 import type * as authz from "../authz.js";
 import type * as badges from "../badges.js";
 import type * as bracket from "../bracket.js";
@@ -25,6 +26,8 @@ import type * as http from "../http.js";
 import type * as members from "../members.js";
 import type * as notifications from "../notifications.js";
 import type * as observations from "../observations.js";
+import type * as passwordCrypto from "../passwordCrypto.js";
+import type * as passwords from "../passwords.js";
 import type * as planTypes from "../planTypes.js";
 import type * as probation from "../probation.js";
 import type * as previewSeed from "../previewSeed.js";
@@ -50,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   account: typeof account;
   announcements: typeof announcements;
   auth: typeof auth;
+  authEmail: typeof authEmail;
   authz: typeof authz;
   badges: typeof badges;
   bracket: typeof bracket;
@@ -64,6 +68,8 @@ declare const fullApi: ApiFromModules<{
   members: typeof members;
   notifications: typeof notifications;
   observations: typeof observations;
+  passwordCrypto: typeof passwordCrypto;
+  passwords: typeof passwords;
   planTypes: typeof planTypes;
   probation: typeof probation;
   previewSeed: typeof previewSeed;

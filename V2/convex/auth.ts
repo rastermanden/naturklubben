@@ -1,20 +1,73 @@
 import { Password } from '@convex-dev/auth/providers/Password'
-import { convexAuth } from '@convex-dev/auth/server'
+import { convexAuth, type EmailConfig } from '@convex-dev/auth/server'
+import { env } from './_generated/server'
+import {
+  authFromAddress,
+  deliverAuthEmail,
+  type AuthMailKind,
+} from './authEmail'
+import { hashPassword, verifyPassword } from './passwordCrypto'
+import { assertPasswordLength, normalizeAuthEmail } from './passwords'
 
 /**
- * Convex Auth med adgangskode.
+ * Convex Auth med adgangskode, bekræftelsesmail og nulstilling.
  *
- * Forskellen fra Supabase Auth, som skal besluttes bevidst: Supabase gemte en
- * bcrypt-hash i `auth.users`, som ikke kan læses gennem API'et. Convex Auth
- * gemmer sin egen hash i `authAccounts`. Der er derfor ingen måde at flytte
- * adgangskoderne med over -- medlemmerne skal sætte en ny adgangskode, eller
- * der skal bygges en engangs-import (se V2/README.md, "Adgangskoder").
+ * Linket i mailen er Convex Auth's kode sat på som `?code=`. Klienten
+ * samler den op på `/velkommen` og `/ny-adgangskode`, så siderne opleves
+ * som den nuværende apps mail-links.
  *
- * Adgangskontrollen (hvem der overhovedet må oprette sig) ligger ikke her: den
- * ligger i `members.claimProfile`, som afviser en e-mail, der ikke står i
- * `allowedEmails`. Det er et bevidst valg, fordi en afvisning skal kunne siges
- * højt i UI'et med en forklaring, ikke ende som en kryptisk auth-fejl.
+ * Importerede bcrypt-hashes fra Supabase verificeres her. Login-siden
+ * skriver dem om til Scrypt bagefter (`passwords.rehashIfImported`).
+ * Se V2/README.md.
  */
+
+const VERIFICATION_MAX_AGE_SECONDS = 60 * 60
+const DEFAULT_FROM = authFromAddress(undefined)
+
+function mailKind(providerId: string): AuthMailKind {
+  return providerId === 'password-reset' ? 'reset' : 'verify'
+}
+
+function emailProvider(id: string): EmailConfig {
+  return {
+    id,
+    type: 'email',
+    name: id,
+    from: DEFAULT_FROM,
+    maxAge: VERIFICATION_MAX_AGE_SECONDS,
+    sendVerificationRequest: async (params) => {
+      await deliverAuthEmail({
+        kind: mailKind(params.provider.id),
+        to: params.identifier,
+        url: params.url,
+        apiKey: env.RESEND_API_KEY,
+        from: env.AUTH_EMAIL_FROM,
+        fetchImpl: fetch,
+        log: (line) => console.log(line),
+      })
+    },
+  }
+}
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [Password],
+  providers: [
+    Password({
+      verify: emailProvider('password-verify'),
+      reset: emailProvider('password-reset'),
+      validatePasswordRequirements: assertPasswordLength,
+      crypto: {
+        hashSecret: hashPassword,
+        verifySecret: verifyPassword,
+      },
+      profile: (params) => {
+        const email = normalizeAuthEmail(String(params.email ?? ''))
+        const name = typeof params.name === 'string' ? params.name.trim() : ''
+        const profile: { [key: string]: string } & { email: string } = {
+          email,
+        }
+        if (name.length > 0) profile.name = name
+        return profile
+      },
+    }),
+  ],
 })

@@ -28,6 +28,8 @@ const KNOWN_CODES: Record<string, string> = {
     'Noget i profilen kunne ikke gemmes. Tjek felterne og prøv igen.',
   ACCOUNT_DELETION_RESERVED:
     'Din konto er ved at blive slettet, så den kan ikke ændres.',
+  PASSWORD_TOO_SHORT: 'Adgangskoden skal være på mindst 6 tegn.',
+  AUTH_EMAIL_NOT_SENT: 'Mailen kunne ikke sendes. Prøv igen om lidt.',
   NOT_ADMIN: 'Du har ikke længere adgang til denne handling.',
   PROFILE_NOT_FOUND: 'Profilen kunne ikke findes. Genindlæs siden.',
   PROFILE_NOT_CREATED: 'Profilen kunne ikke oprettes. Prøv igen om lidt.',
@@ -58,6 +60,15 @@ export function toFriendlyAuthError(error: unknown): string {
     message.includes('credentials')
   ) {
     return 'Forkert e-mail eller adgangskode.'
+  }
+  if (
+    message.includes('at least 6') ||
+    message.includes('password_too_short')
+  ) {
+    return 'Adgangskoden skal være på mindst 6 tegn.'
+  }
+  if (message.includes('auth_email_not_sent')) {
+    return 'Mailen kunne ikke sendes. Prøv igen om lidt.'
   }
   if (message.includes('password')) {
     return 'Adgangskoden opfylder ikke kravene.'

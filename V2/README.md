@@ -120,17 +120,73 @@ faktisk sker.
 
 ### Adgangskoder
 
-Supabase gemte bcrypt-hashes i `auth.users`, som ikke kan læses gennem API'et.
-Convex Auth gemmer sin egen hash. Der er derfor **ingen måde at flytte
-adgangskoder med over**. To muligheder, og valget er ikke taget endnu:
+Supabase gemmer bcrypt-hashes i `auth.users.encrypted_password`. Convex Auth
+gemmer Lucia-Scrypt. De kan ikke læses gennem Supabase' API, men de kan
+eksporteres med SQL-adgang til databasen og lægges ind i Convex.
 
-1. Alle medlemmer sætter en ny adgangskode via nulstillingsflowet (enkelt, og
-   for en klub af denne størrelse sandsynligvis fint).
-2. En engangs-import: eksportér hashes med SQL-adgang til den gamle database,
-   og verificér dem i en tilpasset provider ved første login. Kræver, at Convex
-   Auth kan udvides med en egen hash-verifikation — **ikke undersøgt**.
+`convex/passwords.ts` gør to ting:
 
-Indtil det er afgjort, kan kun nye konti oprettes i V2.
+1. `importHashes` (intern) skriver bcrypt-hashen urørt ind som kontoens
+   hemmelighed og markerer e-mailen som bekræftet. Den hasher ikke igen.
+2. Ved login tjekkes bcrypt, og hashen skrives om til Scrypt med det samme,
+   så næste login kun kender Convex' egen hash.
+
+Sådan køres importen, når flytningen er aftalt -- ikke før, og ikke mod
+rigtige data i utide:
+
+```sql
+select email, encrypted_password
+from auth.users
+where encrypted_password like '$2%';
+```
+
+```bash
+npx convex run passwords:importHashes --prod \
+  '{"confirm":"IMPORT_BCRYPT_HASHES","accounts":[{"email":"medlem@example.com","bcryptHash":"$2a$10$..."}]}'
+```
+
+`confirm` skal være præcis `IMPORT_BCRYPT_HASHES`. Uden den gør mutationen
+ingenting. Funktionen er intern, så appen kan ikke kalde den. Den er ikke
+kørt mod produktion.
+
+Nye adgangskoder (oprettelse, nulstilling, omhashning) er Scrypt. Mindste
+længde er 6 tegn, som i den nuværende app.
+
+### Mails
+
+Bekræftelse ved oprettelse og glemt adgangskode sendes gennem Resends REST
+API (`fetch` i `convex/authEmail.ts`, ingen `resend`-pakke). Afsenderen er
+`Naturklubben <noreply@naturklubben.dk>`, medmindre `AUTH_EMAIL_FROM` er sat.
+Linket i bekræftelsen lander på `/velkommen`, linket ved glemt adgangskode
+på `/ny-adgangskode`. Siderne og teksterne er de samme som i den nuværende
+app.
+
+`RESEND_API_KEY` ligger i repoets Actions-secrets og sættes på
+produktions-deploymentet af `deploy-v2.yml` via stdin. Den må ikke commits.
+Uden nøglen (sådan er previewet) logges mailen, og kaldet lykkes. Previewets
+testbruger markeres som bekræftet, så login-smoken ikke venter på en mail.
+
+Prøvemedlemskab og gæsteansøgninger sender ikke mail i den nuværende app
+(push og en mailto-kladde). De er ikke flyttet til Resend.
+
+`SITE_URL` skal være `https://naturklubben.dk`, så et link tilbage til
+preview-stien `/pr-preview/pr-<nr>/velkommen` accepteres.
+
+#### DNS hos my.host
+
+Domænet `naturklubben.dk` er oprettet i Resend i region **eu-west-1**, men
+endnu ikke verificeret. Kasper lægger disse records ind hos my.host. Værdien
+på DKIM-posten er den, Resend viser for domænet -- den står ikke her.
+
+| Type | Navn | Indhold |
+| --- | --- | --- |
+| TXT | `resend._domainkey` | DKIM-nøglen fra Resend |
+| CNAME | `rsend` | `rsend-euw1.forge.rmta.net` |
+| CNAME | `send` | `send.forge.rmta.net` |
+
+Eksisterende mail-poster for klubbens almindelige post må ikke overskrives.
+Når de tre er lagt ind, trykkes Verify i Resend. Før det afviser Resend
+afsenderen `noreply@naturklubben.dk`, så der sendes ingen prøvemail endnu.
 
 ### Data
 

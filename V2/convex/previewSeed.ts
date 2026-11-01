@@ -391,6 +391,38 @@ export const ensure = internalAction({
     }
 
     await ctx.runMutation(internal.previewSeed.applySample, { userId })
+    // Bekræftelse er slået til. Testbrugeren skal kunne logge ind, selv om
+    // previewet ikke sender mails.
+    await ctx.runMutation(internal.previewSeed.markAccountVerified, { email })
     return { ok: true }
   },
 })
+
+export const markAccountVerified = internalMutation({
+  args: { email: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    assertAllowedOnThisDeployment()
+    await markPasswordAccountVerified(ctx, normalizePreviewEmail(args.email))
+    return null
+  },
+})
+
+/** Sætter e-mailen som bekræftet på adgangskode-kontoen. */
+export async function markPasswordAccountVerified(
+  ctx: MutationCtx,
+  email: string,
+): Promise<void> {
+  const account = await ctx.db
+    .query('authAccounts')
+    .withIndex('providerAndAccountId', (q) =>
+      q.eq('provider', 'password').eq('providerAccountId', email),
+    )
+    .unique()
+  if (account === null) return
+  await ctx.db.patch(account._id, { emailVerified: email })
+  const user = await ctx.db.get(account.userId)
+  if (user !== null && user.emailVerificationTime === undefined) {
+    await ctx.db.patch(user._id, { emailVerificationTime: Date.now() })
+  }
+}

@@ -1,7 +1,9 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuthActions } from '@convex-dev/auth/react'
-import { useConvexAuth } from 'convex/react'
+import { useAction, useConvexAuth } from 'convex/react'
+import { api } from '../../convex/_generated/api'
+import { appUrl } from '../features/auth/authRedirect'
 import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
 
 /**
@@ -13,6 +15,7 @@ import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
  */
 export default function LoginPage() {
   const { signIn } = useAuthActions()
+  const rehashIfImported = useAction(api.passwords.rehashIfImported)
   const { isAuthenticated, isLoading } = useConvexAuth()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from ?? '/'
@@ -48,11 +51,21 @@ export default function LoginPage() {
     const submittedPassword = String(data.get('password') ?? '')
 
     try {
-      await signIn('password', {
+      const result = await signIn('password', {
         email: submittedEmail,
         password: submittedPassword,
         flow: 'signIn',
+        redirectTo: appUrl('velkommen'),
       })
+      if (!result.signingIn) {
+        setError('Bekræft venligst din e-mail, før du logger ind.')
+        setErrorField('email')
+        emailRef.current?.focus()
+        return
+      }
+      // Importerede bcrypt-hashes skrives om, når login er lykkedes.
+      // Fejler det, er man stadig logget ind.
+      await rehashIfImported({ password: submittedPassword }).catch(() => {})
     } catch (signInError) {
       // Convex Auth's tekst er engelsk og ikke en kontrakt, så feltet vælges
       // ud fra, hvad fejlen handler om -- ikke ud fra en fast streng.

@@ -7,14 +7,11 @@ import { toFriendlyMemberError } from '../features/auth/authErrors'
 import { useCurrentProfile } from '../features/auth/useCurrentProfile'
 
 /**
- * Landingssiden efter oprettelsen -- og redningen for en session uden profil.
+ * Landingssiden for linket i bekræftelsesmailen (`/velkommen`).
  *
- * Convex Auth har ingen bekræftelsesmail i denne opsætning, så der er intet
- * link at vente på. Til gengæld kan `ProtectedRoute` sende folk hertil, når
- * der er en session men ingen `profiles`-række (fx fordi oprettelsen blev
- * afbrudt efter auth-brugeren blev lavet). Siden kalder derfor
- * `members.claimProfile`, som er idempotent, og viser svaret: velkommen --
- * eller forklaringen på, hvorfor adressen ikke er inviteret.
+ * Convex Auth samler `?code=` op og logger ind. Siden venter på sessionen
+ * og kalder derefter `members.claimProfile`, som er idempotent. En session
+ * uden profil (oprettelsen blev afbrudt) lander også her.
  *
  * Forsøget gøres kun én gang pr. sidevisning (`attempted`), så en afvist
  * adresse ikke hamrer løs mod backend'en i en uendelig løkke.
@@ -47,7 +44,7 @@ export default function WelcomePage() {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold text-ink-body">
-          Gør din bruger klar…
+          {authLoading ? 'Bekræfter din e-mail…' : 'Gør din bruger klar…'}
         </h1>
       </main>
     )
@@ -57,10 +54,11 @@ export default function WelcomePage() {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold text-ink-body">
-          Du er ikke logget ind
+          Bekræft din e-mail
         </h1>
         <p className="text-ink-muted">
-          Log ind for at se, om din e-mail er inviteret til Naturklubben.
+          Åbn linket i den mail, vi har sendt dig — eller log ind, hvis du
+          allerede har bekræftet din e-mail.
         </p>
         <Link
           to="/login"
@@ -102,18 +100,14 @@ export default function WelcomePage() {
         {firstName ? `Velkommen, ${firstName}!` : 'Velkommen til Naturklubben!'}
       </h1>
       <p className="text-ink-muted">
-        Din bruger er klar, og du er logget ind. Nu kan du se medlemmerne og
-        tilpasse din profil -- resten af appen følger efter, efterhånden som den
-        bliver portet.
+        Din e-mail er bekræftet, og du er logget ind. Nu kan du se kalenderen,
+        billederne og skrive med i chatten.
       </p>
       <Link
-        to="/medlemmer"
+        to="/kalender"
         className="inline-flex min-h-11 items-center justify-center rounded bg-accent px-4 py-2 text-white"
       >
-        Se medlemmerne
-      </Link>
-      <Link to="/profil" className="text-sm text-ink-muted underline">
-        Tilpas din profil
+        Se kalenderen
       </Link>
       <Link to="/" className="text-sm text-ink-muted underline">
         Gå til forsiden

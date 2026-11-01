@@ -59,6 +59,23 @@ jobs:
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
 
+      # Nøglen læses fra stdin. Uden `--secret` skriver `env set` kun navnet
+      # i loggen, ikke værdien.
+      - name: Sæt afsender-nøgle på Convex
+        if: ${{ inputs.deploy_backend }}
+        working-directory: V2
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RESEND_API_KEY}" ]; then
+            echo "Mangler RESEND_API_KEY."
+            exit 1
+          fi
+          npx convex env set SITE_URL https://naturklubben.dk
+          printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY
+
       - name: Build
         working-directory: V2
         run: npm run build

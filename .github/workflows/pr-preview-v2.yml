@@ -125,6 +125,7 @@ jobs:
           esac
           preview="pr-${{ github.event.number }}"
           npx convex env set PREVIEW_SEED 1 --preview-name "$preview"
+          npx convex env set SITE_URL https://naturklubben.dk --preview-name "$preview"
           printf '%s' "$PREVIEW_TEST_EMAIL" | npx convex env set PREVIEW_TEST_EMAIL --preview-name "$preview"
           printf '%s' "$PREVIEW_TEST_PASSWORD" | npx convex env set PREVIEW_TEST_PASSWORD --preview-name "$preview"
           npx convex run previewSeed:ensure '{}' --preview-name "$preview"

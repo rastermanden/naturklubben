@@ -15,6 +15,7 @@
   "dependencies": {
     "@convex-dev/auth": "^0.0.90",
     "@tailwindcss/vite": "^4.3.3",
+    "bcryptjs": "^3.0.3",
     "convex": "^1.30.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
