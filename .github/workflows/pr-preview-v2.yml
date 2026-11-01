@@ -170,6 +170,14 @@ jobs:
               # af SIGPIPE, så et rigtigt match bliver talt som fejl.
               if printf '%s' "$body" | grep -F "$host" >/dev/null && ! printf '%s' "$body" | grep -F 'supabase.co' >/dev/null; then
                 echo "Live bundle $js peger på $host og ikke på Supabase."
+                for route in kalender aktiviteter profil medlemmer login; do
+                  code=$(curl -s -o /dev/null -w '%{http_code}' -L "$url$route?cb=$cb")
+                  echo "/$route -> $code"
+                  if [ "$code" != "200" ]; then
+                    echo "Forventede HTTP 200 på /$route."
+                    exit 1
+                  fi
+                done
                 exit 0
               fi
             fi

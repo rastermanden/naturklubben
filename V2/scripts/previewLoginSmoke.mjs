@@ -193,10 +193,25 @@ async function runOnce() {
       ],
     ]
     for (const [route, text] of reloads) {
-      const response = await page.goto(`${base}${route}`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 30000,
-      })
+      console.log(`genindlæser /${route}`)
+      let response
+      try {
+        // commit frem for domcontentloaded: en åben websocket fra Convex
+        // kan ellers holde navigationen åben, til timeouten rammer.
+        response = await page.goto(`${base}${route}`, {
+          waitUntil: 'commit',
+          timeout: 20000,
+        })
+      } catch (error) {
+        const wrapped = new Error(
+          `Navigation fejlede på /${route}: ${error instanceof Error ? error.message : error}`,
+        )
+        wrapped.fatal = true
+        throw wrapped
+      }
+      console.log(
+        `svar ${response === null ? 'intet' : response.status()} ${page.url()}`,
+      )
       if (response !== null && response.status() >= 400) {
         throw new Error(`HTTP ${response.status()} på /${route}`)
       }
