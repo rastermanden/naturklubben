@@ -10,6 +10,7 @@ import { useMembers } from '../features/members/useMembers'
 import { NotificationTypePreferences } from '../features/notifications/NotificationTypePreferences'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { useAuth } from '../features/auth/useAuth'
+import { SignOutSection } from '../features/auth/SignOutSection'
 import { ChatColorOption } from '../features/chat/ChatColorOption'
 import { profilesMapQueryKey } from '../features/chat/useProfilesMap'
 import { addedCauses, announceCauses } from '../features/profile/announceCauses'
@@ -421,6 +422,8 @@ function ProfilePage() {
           emptyText="Du har ingen badges endnu."
         />
       </section>
+
+      <SignOutSection email={email ?? null} />
 
       {email && <DeleteAccountSection email={email} />}
     </main>

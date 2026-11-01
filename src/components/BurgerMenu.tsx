@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
 import { useAuth } from '../features/auth/useAuth'
 import { useDialogFocus } from '../hooks/useDialogFocus'
-import { navLinks } from './navLinks'
+import { isNavLinkActive, navLinks } from './navLinks'
 import { ThemeToggle } from '../features/theme/ThemeToggle'
 import { InstallAppButton } from './InstallAppButton'
 
@@ -14,8 +14,9 @@ interface BurgerMenuProps {
 }
 
 export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
-  const { session, signOut } = useAuth()
+  const { session } = useAuth()
   const { isAdmin } = useIsAdmin()
+  const { pathname } = useLocation()
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useDialogFocus<HTMLDivElement>({
     open,
@@ -96,7 +97,7 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
               onClick={onClose}
               className={({ isActive }) =>
                 `flex min-h-11 shrink-0 items-center rounded px-3 py-2 text-base ${
-                  isActive
+                  isNavLinkActive(link, pathname, isActive)
                     ? 'bg-surface-raised text-ink-body'
                     : 'text-ink-muted'
                 }`
@@ -110,18 +111,8 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
         <div className="flex shrink-0 flex-col gap-0.5 border-t border-line-soft pt-3">
           <ThemeToggle className="mb-2" />
           <InstallAppButton className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-base text-ink-muted" />
-          {session ? (
-            <button
-              type="button"
-              onClick={async () => {
-                await signOut()
-                onClose()
-              }}
-              className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-base text-ink-muted"
-            >
-              Log ud
-            </button>
-          ) : (
+          {/* "Log ud" står på profilsiden (#285). */}
+          {!session && (
             <NavLink
               to="/login"
               onClick={onClose}
