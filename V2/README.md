@@ -178,11 +178,11 @@ Domænet `naturklubben.dk` er oprettet i Resend i region **eu-west-1**, men
 endnu ikke verificeret. Kasper lægger disse records ind hos my.host. Værdien
 på DKIM-posten er den, Resend viser for domænet -- den står ikke her.
 
-| Type | Navn | Indhold |
-| --- | --- | --- |
-| TXT | `resend._domainkey` | DKIM-nøglen fra Resend |
-| CNAME | `rsend` | `rsend-euw1.forge.rmta.net` |
-| CNAME | `send` | `send.forge.rmta.net` |
+| Type  | Navn                | Indhold                     |
+| ----- | ------------------- | --------------------------- |
+| TXT   | `resend._domainkey` | DKIM-nøglen fra Resend      |
+| CNAME | `rsend`             | `rsend-euw1.forge.rmta.net` |
+| CNAME | `send`              | `send.forge.rmta.net`       |
 
 Eksisterende mail-poster for klubbens almindelige post må ikke overskrives.
 Når de tre er lagt ind, trykkes Verify i Resend. Før det afviser Resend
