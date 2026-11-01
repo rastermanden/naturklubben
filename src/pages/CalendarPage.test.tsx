@@ -39,6 +39,7 @@ const PAST_EVENT: CalendarEvent = {
 }
 
 const mocks = vi.hoisted(() => ({
+  isAdmin: false,
   eventsQuery: {
     data: undefined as CalendarEvent[] | undefined,
     isLoading: false,
@@ -87,7 +88,7 @@ vi.mock('../features/auth/useAuth', () => ({
   useAuth: () => ({ session: { user: { id: 'member-id' } } }),
 }))
 vi.mock('../features/admin/useIsAdmin', () => ({
-  useIsAdmin: () => ({ isAdmin: false }),
+  useIsAdmin: () => ({ isAdmin: mocks.isAdmin }),
 }))
 // Tilmelding og opgaver har deres egne hooks mod Supabase; her handler det
 // kun om, at dialogen åbner fra URL'en.
@@ -152,6 +153,7 @@ function renderAt(path: string) {
 
 afterEach(() => {
   cleanup()
+  mocks.isAdmin = false
   mocks.eventsQuery.data = undefined
   mocks.createEvent.mutateAsync.mockReset()
   mocks.updateEvent.mutateAsync.mockReset()
@@ -453,5 +455,24 @@ describe('CalendarPage: link til billederne (#261)', () => {
         name: /Se billeder/,
       }),
     ).toBeNull()
+  })
+})
+
+describe('CalendarPage: link til datoafstemningerne (#288)', () => {
+  it('viser admins et link til "Find en dato" på admin-siden', () => {
+    mocks.isAdmin = true
+    mocks.eventsQuery.data = [EVENT]
+    renderAt('/kalender')
+
+    expect(
+      screen.getByRole('link', { name: 'Find en dato' }).getAttribute('href'),
+    ).toBe('/admin?sektion=datoer')
+  })
+
+  it('viser ikke linket for almindelige medlemmer', () => {
+    mocks.eventsQuery.data = [EVENT]
+    renderAt('/kalender')
+
+    expect(screen.queryByRole('link', { name: 'Find en dato' })).toBeNull()
   })
 })

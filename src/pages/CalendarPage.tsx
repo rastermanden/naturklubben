@@ -32,6 +32,7 @@ import {
 } from '../features/calendar/announceWaitlist'
 import { useAuth } from '../features/auth/useAuth'
 import { useIsAdmin } from '../features/admin/useIsAdmin'
+import { adminTabPath } from '../features/admin/adminTabs'
 import { useProfilesMap } from '../features/chat/useProfilesMap'
 import { useDialogFocus } from '../hooks/useDialogFocus'
 
@@ -501,6 +502,17 @@ function CalendarPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          {/* Datoafstemningerne (#288) er kun for admins og bor på
+              admin-siden -- men det er her, man står, når man skal
+              planlægge den næste tur. */}
+          {isAdmin && (
+            <Link
+              to={adminTabPath('datoer')}
+              className="flex min-h-11 items-center rounded border border-accent-soft px-5 py-2 text-ink-muted hover:bg-surface-sunken"
+            >
+              Find en dato
+            </Link>
+          )}
           {CALENDAR_FEED_URL && (
             <button
               type="button"
