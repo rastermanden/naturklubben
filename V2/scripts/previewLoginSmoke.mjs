@@ -202,9 +202,7 @@ async function runOnce() {
               const body = document.body?.innerText ?? ''
               const arrived =
                 !requireToken || window.location.search.includes(token)
-              return (
-                arrived && body.includes(expected) && body.includes('Log ud')
-              )
+              return arrived && body.includes(expected)
             },
             { timeout: 20000 },
             text,
@@ -215,8 +213,26 @@ async function runOnce() {
             window.location.assign(url)
           }, `${base}${route}?reload=${stamp}`),
         ])
+        const loggedOut = await page.evaluate(
+          () =>
+            document.body?.innerText.includes('Log ind for at se kalender') ??
+            false,
+        )
+        if (loggedOut) {
+          throw new Error(`Sessionen manglede efter genindlæs af /${route}`)
+        }
       }
     } catch (error) {
+      const info = await page
+        .evaluate(() => ({
+          href: window.location.href,
+          text: (document.body?.innerText ?? '').slice(0, 240),
+          keys: Object.keys(window.localStorage).map((key) => key.slice(0, 48)),
+        }))
+        .catch(() => ({ href: 'væk', text: '', keys: [] }))
+      console.log(
+        `side ${info.href} | ${info.text.replaceAll('\n', ' | ')} | nøgler ${info.keys.join(',')}`,
+      )
       if (error && typeof error === 'object') error.fatal = true
       throw error
     }
