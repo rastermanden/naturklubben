@@ -1,3 +1,24 @@
+import { computeSpaFallback } from './spaFallback'
+
+export { computeSpaFallback }
+
+/**
+ * Pakker `?spa-path=` ud til den rigtige adresse under appens base.
+ * Bruges før React Router læser adressen.
+ */
+export function restoredSpaPath(base: string, href: string): string | null {
+  const url = new URL(href)
+  const path = url.searchParams.get('spa-path')
+  if (path === null) return null
+  url.searchParams.delete('spa-path')
+  const restored = new URL(
+    `${base}${path.replace(/^\/+/, '')}${url.search}`,
+    url.origin,
+  )
+  restored.hash = url.hash
+  return restored.pathname + restored.search + restored.hash
+}
+
 /**
  * Modstykket til den 404.html, `vite.config.ts` udgiver.
  *
@@ -11,16 +32,10 @@
  * de dele, og det sker når auth-provideren mounter, altså efter denne funktion.
  */
 export function restoreSpaRedirect(): void {
-  const url = new URL(window.location.href)
-  const path = url.searchParams.get('spa-path')
-  if (path === null) return
-
-  url.searchParams.delete('spa-path')
-  const restored = new URL(
-    `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}${url.search}`,
-    window.location.origin,
+  const restored = restoredSpaPath(
+    import.meta.env.BASE_URL,
+    window.location.href,
   )
-  restored.hash = url.hash
-
-  window.history.replaceState(window.history.state, '', restored.href)
+  if (restored === null) return
+  window.history.replaceState(window.history.state, '', restored)
 }

@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import { appBuildDate, appVersion, formatAppVersion } from '../lib/appVersion'
 import { FeatureAnnouncementBanner } from '../features/announcements/FeatureAnnouncementBanner'
+import { AppErrorBoundary } from './AppErrorBoundary'
 import { Navbar } from './Navbar'
 
 /**
@@ -19,10 +20,14 @@ export function Layout() {
       {/* Banneret monteres her og ikke på en side: det er også det, der beder
           serveren om at sende nyhedsnotifikationen, så det skal køre, uanset
           hvilken side medlemmet åbner. */}
-      <FeatureAnnouncementBanner />
+      <AppErrorBoundary>
+        <FeatureAnnouncementBanner />
+      </AppErrorBoundary>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
-        <Outlet />
+        <AppErrorBoundary>
+          <Outlet />
+        </AppErrorBoundary>
       </main>
 
       <footer className="border-t border-line-soft px-4 py-3 text-center text-sm text-ink-subtle">

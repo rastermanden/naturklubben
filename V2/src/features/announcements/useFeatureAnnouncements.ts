@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 
@@ -25,7 +25,13 @@ export function resetFeatureAnnouncementDelivery() {
 }
 
 export function useFeatureAnnouncements() {
-  const announcements = useQuery(api.announcements.list)
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
+  // `skip`, så en gæst ikke abonnerer på en medlems-query. Uden det kaster
+  // `useQuery` NOT_A_MEMBER op gennem træet, og hele appen bliver blank.
+  const announcements = useQuery(
+    api.announcements.list,
+    isAuthenticated ? {} : 'skip',
+  )
   const markRead = useMutation(api.announcements.markRead)
   const requestDelivery = useMutation(api.announcements.requestDelivery)
 
@@ -35,17 +41,18 @@ export function useFeatureAnnouncements() {
    *
    * Nyheden oprettes ikke af en migration længere (V2 har ingen), så det er
    * her, den kommer ind i databasen første gang efter et deploy. Kaldet siger
-   * intet om hvad eller til hvem; det er udelukkende et "kig efter".
+   * intet om hvad eller til hvem; det er udelukkende et "kig efter". Kun et
+   * medlem må sætte det i gang.
    */
   useEffect(() => {
-    if (deliveryRequested) return
+    if (!isAuthenticated || deliveryRequested) return
     deliveryRequested = true
     void requestDelivery({}).catch((caught: unknown) => {
       // En fejl her koster ingenting for medlemmet foran skærmen: næste
       // indlæsning spørger igen.
       console.error('Kunne ikke udsende nyheden', caught)
     })
-  }, [requestDelivery])
+  }, [isAuthenticated, requestDelivery])
 
   const unread = (announcements ?? []).filter(
     (announcement) => !announcement.isRead,
@@ -56,8 +63,8 @@ export function useFeatureAnnouncements() {
     unread,
     // Læselisten afgør, hvad der er ulæst. Så længe den ikke er hentet, ville
     // alt se ulæst ud -- og banneret ville blinke forbi hos et medlem, der har
-    // set nyheden for længst.
-    isLoading: announcements === undefined,
+    // set nyheden for længst. En gæst har ingen liste, og det er ikke "henter".
+    isLoading: authLoading || (isAuthenticated && announcements === undefined),
     markAsRead: async (ids: readonly Id<'featureAnnouncements'>[]) => {
       if (ids.length === 0) return
       try {

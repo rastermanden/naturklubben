@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { computeSpaFallback } from './src/lib/spaFallback.js'
 
 /**
  * V2 er en Convex-native omskrivning af Naturklubben. Den ligger ved siden af
@@ -79,32 +80,15 @@ function spaFallback(basePath: string): Plugin {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Naturklubben</title>
     <script>
+      ${computeSpaFallback.toString()}
       ;(function () {
-        var base = ${JSON.stringify(basePath)}
-        var path = location.pathname
-        if (path.indexOf(base) !== 0) {
-          location.replace(base)
-          return
-        }
-        var rest = path.slice(base.length)
-
-        var preview = rest.match(/^pr-preview[/]pr-[0-9]+[/]/)
-        if (preview) {
-          base += preview[0]
-          rest = rest.slice(preview[0].length)
-        }
-
-        if (/[.][^/]+$/.test(rest)) return
-
-        var query = location.search ? location.search.slice(1) + '&' : ''
-        location.replace(
-          base +
-            '?' +
-            query +
-            'spa-path=' +
-            encodeURIComponent(rest) +
-            location.hash,
+        var target = computeSpaFallback(
+          ${JSON.stringify(basePath)},
+          location.pathname,
+          location.search,
+          location.hash,
         )
+        if (target !== null) location.replace(target)
       })()
     </script>
   </head>

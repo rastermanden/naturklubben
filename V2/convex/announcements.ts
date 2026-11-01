@@ -7,7 +7,7 @@ import {
 import type { MutationCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import { v } from 'convex/values'
-import { requireProfile, requireWritableProfile } from './authz'
+import { currentProfile, requireWritableProfile } from './authz'
 import { type PushPayload, type PushTarget } from './push'
 
 /**
@@ -101,7 +101,11 @@ export function announcementPayload(announcement: {
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const profile = await requireProfile(ctx)
+    // Listen er til medlemmer. En gæst skal ikke vælte appen med NOT_A_MEMBER;
+    // der er ingen nyheder at vise, før der er en profil.
+    const profile = await currentProfile(ctx)
+    if (profile === null) return []
+
     const now = Date.now()
 
     const announcements = await ctx.db
@@ -183,7 +187,8 @@ export const setPushEnabled = mutation({
 export const pushEnabled = query({
   args: {},
   handler: async (ctx): Promise<boolean> => {
-    const profile = await requireProfile(ctx)
+    const profile = await currentProfile(ctx)
+    if (profile === null) return false
     return profile.featureNotificationsEnabled !== false
   },
 })
@@ -202,7 +207,10 @@ export const pushEnabled = query({
 export const requestDelivery = mutation({
   args: {},
   handler: async (ctx) => {
-    await requireProfile(ctx)
+    // Gæster må ikke sætte en udsendelse i gang. Klienten kalder heller ikke,
+    // men et direkte kald skal være et nej, ikke en fejl, der ryger i konsollen.
+    const profile = await currentProfile(ctx)
+    if (profile === null) return null
     await seed(ctx)
     await ctx.scheduler.runAfter(0, internal.pushSend.deliverAnnouncements, {})
     return null

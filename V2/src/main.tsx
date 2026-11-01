@@ -6,6 +6,7 @@ import './index.css'
 import App from './App.tsx'
 import { ThemeProvider } from './features/theme/ThemeProvider'
 import { convex } from './lib/convexClient'
+import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { restoreSpaRedirect } from './lib/spaRedirect'
 
 // Skal ske før React Router læser adressen -- ellers ser den rod-ruten i
@@ -21,7 +22,9 @@ createRoot(document.getElementById('root')!).render(
     <ThemeProvider>
       <ConvexAuthProvider client={convex}>
         <BrowserRouter basename={import.meta.env.BASE_URL}>
-          <App />
+          <AppErrorBoundary>
+            <App />
+          </AppErrorBoundary>
         </BrowserRouter>
       </ConvexAuthProvider>
     </ThemeProvider>
