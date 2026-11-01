@@ -189,6 +189,7 @@ async function runOnce() {
       ['kalender', 'Preview-tur'],
       ['aktiviteter', 'Skovtur'],
       ['billeder', 'Uden begivenhed'],
+      ['naturlog', 'Rød ræv'],
       ['chat', 'Hej fra previewet. Skoven er grøn i dag.'],
       ['profil', 'Min profil'],
       ['medlemmer', 'Medlemmer'],

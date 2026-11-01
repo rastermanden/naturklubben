@@ -55,6 +55,8 @@ export const PREVIEW_CHAT_TEXT = 'Hej fra previewet. Skoven er grøn i dag.'
 
 export const PREVIEW_PHOTO_CAPTION = 'Et blad fra previewet'
 
+export const PREVIEW_OBSERVATION_SPECIES = 'Rød ræv'
+
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000
 
@@ -198,6 +200,27 @@ export async function writePreviewSample(
       startAt,
       endAt: endsAt,
       endsAt,
+    })
+  }
+
+  const existingObservation = await ctx.db
+    .query('observations')
+    .filter((q) => q.eq(q.field('species'), PREVIEW_OBSERVATION_SPECIES))
+    .first()
+  if (existingObservation === null) {
+    const now = Date.now()
+    const day = new Date(now).toISOString().slice(0, 10)
+    await ctx.db.insert('observations', {
+      species: PREVIEW_OBSERVATION_SPECIES,
+      location: 'Skovstien',
+      observedOn: day,
+      notes: 'Så den krydse stien i previewet.',
+      latitude: 55.67,
+      longitude: 12.52,
+      createdById: profileId,
+      createdByName: PREVIEW_MEMBER_NAME,
+      createdAt: now,
+      updatedAt: now,
     })
   }
 

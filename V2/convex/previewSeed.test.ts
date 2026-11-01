@@ -5,6 +5,7 @@ import schema from './schema'
 import {
   PREVIEW_ACTIVITIES,
   PREVIEW_CHAT_TEXT,
+  PREVIEW_OBSERVATION_SPECIES,
   PREVIEW_PHOTO_CAPTION,
   PREVIEW_EVENT_TITLE,
   PREVIEW_MEMBER_NAME,
@@ -119,6 +120,16 @@ describe('writePreviewSample', () => {
       ctx.db.query('messages').collect(),
     )
     expect(messages).toHaveLength(1)
+    const observations = await t.run(async (ctx) =>
+      ctx.db.query('observations').collect(),
+    )
+    expect(observations).toHaveLength(1)
+    expect(observations[0]).toMatchObject({
+      species: PREVIEW_OBSERVATION_SPECIES,
+      location: 'Skovstien',
+      createdById: rows.profiles[0]!._id,
+    })
+
     const photos = await t.run(async (ctx) => ctx.db.query('photos').collect())
     expect(photos).toHaveLength(1)
     expect(photos[0]).toMatchObject({

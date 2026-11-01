@@ -1,5 +1,34 @@
+import { Link } from 'react-router-dom'
 import { ActivityIcon } from '../features/activities/ActivityIcon'
 import { useActivities } from '../features/activities/useActivities'
+import { useCurrentProfile } from '../features/auth/useCurrentProfile'
+
+function ClubLinkCard({
+  to,
+  title,
+  description,
+}: {
+  to: string
+  title: string
+  description: string
+}) {
+  return (
+    <li>
+      <Link
+        to={to}
+        className="flex min-h-11 items-center justify-between gap-4 rounded-2xl border border-line-soft bg-surface p-6 shadow-sm hover:bg-surface-sunken"
+      >
+        <span>
+          <span className="block text-xl font-semibold text-ink">{title}</span>
+          <span className="mt-1 block text-ink-muted">{description}</span>
+        </span>
+        <span aria-hidden="true" className="shrink-0 text-2xl text-ink-subtle">
+          →
+        </span>
+      </Link>
+    </li>
+  )
+}
 
 /**
  * Den offentlige aktivitetsside. Indholdet er klubbens eget, så den kræver
@@ -8,6 +37,7 @@ import { useActivities } from '../features/activities/useActivities'
 function ActivitiesPage() {
   const activitiesQuery = useActivities()
   const activities = activitiesQuery ?? []
+  const { profile } = useCurrentProfile()
 
   return (
     <main className="bg-surface-sunken/60 px-4 py-12 sm:px-6 sm:py-16">
@@ -24,6 +54,24 @@ function ActivitiesPage() {
             vi samles om gennem året.
           </p>
         </header>
+
+        <ul
+          aria-label="Klubbens egne"
+          className="mx-auto mt-10 flex max-w-2xl flex-col gap-4"
+        >
+          <ClubLinkCard
+            to="/aktiviteter/btg-turnering"
+            title="BTG turnering"
+            description="Hold styr på kampe, resultater og stilling til klubbens bøssetennisgolf-turneringer."
+          />
+          {profile && (
+            <ClubLinkCard
+              to="/naturlog"
+              title="Naturlog"
+              description="Hvad har vi set derude? Skriv arten, stedet og datoen."
+            />
+          )}
+        </ul>
 
         <section
           className="mt-10"
