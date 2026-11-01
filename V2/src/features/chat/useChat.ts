@@ -181,7 +181,7 @@ export function useMessages(room: ChatRoom, profileId: Id<'profiles'>) {
   const createPollMutation = useMutation(api.chatPolls.createPoll)
   const castVoteMutation = useMutation(api.chatPolls.castPollVote)
   const closePollMutation = useMutation(api.chatPolls.closePoll)
-  const markRoomRead = useMutation(api.chat.markRoomRead)
+  const markMessageRead = useMutation(api.chat.markMessageRead)
   const [sendError, setSendError] = useState<string | null>(null)
 
   const queuedDraft = useCallback(
@@ -209,9 +209,11 @@ export function useMessages(room: ChatRoom, profileId: Id<'profiles'>) {
         replyToId: entry.replyToMessageId,
         writtenAt: entry.writtenAt,
       }),
-    deliver: () => {
-      // En kvitteret besked betyder, at brugeren står i rummet nu.
-      void markRoomRead({ room }).catch(() => {})
+    deliver: (messageId) => {
+      // En besked fra køen er nået frem, mens medlemmet står i rummet.
+      // Positionen flyttes kun fremad, så en forsinket ældre besked ikke
+      // rykker avataren tilbage.
+      void markMessageRead({ messageId }).catch(() => {})
     },
   })
 
@@ -283,7 +285,6 @@ export function useMessages(room: ChatRoom, profileId: Id<'profiles'>) {
     castVote: (pollId: PollId, optionId: PollOptionId) =>
       castVoteMutation({ pollId, optionId }),
     closePoll: (pollId: PollId) => closePollMutation({ pollId }),
-    markRoomRead: () => markRoomRead({ room }),
     /** Beskeder, der endnu ikke er bekræftet af serveren. */
     queuedMessages: queue.messages,
     retryQueued: queue.retry,

@@ -44,6 +44,12 @@ export default function DataPolicyPage() {
             bevares ikke sammen med historikken. Tilmeldinger til begivenheder
             slettes.
           </p>
+          <p className="mt-2">
+            Chatten gemmer, hvor langt du senest har læst i hvert rum, og viser
+            det for de andre i rummet: din avatar står under den seneste besked,
+            du har læst. Det kan ikke slås fra. Oplysningen slettes sammen med
+            din konto og er med i din dataudlevering.
+          </p>
         </section>
 
         <section>

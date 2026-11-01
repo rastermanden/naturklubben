@@ -193,13 +193,20 @@ export const chatTables = {
     .index('by_room_and_last_seen', ['room', 'lastSeenAt']),
 
   /**
-   * Hvor langt et medlem er nået i hvert rum. Ulæst-tallet er antallet af
-   * andres beskeder efter `lastReadAt`, så der er ingen tælling at holde i
-   * sync -- kun et tidspunkt.
+   * Hvor langt et medlem er nået i hvert rum: én række pr. medlem pr. rum,
+   * den seneste besked, de har læst. Ulæst-tallet er andres beskeder efter
+   * den position, og avataren i chatten står under netop den besked.
+   *
+   * `lastReadMessageId` kan mangle, når beskeden er slettet helt, eller når
+   * rækken er en ældre "læst til nu"-markering. Så placerer klienten avataren
+   * ud fra `lastReadAt`.
    */
   chatReads: defineTable({
     profileId: v.id('profiles'),
     room: chatRooms,
     lastReadAt: v.number(),
-  }).index('by_profile_and_room', ['profileId', 'room']),
+    lastReadMessageId: v.optional(v.id('messages')),
+  })
+    .index('by_profile_and_room', ['profileId', 'room'])
+    .index('by_room', ['room']),
 }

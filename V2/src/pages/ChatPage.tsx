@@ -35,6 +35,8 @@ import {
 } from '../features/chat/mentions'
 import type { MentionMember } from '../features/chat/mentions'
 import { REACTION_EMOJI } from '../features/chat/constants'
+import { useReadReceipts } from '../features/chat/useReadReceipts'
+import { readersByMessage } from '../features/chat/readReceipts'
 
 /**
  * Chatten (#14), og det samme for admin-rummet (#212).
@@ -102,6 +104,37 @@ function ChatRoomView({
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [newMessageCount, setNewMessageCount] = useState(0)
   const [isNearBottom, setIsNearBottom] = useState(true)
+  // Læsekvitteringer: den nyeste besked tæller som læst, når bunden af
+  // listen er på skærmen.
+  const { positions: readPositions } = useReadReceipts(
+    room,
+    chat.messages,
+    viewer.profileId,
+    isNearBottom,
+  )
+  const readersMap = useMemo(
+    () =>
+      readersByMessage(
+        chat.messages.map((message) => ({
+          id: message.messageId,
+          userId: message.authorId,
+          createdAt: message.createdAt,
+        })),
+        readPositions.map((position) => ({
+          userId: position.profileId,
+          room: position.room,
+          lastReadMessageId: position.lastReadMessageId,
+          lastReadAt: position.lastReadAt,
+        })),
+        viewer.profileId,
+      ),
+    [chat.messages, readPositions, viewer.profileId],
+  )
+  const memberById = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof memberList>[number]>()
+    for (const member of memberList ?? []) map.set(member.profileId, member)
+    return map
+  }, [memberList])
   const [replyingToId, setReplyingToId] = useState<Id<'messages'> | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [openMessageId, setOpenMessageId] = useState<Id<'messages'> | null>(
@@ -156,18 +189,6 @@ function ChatRoomView({
     scrollHeight: number
     scrollTop: number
   } | null>(null)
-  const markRoomReadRef = useRef(chat.markRoomRead)
-  markRoomReadRef.current = chat.markRoomRead
-
-  // Rummet er læst, når det åbnes. Uden dette ville ulæst-tallet i appens
-  // navigation aldrig falde til ro.
-  useEffect(() => {
-    void markRoomReadRef.current().catch(() => {})
-    // markRoomReadRef peger altid på den nyeste funktion; effekten skal kun
-    // køre, når rummet skifter.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room])
-
   useEffect(() => {
     if (replyingTo && replyingTo.deletedAt !== null) setReplyingToId(null)
   }, [replyingTo])
@@ -206,6 +227,14 @@ function ChatRoomView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.messages])
 
+  // Læsernes avatarer lægger en linje til under beskederne. Står man
+  // nederst, skal den nyeste besked stadig være helt synlig, når de dukker
+  // op eller flytter sig.
+  useEffect(() => {
+    if (isNearBottom) scrollToBottom('auto')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readersMap])
+
   // En besked, der lægges i køen, skal stå nederst i strømmen, akkurat som en
   // sendt besked ville gøre -- man skal kunne se, at den kom af sted.
   useEffect(() => {
@@ -233,14 +262,7 @@ function ChatRoomView({
       list.scrollHeight - list.scrollTop - list.clientHeight
     const nearBottom = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
     setIsNearBottom(nearBottom)
-    if (nearBottom) {
-      setNewMessageCount(0)
-      // Kun når der faktisk er noget ulæst: ellers ville hver eneste scroll
-      // skrive en mutation, som ingen kunne se forskel på.
-      if ((unreadHere?.unread ?? 0) > 0) {
-        void markRoomReadRef.current().catch(() => {})
-      }
-    }
+    if (nearBottom) setNewMessageCount(0)
   }
 
   async function loadOlderMessages() {
@@ -695,6 +717,17 @@ function ChatRoomView({
                   onDelete={deleteSelectedMessage}
                   onVotePoll={votePoll}
                   onClosePoll={closePoll}
+                  readers={(readersMap.get(message.messageId) ?? []).map(
+                    (id) => {
+                      const member = memberById.get(id)
+                      return {
+                        id,
+                        name: member?.fullName ?? 'Medlem',
+                        avatarUrl: member?.avatarUrl ?? null,
+                        color: member?.chatColor ?? '#16a34a',
+                      }
+                    },
+                  )}
                 />
               ))}
               {chat.queuedMessages.map((entry) => (

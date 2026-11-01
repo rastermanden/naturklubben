@@ -73,6 +73,26 @@ function requireRoomAccess(profile: Doc<'profiles'>, room: ChatRoom) {
   }
 }
 
+/**
+ * Ligger beskeden efter læsepositionen? Samme rækkefølge som chatten viser
+ * beskederne i: tidspunkt, og ved lighed id.
+ *
+ * Uden et besked-id er hele det millisekund læst. Det svarer til
+ * `coalesce(last_read_message_id, target.id)` i `mark_chat_read`, så et kald
+ * med en besked fra samme millisekund ikke flytter positionen baglæns.
+ */
+function isAfterReadPosition(
+  message: { _id: Id<'messages'>; createdAt: number },
+  position: { lastReadAt: number; lastReadMessageId?: Id<'messages'> } | null,
+): boolean {
+  if (position === null) return true
+  if (message.createdAt !== position.lastReadAt) {
+    return message.createdAt > position.lastReadAt
+  }
+  const currentId = position.lastReadMessageId ?? message._id
+  return message._id > currentId
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
 }
@@ -524,11 +544,11 @@ export const onlineMembers = query({
 /**
  * Kræver: medlem (`requireProfile`). Ulæste beskeder og mentions pr. rum.
  *
- * Der findes ingen tælling at holde ved lige: et rum er ulæst fra det
- * tidspunkt, medlemmet sidst markerede det læst (`markRoomRead`), og tallet
- * regnes ud fra beskederne. Det er dyrere end en kolonne, men det kan til
- * gengæld ikke komme ud af trit. Tællingen ser højst `UNREAD_SCAN_LIMIT`
- * beskeder tilbage, og `capped` siger, om der var flere.
+ * Der findes ingen tælling at holde ved lige: et rum er ulæst fra den
+ * besked, medlemmet sidst har læst (`markMessageRead`), og tallet regnes ud
+ * fra beskederne. Det er dyrere end en kolonne, men det kan til gengæld ikke
+ * komme ud af trit. Tællingen ser højst `UNREAD_SCAN_LIMIT` beskeder tilbage,
+ * og `capped` siger, om der var flere.
  */
 export const unread = query({
   args: {},
@@ -556,15 +576,21 @@ export const unread = query({
       const recent = await ctx.db
         .query('messages')
         .withIndex('by_room_and_created_at', (q) =>
-          q.eq('room', room).gt('createdAt', lastReadAt),
+          read
+            ? q.eq('room', room).gte('createdAt', lastReadAt)
+            : q.eq('room', room).gt('createdAt', 0),
         )
         .take(UNREAD_SCAN_LIMIT)
 
       summary.push({
         room,
-        // Egne beskeder tælles ikke som ulæste.
-        unread: recent.filter((message) => message.authorId !== profile._id)
-          .length,
+        // Egne beskeder tælles ikke som ulæste, og heller ikke den besked,
+        // positionen allerede står på.
+        unread: recent.filter(
+          (message) =>
+            message.authorId !== profile._id &&
+            isAfterReadPosition(message, read),
+        ).length,
         mentions: recent.filter((message) =>
           message.mentions.includes(profile._id),
         ).length,
@@ -839,11 +865,85 @@ export const leave = mutation({
 })
 
 /**
+ * Kræver: medlem (`requireProfile`), og for admin-rummet administrator
+ * (`requireRoomAccess`).
+ *
+ * Alles læsepositioner i rummet. Convex-abonnementet er realtid: avataren
+ * flytter sig, når en anden markerer en besked læst. Man ser også sin egen
+ * række; klienten viser den ikke som avatar.
+ */
+export const readPositions = query({
+  args: { room: chatRooms },
+  handler: async (ctx, args) => {
+    const profile = await requireProfile(ctx)
+    requireRoomAccess(profile, args.room)
+
+    const rows = await ctx.db
+      .query('chatReads')
+      .withIndex('by_room', (q) => q.eq('room', args.room))
+      .collect()
+
+    return rows.map((row) => ({
+      profileId: row.profileId,
+      room: row.room,
+      lastReadMessageId: row.lastReadMessageId ?? null,
+      lastReadAt: row.lastReadAt,
+    }))
+  },
+})
+
+/**
+ * Kræver: medlem, der ikke er på vej til at blive slettet
+ * (`requireWritableProfile`).
+ *
+ * Sætter kalderens position i beskedens rum til beskeden, men kun fremad.
+ * Et kald, der ville flytte positionen baglæns, gør ingenting: klienten kan
+ * roligt sende en ældre besked, hvis en forsinket fane stadig er åben.
+ *
+ * En besked, kalderen ikke kan se (admin-rummet for et almindeligt medlem),
+ * behandles som en, der ikke findes, så kaldet ikke afslører, om den er der.
+ */
+export const markMessageRead = mutation({
+  args: { messageId: v.id('messages') },
+  handler: async (ctx, args) => {
+    const profile = await requireWritableProfile(ctx)
+    const message = await ctx.db.get(args.messageId)
+    if (message === null || (message.room === 'admin' && !profile.isAdmin)) {
+      throw new ConvexError('CHAT_READ_MESSAGE_NOT_FOUND')
+    }
+
+    const existing = await ctx.db
+      .query('chatReads')
+      .withIndex('by_profile_and_room', (q) =>
+        q.eq('profileId', profile._id).eq('room', message.room),
+      )
+      .unique()
+
+    if (existing !== null && !isAfterReadPosition(message, existing)) return
+
+    const next = {
+      lastReadAt: message.createdAt,
+      lastReadMessageId: message._id,
+    }
+    if (existing === null) {
+      await ctx.db.insert('chatReads', {
+        profileId: profile._id,
+        room: message.room,
+        ...next,
+      })
+      return
+    }
+    await ctx.db.patch(existing._id, next)
+  },
+})
+
+/**
  * Kræver: medlem (`requireProfile`), og for `room: 'admin'` derudover
  * administrator (`requireRoomAccess`).
  *
  * Flytter "læst til og med nu" for det pågældende rum. Ulæst-tallet i
- * `unread` regnes ud fra dette tidspunkt.
+ * `unread` regnes ud fra dette tidspunkt. Chatten selv bruger
+ * `markMessageRead`, så avataren har en bestemt besked at stå under.
  */
 export const markRoomRead = mutation({
   args: { room: chatRooms },

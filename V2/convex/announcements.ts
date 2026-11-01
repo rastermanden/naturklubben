@@ -83,6 +83,12 @@ export const ANNOUNCEMENTS = [
     path: 'chat',
   },
   {
+    slug: 'chat-laest-af',
+    title: 'Nu kan du se, hvem der har læst med i chatten',
+    body: 'Under beskederne i chatten står nu små billeder af dem, der har læst så langt. Tryk på dem for at se navnene. Det gælder også dig: de andre kan se, hvor langt du har læst.',
+    path: 'chat',
+  },
+  {
     slug: 'profilbillede',
     title: 'Du kan nu sætte et profilbillede',
     body: 'Åbn Min profil og tryk på billedet. Det gemmes med det samme, og de andre medlemmer kan se det.',
