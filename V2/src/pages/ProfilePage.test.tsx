@@ -7,6 +7,8 @@ vi.mock('convex/react', () => ({
   useMutation: () => vi.fn(),
   useAction: () => vi.fn(),
   useQuery: () => [],
+  useConvex: () => ({ query: async () => ({}) }),
+  usePaginatedQuery: () => ({ results: [] }),
 }))
 
 vi.mock('@convex-dev/auth/react', () => ({

@@ -19,12 +19,8 @@ import type { Doc, Id } from './_generated/dataModel'
  * Portet fra `supabase/functions/_shared/{pushDelivery,pushRecipients,
  * pushPayloads,vapid}.ts` og `supabase/functions/calendar-push/index.ts`.
  *
- * **Det sidste stykke mangler bevidst.** Selve Web Push-afsendelsen kraver
- * AES-128-GCM-kryptering mod abonnementets `p256dh`/`auth` og en signeret
- * VAPID-JWT; det gør `@web-push`-familien, og den pakke findes ikke i dette
- * projekt. Afsendelsen ligger derfor samlet i `convex/pushSend.ts`, hvis krop
- * er en TODO. Alt andet -- præferencer, modtagervalg, payload, leveringslog,
- * idempotens -- er portet og virker uden pakken.
+ * Afsendelsen ligger i `convex/pushSend.ts` og bruger samme Web Crypto-kode
+ * som den nuværende app. Præferencer, modtagervalg og leveringslog er uændrede.
  *
  * Rækkefølgen er den samme som i den gamle app, og det er pointen: claim'en i
  * leveringsloggen sker *før* der sendes, så et gentaget kald -- to klienter, en
@@ -647,6 +643,26 @@ export const removeSubscription = internalMutation({
  * token-fence som `claim_event_reminder`/`complete_event_reminder`) og sende
  * afsted gennem `internal.pushSend.deliverPush`.
  */
+/** Sender én prøvenotifikation til den indloggede. Bruges af preview-smoken. */
+export const pingSelf = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const profile = await requireWritableProfile(ctx)
+    await ctx.scheduler.runAfter(0, internal.pushSend.deliverPush, {
+      kind: 'event_created',
+      subjectId: `push-probe-${String(profile._id)}-${Date.now()}`,
+      profileIds: [profile._id],
+      payload: {
+        title: 'Naturklubben',
+        body: 'Notifikationer virker.',
+        tag: 'push-probe',
+        path: 'profil',
+      },
+    })
+    return null
+  },
+})
+
 export const enqueueEventReminders = internalMutation({
   args: {},
   handler: async (ctx) => {

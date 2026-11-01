@@ -18,17 +18,17 @@ restoreSpaRedirect()
 // Et ældre preview kan have en service worker på samme sti. Den afregistreres
 // her, og public/sw.js overtager, hvis browseren stadig har den gamle.
 clearStalePreviewServiceWorker()
+// Workeren skal være der, for at push kan leveres -- også i preview.
+// "Installér app" slås fra i preview, se previewInstall.ts.
+if ('serviceWorker' in navigator) {
+  void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw-prod.js`)
+}
 if (!isPreviewDeployment()) {
   installInstallPromptCapture()
   const manifest = document.createElement('link')
   manifest.rel = 'manifest'
   manifest.href = `${import.meta.env.BASE_URL}manifest.webmanifest`
   document.head.appendChild(manifest)
-  if ('serviceWorker' in navigator) {
-    void navigator.serviceWorker.register(
-      `${import.meta.env.BASE_URL}sw-prod.js`,
-    )
-  }
 }
 
 createRoot(document.getElementById('root')!).render(

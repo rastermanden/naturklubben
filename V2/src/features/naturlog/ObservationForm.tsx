@@ -1,7 +1,12 @@
-import { useState, type FormEvent } from 'react'
-import { usePaginatedQuery } from 'convex/react'
+import { useRef, useState, type FormEvent } from 'react'
+import { useMutation, usePaginatedQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
-import type { Doc } from '../../../convex/_generated/dataModel'
+import type { Doc, Id } from '../../../convex/_generated/dataModel'
+import {
+  PHOTO_MAX_EDGE,
+  THUMB_MAX_EDGE,
+  resizePhotoFile,
+} from '../gallery/resizePhoto'
 import { PositionMapPicker } from './map'
 import {
   NOTES_MAX_LENGTH,
@@ -40,11 +45,59 @@ export function ObservationForm({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [photoId, setPhotoId] = useState(editing?.photoId ?? '')
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const generateUploadUrl = useMutation(api.gallery.generateUploadUrl)
+  const createPhoto = useMutation(api.gallery.createPhoto)
   const photos = usePaginatedQuery(
     api.gallery.listPhotos,
     {},
     { initialNumItems: 30 },
   )
+
+  async function postBlob(
+    generateUploadUrl: () => Promise<{ uploadUrl: string }>,
+    blob: Blob,
+  ) {
+    const { uploadUrl } = await generateUploadUrl()
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': blob.type || 'image/jpeg' },
+      body: blob,
+    })
+    if (!response.ok) throw new Error('PHOTO_UPLOAD_NOT_FOUND')
+    const payload = (await response.json()) as { storageId?: Id<'_storage'> }
+    if (!payload.storageId) throw new Error('PHOTO_UPLOAD_NOT_FOUND')
+    return payload.storageId
+  }
+
+  async function uploadObservationPhoto(
+    file: File,
+    caption: string,
+    generateUploadUrl: () => Promise<{ uploadUrl: string }>,
+    createPhoto: (args: {
+      storageId: Id<'_storage'>
+      thumbnailStorageId: Id<'_storage'>
+      width: number
+      height: number
+      caption?: string
+      clientUploadId: string
+    }) => Promise<Id<'photos'>>,
+  ) {
+    const display = await resizePhotoFile(file, PHOTO_MAX_EDGE)
+    const thumb = await resizePhotoFile(file, THUMB_MAX_EDGE)
+    const storageId = await postBlob(generateUploadUrl, display.blob)
+    const thumbnailStorageId = await postBlob(generateUploadUrl, thumb.blob)
+    const photoId = await createPhoto({
+      storageId,
+      thumbnailStorageId,
+      width: display.width,
+      height: display.height,
+      caption: caption || undefined,
+      clientUploadId: crypto.randomUUID(),
+    })
+    return photoId
+  }
 
   function setField<K extends keyof ObservationDraft>(
     key: K,
@@ -79,7 +132,15 @@ export function ObservationForm({
     setBusy(true)
     setError(null)
     try {
-      const linked = photoId === '' ? undefined : photoId
+      let linked = photoId === '' ? undefined : photoId
+      if (photoFile) {
+        linked = await uploadObservationPhoto(
+          photoFile,
+          draft.species,
+          generateUploadUrl,
+          createPhoto,
+        )
+      }
       if (editing) {
         await update({
           observationId: editing._id,
@@ -164,8 +225,42 @@ export function ObservationForm({
         }}
       />
 
+      <fieldset className="flex flex-col gap-2 text-sm text-ink-body">
+        <legend>Billede</legend>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          aria-label="Vælg et billede fra enheden"
+          className="sr-only"
+          onChange={(event) => setPhotoFile(event.target.files?.[0] ?? null)}
+        />
+        {photoFile ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="min-w-0 flex-1 truncate text-ink-muted">
+              {photoFile.name}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPhotoFile(null)}
+              className="min-h-11 rounded-lg border border-line-strong px-3 text-ink-muted"
+            >
+              Fjern billede
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="min-h-11 w-fit rounded-lg bg-accent px-5 py-2 text-white"
+          >
+            Vælg billede
+          </button>
+        )}
+      </fieldset>
+
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Billede fra galleriet
+        Eller vælg et billede, der allerede ligger i galleriet
         <select
           value={photoId}
           onChange={(event) => setPhotoId(event.target.value)}

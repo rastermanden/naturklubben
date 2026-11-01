@@ -8,31 +8,20 @@ import { pushPayload, type PushPayload, type PushTarget } from './push'
 import { probationPayload } from './probation'
 import { notificationKind } from './tables/notifications'
 import type { Id } from './_generated/dataModel'
+import { sendPushNotification } from './webpush'
 
 /**
  * Web Push-afsendelsen -- det ene sted, hvor der stadig mangler noget.
  *
- * Filen er en Node-action (`'use node'`), fordi Web Push ikke kan skrives med
- * det, Convex' standard-runtime giver: payloaden skal krypteres med
- * AES-128-GCM mod abonnementets `p256dh`/`auth` (RFC 8291), og anmodningen skal
- * bære en ES256-signeret VAPID-JWT (RFC 8292). Det gør `web-push`-pakken, og
- * den er **ikke** tilføjet som afhængighed.
+ * Filen er en Node-action (`'use node'`), fordi afsendelsen kalder push-tjenesten.
+ * Selve krypteringen er den samme Web Crypto-implementering som den nuværende
+ * app (`supabase/functions/_shared/webpush.ts`): RFC 8291 aes128gcm og en
+ * VAPID-JWT. Der er ingen `web-push`-pakke -- den kode er allerede afprøvet
+ * i produktion, og en ekstra afhængighed ville ikke gøre protokollen mere rigtig.
  *
- * Alt andet i forløbet er portet og ligger i V8-runtimen, hvor det kan testes:
- * modtagervalg og leveringslog i `convex/push.ts`, nyhedernes outbox i
- * `convex/announcements.ts`, ansøgningernes udbox i `convex/probation.ts`.
- * Denne fil kalder dem og samler resultatet.
- *
- * ## Hvad der mangler, præcist
- *
- * 1. `npm install web-push` (og `@types/web-push`) i `V2/`.
- * 2. Kaldet i `sendWebPush` herunder: `webpush.sendNotification(...)` med
- *    `vapid`-nøglerne, `TTL`, `urgency` og `Content-Encoding: aes128gcm`.
- * 3. Intet secret skal sættes: nøgleparret genererer og gemmer sig selv i
- *    `pushVapidKeys` (se `ensureVapidKeys`), og miljøvariablerne
- *    `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` er kun en valgfri overstyring.
- * 4. At filen bliver kørt på et Node-runtime med `crypto.subtle` (Node 18+),
- *    hvilket er det samme krav som genereringen af nøgleparret stiller.
+ * Nøgleparret genererer og gemmer sig selv i `pushVapidKeys` (se
+ * `ensureVapidKeys`). `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` er kun en valgfri
+ * overstyring.
  */
 
 /** Kontaktpunkt, hvis push-tjenesten skal kunne række ud. */
@@ -119,27 +108,18 @@ export const ensureVapidKeys = internalAction({
   },
 })
 
-/**
- * Den sidste afsendelse. **Alt andet er gjort; dette er TODO'en.**
- *
- * Skal kryptere `payload` mod `target.p256dh`/`target.auth` og sende den til
- * `target.endpoint` med en VAPID-JWT signeret med `vapid.privateKey`. Se
- * filens hovedkommentar for de fire ting, der mangler.
- */
+/** Krypterer payloaden og poster den til push-tjenesten. */
 async function sendWebPush(
   target: PushEndpoint,
   payload: PushPayload,
   vapid: VapidDetails,
 ): Promise<PushOutcome> {
-  // TODO(web-push): erstat denne krop med
-  //   await webpush.sendNotification({ endpoint, keys }, JSON.stringify(payload), {
-  //     vapidDetails: vapid, TTL: 3600, urgency: 'high',
-  //   })
-  // og oversæt en `WebPushError` med statusCode 404/410 til { isGone: true }.
-  void target
-  void payload
-  void vapid
-  throw new ConvexError('PUSH_SENDER_NOT_IMPLEMENTED')
+  return await sendPushNotification(
+    target,
+    JSON.stringify(payload),
+    vapid,
+    60 * 60,
+  )
 }
 
 // ---------------------------------------------------------------------------

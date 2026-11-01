@@ -14,7 +14,11 @@ import { api } from '../../../convex/_generated/api'
 export const ACCOUNT_DELETION_CONFIRMATION = 'SLET MIN KONTO'
 
 export type AccountDeletionErrorCode =
-  'invalid_confirmation' | 'last_admin' | 'not_a_member' | 'unknown'
+  | 'invalid_confirmation'
+  | 'invalid_password'
+  | 'last_admin'
+  | 'not_a_member'
+  | 'unknown'
 
 export class AccountDeletionError extends Error {
   readonly code: AccountDeletionErrorCode
@@ -52,6 +56,8 @@ export function accountDeletionErrorMessage(error: unknown): string {
   switch (code) {
     case 'invalid_confirmation':
       return `Skriv ${ACCOUNT_DELETION_CONFIRMATION} præcis som vist.`
+    case 'invalid_password':
+      return 'Forkert adgangskode.'
     case 'last_admin':
       return 'Du er klubbens sidste administrator. Udpeg en ny administrator, før du sletter kontoen.'
     case 'not_a_member':

@@ -2,7 +2,7 @@ import { internalMutation, mutation, query } from './_generated/server'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
-import { requireProfile } from './authz'
+import { currentUserId, requireProfile } from './authz'
 import type { Doc, Id } from './_generated/dataModel'
 
 /**
@@ -107,6 +107,17 @@ export const PERSONAL_TABLES = [
  * `authAccounts`/`users`, og der findes intet `last_sign_in_at` at udlevere --
  * se den samme usikkerhed i `requestDeletion`.
  */
+/** E-mailen, slet-konto-dialogen viser. */
+export const myEmail = query({
+  args: {},
+  handler: async (ctx): Promise<string | null> => {
+    const userId = await currentUserId(ctx)
+    if (userId === null) return null
+    const user = await ctx.db.get(userId)
+    return typeof user?.email === 'string' ? user.email : null
+  },
+})
+
 export const exportData = query({
   args: {},
   handler: async (ctx) => {

@@ -12,6 +12,7 @@ import { api } from '../../convex/_generated/api'
 import { Avatar } from '../components/Avatar'
 import { toFriendlyMemberError } from '../features/auth/authErrors'
 import { useCurrentProfile } from '../features/auth/useCurrentProfile'
+import { DeleteAccountSection } from '../features/account/DeleteAccountSection'
 import { MyBadgeShowcase } from '../features/badges/BadgeShowcase'
 import { NotificationToggle } from '../features/notifications/NotificationToggle'
 import { NotificationTypePreferences } from '../features/notifications/NotificationTypePreferences'
@@ -340,6 +341,7 @@ export default function ProfilePage() {
       </section>
 
       <SignOutSection />
+      <DeleteAccountSection />
     </main>
   )
 }

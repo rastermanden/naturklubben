@@ -47,13 +47,9 @@ export function NotificationToggle() {
         {isWorking
           ? 'Arbejder…'
           : status.state === 'on'
-            ? 'Slå notifikationer fra på denne enhed'
-            : 'Slå notifikationer til på denne enhed'}
+            ? 'Notifikationer til'
+            : 'Slå notifikationer til'}
       </button>
-      <p className="text-sm text-ink-subtle">
-        Afsendelsen af notifikationer er ikke sat i drift endnu, så der kommer
-        ingen beskeder på telefonen før videre.
-      </p>
       {error && (
         <p role="alert" className="text-sm text-danger">
           {error}

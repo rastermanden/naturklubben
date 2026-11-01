@@ -103,6 +103,9 @@ async function runOnce() {
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   })
+  await browser
+    .defaultBrowserContext()
+    .overridePermissions(origin, ['notifications'])
   try {
     const page = await browser.newPage()
     page.setDefaultTimeout(20000)
@@ -248,6 +251,8 @@ async function runOnce() {
       if (error && typeof error === 'object') error.fatal = true
       throw error
     }
+    await probePush(page, hosts)
+
     if (document404s.length > 0) {
       throw new Error(`Dokument-404: ${document404s.join(', ')}`)
     }
@@ -264,6 +269,89 @@ async function runOnce() {
   } finally {
     await browser.close()
   }
+}
+
+async function probePush(page, hosts) {
+  await page.goto(`${base}profil`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 20000,
+  })
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('button')].some((el) =>
+        (el.textContent ?? '').includes('notifikationer'),
+      ),
+    { timeout: 20000 },
+  )
+  const label = await page.evaluate(() => {
+    const button = [...document.querySelectorAll('button')].find((el) =>
+      (el.textContent ?? '').toLowerCase().includes('notifikationer'),
+    )
+    return button?.textContent ?? ''
+  })
+  if (label.includes('Slå notifikationer til')) {
+    await page.evaluate(() => {
+      const button = [...document.querySelectorAll('button')].find((el) =>
+        (el.textContent ?? '').includes('Slå notifikationer til'),
+      )
+      button?.click()
+    })
+  }
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('button')].some((el) =>
+        (el.textContent ?? '').includes('Notifikationer til'),
+      ),
+    { timeout: 25000 },
+  )
+
+  await page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        window.__pushProbe = new Promise((heard, failed) => {
+          const timer = setTimeout(
+            () => failed(new Error('Ingen push-besked nåede frem')),
+            25000,
+          )
+          navigator.serviceWorker.addEventListener('message', (event) => {
+            const data = event.data
+            if (
+              data &&
+              data.type === 'push' &&
+              data.body === 'Notifikationer virker.'
+            ) {
+              clearTimeout(timer)
+              heard(true)
+            }
+          })
+        })
+        resolve(true)
+      }),
+  )
+
+  const token = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((name) =>
+      name.startsWith('__convexAuthJWT'),
+    )
+    return key ? localStorage.getItem(key) : null
+  })
+  if (!token) throw new Error('Manglede sessionstoken til push-prøven')
+
+  const host = [...hosts].find((name) => name.endsWith('.convex.cloud'))
+  if (!host) throw new Error('Ingen Convex-vært til push-prøven')
+  const response = await fetch(`https://${host}/api/mutation`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ path: 'push:pingSelf', args: {}, format: 'json' }),
+  })
+  if (!response.ok) {
+    throw new Error(`push:pingSelf svarede ${response.status}`)
+  }
+  await page.evaluate(() => window.__pushProbe)
+  console.log('Push-prøven nåede browseren.')
 }
 
 const attempts = 18
