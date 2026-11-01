@@ -125,6 +125,9 @@ async function runOnce() {
         document404s.push(response.url())
       }
     })
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) console.log(`frame ${frame.url()}`)
+    })
     page.on('pageerror', (error) => {
       console.error(`pageerror: ${redact(error.message)}`)
     })
@@ -198,20 +201,22 @@ async function runOnce() {
         console.log(`genindlæser /${route}`)
         await Promise.all([
           page.waitForFunction(
-            (expected, token, requireToken) => {
+            (expected, token, isLogin) => {
               const body = document.body?.innerText ?? ''
-              const arrived =
-                !requireToken || window.location.search.includes(token)
+              const arrived = isLogin
+                ? !window.location.pathname.endsWith('/login') &&
+                  !window.location.pathname.endsWith('/login/')
+                : window.location.hash.includes(token)
               return arrived && body.includes(expected)
             },
             { timeout: 20000 },
             text,
             stamp,
-            route !== 'login',
+            route === 'login',
           ),
           page.evaluate((url) => {
             window.location.assign(url)
-          }, `${base}${route}?reload=${stamp}`),
+          }, `${base}${route}#r=${stamp}`),
         ])
         const loggedOut = await page.evaluate(
           () =>
