@@ -49,6 +49,10 @@ export const PREVIEW_ACTIVITIES = [
 
 export const PREVIEW_EVENT_TITLE = 'Preview-tur'
 
+/** Stabilt klient-id, så seedet ikke lægger den samme besked ind to gange. */
+export const PREVIEW_CHAT_CLIENT_ID = 'preview-seed-chat'
+export const PREVIEW_CHAT_TEXT = 'Hej fra previewet. Skoven er grøn i dag.'
+
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000
 
@@ -192,6 +196,22 @@ export async function writePreviewSample(
       startAt,
       endAt: endsAt,
       endsAt,
+    })
+  }
+
+  const existingChat = await ctx.db
+    .query('messages')
+    .withIndex('by_client_id', (q) => q.eq('clientId', PREVIEW_CHAT_CLIENT_ID))
+    .unique()
+  if (existingChat === null) {
+    await ctx.db.insert('messages', {
+      room: 'general',
+      authorId: profileId,
+      content: PREVIEW_CHAT_TEXT,
+      messageType: 'text',
+      mentions: [],
+      createdAt: Date.now(),
+      clientId: PREVIEW_CHAT_CLIENT_ID,
     })
   }
 

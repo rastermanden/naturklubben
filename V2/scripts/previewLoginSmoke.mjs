@@ -188,6 +188,7 @@ async function runOnce() {
       ['', 'Kalenderen, aktiviteterne og de andre medlemmer er åbne for dig.'],
       ['kalender', 'Preview-tur'],
       ['aktiviteter', 'Skovtur'],
+      ['chat', 'Hej fra previewet. Skoven er grøn i dag.'],
       ['profil', 'Min profil'],
       ['medlemmer', 'Medlemmer'],
       [

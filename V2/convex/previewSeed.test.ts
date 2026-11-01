@@ -4,6 +4,7 @@ import { convexTest } from 'convex-test'
 import schema from './schema'
 import {
   PREVIEW_ACTIVITIES,
+  PREVIEW_CHAT_TEXT,
   PREVIEW_EVENT_TITLE,
   PREVIEW_MEMBER_NAME,
   PROD_DEPLOYMENT_SLUG,
@@ -112,6 +113,17 @@ describe('writePreviewSample', () => {
       createdBy: rows.profiles[0]!._id,
     })
     expect(rows.events[0]!.endsAt).toBeGreaterThan(Date.now())
+
+    const messages = await t.run(async (ctx) =>
+      ctx.db.query('messages').collect(),
+    )
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      room: 'general',
+      authorId: rows.profiles[0]!._id,
+      content: PREVIEW_CHAT_TEXT,
+      messageType: 'text',
+    })
   })
 
   it('rykker en forbi preview-tur frem i stedet for at lave en ny', async () => {

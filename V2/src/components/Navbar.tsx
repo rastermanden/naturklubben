@@ -15,12 +15,14 @@ export interface NavLinkItem {
 }
 
 /**
- * Bannerets links. Kun ruter, der findes i V2: de øvrige domæner (kalender,
- * billeder, chat) tilføjer deres egen linje, når de er portet -- et link til
- * en side uden rute ville føre til en tom skærm.
+ * Bannerets links. Nye sider føjes til, når de er klar til medlemmerne.
+ * Naturlog og Spil ligger under Aktiviteter, ikke som egne punkter.
  */
 export const navLinks: readonly NavLinkItem[] = [
   { to: '/', label: 'Forsiden' },
+  { to: '/aktiviteter', label: 'Aktiviteter' },
+  { to: '/kalender', label: 'Kalender', requiresAuth: true },
+  { to: '/chat', label: 'Chat', requiresAuth: true },
   { to: '/medlemmer', label: 'Medlemmer', requiresAuth: true },
   { to: '/profil', label: 'Min profil', requiresAuth: true },
   { to: '/admin', label: 'Admin', requiresAuth: true, requiresAdmin: true },

@@ -59,6 +59,12 @@ export const ANNOUNCEMENTS = [
     path: 'profil',
   },
   {
+    slug: 'chat',
+    title: 'Chatten er åben',
+    body: 'Skriv til de andre under Chat. Beskederne kommer frem med det samme, også hos dem, der allerede har siden åben.',
+    path: 'chat',
+  },
+  {
     slug: 'profilbillede',
     title: 'Du kan nu sætte et profilbillede',
     body: 'Åbn Min profil og tryk på billedet. Det gemmes med det samme, og de andre medlemmer kan se det.',
