@@ -2,25 +2,39 @@
 <html lang="da">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Naturklubben</title>
     <script>
       ;(function () {
-        var base = "/naturklubben/pr-preview/pr-277/"
+        var base = "/pr-preview/pr-277/"
         var path = location.pathname
         if (path.indexOf(base) !== 0) {
           location.replace(base)
           return
         }
         var rest = path.slice(base.length)
+
+        var preview = rest.match(/^pr-preview[/]pr-[0-9]+[/]/)
+        if (preview) {
+          base += preview[0]
+          rest = rest.slice(preview[0].length)
+        }
+
         if (/[.][^/]+$/.test(rest)) return
+
         var query = location.search ? location.search.slice(1) + '&' : ''
         location.replace(
-          base + '?' + query + 'spa-path=' + encodeURIComponent(rest) + location.hash,
+          base +
+            '?' +
+            query +
+            'spa-path=' +
+            encodeURIComponent(rest) +
+            location.hash,
         )
       })()
     </script>
   </head>
   <body>
-    <p>Siden findes ikke. <a href="/naturklubben/pr-preview/pr-277/">Gå til Naturklubben</a>.</p>
+    <p>Siden findes ikke. <a href="/pr-preview/pr-277/">Gå til Naturklubben</a>.</p>
   </body>
 </html>
