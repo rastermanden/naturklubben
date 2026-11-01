@@ -111,6 +111,17 @@ function repository(overrides: Partial<AccountExportRepository> = {}) {
         },
       ]
     },
+    getChatReadPositions: async (id) => {
+      seenUserIds.push(id)
+      return [
+        {
+          room: 'general',
+          last_read_message_id: 'message-1',
+          last_read_at: '2026-08-05T10:00:00.000Z',
+          updated_at: '2026-08-05T10:00:05.000Z',
+        },
+      ]
+    },
     getPhotoComments: async (id) => {
       seenUserIds.push(id)
       return [
@@ -173,6 +184,7 @@ Deno.test(
       userId,
       userId,
       userId,
+      userId,
     ])
     assertEquals(body.account.email, 'medlem@example.com')
     assertEquals(body.messages[0].content, 'Hej')
@@ -224,6 +236,14 @@ Deno.test(
           ends_at: null,
           poll: { id: 'date-poll-1', title: 'Svampetur' },
         },
+      },
+    ])
+    assertEquals(body.chat_read_positions, [
+      {
+        room: 'general',
+        last_read_message_id: 'message-1',
+        last_read_at: '2026-08-05T10:00:00.000Z',
+        updated_at: '2026-08-05T10:00:05.000Z',
       },
     ])
     assertEquals(body.observations, [

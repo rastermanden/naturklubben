@@ -338,6 +338,26 @@ afstemning direkte i chatten. Alt om selve afstemningen ejes af databasen:
   erstatter den gamle, at kun opretteren eller en admin kan lukke, og at
   ingen af de tre tabeller kan skrives uden om RPC'erne.
 
+## Læsekvitteringer i chatten (#294)
+
+- `chat_read_positions` har én række pr. medlem pr. rum: den seneste besked,
+  medlemmet har læst (`last_read_message_id`, `last_read_at`). Ikke én række
+  pr. besked pr. læser -- "hvem har læst X" er alle, hvis position ligger på
+  eller efter X, og klienten viser hver læsers avatar under netop den besked,
+  de senest har læst (`src/features/chat/readReceipts.ts`).
+- Synligheden følger beskederne: det fælles rum for alle indloggede,
+  admin-rummet kun for admins. Der er intet fravalg (besluttet i #294), og
+  datapolitikken siger det.
+- Positionen skrives kun gennem `mark_chat_read(p_message_id)`, der flytter
+  den fremad (efter `(created_at, id)`) og aldrig baglæns, og som behandler en
+  besked i et rum, kalderen ikke kan se, som en, der ikke findes. Klienten
+  kalder den, når bunden af chatten er på skærmen og appen er i forgrunden.
+- Tabellen er i `supabase_realtime`, så avatarerne flytter sig live;
+  `05_schema.sql` holder listen over publicerede tabeller.
+- Rækkerne kaskaderer ved kontosletning, og `export-account` tager ens egne
+  positioner med som `chat_read_positions`. `22_chat_read_receipts.sql`
+  tester adgangen.
+
 ## Chat uden forbindelse (#219)
 
 En besked skrevet uden dækning -- typisk i skoven -- fejler ikke længere. Den
