@@ -51,6 +51,18 @@ export const PREVIEW_EVENT_TITLE = 'Preview-tur'
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000
 
+/** Samme regler som smoke-testen: uden dem rammer login en anden streng, end den der blev gemt. */
+export function normalizePreviewEmail(value: string | undefined): string {
+  return (value ?? '')
+    .replace(/[\r\n]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+export function normalizePreviewPassword(value: string | undefined): string {
+  return (value ?? '').replace(/[\r\n]+$/g, '')
+}
+
 export function assertPreviewSeedAllowed(input: {
   previewSeed: string | undefined
   cloudUrl: string | undefined
@@ -201,8 +213,8 @@ export const ensure = internalAction({
   handler: async (ctx): Promise<{ ok: true }> => {
     assertAllowedOnThisDeployment()
 
-    const email = env.PREVIEW_TEST_EMAIL?.trim() ?? ''
-    const password = env.PREVIEW_TEST_PASSWORD ?? ''
+    const email = normalizePreviewEmail(env.PREVIEW_TEST_EMAIL)
+    const password = normalizePreviewPassword(env.PREVIEW_TEST_PASSWORD)
     if (!/^[^@\s]+@[^@\s]+$/.test(email) || password.length < 8) {
       throw new Error('PREVIEW_SEED_INVALID')
     }

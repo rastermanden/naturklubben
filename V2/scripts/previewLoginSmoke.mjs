@@ -7,8 +7,21 @@
  */
 import { createRequire } from 'node:module'
 
-const email = process.env.PREVIEW_TEST_EMAIL?.trim() ?? ''
-const password = process.env.PREVIEW_TEST_PASSWORD ?? ''
+function normalizePreviewEmail(value) {
+  return value
+    .replace(/[\r\n]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function normalizePreviewPassword(value) {
+  return value.replace(/[\r\n]+$/g, '')
+}
+
+const email = normalizePreviewEmail(process.env.PREVIEW_TEST_EMAIL ?? '')
+const password = normalizePreviewPassword(
+  process.env.PREVIEW_TEST_PASSWORD ?? '',
+)
 const previewPath = process.env.PREVIEW_PATH ?? ''
 
 if (!email || !password || !previewPath.startsWith('/pr-preview/')) {
@@ -47,6 +60,24 @@ async function assertText(page, text, timeout = 20000) {
 
 async function open(page, url) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+}
+
+async function setField(page, selector, value) {
+  await page.waitForSelector(selector)
+  await page.evaluate(
+    (sel, next) => {
+      const field = document.querySelector(sel)
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'value',
+      ).set
+      setter.call(field, next)
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+      field.dispatchEvent(new Event('change', { bubbles: true }))
+    },
+    selector,
+    value,
+  )
 }
 
 async function clickText(page, text) {
@@ -98,9 +129,8 @@ async function runOnce() {
     await clickText(page, 'Se åbne ture')
     await assertText(page, 'Preview-tur')
     await clickText(page, 'Log ind')
-    await page.waitForSelector('#login-email', { timeout: 20000 })
-    await page.type('#login-email', email)
-    await page.type('#login-password', password)
+    await setField(page, '#login-email', email)
+    await setField(page, '#login-password', password)
     await page.click('button[type="submit"]')
     await new Promise((resolve, reject) => {
       let settled = false

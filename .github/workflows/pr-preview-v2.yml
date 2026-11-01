@@ -144,6 +144,30 @@ jobs:
           # preview-linket som rastermanden.github.io/naturklubben/...
           pages-base-url: naturklubben.dk
 
+      # CDN'en kan stadig have V1 et øjeblik efter push til gh-pages.
+      - if: github.event.action != 'closed'
+        name: Tjek at det udgivne preview er V2
+        working-directory: V2
+        run: |
+          set -euo pipefail
+          host=$(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123')
+          url="https://naturklubben.dk/pr-preview/pr-${{ github.event.number }}/"
+          for attempt in $(seq 1 18); do
+            html=$(curl -fsS "$url" || true)
+            js=$(printf '%s' "$html" | grep -oE 'assets/index-[^"]+\.js' | head -1 || true)
+            if [ -n "${js:-}" ]; then
+              body=$(curl -fsS "$url$js" || true)
+              if printf '%s' "$body" | grep -F -q "$host" && ! printf '%s' "$body" | grep -F -q 'supabase.co'; then
+                echo "Live bundle $js peger på $host og ikke på Supabase."
+                exit 0
+              fi
+            fi
+            echo "Live bundle er endnu ikke V2 (forsøg $attempt)."
+            sleep 10
+          done
+          echo "Previewet peger ikke på $host."
+          exit 1
+
       # Bekræfter, at det udgivne preview kan logge ind med den seedede bruger
       # og viser prøvedata. Puppeteer hentes kun til dette trin.
       - if: github.event.action != 'closed'

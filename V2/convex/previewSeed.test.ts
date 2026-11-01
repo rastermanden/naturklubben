@@ -8,6 +8,8 @@ import {
   PREVIEW_MEMBER_NAME,
   PROD_DEPLOYMENT_SLUG,
   assertPreviewSeedAllowed,
+  normalizePreviewEmail,
+  normalizePreviewPassword,
   writePreviewSample,
 } from './previewSeed'
 
@@ -45,6 +47,16 @@ describe('assertPreviewSeedAllowed', () => {
         cloudUrl: 'https://savory-possum-345.convex.cloud',
       }),
     ).not.toThrow()
+  })
+})
+
+describe('preview-legitimationsoplysninger', () => {
+  it('sammenligner e-mail og adgangskode uden linjeskift fra secretet', () => {
+    expect(normalizePreviewEmail(' Preview@Example.com\r\n')).toBe(
+      'preview@example.com',
+    )
+    expect(normalizePreviewPassword('hemmelig\r\n')).toBe('hemmelig')
+    expect(normalizePreviewPassword('hemmelig')).toBe('hemmelig')
   })
 })
 
