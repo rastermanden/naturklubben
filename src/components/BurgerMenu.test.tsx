@@ -3,16 +3,22 @@ import { useRef, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { BurgerMenu } from './BurgerMenu'
+import { navLinks } from './navLinks'
+
+const mocks = vi.hoisted(() => ({
+  session: null as object | null,
+  isAdmin: false,
+}))
 
 vi.mock('../features/auth/useAuth', () => ({
   useAuth: () => ({
-    session: null,
+    session: mocks.session,
     signOut: vi.fn().mockResolvedValue(undefined),
   }),
 }))
 
 vi.mock('../features/admin/useIsAdmin', () => ({
-  useIsAdmin: () => ({ isAdmin: false }),
+  useIsAdmin: () => ({ isAdmin: mocks.isAdmin }),
 }))
 
 vi.mock('./InstallAppButton', () => ({
@@ -29,6 +35,8 @@ vi.mock('../features/theme/ThemeToggle', () => ({
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  mocks.session = null
+  mocks.isAdmin = false
 })
 
 function Harness() {
@@ -97,5 +105,38 @@ describe('BurgerMenu', () => {
     act(() => handleChange?.({ matches: true } as MediaQueryListEvent))
 
     expect(screen.queryByRole('dialog')).toBe(null)
+  })
+
+  // jsdom har intet layout, så højden kan ikke måles her -- men det er netop
+  // klasserne, der afgør, om listen kan scrolles på en lav skærm (#283).
+  it('lader den lange admin-liste scrolle, mens knapperne bliver stående', () => {
+    mocks.session = { user: { id: 'admin-id' } }
+    mocks.isAdmin = true
+    render(
+      <MemoryRouter>
+        <Harness />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Åbn menu' }))
+
+    const list = screen.getByRole('navigation', { name: 'Menupunkter' })
+    expect(list.querySelectorAll('a')).toHaveLength(navLinks.length)
+    expect(list.className).toMatch(/\boverflow-y-auto\b/)
+    expect(list.className).toMatch(/\bflex-1\b/)
+    expect(list.className).toMatch(/\boverscroll-contain\b/)
+
+    // Hvert link er stadig mindst 44 px højt, så de er nemme at ramme.
+    for (const link of list.querySelectorAll('a')) {
+      expect(link.className).toMatch(/\bmin-h-11\b/)
+      expect(link.className).toMatch(/\bshrink-0\b/)
+    }
+
+    // Luk-knappen og log ud ligger uden for scroll-området.
+    expect(
+      list.contains(screen.getByRole('button', { name: 'Luk menu' })),
+    ).toBe(false)
+    expect(list.contains(screen.getByRole('button', { name: 'Log ud' }))).toBe(
+      false,
+    )
   })
 })

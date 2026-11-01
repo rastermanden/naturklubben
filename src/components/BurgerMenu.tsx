@@ -62,14 +62,18 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
         aria-modal="true"
         aria-label="Navigation"
         tabIndex={-1}
-        className="fixed inset-y-0 right-0 z-50 flex w-72 max-w-[85vw] flex-col gap-2 bg-surface p-4 shadow-xl md:hidden"
+        // Listen er længere end en telefonskærm (#283): linkene scroller for
+        // sig selv, så luk-knappen og knapperne nederst bliver stående. Selve
+        // panelet kan også scrolle, hvis skærmen er så lav (fx på tværs), at
+        // selv de faste dele ikke er plads til.
+        className="fixed inset-y-0 right-0 z-50 flex w-72 max-w-[85vw] flex-col gap-2 overflow-y-auto overscroll-contain bg-surface p-4 shadow-xl md:hidden"
         style={{
           paddingTop: 'max(1rem, env(safe-area-inset-top))',
           paddingRight: 'max(1rem, env(safe-area-inset-right))',
           paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
         }}
       >
-        <div className="flex justify-end">
+        <div className="flex shrink-0 justify-end">
           <button
             ref={closeButtonRef}
             type="button"
@@ -81,14 +85,17 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
           </button>
         </div>
 
-        <nav className="flex flex-col gap-1">
+        <nav
+          aria-label="Menupunkter"
+          className="flex min-h-40 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain"
+        >
           {visibleLinks.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
               onClick={onClose}
               className={({ isActive }) =>
-                `flex min-h-11 items-center rounded px-3 py-2 text-lg ${
+                `flex min-h-11 shrink-0 items-center rounded px-3 py-2 text-base ${
                   isActive
                     ? 'bg-surface-raised text-ink-body'
                     : 'text-ink-muted'
@@ -100,9 +107,9 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
           ))}
         </nav>
 
-        <div className="mt-auto flex flex-col gap-1 border-t border-line-soft pt-4">
+        <div className="flex shrink-0 flex-col gap-0.5 border-t border-line-soft pt-3">
           <ThemeToggle className="mb-2" />
-          <InstallAppButton className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-lg text-ink-muted" />
+          <InstallAppButton className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-base text-ink-muted" />
           {session ? (
             <button
               type="button"
@@ -110,7 +117,7 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
                 await signOut()
                 onClose()
               }}
-              className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-lg text-ink-muted"
+              className="flex min-h-11 w-full items-center rounded px-3 py-2 text-left text-base text-ink-muted"
             >
               Log ud
             </button>
@@ -118,7 +125,7 @@ export function BurgerMenu({ open, onClose, triggerRef }: BurgerMenuProps) {
             <NavLink
               to="/login"
               onClick={onClose}
-              className="flex min-h-11 items-center rounded px-3 py-2 text-lg text-ink-muted"
+              className="flex min-h-11 items-center rounded px-3 py-2 text-base text-ink-muted"
             >
               Log ind
             </NavLink>
