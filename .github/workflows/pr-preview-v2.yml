@@ -83,10 +83,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          sha="${{ github.sha }}"
+          sha="${{ github.event.pull_request.head.sha }}"
           for attempt in $(seq 1 90); do
             status=$(gh run list \
-              --workflow pr-preview.yml \
+              --workflow .github/workflows/pr-preview.yml \
               --commit "$sha" \
               --limit 1 \
               --json status \
