@@ -67,7 +67,9 @@ export default function LoginPage() {
             : null
 
       setError(toFriendlyAuthError(signInError))
-      setErrorCodeRaw(errorCode(signInError))
+      setErrorCodeRaw(
+        errorCode(signInError) ?? String(signInError).slice(0, 120),
+      )
       setErrorField(field)
       if (field === 'password') passwordRef.current?.focus()
       if (field === 'email') emailRef.current?.focus()
