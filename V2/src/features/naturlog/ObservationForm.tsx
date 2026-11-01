@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, usePaginatedQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import type { Doc, Id } from '../../../convex/_generated/dataModel'
@@ -7,6 +7,7 @@ import {
   THUMB_MAX_EDGE,
   resizePhotoFile,
 } from '../gallery/resizePhoto'
+import { validateFiles } from '../gallery/useUploadPhotos'
 import { PositionMapPicker } from './map'
 import {
   NOTES_MAX_LENGTH,
@@ -32,8 +33,8 @@ interface ObservationFormProps {
  * Formularen til et fund. Felterne og grænserne er de samme som i den gamle
  * app; positionen sættes med telefonens egen, og kan fjernes igen.
  *
- * Billede fra galleriet er ikke med: galleriet er ikke portet til V2 endnu, så
- * `observations.photoId` har ingen billeder at pege på.
+ * Et nyt billede vælges eller tages herfra og lægges i galleriet. Et billede,
+ * der allerede ligger der, kan også knyttes til fundet.
  */
 export function ObservationForm({
   editing,
@@ -46,7 +47,14 @@ export function ObservationForm({
   const [busy, setBusy] = useState(false)
   const [photoId, setPhotoId] = useState(editing?.photoId ?? '')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoError, setPhotoError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const previewUrl = photoFile ? URL.createObjectURL(photoFile) : null
+  useEffect(() => {
+    if (!previewUrl) return
+    return () => URL.revokeObjectURL(previewUrl)
+  }, [previewUrl])
   const generateUploadUrl = useMutation(api.gallery.generateUploadUrl)
   const createPhoto = useMutation(api.gallery.createPhoto)
   const photos = usePaginatedQuery(
@@ -104,6 +112,26 @@ export function ObservationForm({
     value: ObservationDraft[K],
   ) {
     setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  function clearPhoto() {
+    setPhotoFile(null)
+    setPhotoError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
+  }
+
+  function handleFile(files: FileList | null) {
+    const file = files?.[0] ?? null
+    setPhotoError(null)
+    if (!file) return
+    const problem = validateFiles([file])
+    if (problem) {
+      setPhotoError(problem)
+      setPhotoFile(null)
+      return
+    }
+    setPhotoFile(file)
   }
 
   function pickMyPosition() {
@@ -226,37 +254,93 @@ export function ObservationForm({
       />
 
       <fieldset className="flex flex-col gap-2 text-sm text-ink-body">
-        <legend>Billede</legend>
+        <legend className="mb-1">Billede</legend>
+        {editing?.photoId && !photoFile && (
+          <span className="text-ink-subtle">
+            Observationen har allerede et billede. Vælg et nyt for at erstatte
+            det -- det gamle bliver i galleriet.
+          </span>
+        )}
         <input
+          id="observation-photo-file"
           ref={fileInputRef}
           type="file"
-          accept="image/*"
           aria-label="Vælg et billede fra enheden"
+          accept="image/*"
+          onChange={(event) => handleFile(event.target.files)}
+          aria-invalid={photoError ? true : undefined}
+          aria-describedby={photoError ? 'observation-photo-error' : undefined}
           className="sr-only"
-          onChange={(event) => setPhotoFile(event.target.files?.[0] ?? null)}
+        />
+        <input
+          id="observation-photo-camera"
+          ref={cameraInputRef}
+          type="file"
+          aria-label="Tag et billede med kameraet"
+          accept="image/*"
+          capture="environment"
+          onChange={(event) => handleFile(event.target.files)}
+          aria-invalid={photoError ? true : undefined}
+          aria-describedby={photoError ? 'observation-photo-error' : undefined}
+          className="sr-only"
         />
         {photoFile ? (
           <div className="flex flex-wrap items-center gap-3">
+            {previewUrl && (
+              <img
+                src={previewUrl}
+                alt=""
+                className="h-20 w-20 rounded object-cover"
+              />
+            )}
             <span className="min-w-0 flex-1 truncate text-ink-muted">
               {photoFile.name}
             </span>
             <button
               type="button"
-              onClick={() => setPhotoFile(null)}
+              onClick={clearPhoto}
               className="min-h-11 rounded-lg border border-line-strong px-3 text-ink-muted"
             >
               Fjern billede
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="min-h-11 w-fit rounded-lg bg-accent px-5 py-2 text-white"
-          >
-            Vælg billede
-          </button>
+          <div className="grid gap-2 sm:flex sm:flex-wrap">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              aria-describedby={
+                photoError ? 'observation-photo-error' : undefined
+              }
+              className="min-h-11 rounded-lg bg-accent px-5 py-2 text-white"
+            >
+              Vælg billede
+            </button>
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              aria-describedby={
+                photoError ? 'observation-photo-error' : undefined
+              }
+              className="min-h-11 rounded-lg border border-accent px-5 py-2 text-ink-body"
+            >
+              Tag billede
+            </button>
+          </div>
         )}
+        {photoError && (
+          <span
+            id="observation-photo-error"
+            role="alert"
+            className="text-danger"
+          >
+            {photoError}
+          </span>
+        )}
+        <span className="text-xs text-ink-subtle">
+          Vælg fra kamerarullen eller dine filer. Maks. 15 MB. Billedet lægges
+          også i galleriet under Billeder.
+        </span>
       </fieldset>
 
       <label className="flex flex-col gap-1 text-sm text-ink-muted">

@@ -3,6 +3,7 @@ import {
   clearPreviewServiceWorker,
   isPreviewCache,
   isPreviewScopedRegistration,
+  isStalePreviewWorker,
 } from './previewServiceWorker'
 
 const previewScope = 'https://naturklubben.dk/pr-preview/pr-277/'
@@ -34,17 +35,54 @@ describe('isPreviewScopedRegistration', () => {
   })
 })
 
+describe('isStalePreviewWorker', () => {
+  it('rammer kun den gamle selvafmeldende worker', () => {
+    expect(
+      isStalePreviewWorker(
+        {
+          scope: previewScope,
+          scriptURL: 'https://naturklubben.dk/pr-preview/pr-277/sw.js',
+        },
+        previewScope,
+      ),
+    ).toBe(true)
+    expect(
+      isStalePreviewWorker(
+        {
+          scope: previewScope,
+          scriptURL: 'https://naturklubben.dk/pr-preview/pr-277/sw-prod.js',
+        },
+        previewScope,
+      ),
+    ).toBe(false)
+  })
+})
+
 describe('clearPreviewServiceWorker', () => {
-  it('afregistrerer preview-workeren og sletter kun dens caches', async () => {
-    const unregisterPreview = vi.fn(async () => true)
+  it('afregistrerer den gamle preview-worker og lader push-workeren blive', async () => {
+    const unregisterStale = vi.fn(async () => true)
+    const unregisterPush = vi.fn(async () => true)
     const unregisterProd = vi.fn(async () => true)
     const deleteCache = vi.fn(async () => true)
 
     await clearPreviewServiceWorker({
       previewScope,
       registrations: [
-        { scope: 'https://naturklubben.dk/', unregister: unregisterProd },
-        { scope: previewScope, unregister: unregisterPreview },
+        {
+          scope: 'https://naturklubben.dk/',
+          scriptURL: 'https://naturklubben.dk/sw.js',
+          unregister: unregisterProd,
+        },
+        {
+          scope: previewScope,
+          scriptURL: 'https://naturklubben.dk/pr-preview/pr-277/sw.js',
+          unregister: unregisterStale,
+        },
+        {
+          scope: previewScope,
+          scriptURL: 'https://naturklubben.dk/pr-preview/pr-277/sw-prod.js',
+          unregister: unregisterPush,
+        },
       ],
       cacheNames: [
         'workbox-precache-v2-https://naturklubben.dk/',
@@ -53,7 +91,8 @@ describe('clearPreviewServiceWorker', () => {
       deleteCache,
     })
 
-    expect(unregisterPreview).toHaveBeenCalledOnce()
+    expect(unregisterStale).toHaveBeenCalledOnce()
+    expect(unregisterPush).not.toHaveBeenCalled()
     expect(unregisterProd).not.toHaveBeenCalled()
     expect(deleteCache).toHaveBeenCalledOnce()
     expect(deleteCache).toHaveBeenCalledWith(

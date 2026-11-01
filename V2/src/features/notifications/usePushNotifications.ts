@@ -10,10 +10,8 @@ import { api } from '../../../convex/_generated/api'
  * stedet for et GET-kald til en Edge Function, og abonnementet gemmes med en
  * mutation i stedet for et `upsert` mod en tabel.
  *
- * **Det sidste stykke virker endnu ikke.** Abonnementet kan oprettes og gemmes,
- * men der kan ikke sendes en notifikation, før `web-push`-pakken er tilføjet --
- * se `V2/convex/pushSend.ts`. Knappen må ikke love mere, end serveren kan
- * holde, så teksten i `NotificationToggle` siger det.
+ * Afsendelsen ligger i `convex/pushSend.ts` og bruger samme Web Crypto-kode
+ * som den nuværende app. Knappen her opretter kun abonnementet.
  */
 
 export type PushUnavailableReason = 'unsupported' | 'needs-install' | 'blocked'

@@ -251,7 +251,20 @@ async function runOnce() {
       if (error && typeof error === 'object') error.fatal = true
       throw error
     }
-    await probePush(page, hosts)
+    // Ny fane: den første sides Convex-websocket kan hænge en goto, og push
+    // skal prøves på en frisk indlæsning, hvor serviceworkeren er registreret.
+    const pushPage = await browser.newPage()
+    await pushPage.setViewport({ width: 1280, height: 800 })
+    pushPage.on('pageerror', (error) => {
+      console.error(`pageerror: ${redact(error.message)}`)
+    })
+    pushPage.on('console', (message) => {
+      if (message.type() === 'error') {
+        console.error(`konsol: ${redact(message.text())}`)
+      }
+    })
+    await probePush(pushPage, hosts)
+    await pushPage.close()
 
     if (document404s.length > 0) {
       throw new Error(`Dokument-404: ${document404s.join(', ')}`)
@@ -306,20 +319,52 @@ async function probePushOnce(page, hosts) {
     return button?.textContent ?? ''
   })
   if (label.includes('Slå notifikationer til')) {
-    await page.evaluate(() => {
-      const button = [...document.querySelectorAll('button')].find((el) =>
+    const handle = await page.evaluateHandle(() =>
+      [...document.querySelectorAll('button')].find((el) =>
         (el.textContent ?? '').includes('Slå notifikationer til'),
-      )
-      button?.click()
-    })
-  }
-  await page.waitForFunction(
-    () =>
-      [...document.querySelectorAll('button')].some((el) =>
-        (el.textContent ?? '').includes('Notifikationer til'),
       ),
-    { timeout: 25000 },
-  )
+    )
+    const button = handle.asElement()
+    if (!button) throw new Error('Knappen til notifikationer forsvandt')
+    // Rigtigt klik, ikke element.click() inde i siden: tilladelsen kræver
+    // en brugerhandling, hvis browseren ikke allerede har givet den.
+    await button.click()
+  }
+  const enabled = await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('button')].some((el) =>
+          (el.textContent ?? '').includes('Notifikationer til'),
+        ),
+      { timeout: 20000 },
+    )
+    .then(() => true)
+    .catch(() => false)
+  if (!enabled) {
+    const detail = await page.evaluate(async () => {
+      const regs = await navigator.serviceWorker.getRegistrations()
+      return {
+        permission: Notification.permission,
+        workers: regs.map(
+          (registration) =>
+            registration.active?.scriptURL ||
+            registration.installing?.scriptURL ||
+            registration.waiting?.scriptURL ||
+            registration.scope,
+        ),
+        button: [...document.querySelectorAll('button')]
+          .map((el) => el.textContent?.trim())
+          .filter((text) => text?.toLowerCase().includes('notifikation'))
+          .join(' | '),
+        alert: document.querySelector('[role="alert"]')?.textContent ?? '',
+      }
+    })
+    const error = new Error(
+      `Notifikationer blev ikke slået til: ${JSON.stringify(detail)}`,
+    )
+    error.fatal = true
+    throw error
+  }
 
   await page.evaluate(
     () =>

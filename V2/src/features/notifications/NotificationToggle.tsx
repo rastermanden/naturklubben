@@ -12,10 +12,8 @@ const UNAVAILABLE_TEXT = {
 /**
  * Til/fra for notifikationer på netop denne enhed.
  *
- * Knappen gemmer browserens abonnement på serveren. Den kan endnu ikke sende
- * en notifikation -- `sendWebPush` i `convex/pushSend.ts` er en TODO, fordi
- * Web Push-krypteringen kræver `web-push`-pakken. Det står der i teksten, så
- * ingen tror, at de har slået noget til, der virker.
+ * Knappen gemmer browserens abonnement på serveren. Afsendelsen sker i
+ * `convex/pushSend.ts` med den samme Web Crypto-kode som den nuværende app.
  */
 export function NotificationToggle() {
   const { status, isWorking, error, enable, disable } = usePushNotifications()

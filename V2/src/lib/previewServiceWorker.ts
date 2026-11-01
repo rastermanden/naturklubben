@@ -1,8 +1,29 @@
 /**
- * Fjerner en service worker, et tidligere preview har registreret under
- * sin egen sti. Produktionens worker har scope `/` og må blive: den styrer
- * hele origin, og et preview-besøg må ikke slå den fra.
+ * Fjerner den gamle preview-worker (`sw.js`) under previewets egen sti.
+ * `sw-prod.js` bliver: den leverer push. Produktionens worker har scope `/`
+ * og må også blive, for et preview-besøg må ikke slå den fra.
  */
+
+/**
+ * Den gamle preview-worker (`sw.js`) afregistrerer sig selv og må ikke blive
+ * liggende. `sw-prod.js` er den worker, appen selv registrerer, så push kan
+ * leveres -- den har samme scope og må ikke ryddes væk sammen med den gamle.
+ */
+export function isStalePreviewWorker(
+  registration: { scope: string; scriptURL: string },
+  previewScope: string,
+): boolean {
+  if (!isPreviewScopedRegistration(registration.scope, previewScope)) {
+    return false
+  }
+  let pathname: string
+  try {
+    pathname = new URL(registration.scriptURL).pathname
+  } catch {
+    return false
+  }
+  return pathname.endsWith('/sw.js')
+}
 
 export function isPreviewScopedRegistration(
   scope: string,
@@ -30,6 +51,7 @@ export async function clearPreviewServiceWorker(input: {
   previewScope: string
   registrations: readonly {
     scope: string
+    scriptURL: string
     unregister: () => Promise<boolean>
   }[]
   cacheNames: readonly string[]
@@ -38,7 +60,7 @@ export async function clearPreviewServiceWorker(input: {
   await Promise.all(
     input.registrations
       .filter((registration) =>
-        isPreviewScopedRegistration(registration.scope, input.previewScope),
+        isStalePreviewWorker(registration, input.previewScope),
       )
       .map((registration) => registration.unregister()),
   )
@@ -50,20 +72,28 @@ export async function clearPreviewServiceWorker(input: {
 }
 
 /** Kører i browseren ved opstart. Gør ingenting uden service worker-API. */
-export function clearStalePreviewServiceWorker(): void {
+export function clearStalePreviewServiceWorker(): Promise<void> {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
-    return
+    return Promise.resolve()
   }
 
   const previewScope = new URL(import.meta.env.BASE_URL, window.location.origin)
     .href
 
-  void (async () => {
+  return (async () => {
     const registrations = await navigator.serviceWorker.getRegistrations()
     const cacheNames = 'caches' in window ? await caches.keys() : []
     await clearPreviewServiceWorker({
       previewScope,
-      registrations,
+      registrations: registrations.map((registration) => ({
+        scope: registration.scope,
+        scriptURL:
+          registration.active?.scriptURL ??
+          registration.waiting?.scriptURL ??
+          registration.installing?.scriptURL ??
+          '',
+        unregister: () => registration.unregister(),
+      })),
       cacheNames,
       deleteCache: (name) => caches.delete(name),
     })
