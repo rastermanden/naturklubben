@@ -26,7 +26,10 @@ self.addEventListener('push', (event) => {
     badge: `${basePath}pwa-192x192.png`,
     tag: payload.tag || 'naturklubben-chat',
     renotify: true,
-    data: { url: new URL(payload.path || 'chat', self.location.origin + basePath).href },
+    data: {
+      url: new URL(payload.path || 'chat', self.location.origin + basePath)
+        .href,
+    },
   }
   event.waitUntil(
     (async () => {
@@ -45,5 +48,7 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const target = event.notification.data && event.notification.data.url
-  event.waitUntil(self.clients.openWindow(target || self.location.origin + basePath))
+  event.waitUntil(
+    self.clients.openWindow(target || self.location.origin + basePath),
+  )
 })
