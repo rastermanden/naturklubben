@@ -1,47 +1,33 @@
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
+import {
+  chooseInstallMethod,
+  getInstallPromptState,
+  promptInstall,
+  subscribeInstallPrompt,
+  type InstallMethod,
+} from './installPrompt'
+import { isAndroidDevice, isIosDevice, isStandaloneDisplay } from './platform'
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
-}
-
-export function useInstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null)
-  const [isInstalled, setIsInstalled] = useState(
-    () => window.matchMedia('(display-mode: standalone)').matches,
+/**
+ * Om -- og hvordan -- appen kan installeres her (#291). Læser det fælles
+ * lager, som main.tsx fylder ved opstart, så også en knap, der monteres
+ * senere (fx i burger-menuen), ved, at browseren har meldt sig klar.
+ */
+export function useInstallPrompt(): {
+  method: InstallMethod
+  promptInstall: () => Promise<void>
+} {
+  const state = useSyncExternalStore(
+    subscribeInstallPrompt,
+    getInstallPromptState,
   )
 
-  useEffect(() => {
-    function handleBeforeInstallPrompt(event: Event) {
-      event.preventDefault()
-      setDeferredPrompt(event as BeforeInstallPromptEvent)
-    }
-    function handleAppInstalled() {
-      setDeferredPrompt(null)
-      setIsInstalled(true)
-    }
+  const method = chooseInstallMethod({
+    hasPrompt: state.deferredPrompt !== null,
+    isStandalone: state.installed || isStandaloneDisplay(),
+    isIos: isIosDevice(),
+    isAndroid: isAndroidDevice(),
+  })
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
-    window.addEventListener('appinstalled', handleAppInstalled)
-    return () => {
-      window.removeEventListener(
-        'beforeinstallprompt',
-        handleBeforeInstallPrompt,
-      )
-      window.removeEventListener('appinstalled', handleAppInstalled)
-    }
-  }, [])
-
-  async function promptInstall() {
-    if (!deferredPrompt) return
-    await deferredPrompt.prompt()
-    await deferredPrompt.userChoice
-    setDeferredPrompt(null)
-  }
-
-  return {
-    canInstall: !isInstalled && deferredPrompt !== null,
-    promptInstall,
-  }
+  return { method, promptInstall }
 }

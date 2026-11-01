@@ -10,11 +10,15 @@ import { AuthProvider } from './features/auth/AuthProvider'
 import { ThemeProvider } from './features/theme/ThemeProvider'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { installGlobalErrorReporting } from './lib/errorReporting'
+import { installInstallPromptCapture } from './features/pwa/installPrompt'
 import { SiteMovedNotice } from './features/siteMove/SiteMovedNotice'
 
 // Skal ske før React Router læser adressen -- ellers ser den rod-ruten i
 // stedet for den sti, brugeren faktisk bad om (se lib/spaRedirect.ts).
 installGlobalErrorReporting()
+// Browserens "kan installeres"-melding kommer kun én gang, kort efter
+// indlæsningen -- den skal fanges, før nogen knap er monteret (#291).
+installInstallPromptCapture()
 restoreSpaRedirect()
 
 createRoot(document.getElementById('root')!).render(
