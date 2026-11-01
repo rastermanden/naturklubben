@@ -20,6 +20,7 @@ import type * as calendarFeed from "../calendarFeed.js";
 import type * as chat from "../chat.js";
 import type * as chatPolls from "../chatPolls.js";
 import type * as crons from "../crons.js";
+import type * as emailProbe from "../emailProbe.js";
 import type * as gallery from "../gallery.js";
 import type * as games from "../games.js";
 import type * as http from "../http.js";
@@ -62,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   chat: typeof chat;
   chatPolls: typeof chatPolls;
   crons: typeof crons;
+  emailProbe: typeof emailProbe;
   gallery: typeof gallery;
   games: typeof games;
   http: typeof http;
