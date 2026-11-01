@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { computeSpaFallback, restoredSpaPath } from './spaRedirect'
+import {
+  computeSpaFallback,
+  restoredSpaPath,
+  withoutTrailingRouteSlash,
+} from './spaRedirect'
 
 const preview = '/pr-preview/pr-277/'
 
@@ -30,6 +34,27 @@ describe('computeSpaFallback', () => {
   it('lader en manglende fil være', () => {
     expect(
       computeSpaFallback(preview, '/pr-preview/pr-277/assets/app.js', '', ''),
+    ).toBeNull()
+  })
+})
+
+describe('withoutTrailingRouteSlash', () => {
+  it('fjerner skråstregen, GitHub Pages sætter på en rute-mappe', () => {
+    expect(
+      withoutTrailingRouteSlash(preview, '/pr-preview/pr-277/kalender/'),
+    ).toBe('/pr-preview/pr-277/kalender')
+    expect(
+      withoutTrailingRouteSlash(
+        preview,
+        '/pr-preview/pr-277/kalender/offentlig/',
+      ),
+    ).toBe('/pr-preview/pr-277/kalender/offentlig')
+  })
+
+  it('lader forsiden og en sti uden skråstreg være', () => {
+    expect(withoutTrailingRouteSlash(preview, preview)).toBeNull()
+    expect(
+      withoutTrailingRouteSlash(preview, '/pr-preview/pr-277/profil'),
     ).toBeNull()
   })
 })

@@ -1,8 +1,11 @@
 import { execFileSync } from 'node:child_process'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import path from 'node:path'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { computeSpaFallback } from './src/lib/spaFallback.js'
+import { spaIndexFile, spaIndexPaths } from './src/lib/spaRoutes.js'
 
 /**
  * V2 er en Convex-native omskrivning af Naturklubben. Den ligger ved siden af
@@ -107,6 +110,29 @@ function spaFallback(basePath: string): Plugin {
   }
 }
 
+/**
+ * En kopi af index.html pr. statisk rute. GitHub Pages svarer så 200 på
+ * `/kalender/` i stedet for at hente rodens 404.html.
+ */
+function spaIndexCopies(): Plugin {
+  let outDir = ''
+  return {
+    name: 'naturklubben-v2:spa-index-copies',
+    apply: 'build',
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir)
+    },
+    closeBundle() {
+      const index = readFileSync(path.join(outDir, 'index.html'))
+      for (const route of spaIndexPaths) {
+        const file = path.join(outDir, spaIndexFile(route))
+        mkdirSync(path.dirname(file), { recursive: true })
+        writeFileSync(file, index)
+      }
+    },
+  }
+}
+
 export default defineConfig(({ command, mode }) => {
   if (command === 'build') assertConvexEnv(mode)
 
@@ -116,6 +142,6 @@ export default defineConfig(({ command, mode }) => {
       __APP_VERSION__: JSON.stringify(appVersion.version),
       __APP_BUILD_DATE__: JSON.stringify(appVersion.date),
     },
-    plugins: [react(), tailwindcss(), spaFallback(basePath)],
+    plugins: [react(), tailwindcss(), spaFallback(basePath), spaIndexCopies()],
   }
 })

@@ -10,7 +10,7 @@ function HeroPage() {
   const location = useLocation()
   const authRequired = (location.state as { authRequired?: boolean } | null)
     ?.authRequired
-  const { isAuthenticated } = useConvexAuth()
+  const { isAuthenticated, isLoading } = useConvexAuth()
   const activities = useActivities(3) ?? []
 
   return (
@@ -22,7 +22,11 @@ function HeroPage() {
           </h1>
           <p className="mx-auto max-w-prose text-lg text-ink-muted">
             Vi mødes om naturen — vandreture, fugletårne og fælles oprydninger.
-            Log ind for at se kalender, billeder og chat med de andre medlemmer.
+            {isLoading
+              ? ''
+              : isAuthenticated
+                ? ' Kalenderen, aktiviteterne og de andre medlemmer er åbne for dig.'
+                : ' Log ind for at se kalender, billeder og chat med de andre medlemmer.'}
           </p>
         </div>
 
@@ -41,12 +45,14 @@ function HeroPage() {
               Gå til kalender
             </Link>
           ) : (
-            <Link
-              to="/login"
-              className="flex min-h-11 items-center rounded bg-accent px-5 py-2 text-white"
-            >
-              Log ind
-            </Link>
+            !isLoading && (
+              <Link
+                to="/login"
+                className="flex min-h-11 items-center rounded bg-accent px-5 py-2 text-white"
+              >
+                Log ind
+              </Link>
+            )
           )}
           <Link
             to="/aktiviteter"

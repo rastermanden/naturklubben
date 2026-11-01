@@ -116,6 +116,15 @@ async function runOnce() {
         // Ugyldige URL'er er ikke Convex-værter.
       }
     })
+    const document404s = []
+    page.on('response', (response) => {
+      if (
+        response.request().resourceType() === 'document' &&
+        response.status() === 404
+      ) {
+        document404s.push(response.url())
+      }
+    })
     page.on('pageerror', (error) => {
       console.error(`pageerror: ${redact(error.message)}`)
     })
@@ -168,6 +177,34 @@ async function runOnce() {
     const name = await page.$eval('#fullName', (input) => input.value)
     if (name !== 'Preview-tester') {
       throw new Error(`Profilnavn var ${JSON.stringify(redact(name))}`)
+    }
+
+    // Direkte indlæsning, ikke et klik: GitHub Pages skal svare 200, og
+    // sessionen skal stadig være der bagefter.
+    const reloads = [
+      ['', 'Kalenderen, aktiviteterne og de andre medlemmer er åbne for dig.'],
+      ['kalender', 'Preview-tur'],
+      ['aktiviteter', 'Skovtur'],
+      ['profil', 'Preview-tester'],
+      ['medlemmer', 'Medlemmer'],
+      [
+        'login',
+        'Kalenderen, aktiviteterne og de andre medlemmer er åbne for dig.',
+      ],
+    ]
+    for (const [route, text] of reloads) {
+      const response = await page.goto(`${base}${route}`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      })
+      if (response !== null && response.status() >= 400) {
+        throw new Error(`HTTP ${response.status()} på /${route}`)
+      }
+      await assertText(page, text)
+      await assertText(page, 'Log ud')
+    }
+    if (document404s.length > 0) {
+      throw new Error(`Dokument-404: ${document404s.join(', ')}`)
     }
 
     for (const host of hosts) {

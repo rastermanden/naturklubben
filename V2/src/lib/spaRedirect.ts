@@ -31,11 +31,42 @@ export function restoredSpaPath(base: string, href: string): string | null {
  * pakkes ind): Convex Auth læser engangskoder og bekræftelseslinks fra netop
  * de dele, og det sker når auth-provideren mounter, altså efter denne funktion.
  */
+/**
+ * GitHub Pages sender `/kalender` videre til `/kalender/`, fordi kopien af
+ * index.html ligger i mappen. React Router matcher ikke den ekstra skråstreg
+ * som den samme rute, så den fjernes før routeren læser adressen.
+ */
+export function withoutTrailingRouteSlash(
+  base: string,
+  pathname: string,
+): string | null {
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`
+  if (!pathname.startsWith(normalizedBase)) return null
+  const rest = pathname.slice(normalizedBase.length)
+  if (rest.length === 0 || !rest.endsWith('/')) return null
+  return normalizedBase + rest.replace(/\/+$/, '')
+}
+
 export function restoreSpaRedirect(): void {
-  const restored = restoredSpaPath(
-    import.meta.env.BASE_URL,
-    window.location.href,
+  const base = import.meta.env.BASE_URL
+  const current = new URL(window.location.href)
+  const restored = restoredSpaPath(base, current.href)
+  if (restored !== null) {
+    const restoredUrl = new URL(restored, current.origin)
+    const stripped = withoutTrailingRouteSlash(base, restoredUrl.pathname)
+    if (stripped !== null) restoredUrl.pathname = stripped
+    window.history.replaceState(
+      window.history.state,
+      '',
+      restoredUrl.pathname + restoredUrl.search + restoredUrl.hash,
+    )
+    return
+  }
+  const stripped = withoutTrailingRouteSlash(base, current.pathname)
+  if (stripped === null) return
+  window.history.replaceState(
+    window.history.state,
+    '',
+    stripped + current.search + current.hash,
   )
-  if (restored === null) return
-  window.history.replaceState(window.history.state, '', restored)
 }
