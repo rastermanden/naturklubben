@@ -66,7 +66,7 @@ GitHub.
    `VITE_CONVEX_URL` i `V2/.env.local` og genererer `convex/_generated/`.
    Sidstnævnte er forudsætningen for, at `tsc` og `convex-test` kan køre
    overhovedet; mappen committes.
-4. `npm run dev` — appen kører på `http://localhost:5173/naturklubben/v2/`.
+4. `npm run dev` — appen kører på `http://localhost:5173/v2/`.
 
 Til GitHub Actions skal der bruges to ting i repoets indstillinger:
 
@@ -84,11 +84,11 @@ Til GitHub Actions skal der bruges to ting i repoets indstillinger:
 De to apps har hvert sit build og deler ikke kode. Et skift er derfor et
 deploy-valg, ikke en kodeændring:
 
-- **Begge samtidigt.** `deploy-v2.yml` bygger V2 med standardstien
-  `/naturklubben/v2/` og lægger den ved siden af den nuværende app på samme
-  GitHub Pages-site. Intet af den gamle app røres.
-- **V2 som den rigtige app.** Kør samme workflow med `base_path` sat til
-  `/naturklubben/` og `publish_to_root` slået til. V2 overskriver da
+- **Begge samtidigt.** `deploy-v2.yml` bygger V2 med standardstien `/v2/`
+  og lægger den ved siden af den nuværende app på naturklubben.dk. Intet af
+  den gamle app røres.
+- **V2 som den rigtige app.** Kør samme workflow med `base_path` sat til `/`
+  og `publish_to_root` slået til. V2 overskriver da
   `index.html` på produktions-URL'en; den gamle app ligger stadig i git og kan
   deployes tilbage med `deploy.yml`.
 - **Tilbage til den gamle app.** Kør `deploy.yml` igen. Der er intet at

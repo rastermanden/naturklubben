@@ -8,11 +8,12 @@ import tailwindcss from '@tailwindcss/vite'
  * den nuværende Supabase-app og har sit eget build, så de to kan deployes hver
  * for sig -- se V2/README.md, "Skift mellem de to apps".
  *
- * Standardstien er /naturklubben/v2/, så V2 kan ligge på samme GitHub
- * Pages-site som den nuværende app uden at overskrive den. Sæt
- * VITE_BASE_PATH=/naturklubben/ for at lægge V2 på produktions-URL'en.
+ * Sitet er naturklubben.dk, serveret fra roden. Standardstien er /v2/, så V2
+ * kan ligge ved siden af den nuværende app uden at overskrive den.
+ * PR-preview-workflowet sætter VITE_BASE_PATH til /pr-preview/pr-<nr>/.
+ * Sæt VITE_BASE_PATH=/ for at lægge V2 på produktions-URL'en.
  */
-const basePath = process.env.VITE_BASE_PATH ?? '/naturklubben/v2/'
+const basePath = process.env.VITE_BASE_PATH ?? '/v2/'
 
 function git(args: string[]): string | null {
   try {
@@ -61,34 +62,54 @@ function assertConvexEnv(mode: string) {
 
 /**
  * GitHub Pages har ingen SPA-fallback. En direkte navigation til fx
- * /naturklubben/v2/kalender findes ikke på disken og besvares med GitHubs
- * egen 404. Filen her overtager svaret og sender stien videre til index.html.
+ * /v2/kalender findes ikke på disken og besvares med GitHubs egen 404.
+ * Filen her overtager svaret og sender stien videre til index.html.
+ *
+ * Samme mønster som rod-appens `vite.config.ts`: kender sin egen base-sti,
+ * og en preview-sti, der rammer en 404 med base `/`, sendes til previewets
+ * index.html. Scriptet står i en template literal, så regexerne bruger
+ * tegnklasser (`[/]`, `[0-9]`, `[.]`) i stedet for skråstreger, som
+ * JavaScript selv ville spise.
  */
-function spaFallback(path: string): Plugin {
+function spaFallback(basePath: string): Plugin {
   const html = `<!doctype html>
 <html lang="da">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Naturklubben</title>
     <script>
       ;(function () {
-        var base = ${JSON.stringify(path)}
+        var base = ${JSON.stringify(basePath)}
         var path = location.pathname
         if (path.indexOf(base) !== 0) {
           location.replace(base)
           return
         }
         var rest = path.slice(base.length)
+
+        var preview = rest.match(/^pr-preview[/]pr-[0-9]+[/]/)
+        if (preview) {
+          base += preview[0]
+          rest = rest.slice(preview[0].length)
+        }
+
         if (/[.][^/]+$/.test(rest)) return
+
         var query = location.search ? location.search.slice(1) + '&' : ''
         location.replace(
-          base + '?' + query + 'spa-path=' + encodeURIComponent(rest) + location.hash,
+          base +
+            '?' +
+            query +
+            'spa-path=' +
+            encodeURIComponent(rest) +
+            location.hash,
         )
       })()
     </script>
   </head>
   <body>
-    <p>Siden findes ikke. <a href="${path}">Gå til Naturklubben</a>.</p>
+    <p>Siden findes ikke. <a href="${basePath}">Gå til Naturklubben</a>.</p>
   </body>
 </html>
 `

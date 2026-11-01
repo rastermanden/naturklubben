@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       base_path:
-        description: 'Sti på GitHub Pages. Brug /naturklubben/ for at lægge V2 på produktions-URL-en.'
+        description: 'Sti på naturklubben.dk. /v2/ lægger V2 ved siden af den nuværende app. Brug / for at lægge V2 på produktions-URL-en.'
         required: true
-        default: /naturklubben/v2/
+        default: /v2/
       publish_to_root:
         description: 'Skriv til gh-pages-roden i stedet for v2/-undermappen (overskriver den nuværende apps index.html).'
         required: true
