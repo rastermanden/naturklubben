@@ -29,7 +29,6 @@ on:
     types: [opened, reopened, synchronize, closed]
 
 permissions:
-  actions: read
   contents: write
   pull-requests: write
 
@@ -130,34 +129,10 @@ jobs:
           printf '%s' "$PREVIEW_TEST_PASSWORD" | npx convex env set PREVIEW_TEST_PASSWORD --preview-name "$preview"
           npx convex run previewSeed:ensure '{}' --preview-name "$preview"
 
-      # Begge preview-workflows skriver den samme mappe `pr-preview/pr-<nr>/`.
-      # Den gamle apps build er langsommere og ville ellers overskrive V2,
-      # når en PR rører begge. Vent, til den er færdig, og læg V2 ovenpå.
-      - if: github.event.action != 'closed'
-        name: Vent på den gamle apps preview
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          sha="${{ github.event.pull_request.head.sha }}"
-          for attempt in $(seq 1 90); do
-            status=$(gh run list \
-              --workflow .github/workflows/pr-preview.yml \
-              --commit "$sha" \
-              --limit 1 \
-              --json status \
-              --jq '.[0].status // "missing"')
-            echo "PR Preview: $status (forsøg $attempt)"
-            if [ "$status" = "completed" ]; then
-              exit 0
-            fi
-            if [ "$status" = "missing" ] && [ "$attempt" -ge 12 ]; then
-              echo "Ingen kørsel af PR Preview. Udgiver V2."
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "PR Preview blev ikke færdig i tide. Udgiver V2 alligevel."
+      # `pr-preview.yml` udgiver ikke, når PR'en rører V2/. Derfor er der
+      # ingen venten på V1: den kørsel pushede alligevel til gh-pages efter
+      # V2, fordi status "completed" ikke garanterede, at V1's push var den
+      # sidste.
 
       # Samme action som den gamle app bruger: den lægger buildet i
       # pr-preview/pr-<nr>/ på gh-pages og fjerner mappen igen, når PR'en

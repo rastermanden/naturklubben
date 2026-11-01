@@ -1,5 +1,10 @@
 name: PR Preview
 
+# V1-previewet og V2-previewet (`pr-preview-v2.yml`) skriver begge til
+# `pr-preview/pr-<nr>/` på gh-pages. Rører PR'en `V2/`, udgiver dette workflow
+# ikke: ellers lægger det langsommere V1-build ovenpå V2, efter V2 er færdig,
+# og previewet viser den gamle app mod produktions-Supabase.
+
 on:
   pull_request:
     types: [opened, reopened, synchronize, closed]
@@ -24,12 +29,27 @@ jobs:
           fetch-depth: 0
 
       - if: github.event.action != 'closed'
+        name: Afgør om V1-previewet må udgives
+        id: app
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if git diff --name-only "$(git merge-base "$BASE_SHA" "$HEAD_SHA")" "$HEAD_SHA" -- V2/ | grep -q .; then
+            echo "v2=true" >> "$GITHUB_OUTPUT"
+            echo "PR'en ændrer V2/. V1-previewet udgiver ikke pr-${{ github.event.number }}." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "v2=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: github.event.action != 'closed' && steps.app.outputs.v2 != 'true'
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
-      - if: github.event.action != 'closed'
+      - if: github.event.action != 'closed' && steps.app.outputs.v2 != 'true'
         run: npm ci
 
       # Supabase er kilden til sandhed: hvis integrationen opretter en Preview
@@ -39,7 +59,7 @@ jobs:
       #
       # Branch-projektets ref og publishable key hentes fra Management API'et og
       # skrives til GITHUB_ENV, hvor build-trinnet nedenfor samler dem op.
-      - if: github.event.action != 'closed'
+      - if: github.event.action != 'closed' && steps.app.outputs.v2 != 'true'
         name: Find PR'ens Supabase Preview Branch
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -167,7 +187,7 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "✅ Preview bygget mod Supabase Preview Branch \`$branch_ref\`." >> "$GITHUB_STEP_SUMMARY"
 
-      - if: github.event.action != 'closed' && env.SUPABASE_PREVIEW_BRANCH_USED == 'true'
+      - if: github.event.action != 'closed' && steps.app.outputs.v2 != 'true' && env.SUPABASE_PREVIEW_BRANCH_USED == 'true'
         name: Kontrollér trusted IP-header i Preview
         # Supabase GitHub-integrationen deployer functionen fra config.toml til
         # Preview Branch. Cloudflare skal enten afvise en caller-sat
@@ -217,7 +237,7 @@ jobs:
           fi
           echo "✅ Supabase Preview afviste/overskrev spoofet CF-Connecting-IP og functionen ignorerede spoofet X-Forwarded-For." >> "$GITHUB_STEP_SUMMARY"
 
-      - if: github.event.action != 'closed'
+      - if: github.event.action != 'closed' && steps.app.outputs.v2 != 'true'
         name: Build preview
         # VITE_SUPABASE_* kommer fra trinnet ovenfor via GITHUB_ENV og må derfor
         # ikke sættes her -- en env-nøgle på selve trinnet ville overskrive dem
@@ -228,8 +248,10 @@ jobs:
           VITE_BASE_PATH: /pr-preview/pr-${{ github.event.number }}/
 
       # Håndterer både deploy (åbnet/opdateret PR) og oprydning (lukket PR)
-      # automatisk ud fra event-typen ovenfor.
-      - uses: rossjrw/pr-preview-action@v1
+      # automatisk ud fra event-typen ovenfor. Lukning rydder stadig op, også
+      # når V2 ejer mappen: V2's eget workflow sletter den samme sti.
+      - if: github.event.action == 'closed' || steps.app.outputs.v2 != 'true'
+        uses: rossjrw/pr-preview-action@v1
         with:
           source-dir: ./dist
           # Sitet har eget domæne (public/CNAME); uden dette skriver actionen

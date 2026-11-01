@@ -7,11 +7,15 @@ import App from './App.tsx'
 import { ThemeProvider } from './features/theme/ThemeProvider'
 import { convex } from './lib/convexClient'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
+import { clearStalePreviewServiceWorker } from './lib/previewServiceWorker'
 import { restoreSpaRedirect } from './lib/spaRedirect'
 
 // Skal ske før React Router læser adressen -- ellers ser den rod-ruten i
 // stedet for den sti, brugeren faktisk bad om (se lib/spaRedirect.ts).
 restoreSpaRedirect()
+// Et ældre preview kan have en service worker på samme sti. Den afregistreres
+// her, og public/sw.js overtager, hvis browseren stadig har den gamle.
+clearStalePreviewServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
