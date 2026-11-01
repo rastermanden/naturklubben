@@ -1,19 +1,19 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useAction, useMutation } from 'convex/react'
+import { useMutation } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
+import { PHOTO_MAX_EDGE, THUMB_MAX_EDGE, resizePhotoFile } from './resizePhoto'
 
 /**
  * Uploadkøen. Porteret fra `src/features/gallery/useUploadPhotos.ts`, men
  * todelt på en ny måde, fordi Convex filstorage ikke tager imod en fil gennem
  * en database-mutation:
  *
- * 1. `gallery.generateUploadUrl` giver en engangs-URL (kun for medlemmer).
- * 2. Klienten `POST`er filen dertil og får et `storageId` tilbage.
- * 3. `gallery.createPhoto` registrerer rækken med det id -- og kontrollerer
- *    først, at filen er et billede og højst 15 MB. Bucket-grænserne fra den
- *    gamle app findes ikke længere, så kontrollen ligger nu i mutationen.
- * 4. `gallery.optimizePhoto` (action) sætter gang i optimeringsstatus'en.
+ * 1. Browseren skalerer til et visningsbillede og en miniature.
+ * 2. `gallery.generateUploadUrl` giver en engangs-URL (kun for medlemmer).
+ * 3. Klienten `POST`er filerne dertil og får et `storageId` tilbage.
+ * 4. `gallery.createPhoto` registrerer rækken. Med en miniature er billedet
+ *    klar med det samme; serveren skalerer ikke.
  *
  * Køen er stadig klientens: en fil ad gangen, så et dårligt netværk ikke
  * starter ti parallelle uploads.
@@ -77,10 +77,27 @@ export function createUploadQueueItems({
   })
 }
 
+async function postImage(
+  generateUploadUrl: () => Promise<{ uploadUrl: string }>,
+  blob: Blob,
+): Promise<Id<'_storage'>> {
+  const { uploadUrl } = await generateUploadUrl()
+  const response = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': blob.type || 'image/jpeg' },
+    body: blob,
+  })
+  if (!response.ok) {
+    throw new Error('PHOTO_UPLOAD_NOT_FOUND')
+  }
+  const payload = (await response.json()) as { storageId?: Id<'_storage'> }
+  if (!payload.storageId) throw new Error('PHOTO_UPLOAD_NOT_FOUND')
+  return payload.storageId
+}
+
 export function useUploadPhotos() {
   const generateUploadUrl = useMutation(api.gallery.generateUploadUrl)
   const createPhoto = useMutation(api.gallery.createPhoto)
-  const optimizePhoto = useAction(api.gallery.optimizePhoto)
   const [items, setItems] = useState<UploadQueueItem[]>([])
 
   const updateItem = useCallback(
@@ -97,37 +114,25 @@ export function useUploadPhotos() {
       updateItem(item.id, { status: 'uploading', error: null })
 
       try {
-        const { uploadUrl } = await generateUploadUrl()
-        const response = await fetch(uploadUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': item.file.type },
-          body: item.file,
-        })
-        if (!response.ok) {
-          throw new Error(`Upload svarede ${response.status}`)
-        }
-        const { storageId } = (await response.json()) as {
-          storageId: Id<'_storage'>
-        }
+        const display = await resizePhotoFile(item.file, PHOTO_MAX_EDGE)
+        const thumb = await resizePhotoFile(item.file, THUMB_MAX_EDGE)
+        const storageId = await postImage(generateUploadUrl, display.blob)
+        const thumbnailStorageId = await postImage(
+          generateUploadUrl,
+          thumb.blob,
+        )
 
-        const photoId = await createPhoto({
+        await createPhoto({
           storageId,
+          thumbnailStorageId,
+          width: display.width,
+          height: display.height,
           clientUploadId: item.clientUploadId,
           caption: item.caption || undefined,
           eventId: item.eventId ?? undefined,
           eventTitle: item.eventTitle,
         })
         updateItem(item.id, { status: 'saved' })
-
-        // Status sættes i baggrunden: billedet er allerede synligt i galleriet,
-        // og et fejlet optimeringsforsøg må ikke gøre et gemt upload til en
-        // fejl. Rækken kan prøves igen fra lysbordet.
-        void optimizePhoto({ photoId }).catch((error: unknown) => {
-          console.warn(
-            'Billedet er gemt, men optimeringen kunne ikke startes',
-            error,
-          )
-        })
       } catch (caught) {
         console.error('Billedupload fejlede', caught)
         updateItem(item.id, {
@@ -136,7 +141,7 @@ export function useUploadPhotos() {
         })
       }
     },
-    [createPhoto, generateUploadUrl, optimizePhoto, updateItem],
+    [createPhoto, generateUploadUrl, updateItem],
   )
 
   const enqueue = useCallback(

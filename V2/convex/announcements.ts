@@ -59,6 +59,12 @@ export const ANNOUNCEMENTS = [
     path: 'profil',
   },
   {
+    slug: 'billeder',
+    title: 'Du kan nu lægge billeder op',
+    body: 'Åbn Billeder, vælg et foto, og det gemmes i klubbens galleri. Billedet skaleres på din telefon, før det sendes.',
+    path: 'billeder',
+  },
+  {
     slug: 'chat',
     title: 'Chatten er åben',
     body: 'Skriv til de andre under Chat. Beskederne kommer frem med det samme, også hos dem, der allerede har siden åben.',

@@ -22,6 +22,7 @@ export const navLinks: readonly NavLinkItem[] = [
   { to: '/', label: 'Forsiden' },
   { to: '/aktiviteter', label: 'Aktiviteter' },
   { to: '/kalender', label: 'Kalender', requiresAuth: true },
+  { to: '/billeder', label: 'Billeder', requiresAuth: true },
   { to: '/chat', label: 'Chat', requiresAuth: true },
   { to: '/medlemmer', label: 'Medlemmer', requiresAuth: true },
   { to: '/profil', label: 'Min profil', requiresAuth: true },

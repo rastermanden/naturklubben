@@ -5,6 +5,7 @@ import schema from './schema'
 import {
   PREVIEW_ACTIVITIES,
   PREVIEW_CHAT_TEXT,
+  PREVIEW_PHOTO_CAPTION,
   PREVIEW_EVENT_TITLE,
   PREVIEW_MEMBER_NAME,
   PROD_DEPLOYMENT_SLUG,
@@ -118,6 +119,14 @@ describe('writePreviewSample', () => {
       ctx.db.query('messages').collect(),
     )
     expect(messages).toHaveLength(1)
+    const photos = await t.run(async (ctx) => ctx.db.query('photos').collect())
+    expect(photos).toHaveLength(1)
+    expect(photos[0]).toMatchObject({
+      caption: PREVIEW_PHOTO_CAPTION,
+      optimizationStatus: 'ready',
+      albumKey: 'without-event',
+    })
+
     expect(messages[0]).toMatchObject({
       room: 'general',
       authorId: rows.profiles[0]!._id,

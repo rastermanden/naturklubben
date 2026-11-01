@@ -53,6 +53,8 @@ export const PREVIEW_EVENT_TITLE = 'Preview-tur'
 export const PREVIEW_CHAT_CLIENT_ID = 'preview-seed-chat'
 export const PREVIEW_CHAT_TEXT = 'Hej fra previewet. Skoven er grøn i dag.'
 
+export const PREVIEW_PHOTO_CAPTION = 'Et blad fra previewet'
+
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000
 
@@ -197,6 +199,45 @@ export async function writePreviewSample(
       endAt: endsAt,
       endsAt,
     })
+  }
+
+  const existingPhoto = await ctx.db
+    .query('photos')
+    .filter((q) => q.eq(q.field('caption'), PREVIEW_PHOTO_CAPTION))
+    .first()
+  if (existingPhoto === null) {
+    const storageId = await ctx.storage.store(previewAvatarBlob())
+    const now = Date.now()
+    const photoId = await ctx.db.insert('photos', {
+      storageId,
+      optimizedStorageId: storageId,
+      thumbnailStorageId: storageId,
+      width: 1,
+      height: 1,
+      caption: PREVIEW_PHOTO_CAPTION,
+      albumKey: 'without-event',
+      uploaderId: profileId,
+      createdAt: now,
+      optimizationStatus: 'ready',
+      optimizationAttempts: 0,
+      optimizationCompletedAt: now,
+      commentCount: 0,
+    })
+    const album = await ctx.db
+      .query('photoAlbums')
+      .withIndex('by_album_key', (q) => q.eq('albumKey', 'without-event'))
+      .unique()
+    if (album === null) {
+      await ctx.db.insert('photoAlbums', {
+        albumKey: 'without-event',
+        photoCount: 1,
+        latestPhotoAt: now,
+        coverPhotoId: photoId,
+        coverThumbnailStorageId: storageId,
+        coverOptimizedStorageId: storageId,
+        coverCreatedAt: now,
+      })
+    }
   }
 
   const existingChat = await ctx.db

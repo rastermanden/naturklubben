@@ -408,6 +408,13 @@ export const createPhoto = mutation({
     caption: v.optional(v.string()),
     eventId: v.optional(v.string()),
     eventTitle: v.optional(v.string()),
+    /**
+     * Miniaturen, skaleret i browseren. Når den er med, er billedet klar med
+     * det samme: serveren skalerer ikke selv.
+     */
+    thumbnailStorageId: v.optional(v.id('_storage')),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const profile = await requireWritableProfile(ctx)
@@ -450,25 +457,64 @@ export const createPhoto = mutation({
 
     const eventId = trimmedOrUndefined(args.eventId)
     const now = Date.now()
+    const thumbnailStorageId = args.thumbnailStorageId
+    if (thumbnailStorageId !== undefined) {
+      const thumb = await ctx.db.system.get(thumbnailStorageId)
+      if (
+        thumb === null ||
+        !(thumb.contentType ?? '').startsWith('image/') ||
+        thumb.size > MAX_FILE_SIZE
+      ) {
+        await ctx.storage.delete(args.storageId)
+        if (thumb !== null) await ctx.storage.delete(thumbnailStorageId)
+        throw new ConvexError(
+          thumb === null
+            ? 'PHOTO_UPLOAD_NOT_FOUND'
+            : !(thumb.contentType ?? '').startsWith('image/')
+              ? 'PHOTO_NOT_AN_IMAGE'
+              : 'PHOTO_TOO_LARGE',
+        )
+      }
+    }
+
+    const ready = thumbnailStorageId !== undefined
+    const albumKey = albumKeyFor(eventId)
     const photoId = await ctx.db.insert('photos', {
       storageId: args.storageId,
+      optimizedStorageId: ready ? args.storageId : undefined,
+      thumbnailStorageId,
+      width: args.width,
+      height: args.height,
       caption,
-      albumKey: albumKeyFor(eventId),
+      albumKey,
       eventId,
       uploaderId: profile._id,
       clientUploadId,
       createdAt: now,
-      optimizationStatus: 'pending',
+      optimizationStatus: ready ? 'ready' : 'pending',
       optimizationAttempts: 0,
+      optimizationCompletedAt: ready ? now : undefined,
       commentCount: 0,
     })
 
     await addPhotoToAlbum(ctx, {
-      albumKey: albumKeyFor(eventId),
+      albumKey,
       eventId,
       eventTitle: trimmedOrUndefined(args.eventTitle),
       createdAt: now,
     })
+
+    if (ready) {
+      const album = await albumByKey(ctx, albumKey)
+      if (album !== null) {
+        await ctx.db.patch(album._id, {
+          coverPhotoId: photoId,
+          coverThumbnailStorageId: thumbnailStorageId,
+          coverOptimizedStorageId: args.storageId,
+          coverCreatedAt: now,
+        })
+      }
+    }
 
     return photoId
   },
