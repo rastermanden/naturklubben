@@ -153,16 +153,36 @@ async function runOnce() {
             '#login-error',
             (el) => el.textContent ?? '',
           )
-          const emailLen = await page.$eval(
-            '#login-email',
-            (el) => el.value.length,
-          )
-          const passwordLen = await page.$eval(
-            '#login-password',
-            (el) => el.value.length,
-          )
+          const fieldFp = await page.evaluate(async () => {
+            async function fp(value) {
+              const digest = await crypto.subtle.digest(
+                'SHA-256',
+                new TextEncoder().encode(value),
+              )
+              return [...new Uint8Array(digest)]
+                .slice(0, 4)
+                .map((byte) => byte.toString(16).padStart(2, '0'))
+                .join('')
+            }
+            return {
+              email: await fp(document.querySelector('#login-email').value),
+              password: await fp(
+                document.querySelector('#login-password').value,
+              ),
+            }
+          })
+          async function fp(value) {
+            const digest = await crypto.subtle.digest(
+              'SHA-256',
+              new TextEncoder().encode(value),
+            )
+            return [...new Uint8Array(digest)]
+              .slice(0, 4)
+              .map((byte) => byte.toString(16).padStart(2, '0'))
+              .join('')
+          }
           const loginError = new Error(
-            `Login afvist: ${redact(text)} (feltlængder ${emailLen}/${passwordLen}, forventet ${email.length}/${password.length})`,
+            `Login afvist: ${redact(text)} (felt ${fieldFp.email}/${fieldFp.password}, forventet ${await fp(email)}/${await fp(password)}, værter ${[...hosts].join(' ') || 'ingen'})`,
           )
           loginError.fatal = true
           reject(loginError)
