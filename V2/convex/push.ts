@@ -8,7 +8,7 @@ import {
 import type { MutationCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
-import { requireProfile, requireWritableProfile } from './authz'
+import { currentUserId, requireProfile, requireWritableProfile } from './authz'
 import { notificationKind, type NotificationKind } from './tables/notifications'
 import type { Doc, Id } from './_generated/dataModel'
 
@@ -643,15 +643,49 @@ export const removeSubscription = internalMutation({
  * token-fence som `claim_event_reminder`/`complete_event_reminder`) og sende
  * afsted gennem `internal.pushSend.deliverPush`.
  */
-/** Sender én prøvenotifikation til den indloggede. Bruges af preview-smoken. */
-export const pingSelf = mutation({
+/** Profilen for den indloggede, til prøveafsendelsen. */
+export const profileIdForCurrentUser = internalQuery({
   args: {},
-  handler: async (ctx) => {
-    const profile = await requireWritableProfile(ctx)
-    await ctx.scheduler.runAfter(0, internal.pushSend.deliverPush, {
+  handler: async (ctx): Promise<Id<'profiles'> | null> => {
+    const userId = await currentUserId(ctx)
+    if (userId === null) return null
+    const profile = await ctx.db
+      .query('profiles')
+      .withIndex('by_user', (q) => q.eq('userId', userId))
+      .unique()
+    return profile?._id ?? null
+  },
+})
+
+/**
+ * Sender én prøvenotifikation til den indloggede og venter på push-tjenestens
+ * svar. Preview-smoken bruger den til at se, at en besked faktisk går ud.
+ */
+export const pingSelf = action({
+  args: {},
+  returns: v.object({
+    sent: v.number(),
+    failed: v.number(),
+    removed: v.number(),
+    skipped: v.number(),
+  }),
+  handler: async (
+    ctx,
+  ): Promise<{
+    sent: number
+    failed: number
+    removed: number
+    skipped: number
+  }> => {
+    const profileId: Id<'profiles'> | null = await ctx.runQuery(
+      internal.push.profileIdForCurrentUser,
+      {},
+    )
+    if (profileId === null) throw new ConvexError('NOT_A_MEMBER')
+    return await ctx.runAction(internal.pushSend.deliverPush, {
       kind: 'event_created',
-      subjectId: `push-probe-${String(profile._id)}-${Date.now()}`,
-      profileIds: [profile._id],
+      subjectId: `push-probe-${String(profileId)}-${Date.now()}`,
+      profileIds: [profileId],
       payload: {
         title: 'Naturklubben',
         body: 'Notifikationer virker.',
@@ -659,7 +693,6 @@ export const pingSelf = mutation({
         path: 'profil',
       },
     })
-    return null
   },
 })
 

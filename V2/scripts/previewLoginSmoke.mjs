@@ -339,7 +339,7 @@ async function probePush(page, hosts) {
 
   const host = [...hosts].find((name) => name.endsWith('.convex.cloud'))
   if (!host) throw new Error('Ingen Convex-vært til push-prøven')
-  const response = await fetch(`https://${host}/api/mutation`, {
+  const response = await fetch(`https://${host}/api/action`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -347,8 +347,21 @@ async function probePush(page, hosts) {
     },
     body: JSON.stringify({ path: 'push:pingSelf', args: {}, format: 'json' }),
   })
+  const raw = await response.text()
   if (!response.ok) {
     throw new Error(`push:pingSelf svarede ${response.status}`)
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error('push:pingSelf gav ikke JSON')
+  }
+  const value = parsed.value ?? parsed
+  if (!value || value.sent < 1) {
+    throw new Error(
+      `Push blev ikke sendt: ${JSON.stringify(value).slice(0, 240)}`,
+    )
   }
   await page.evaluate(() => window.__pushProbe)
   console.log('Push-prøven nåede browseren.')
