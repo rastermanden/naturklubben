@@ -175,7 +175,7 @@ async function runOnce() {
       )
     })
 
-    await clickText(page, 'Min profil')
+    await clickText(page, 'Profil')
     await page.waitForSelector('#fullName', { timeout: 20000 })
     const name = await page.$eval('#fullName', (input) => input.value)
     if (name !== 'Preview-tester') {
