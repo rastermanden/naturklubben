@@ -2,6 +2,7 @@ import { formatDuration } from './leaderboard'
 import { rankName } from './kaper/engine'
 import { className } from './sti/engine'
 import { className as fugletraekClass } from './fugletraek/engine'
+import { drawName } from './kabale/engine'
 import type { GameId, GameScore } from './types'
 
 export interface GameDefinition {
@@ -15,9 +16,9 @@ export interface GameDefinition {
   /**
    * Linjen under navnet på resultatlisten. Kolonnerne i `game_scores` er de
    * samme for alle spil, men de betyder noget forskelligt: `lines` er rækker i
-   * Tetris, træk i Kaptajn Kaper og poster i Stifinderen, og niveauet dér er
-   * en rang eller en baneklasse. 2048 bruger kun `score` og
-   * `duration_seconds`.
+   * Tetris, træk i Kaptajn Kaper og i 7-kabale, og poster i Stifinderen, og
+   * niveauet dér er en rang, en baneklasse eller hvor mange kort der trækkes.
+   * 2048 bruger kun `score` og `duration_seconds`.
    */
   describeScore: (score: GameScore) => string
 }
@@ -85,6 +86,16 @@ export const games: readonly GameDefinition[] = [
     symbol: '🐦',
     describeScore: (score) =>
       `${score.lines} vendinger · ${fugletraekClass(score.level)} · ${formatDuration(score.duration_seconds)}`,
+  },
+  {
+    id: 'kabale',
+    title: '7-kabale',
+    tagline:
+      'Syv rækker, en bunke og fire grundbunker. Læg alle kortene hjem, fra es til konge.',
+    path: '/spil/kabale',
+    symbol: '🃏',
+    describeScore: (score) =>
+      `${score.lines} træk · ${drawName(score.level)} · ${formatDuration(score.duration_seconds)}`,
   },
 ]
 
