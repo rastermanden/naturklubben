@@ -32,6 +32,10 @@ export interface VapidDetails {
 
 const supportedPushHosts = new Set([
   'fcm.googleapis.com',
+  // Chromiums staging-tjeneste. Stabil Chrome bruger fcm.googleapis.com;
+  // Chrome for Testing (preview-smoken) får jmt17.google.com. Værtsnavnet
+  // er fast i Chromium, ikke et vilkårligt Google-domæne.
+  'jmt17.google.com',
   'updates.push.services.mozilla.com',
   'push.services.mozilla.com',
   'web.push.apple.com',

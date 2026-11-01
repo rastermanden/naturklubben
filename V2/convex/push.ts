@@ -246,13 +246,15 @@ const KEY_MAX_LENGTH = 256
 /**
  * Push-tjenesternes værtsnavne. Et endpoint er en URL, appen senere sender
  * medlemmets krypterede besked til, så et vilkårligt værtsnavn ville gøre
- * serveren til en videresender for hvem som helst.
+ * serveren til en videresender for hvem som helst. `jmt17.google.com` er
+ * Chromiums faste staging-vært (Chrome for Testing); stabil Chrome bruger
+ * `fcm.googleapis.com`.
  *
  * Portet fra `allowedPushEndpoint` i submit-probation-application/handler.ts og
  * fra `probation_push_endpoint_service` i 20260823133000.
  */
 const ENDPOINT_PATTERN =
-  /^https:\/\/(fcm[.]googleapis[.]com|updates[.]push[.]services[.]mozilla[.]com|push[.]services[.]mozilla[.]com|web[.]push[.]apple[.]com|[a-z0-9-]+[.]notify[.]windows[.]com)\//i
+  /^https:\/\/(fcm[.]googleapis[.]com|jmt17[.]google[.]com|updates[.]push[.]services[.]mozilla[.]com|push[.]services[.]mozilla[.]com|web[.]push[.]apple[.]com|[a-z0-9-]+[.]notify[.]windows[.]com)\//i
 
 export function isAllowedPushEndpoint(endpoint: string) {
   if (endpoint.length === 0 || endpoint.length > ENDPOINT_MAX_LENGTH) {

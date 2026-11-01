@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { sendPushNotification, type VapidDetails } from './webpush'
+import { isAllowedPushEndpoint } from './push'
+import {
+  isSupportedPushEndpoint,
+  sendPushNotification,
+  type VapidDetails,
+} from './webpush'
 
 function asBuffer(bytes: Uint8Array): BufferSource {
   return bytes as BufferSource
@@ -55,6 +60,20 @@ function labelInfo(label: string, ...extra: Uint8Array[]) {
     ...extra,
   )
 }
+
+describe('push-værter', () => {
+  it('godkender Chromiums staging-vært og ikke et vilkårligt Google-domæne', () => {
+    const staging = 'https://jmt17.google.com/fcm/send/abc'
+    expect(isSupportedPushEndpoint(staging)).toBe(true)
+    expect(isAllowedPushEndpoint(staging)).toBe(true)
+    expect(
+      isSupportedPushEndpoint('https://evil.google.com/fcm/send/abc'),
+    ).toBe(false)
+    expect(isAllowedPushEndpoint('https://evil.google.com/fcm/send/abc')).toBe(
+      false,
+    )
+  })
+})
 
 describe('sendPushNotification', () => {
   it('sender en krypteret notifikation, som abonnenten kan læse', async () => {
