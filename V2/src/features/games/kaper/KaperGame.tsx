@@ -533,8 +533,8 @@ export function KaperGame() {
   const { state, dispatch } = controls
   const [captain, setCaptain] = useState(defaultName)
 
-  const personalBest = usePersonalBest('kaper', userId)
-  const submitScore = useSubmitScore('kaper', userId)
+  const personalBest = usePersonalBest('kaper')
+  const submitScore = useSubmitScore('kaper')
   const submitted = useRef(false)
   const bestBeforeGame = useRef(0)
   const [record, setRecord] = useState(false)

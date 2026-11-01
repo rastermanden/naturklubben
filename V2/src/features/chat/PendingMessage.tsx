@@ -61,13 +61,18 @@ export function PendingMessage({
       >
         <div className="mb-0.5 flex flex-wrap items-center justify-end gap-x-1.5 text-xs">
           <span className="font-medium">{name}</span>
-          <time dateTime={new Date(entry.writtenAt).toISOString()} title={timestamp}>
+          <time
+            dateTime={new Date(entry.writtenAt).toISOString()}
+            title={timestamp}
+          >
             {formatRelativeTime(entry.writtenAt)}
           </time>
           <span
             className="font-semibold"
             title={
-              entry.status === 'failed' ? (entry.lastError ?? undefined) : undefined
+              entry.status === 'failed'
+                ? (entry.lastError ?? undefined)
+                : undefined
             }
           >
             {QUEUED_STATUS_TEXT[entry.status]}

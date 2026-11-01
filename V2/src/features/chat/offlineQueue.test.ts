@@ -279,7 +279,9 @@ describe('isRetryableSendError', () => {
 
   it('prøver igen, når WebSocket-forbindelsen til Convex blev tabt', () => {
     expect(
-      isRetryableSendError(new Error('Connection lost while action was inflight')),
+      isRetryableSendError(
+        new Error('Connection lost while action was inflight'),
+      ),
     ).toBe(true)
   })
 
@@ -294,9 +296,7 @@ describe('isRetryableSendError', () => {
 
   it('lægger ikke en afvist besked i køen -- den ville fejle igen og igen', () => {
     expect(
-      isRetryableSendError(
-        new Error('MESSAGE_SEND_INVALID_CONTENT'),
-      ),
+      isRetryableSendError(new Error('MESSAGE_SEND_INVALID_CONTENT')),
     ).toBe(false)
     expect(isRetryableSendError(new Error('NOT_A_MEMBER'))).toBe(false)
     expect(isRetryableSendError(undefined)).toBe(false)

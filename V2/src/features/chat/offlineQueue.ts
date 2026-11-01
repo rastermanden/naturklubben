@@ -164,7 +164,9 @@ export function resumeInterruptedQueue(
   queue: readonly QueuedMessage[],
 ): QueuedMessage[] {
   return queue.map((entry) =>
-    entry.status === 'sending' ? { ...entry, status: 'queued' as const } : entry,
+    entry.status === 'sending'
+      ? { ...entry, status: 'queued' as const }
+      : entry,
   )
 }
 

@@ -545,7 +545,8 @@ export const nominate = mutation({
     if (reason.length === 0) throw new ConvexError('BADGE_REASON_REQUIRED')
     if (reason.length > 2000) throw new ConvexError('BADGE_REASON_TOO_LONG')
 
-    if (args.nomineeId === me._id) throw new ConvexError('BADGE_SELF_NOMINATION')
+    if (args.nomineeId === me._id)
+      throw new ConvexError('BADGE_SELF_NOMINATION')
 
     const badge = await ctx.db.get(args.badgeId)
     if (badge === null) throw new ConvexError('BADGE_NOT_FOUND')
@@ -588,7 +589,9 @@ export const nominate = mutation({
     const lastDay = await ctx.db
       .query('badgeNominations')
       .withIndex('by_nominator_created', (q) =>
-        q.eq('nominatedById', me._id).gt('createdAt', now - 24 * 60 * 60 * 1000),
+        q
+          .eq('nominatedById', me._id)
+          .gt('createdAt', now - 24 * 60 * 60 * 1000),
       )
       .take(NOMINATIONS_PER_DAY)
     if (lastDay.length >= NOMINATIONS_PER_DAY) {
@@ -694,10 +697,9 @@ export const vote = mutation({
     const alreadyAwarded = await ctx.db
       .query('memberBadges')
       .withIndex('by_badge_profile', (q) =>
-        q.eq('badgeId', nomination.badgeId).eq(
-          'profileId',
-          nomination.nomineeId,
-        ),
+        q
+          .eq('badgeId', nomination.badgeId)
+          .eq('profileId', nomination.nomineeId),
       )
       .unique()
     if (alreadyAwarded !== null) {

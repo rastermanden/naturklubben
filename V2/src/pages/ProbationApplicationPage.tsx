@@ -2,10 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAction } from 'convex/react'
 import { api } from '../../convex/_generated/api'
-import {
-  toFriendlyProbationApplicationError,
-  useSubmitProbationApplication,
-} from '../features/probation/useProbationApplication'
+import { toFriendlyProbationApplicationError } from '../features/probation/probationErrors'
+import { useSubmitProbationApplication } from '../features/probation/useProbationApplication'
 import {
   prepareBrowserPushSubscription,
   PushSetupError,
@@ -42,8 +40,8 @@ function ProbationApplicationPage() {
     setError(null)
 
     try {
-      const subscription = await prepareBrowserPushSubscription(async () =>
-        await fetchVapidPublicKey({}),
+      const subscription = await prepareBrowserPushSubscription(
+        async () => await fetchVapidPublicKey({}),
       )
       await submitApplication.submit({
         fullName,

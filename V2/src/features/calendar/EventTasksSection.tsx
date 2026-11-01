@@ -93,7 +93,9 @@ export function EventTasksSection({ eventId }: { eventId: Id<'events'> }) {
                 {task.assignedTo === null && (
                   <button
                     type="button"
-                    onClick={() => void run(() => claimTask({ taskId: task.id }))}
+                    onClick={() =>
+                      void run(() => claimTask({ taskId: task.id }))
+                    }
                     disabled={busy}
                     className="min-h-11 rounded border border-accent-soft px-3 py-1 text-sm text-ink-muted disabled:opacity-60"
                   >

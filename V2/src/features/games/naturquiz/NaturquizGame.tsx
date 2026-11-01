@@ -31,8 +31,8 @@ export function NaturquizGame() {
   const controls = useNaturquizGame()
   const { state } = controls
 
-  const personalBest = usePersonalBest('naturquiz', userId)
-  const submitScore = useSubmitScore('naturquiz', userId)
+  const personalBest = usePersonalBest('naturquiz')
+  const submitScore = useSubmitScore('naturquiz')
   const submitted = useRef(false)
   const [record, setRecord] = useState(false)
 

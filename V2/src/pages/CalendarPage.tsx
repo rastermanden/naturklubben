@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation } from 'convex/react'
 import type { Id } from '../../convex/_generated/dataModel'
 import { api } from '../../convex/_generated/api'
-import { downloadIcal } from '../../lib/ical'
+import { downloadIcal } from '../lib/ical'
 import { AttendanceSection } from '../features/calendar/AttendanceSection'
 import { EventForm } from '../features/calendar/EventForm'
 import { EventTasksSection } from '../features/calendar/EventTasksSection'
@@ -337,7 +337,8 @@ function CalendarPage() {
   const pastQuery = usePastEvents(dayStart, 20, showPast)
   const upcoming = upcomingQuery ?? []
   const pastEvents = pastQuery ?? []
-  const openEventId = editing === null ? (selectedEventId ?? routedEventId ?? null) : null
+  const openEventId =
+    editing === null ? (selectedEventId ?? routedEventId ?? null) : null
 
   // En flerdagstur står på hver af sine dage (#259). Månedsvisningen og de
   // kommende begivenheder kan indeholde den samme -- den tælles én gang.

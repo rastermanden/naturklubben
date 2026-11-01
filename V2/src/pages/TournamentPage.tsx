@@ -111,7 +111,9 @@ function CreateTournamentForm({ onCreated }: CreateFormProps) {
           </label>
         ))}
         {candidates !== undefined && candidates.length === 0 && (
-          <p className="text-sm text-ink-subtle">Der er ingen medlemmer endnu.</p>
+          <p className="text-sm text-ink-subtle">
+            Der er ingen medlemmer endnu.
+          </p>
         )}
       </fieldset>
 
@@ -255,9 +257,7 @@ function MatchCard({ match, names, onRecord, onUndo }: MatchCardProps) {
       )}
 
       {!match.bye && match.status === 'completed' && (
-        <p className="text-sm text-ink-body">
-          Vinder: {label(match.winnerId)}
-        </p>
+        <p className="text-sm text-ink-body">Vinder: {label(match.winnerId)}</p>
       )}
 
       {!match.bye && waiting && (
@@ -454,9 +454,7 @@ export default function TournamentPage() {
             {rulesSummary(detail.tournament.format)}
           </p>
 
-          {roundRobin && (
-            <StandingsTable standings={detail.standings} />
-          )}
+          {roundRobin && <StandingsTable standings={detail.standings} />}
 
           {roundNumbers.map((round) => (
             <div key={round} className="flex flex-col gap-2">

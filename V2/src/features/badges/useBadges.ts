@@ -59,7 +59,10 @@ const MESSAGES: [code: string, message: string][] = [
   ['BADGE_SELF_NOMINATION', 'Du kan ikke indstille dig selv.'],
   ['BADGE_ALREADY_AWARDED', 'Vedkommende har allerede fået den badge.'],
   ['BADGE_ALREADY_PENDING', 'Der ligger allerede en åben indstilling.'],
-  ['BADGE_NOMINATE_RATE_LIMITED', 'Du har indstillet mange på kort tid. Vent lidt.'],
+  [
+    'BADGE_NOMINATE_RATE_LIMITED',
+    'Du har indstillet mange på kort tid. Vent lidt.',
+  ],
   ['BADGE_REASON_REQUIRED', 'Skriv en begrundelse.'],
   ['BADGE_REASON_TOO_LONG', 'Begrundelsen er for lang.'],
   ['BADGE_INACTIVE', 'Den badge er ikke i brug længere.'],

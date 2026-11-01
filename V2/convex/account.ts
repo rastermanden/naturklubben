@@ -639,9 +639,7 @@ async function anonymizeModerationLog(
     const asUploader = row.uploaderId === profileId
     if (!asActor && !asUploader) continue
     await ctx.db.patch(row._id, {
-      ...(asActor
-        ? { actorId: undefined, actorName: FORMER_MEMBER_NAME }
-        : {}),
+      ...(asActor ? { actorId: undefined, actorName: FORMER_MEMBER_NAME } : {}),
       ...(asUploader
         ? { uploaderId: undefined, uploaderName: FORMER_MEMBER_NAME }
         : {}),
@@ -1017,10 +1015,7 @@ async function exportPhotos(ctx: QueryCtx, profileId: Id<'profiles'>) {
 }
 
 /** Medlemmets egne kommentarer på billeder, ældste først. */
-async function exportPhotoComments(
-  ctx: QueryCtx,
-  profileId: Id<'profiles'>,
-) {
+async function exportPhotoComments(ctx: QueryCtx, profileId: Id<'profiles'>) {
   const comments = await ctx.db
     .query('photoComments')
     .withIndex('by_author', (q) => q.eq('authorId', profileId))

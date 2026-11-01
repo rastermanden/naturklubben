@@ -4,11 +4,7 @@ import { internal } from './_generated/api'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { ConvexError, v } from 'convex/values'
-import {
-  requireAdmin,
-  requireProfile,
-  requireWritableProfile,
-} from './authz'
+import { requireAdmin, requireProfile, requireWritableProfile } from './authz'
 
 /**
  * Galleriet: billeder, uploads, optimeringsstatus, albums, kommentarer og
@@ -164,7 +160,9 @@ export const listAlbums = query({
 
     const withEvent = views
       .filter((album) => album.eventId !== null)
-      .sort((left, right) => (right.latestPhotoAt ?? 0) - (left.latestPhotoAt ?? 0))
+      .sort(
+        (left, right) => (right.latestPhotoAt ?? 0) - (left.latestPhotoAt ?? 0),
+      )
     const withoutEvent = views.filter((album) => album.eventId === null)
     return [...withEvent, ...withoutEvent]
   },
@@ -369,7 +367,9 @@ async function removePhotoFromAlbum(ctx: MutationCtx, photo: Doc<'photos'>) {
     coverOptimizedStorageId: coverBelongsToPhoto
       ? nextCover?.optimizedStorageId
       : album.coverOptimizedStorageId,
-    coverCreatedAt: coverBelongsToPhoto ? nextCover?.createdAt : album.coverCreatedAt,
+    coverCreatedAt: coverBelongsToPhoto
+      ? nextCover?.createdAt
+      : album.coverCreatedAt,
   })
 }
 
@@ -639,9 +639,15 @@ export const deleteComment = mutation({
  * `internalMutation`: en klient må ikke kunne sætte sin egen status. Kun
  * `optimizePhoto` (action) kalder den.
  */
+type OptimizationClaim =
+  | { status: 'not_found' }
+  | { status: 'busy' }
+  | { status: 'ready' }
+  | { status: 'claimed'; storageId: Id<'_storage'>; attempt: number }
+
 export const claimOptimization = internalMutation({
   args: { photoId: v.id('photos') },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<OptimizationClaim> => {
     const profile = await requireWritableProfile(ctx)
 
     const photo = await ctx.db.get(args.photoId)
@@ -651,7 +657,10 @@ export const claimOptimization = internalMutation({
     }
 
     const now = Date.now()
-    if (photo.optimizationStatus === 'processing' && !isStaleProcessing(photo, now)) {
+    if (
+      photo.optimizationStatus === 'processing' &&
+      !isStaleProcessing(photo, now)
+    ) {
       return { status: 'busy' as const }
     }
     if (photo.optimizationStatus === 'ready') {
@@ -713,10 +722,9 @@ export const finishOptimization = internalMutation({
       await ctx.db.patch(photo._id, {
         optimizationStatus: 'failed',
         optimizationCompletedAt: undefined,
-        optimizationError: (args.error ?? 'Billedet kunne ikke optimeres.').slice(
-          0,
-          MAX_OPTIMIZATION_ERROR_LENGTH,
-        ),
+        optimizationError: (
+          args.error ?? 'Billedet kunne ikke optimeres.'
+        ).slice(0, MAX_OPTIMIZATION_ERROR_LENGTH),
       })
       return { applied: true }
     }
@@ -737,12 +745,15 @@ export const finishOptimization = internalMutation({
     const album = await albumByKey(ctx, photo.albumKey)
     if (
       album !== null &&
-      (album.coverCreatedAt === undefined || album.coverCreatedAt <= photo.createdAt)
+      (album.coverCreatedAt === undefined ||
+        album.coverCreatedAt <= photo.createdAt)
     ) {
       await ctx.db.patch(album._id, {
         coverPhotoId: photo._id,
-        coverThumbnailStorageId: args.thumbnailStorageId ?? photo.thumbnailStorageId,
-        coverOptimizedStorageId: args.optimizedStorageId ?? photo.optimizedStorageId,
+        coverThumbnailStorageId:
+          args.thumbnailStorageId ?? photo.thumbnailStorageId,
+        coverOptimizedStorageId:
+          args.optimizedStorageId ?? photo.optimizedStorageId,
         coverCreatedAt: photo.createdAt,
       })
     }
@@ -787,13 +798,19 @@ export const finishOptimization = internalMutation({
  */
 export const optimizePhoto = action({
   args: { photoId: v.id('photos') },
-  handler: async (ctx, args) => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<'not_found' | 'busy' | 'ready' | 'failed'> => {
     // En action har ikke `ctx.db`. Medlemskabet kontrolleres derfor i de
     // interne mutationer herunder, som begge kalder `requireWritableProfile` --
     // en action uden det kald ville være offentlig, ligesom en query.
-    const claim = await ctx.runMutation(internal.gallery.claimOptimization, {
-      photoId: args.photoId,
-    })
+    // Returtypen står eksplicit, fordi kaldet går til en funktion i samme fil
+    // og ellers bliver cirkulær for TypeScript.
+    const claim: OptimizationClaim = await ctx.runMutation(
+      internal.gallery.claimOptimization,
+      { photoId: args.photoId },
+    )
     if (claim.status !== 'claimed') return claim.status
 
     try {
@@ -832,7 +849,10 @@ export const optimizePhoto = action({
     } catch (error) {
       // Også den uventede fejl skal ende som en status på rækken -- ellers står
       // billedet som "Optimerer…", indtil claimet bliver forældet.
-      console.error('Photo optimization failed', { photoId: args.photoId, error })
+      console.error('Photo optimization failed', {
+        photoId: args.photoId,
+        error,
+      })
       await ctx.runMutation(internal.gallery.finishOptimization, {
         photoId: args.photoId,
         expectedAttempt: claim.attempt,

@@ -1,4 +1,5 @@
 import {
+  env,
   httpAction,
   internalMutation,
   mutation,
@@ -332,9 +333,7 @@ export const submitApplication = internalMutation({
     const perIpDay = await ctx.db
       .query('probationSubmissionAttempts')
       .withIndex('by_ip_and_time', (q) =>
-        q
-          .eq('ipHash', args.ipHash)
-          .gt('attemptedAt', now - WINDOW_24_HOURS_MS),
+        q.eq('ipHash', args.ipHash).gt('attemptedAt', now - WINDOW_24_HOURS_MS),
       )
       .collect()
     const perEmailDay = await ctx.db
@@ -441,10 +440,14 @@ export const submitApplication = internalMutation({
     // Selve afsendelsen sker efter mutationen -- et eksternt HTTP-kald kan ikke
     // være en del af den. Fejler den, står ansøgningen stadig som pending, og
     // `retryNotifications` tager den igen.
-    await ctx.scheduler.runAfter(0, internal.pushSend.deliverProbationNotification, {
-      applicationId,
-      kind: 'admin',
-    })
+    await ctx.scheduler.runAfter(
+      0,
+      internal.pushSend.deliverProbationNotification,
+      {
+        applicationId,
+        kind: 'admin',
+      },
+    )
 
     return { outcome: 'accepted' }
   },
@@ -795,8 +798,7 @@ export const retryNotifications = internalMutation({
           // lige er startet, skal have lov at blive færdigt.
           if (
             application.adminNotificationStatus !== 'sending' ||
-            (application.adminNotificationStartedAt ?? 0) <
-              now - CRON_RETRY_MS
+            (application.adminNotificationStartedAt ?? 0) < now - CRON_RETRY_MS
           ) {
             await ctx.scheduler.runAfter(
               0,
@@ -967,14 +969,10 @@ export const submitProbationApplication = httpAction(async (ctx, req) => {
     })
   }
 
-  const secret = process.env.RATE_LIMIT_HASH_SECRET
+  const secret = env.RATE_LIMIT_HASH_SECRET
   if (!secret) {
     console.error(`[${requestId}] rate_limit_secret_unavailable`)
-    return jsonResponse(
-      { code: 'temporarily_unavailable' },
-      503,
-      requestId,
-    )
+    return jsonResponse({ code: 'temporarily_unavailable' }, 503, requestId)
   }
 
   // Både HMAC'en herunder og tokens kræver WebCrypto. Findes det ikke i

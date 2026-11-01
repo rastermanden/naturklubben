@@ -1,12 +1,7 @@
 /** Spil, der kan lægge resultater på klubbens liste. Skal matche
  *  `gameIdValidator` i `convex/tables/community.ts`. */
 export type GameId =
-  | 'tetris'
-  | 'kaper'
-  | '2048'
-  | 'naturquiz'
-  | 'sti'
-  | 'fugletraek'
+  'tetris' | 'kaper' | '2048' | 'naturquiz' | 'sti' | 'fugletraek'
 
 /**
  * Et resultat, som det ligger i `gameScores` i Convex.

@@ -32,9 +32,7 @@ export function OnlineMembers({ members }: { members: OnlineMember[] }) {
       <div className="flex -space-x-1.5" aria-label="Online medlemmer">
         {sorted.map((member) => {
           const label = [
-            member.isCurrentUser
-              ? `${member.fullName} (dig)`
-              : member.fullName,
+            member.isCurrentUser ? `${member.fullName} (dig)` : member.fullName,
             member.isAway
               ? member.awayMessage
                 ? `(væk: ${member.awayMessage})`

@@ -100,7 +100,8 @@ export const communityTables = {
     badgeName: v.string(),
     nomineeId: v.id('profiles'),
     nomineeName: v.string(),
-    nominatedById: v.id('profiles'),
+    /** Valgfrit, fordi kontosletning nulstiller ophavet. Navnet bliver stående. */
+    nominatedById: v.optional(v.id('profiles')),
     nominatedByName: v.string(),
     reason: v.string(),
     status: v.union(
@@ -230,10 +231,7 @@ export const communityTables = {
   /** Selve turneringen. `participantCount` og `pendingMatchCount` er
    *  aggregater -- se kommentaren øverst. */
   tournaments: defineTable({
-    format: v.union(
-      v.literal('round_robin'),
-      v.literal('single_elimination'),
-    ),
+    format: v.union(v.literal('round_robin'), v.literal('single_elimination')),
     status: v.union(
       v.literal('setup'),
       v.literal('in_progress'),
@@ -294,11 +292,7 @@ export const communityTables = {
     nextMatchId: v.optional(v.id('tournamentMatches')),
     nextMatchSlot: v.optional(v.number()),
   })
-    .index('by_tournament_round_index', [
-      'tournamentId',
-      'round',
-      'matchIndex',
-    ])
+    .index('by_tournament_round_index', ['tournamentId', 'round', 'matchIndex'])
     .index('by_tournament_status', ['tournamentId', 'status']),
 
   /** Enkeltspillene i en kamp, i rækkefølge. `gameNumber` er 1-5. */

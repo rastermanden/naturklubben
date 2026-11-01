@@ -78,7 +78,9 @@ export function mentionMembers(
 ): MentionMember[] {
   if (!members) return []
   return members
-    .filter((member) => member.profileId !== excludeId && member.fullName.trim())
+    .filter(
+      (member) => member.profileId !== excludeId && member.fullName.trim(),
+    )
     .map((member) => ({ id: member.profileId, name: member.fullName.trim() }))
     .sort((left, right) => left.name.localeCompare(right.name, 'da-DK'))
 }

@@ -10,7 +10,12 @@ import {
   useChatSearch,
   useMessages,
 } from '../features/chat/useChat'
-import type { ChatViewer, ChatRoom, MessageView, PollSummary } from '../features/chat/types'
+import type {
+  ChatViewer,
+  ChatRoom,
+  MessageView,
+  PollSummary,
+} from '../features/chat/types'
 import { MessageBubble } from '../features/chat/MessageBubble'
 import { OnlineMembers } from '../features/chat/OnlineMembers'
 import { PendingMessage } from '../features/chat/PendingMessage'
@@ -29,6 +34,7 @@ import {
   resolveMentions,
 } from '../features/chat/mentions'
 import type { MentionMember } from '../features/chat/mentions'
+import { REACTION_EMOJI } from '../features/chat/constants'
 
 /**
  * Chatten (#14), og det samme for admin-rummet (#212).
@@ -71,7 +77,13 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
   return <ChatRoomView room={room} viewer={viewer} />
 }
 
-function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) {
+function ChatRoomView({
+  room,
+  viewer,
+}: {
+  room: ChatRoom
+  viewer: ChatViewer
+}) {
   const chat = useMessages(room, viewer.profileId)
   const memberList = useChatMembers()
   const onlineMembers = useOnlineMembers(room) ?? []
@@ -92,12 +104,13 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
   const [isNearBottom, setIsNearBottom] = useState(true)
   const [replyingToId, setReplyingToId] = useState<Id<'messages'> | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [openMessageId, setOpenMessageId] = useState<Id<'messages'> | null>(null)
+  const [openMessageId, setOpenMessageId] = useState<Id<'messages'> | null>(
+    null,
+  )
   const [away, setAway] = useState<string | null>(null)
   const [notices, setNotices] = useState<{ id: number; text: string }[]>([])
-  const [highlightedMessageId, setHighlightedMessageId] = useState<
-    Id<'messages'> | null
-  >(null)
+  const [highlightedMessageId, setHighlightedMessageId] =
+    useState<Id<'messages'> | null>(null)
   const nextNoticeId = useRef(1)
 
   const search = useChatSearch(room, searchTerm)
@@ -111,10 +124,7 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
 
   // Mention-vælgeren viser alle andre end én selv; mention-fortolkningen ved
   // afsendelsen bruger hele listen, så et navn skrevet i hånden også tæller.
-  const allMembers = useMemo(
-    () => mentionMembers(memberList),
-    [memberList],
-  )
+  const allMembers = useMemo(() => mentionMembers(memberList), [memberList])
   const pickableMembers = useMemo(
     () => mentionMembers(memberList, viewer.profileId),
     [memberList, viewer.profileId],
@@ -166,7 +176,8 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
     const snapshot = prependScrollSnapshot
     const list = listRef.current
     if (!snapshot || !list) return
-    list.scrollTop = snapshot.scrollTop + (list.scrollHeight - snapshot.scrollHeight)
+    list.scrollTop =
+      snapshot.scrollTop + (list.scrollHeight - snapshot.scrollHeight)
     setPrependScrollSnapshot(null)
   }, [prependScrollSnapshot])
 
@@ -180,7 +191,11 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
     if (delta > 0) {
       const isInitialLoad = previousCount === 0
       const latest = chat.messages[chat.messages.length - 1]
-      if (isInitialLoad || isNearBottom || latest.authorId === viewer.profileId) {
+      if (
+        isInitialLoad ||
+        isNearBottom ||
+        latest.authorId === viewer.profileId
+      ) {
         scrollToBottom(isInitialLoad ? 'auto' : 'smooth')
         setNewMessageCount(0)
       } else {
@@ -214,7 +229,8 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
   function handleScroll() {
     const list = listRef.current
     if (!list) return
-    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight
+    const distanceFromBottom =
+      list.scrollHeight - list.scrollTop - list.clientHeight
     const nearBottom = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
     setIsNearBottom(nearBottom)
     if (nearBottom) {
@@ -283,7 +299,9 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
     )
     const field = draftRef.current
     field?.focus()
-    requestAnimationFrame(() => field?.setSelectionRange(next.caret, next.caret))
+    requestAnimationFrame(() =>
+      field?.setSelectionRange(next.caret, next.caret),
+    )
   }
 
   // "/afstemning" sender selve spørgsmålet som en helt almindelig besked --
@@ -291,7 +309,11 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
   // derefter `chatPolls.createPoll` med besked-id'et og svarene. Fejler det
   // bagefter, står spørgsmålet tilbage som en almindelig tekstbesked uden
   // afstemningskort; det er sjældent nok til ikke at kræve en oprydning her.
-  async function sendPoll(question: string, options: string[], originalInput: string) {
+  async function sendPoll(
+    question: string,
+    options: string[],
+    originalInput: string,
+  ) {
     try {
       const sent = await chat.sendMessage({
         content: question,
@@ -335,9 +357,11 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
     // Mentions læses af den tekst, der faktisk sendes: et navn valgt fra listen
     // og rettet væk igen skal ikke efterlade en usynlig mention. Man nævner
     // ikke sig selv.
-    const mentions = resolveMentions(content, allMembers, pickedMentionIds).filter(
-      (id) => id !== viewer.profileId,
-    )
+    const mentions = resolveMentions(
+      content,
+      allMembers,
+      pickedMentionIds,
+    ).filter((id) => id !== viewer.profileId)
 
     setSendError(null)
     setDraft('')
@@ -386,7 +410,9 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
   }
 
   function reactTo(message: MessageView, emoji: string) {
-    void chat.toggleReaction(message.messageId, emoji).catch(() => {
+    const reaction = REACTION_EMOJI.find((candidate) => candidate === emoji)
+    if (reaction === undefined) return
+    void chat.toggleReaction(message.messageId, reaction).catch(() => {
       pushNotice('Reaktionen kunne ikke gemmes. Prøv igen.')
     })
   }
@@ -496,7 +522,9 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
             type="button"
             onClick={toggleFullscreen}
             aria-pressed={isFullscreen}
-            aria-label={isFullscreen ? 'Afslut fuldskærm' : 'Vis chatten i fuldskærm'}
+            aria-label={
+              isFullscreen ? 'Afslut fuldskærm' : 'Vis chatten i fuldskærm'
+            }
             title={isFullscreen ? 'Afslut fuldskærm' : 'Fuldskærm'}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-line-strong text-lg text-ink-body"
           >
@@ -639,15 +667,18 @@ function ChatRoomView({ room, viewer }: { room: ChatRoom; viewer: ChatViewer }) 
                     disabled={chat.isLoadingMore}
                     className="min-h-11 rounded px-4 text-sm font-medium text-ink-muted underline-offset-2 hover:underline disabled:opacity-50"
                   >
-                    {chat.isLoadingMore ? 'Henter ældre…' : 'Hent ældre beskeder'}
+                    {chat.isLoadingMore
+                      ? 'Henter ældre…'
+                      : 'Hent ældre beskeder'}
                   </button>
                 </li>
               )}
-              {chat.messages.length === 0 && chat.queuedMessages.length === 0 && (
-                <li className="py-12 text-center text-ink-subtle">
-                  Ingen beskeder endnu. Vær den første til at sige hej!
-                </li>
-              )}
+              {chat.messages.length === 0 &&
+                chat.queuedMessages.length === 0 && (
+                  <li className="py-12 text-center text-ink-subtle">
+                    Ingen beskeder endnu. Vær den første til at sige hej!
+                  </li>
+                )}
               {chat.messages.map((message) => (
                 <MessageBubble
                   key={message.messageId}

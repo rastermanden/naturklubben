@@ -28,4 +28,3 @@ export const appRoutes: AppRoute[] = [
   ...notificationRoutes,
   ...gameRoutes,
 ]
-

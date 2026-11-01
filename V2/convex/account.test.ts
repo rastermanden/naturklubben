@@ -598,7 +598,9 @@ describe('requestDeletion', () => {
       .catch((caught: unknown) => caught)
 
     expect(failure).toBeInstanceOf(ConvexError)
-    expect((failure as ConvexError<string>).data).toBe('LAST_ADMIN')
+    // convex-test sender fejlen videre, som wiren gør: `data` er JSON, ikke
+    // den rå værdi. Klienten parser den, før den vises.
+    expect(JSON.parse((failure as ConvexError<string>).data)).toBe('LAST_ADMIN')
 
     const profile = await t.run(
       async (ctx) => await ctx.db.get(admin.profileId),
@@ -629,9 +631,7 @@ describe('requestDeletion', () => {
       // Selve arbejdet ligger i en planlagt kørsel, ikke i kaldet ovenfor.
       await t.finishAllScheduledFunctions(vi.runAllTimers)
 
-      const gone = await t.run(
-        async (ctx) => await ctx.db.get(admin.profileId),
-      )
+      const gone = await t.run(async (ctx) => await ctx.db.get(admin.profileId))
       expect(gone).toBeNull()
     } finally {
       vi.useRealTimers()

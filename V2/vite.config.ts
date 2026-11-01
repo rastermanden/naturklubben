@@ -33,7 +33,8 @@ function resolveAppVersion() {
     git(['describe', '--tags', '--always', '--dirty']) ??
     process.env.GITHUB_SHA?.slice(0, 7) ??
     'ukendt'
-  const commitDate = git(['log', '-1', '--format=%cI']) ?? new Date().toISOString()
+  const commitDate =
+    git(['log', '-1', '--format=%cI']) ?? new Date().toISOString()
   return { version: `V2 · ${described}`, date: commitDate }
 }
 

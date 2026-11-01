@@ -130,8 +130,8 @@ export function SubscribeDialog({
         </h3>
         <p className="mt-2 text-ink">
           Åbn genvejen herunder — den beder kalender-appen om at oprette
-          abonnementet. Sker der ingenting, har din browser ingen kalender-app at
-          åbne linket i; brug så «Fra URL» med linket ovenfor i stedet.
+          abonnementet. Sker der ingenting, har din browser ingen kalender-app
+          at åbne linket i; brug så «Fra URL» med linket ovenfor i stedet.
         </p>
         <p className="mt-2">
           <a

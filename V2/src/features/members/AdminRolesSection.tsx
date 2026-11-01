@@ -28,8 +28,12 @@ export function AdminRolesSection({
 }) {
   const navigate = useNavigate()
   const { members, isLoading } = useMembers()
-  const { roleChanges, isLoading: changesLoading, setAdminRole, isPending } =
-    useAdminRoles()
+  const {
+    roleChanges,
+    isLoading: changesLoading,
+    setAdminRole,
+    isPending,
+  } = useAdminRoles()
   const [success, setSuccess] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 

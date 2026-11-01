@@ -1,18 +1,27 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useAction, useMutation, useQuery, usePaginatedQuery } from 'convex/react'
-import { api } from '../../../convex/_generated/api'
-import type { Id } from '../../../convex/_generated/dataModel'
-import { useAutoOptimizePendingPhotos } from './useAutoOptimizePendingPhotos'
-import { useUploadPhotos, validateFiles, type UploadQueueItem } from './useUploadPhotos'
-import { GalleryAlbumGrid } from './GalleryAlbumGrid'
-import { PhotoThumbnail } from './PhotoThumbnail'
-import { PhotoLightbox } from './PhotoLightbox'
+import {
+  useAction,
+  useMutation,
+  useQuery,
+  usePaginatedQuery,
+} from 'convex/react'
+import { api } from '../../convex/_generated/api'
+import type { Id } from '../../convex/_generated/dataModel'
+import { useAutoOptimizePendingPhotos } from '../features/gallery/useAutoOptimizePendingPhotos'
+import {
+  useUploadPhotos,
+  validateFiles,
+  type UploadQueueItem,
+} from '../features/gallery/useUploadPhotos'
+import { GalleryAlbumGrid } from '../features/gallery/GalleryAlbumGrid'
+import { PhotoThumbnail } from '../features/gallery/PhotoThumbnail'
+import { PhotoLightbox } from '../features/gallery/PhotoLightbox'
 import {
   clearAlbumSearchParams,
   updateGallerySearchParam,
-} from './gallerySearchParams'
-import type { GalleryAlbum, Photo } from './types'
+} from '../features/gallery/gallerySearchParams'
+import type { GalleryAlbum, Photo } from '../features/gallery/types'
 
 /**
  * Gallerisiden. Porteret fra `src/pages/GalleryPage.tsx`.
@@ -95,8 +104,7 @@ function GalleryPage() {
     ? photos.findIndex((photo) => photo.id === activePhoto.id)
     : -1
   const previousPhoto = activeIndex > 0 ? photos[activeIndex - 1] : undefined
-  const nextPhoto =
-    activeIndex >= 0 ? photos[activeIndex + 1] : undefined
+  const nextPhoto = activeIndex >= 0 ? photos[activeIndex + 1] : undefined
   const currentAlbum = albumParam
     ? (albums?.find((album) => album.albumId === albumParam) ?? null)
     : null
@@ -144,7 +152,9 @@ function GalleryPage() {
       .filter((message): message is string => message !== null)
     setFormError(errors.length > 0 ? errors.join(' ') : null)
 
-    const validFiles = fileArray.filter((file) => validateFiles([file]) === null)
+    const validFiles = fileArray.filter(
+      (file) => validateFiles([file]) === null,
+    )
     if (validFiles.length > 0) {
       upload.enqueue({
         files: validFiles,
@@ -170,9 +180,7 @@ function GalleryPage() {
     setBusyPhotoId(photo.id)
     void deletePhoto({ photoId: photo.id as Id<'photos'> })
       .then(() => setGalleryParam('photo', null))
-      .catch(() =>
-        setActionError('Billedet kunne ikke slettes. Prøv igen.'),
-      )
+      .catch(() => setActionError('Billedet kunne ikke slettes. Prøv igen.'))
       .finally(() => setBusyPhotoId(null))
   }
 
@@ -180,7 +188,9 @@ function GalleryPage() {
     setActionError(null)
     setRetryingPhotoId(photo.id)
     void optimizePhoto({ photoId: photo.id as Id<'photos'> })
-      .catch(() => setActionError('Optimeringen kunne ikke startes. Prøv igen.'))
+      .catch(() =>
+        setActionError('Optimeringen kunne ikke startes. Prøv igen.'),
+      )
       .finally(() => setRetryingPhotoId(null))
   }
 
@@ -433,7 +443,6 @@ function GalleryPage() {
           actionError={actionError}
         />
       )}
-
     </section>
   )
 }

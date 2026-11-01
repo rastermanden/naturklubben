@@ -108,10 +108,7 @@ function canManageEvent(profile: Doc<'profiles'>, event: Doc<'events'>) {
 }
 
 /** Ventelistens rækkefølge: først til mølle, med profil-id som fast bryder. */
-function byQueue(
-  left: Doc<'eventAttendance'>,
-  right: Doc<'eventAttendance'>,
-) {
+function byQueue(left: Doc<'eventAttendance'>, right: Doc<'eventAttendance'>) {
   if (left.queuedAt !== right.queuedAt) return left.queuedAt - right.queuedAt
   return left.profileId < right.profileId
     ? -1
@@ -192,7 +189,9 @@ async function syncEventCounts(ctx: MutationCtx, eventId: Id<'events'>) {
 
   const rows = await attendanceRows(ctx, eventId)
   const attending = rows.filter((row) => row.status === 'attending').length
-  const waiting = rows.filter((row) => row.status === 'waitlisted').sort(byQueue)
+  const waiting = rows
+    .filter((row) => row.status === 'waitlisted')
+    .sort(byQueue)
 
   for (const [index, row] of waiting.entries()) {
     if (row.waitlistPosition !== index + 1) {
@@ -526,9 +525,7 @@ export const attendance = query({
     const rows = await attendanceRows(ctx, args.eventId)
     const visible = rows.filter(
       (row) =>
-        row.status !== 'declined' ||
-        canManage ||
-        row.profileId === profile._id,
+        row.status !== 'declined' || canManage || row.profileId === profile._id,
     )
 
     const rank = { attending: 0, waitlisted: 1, declined: 2 }
@@ -618,9 +615,7 @@ export const tasks = query({
     const entries = []
     for (const task of rows) {
       const assignee =
-        task.assignedTo === undefined
-          ? null
-          : await ctx.db.get(task.assignedTo)
+        task.assignedTo === undefined ? null : await ctx.db.get(task.assignedTo)
       entries.push({
         id: task._id,
         eventId: task.eventId,
@@ -691,14 +686,16 @@ export const publicEvents = query({
       )
       .take(200)
 
-    return rows.sort((a, b) => a.startAt - b.startAt).map((event) => ({
-      id: event._id,
-      title: event.title,
-      description: event.description ?? null,
-      location: event.location ?? null,
-      startAt: event.startAt,
-      endAt: event.endAt ?? null,
-    }))
+    return rows
+      .sort((a, b) => a.startAt - b.startAt)
+      .map((event) => ({
+        id: event._id,
+        title: event.title,
+        description: event.description ?? null,
+        location: event.location ?? null,
+        startAt: event.startAt,
+        endAt: event.endAt ?? null,
+      }))
   },
 })
 
@@ -723,13 +720,15 @@ export const feedEvents = internalQuery({
       )
       .take(500)
 
-    return rows.sort((a, b) => a.startAt - b.startAt).map((event) => ({
-      id: event._id as string,
-      title: event.title,
-      location: event.location ?? null,
-      startAt: event.startAt,
-      endAt: event.endAt ?? null,
-    }))
+    return rows
+      .sort((a, b) => a.startAt - b.startAt)
+      .map((event) => ({
+        id: event._id as string,
+        title: event.title,
+        location: event.location ?? null,
+        startAt: event.startAt,
+        endAt: event.endAt ?? null,
+      }))
   },
 })
 
@@ -1224,9 +1223,7 @@ export const createGuestRequest = internalMutation({
           q.eq('eventId', eventId).eq('email', email),
         )
         .collect()
-    ).find(
-      (row) => row.status === 'pending' || row.status === 'approved',
-    )
+    ).find((row) => row.status === 'pending' || row.status === 'approved')
     if (open !== undefined) {
       return { outcome: 'accepted' as const }
     }
@@ -1244,4 +1241,3 @@ export const createGuestRequest = internalMutation({
     return { outcome: 'accepted' as const }
   },
 })
-

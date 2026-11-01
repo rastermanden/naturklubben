@@ -34,8 +34,8 @@ export function StiGame() {
   const controls = useStiGame()
   const { state, dispatch } = controls
 
-  const personalBest = usePersonalBest('sti', userId)
-  const submitScore = useSubmitScore('sti', userId)
+  const personalBest = usePersonalBest('sti')
+  const submitScore = useSubmitScore('sti')
   const submitted = useRef(false)
   const bestBeforeGame = useRef(0)
   const [record, setRecord] = useState(false)

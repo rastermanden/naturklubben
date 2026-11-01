@@ -14,10 +14,7 @@ import { api } from '../../../convex/_generated/api'
 export const ACCOUNT_DELETION_CONFIRMATION = 'SLET MIN KONTO'
 
 export type AccountDeletionErrorCode =
-  | 'invalid_confirmation'
-  | 'last_admin'
-  | 'not_a_member'
-  | 'unknown'
+  'invalid_confirmation' | 'last_admin' | 'not_a_member' | 'unknown'
 
 export class AccountDeletionError extends Error {
   readonly code: AccountDeletionErrorCode

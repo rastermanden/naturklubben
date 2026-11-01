@@ -57,7 +57,10 @@ const MESSAGES: [code: string, message: string][] = [
   ['MATCH_MISSING_PARTICIPANT', 'Kampen mangler stadig en deltager.'],
   ['MATCH_NO_MAJORITY', 'Der mangler en vinder af kampen.'],
   ['MATCH_TOO_MANY_GAMES', 'Der er tastet flere spil, end kampen går over.'],
-  ['MATCH_NEXT_COMPLETED', 'Den næste kamp er allerede afgjort -- fortryd den først.'],
+  [
+    'MATCH_NEXT_COMPLETED',
+    'Den næste kamp er allerede afgjort -- fortryd den først.',
+  ],
   ['GAME_WINNER_NOT_IN_MATCH', 'Et af spillene er vundet af en fremmed.'],
 ]
 

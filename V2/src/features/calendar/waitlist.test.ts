@@ -15,7 +15,11 @@ function entry(
   status: AttendanceEntry['status'],
   seconds: number,
 ): AttendanceEntry {
-  return { profileId, status, queuedAt: Date.parse('2026-09-01T10:00:00Z') + seconds * 1000 }
+  return {
+    profileId,
+    status,
+    queuedAt: Date.parse('2026-09-01T10:00:00Z') + seconds * 1000,
+  }
 }
 
 const entries: AttendanceEntry[] = [
@@ -35,7 +39,10 @@ describe('waitlist', () => {
   })
 
   it('bryder et sammenfald i tidspunkt på profil-id, som serveren gør', () => {
-    const sameMoment = [entry('b', 'waitlisted', 0), entry('a', 'waitlisted', 0)]
+    const sameMoment = [
+      entry('b', 'waitlisted', 0),
+      entry('a', 'waitlisted', 0),
+    ]
     expect(waitlistEntries(sameMoment).map((row) => row.profileId)).toEqual([
       'a',
       'b',

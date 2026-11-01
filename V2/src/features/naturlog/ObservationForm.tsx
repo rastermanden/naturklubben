@@ -8,7 +8,10 @@ import {
   validateObservationDraft,
   type ObservationDraft,
 } from './observationDraft'
-import { observationErrorMessage, useObservationActions } from './useObservations'
+import {
+  observationErrorMessage,
+  useObservationActions,
+} from './useObservations'
 
 interface ObservationFormProps {
   /** Sat, når et fund rettes; null når et nyt skrives. */

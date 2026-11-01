@@ -52,8 +52,8 @@ export function FugletraekGame() {
   const controls = useFugletraekGame()
   const { state, dispatch, elapsed } = controls
 
-  const personalBest = usePersonalBest('fugletraek', userId)
-  const submitScore = useSubmitScore('fugletraek', userId)
+  const personalBest = usePersonalBest('fugletraek')
+  const submitScore = useSubmitScore('fugletraek')
   const submitted = useRef(false)
   const bestBeforeGame = useRef(0)
   const [record, setRecord] = useState(false)

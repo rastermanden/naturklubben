@@ -30,11 +30,11 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 interface ObservationContent {
   species: string
-  location: string | undefined
+  location?: string
   observedOn: string
-  notes: string | undefined
-  latitude: number | undefined
-  longitude: number | undefined
+  notes?: string
+  latitude?: number
+  longitude?: number
 }
 
 /**
@@ -48,7 +48,8 @@ function danishTodayCeiling(): string {
 
 function validateContent(input: ObservationContent): ObservationContent {
   const species = input.species.trim()
-  if (species.length === 0) throw new ConvexError('OBSERVATION_SPECIES_REQUIRED')
+  if (species.length === 0)
+    throw new ConvexError('OBSERVATION_SPECIES_REQUIRED')
   if (species.length > SPECIES_MAX_LENGTH) {
     throw new ConvexError('OBSERVATION_SPECIES_TOO_LONG')
   }

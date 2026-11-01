@@ -1,10 +1,10 @@
 'use node'
 
-import { internalAction } from './_generated/server'
+import { env, internalAction } from './_generated/server'
 import { internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
 import { announcementPayload } from './announcements'
-import { pushPayload, type PushPayload } from './push'
+import { pushPayload, type PushPayload, type PushTarget } from './push'
 import { probationPayload } from './probation'
 import { notificationKind } from './tables/notifications'
 import type { Id } from './_generated/dataModel'
@@ -83,7 +83,8 @@ async function generateVapidKeyPair() {
     new Uint8Array(await crypto.subtle.exportKey('raw', keys.publicKey)),
   )
   const jwk = await crypto.subtle.exportKey('jwk', keys.privateKey)
-  if (!jwk.d) throw new ConvexError('Den genererede nøgle mangler d-komponenten')
+  if (!jwk.d)
+    throw new ConvexError('Den genererede nøgle mangler d-komponenten')
 
   return { publicKey, privateKey: jwk.d }
 }
@@ -99,9 +100,9 @@ async function generateVapidKeyPair() {
 export const ensureVapidKeys = internalAction({
   args: {},
   handler: async (ctx): Promise<VapidDetails> => {
-    const subject = process.env.VAPID_SUBJECT ?? DEFAULT_VAPID_SUBJECT
-    const envPublicKey = process.env.VAPID_PUBLIC_KEY
-    const envPrivateKey = process.env.VAPID_PRIVATE_KEY
+    const subject = env.VAPID_SUBJECT ?? DEFAULT_VAPID_SUBJECT
+    const envPublicKey = env.VAPID_PUBLIC_KEY
+    const envPrivateKey = env.VAPID_PRIVATE_KEY
     if (envPublicKey && envPrivateKey) {
       return { publicKey: envPublicKey, privateKey: envPrivateKey, subject }
     }
@@ -161,12 +162,23 @@ export const deliverPush = internalAction({
     profileIds: v.array(v.id('profiles')),
     payload: pushPayload,
   },
-  handler: async (ctx, args) => {
-    const prepared = await ctx.runMutation(internal.push.prepareDeliveries, {
-      kind: args.kind,
-      subjectId: args.subjectId,
-      profileIds: args.profileIds,
-    })
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    sent: number
+    failed: number
+    removed: number
+    skipped: number
+  }> => {
+    // `prepareDeliveries` ligger i et modul, der selv kalder tilbage hertil.
+    // Uden typen på resultatet kan TypeScript ikke udlede nogen af delene.
+    const prepared: { targets: PushTarget[]; skipped: number } =
+      await ctx.runMutation(internal.push.prepareDeliveries, {
+        kind: args.kind,
+        subjectId: args.subjectId,
+        profileIds: args.profileIds,
+      })
     if (prepared.targets.length === 0) {
       return { sent: 0, failed: 0, removed: 0, skipped: prepared.skipped }
     }

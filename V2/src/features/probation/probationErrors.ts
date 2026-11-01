@@ -4,9 +4,7 @@
  * returnerer -- ikke Supabase' SQLSTATE'er, som den gamle app måtte oversætte.
  */
 export type ProbationSubmissionErrorCode =
-  | 'invalid_request'
-  | 'rate_limited'
-  | 'temporarily_unavailable'
+  'invalid_request' | 'rate_limited' | 'temporarily_unavailable'
 
 export class ProbationSubmissionError extends Error {
   readonly code: ProbationSubmissionErrorCode

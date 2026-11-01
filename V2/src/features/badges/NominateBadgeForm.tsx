@@ -1,5 +1,10 @@
 import { useState } from 'react'
-import { badgeErrorMessage, useBadgeActions, useBadgeCatalog, useNomineeCandidates } from './useBadges'
+import {
+  badgeErrorMessage,
+  useBadgeActions,
+  useBadgeCatalog,
+  useNomineeCandidates,
+} from './useBadges'
 
 /**
  * "Indstil et medlem til en badge".

@@ -73,10 +73,7 @@ export function useChatQueue({
     message: QueuedMessage,
   ) => Promise<{ messageId: Id<'messages'>; inserted: boolean }>
   /** Kaldes, når serveren har kvitteret. `notify` er false for en gentagelse. */
-  deliver: (
-    messageId: Id<'messages'>,
-    result: { notify: boolean },
-  ) => void
+  deliver: (messageId: Id<'messages'>, result: { notify: boolean }) => void
 }): ChatQueue {
   const [store] = useState<QueueStore>(createQueueStore)
   const [queue, setQueue] = useState<QueuedMessage[]>([])

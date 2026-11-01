@@ -22,8 +22,9 @@ export type ChatRoom = FunctionArgs<typeof api.chat.history>['room']
 export type MessageType = 'text' | 'action'
 
 /** Én side af beskedhistorikken, som `usePaginatedQuery` leverer den. */
-export type MessageView =
-  FunctionReturnType<typeof api.chat.history>['page'][number]
+export type MessageView = FunctionReturnType<
+  typeof api.chat.history
+>['page'][number]
 
 export type ReactionSummary = MessageView['reactions'][number]
 export type ReplyPreview = NonNullable<MessageView['replyTo']>
@@ -32,8 +33,9 @@ export type PollOptionSummary = PollSummary['options'][number]
 
 export type ChatMember = FunctionReturnType<typeof api.chat.members>[number]
 export type ChatViewer = FunctionReturnType<typeof api.chat.viewer>
-export type OnlineMember =
-  FunctionReturnType<typeof api.chat.onlineMembers>[number]
+export type OnlineMember = FunctionReturnType<
+  typeof api.chat.onlineMembers
+>[number]
 export type UnreadSummary = FunctionReturnType<typeof api.chat.unread>[number]
 export type SearchResult = FunctionReturnType<typeof api.chat.search>
 export type MessageContext = FunctionReturnType<typeof api.chat.context>

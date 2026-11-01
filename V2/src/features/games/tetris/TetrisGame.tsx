@@ -30,8 +30,8 @@ export function TetrisGame() {
   const { state } = controls
   const gestures = useTouchGestures(controls)
 
-  const personalBest = usePersonalBest('tetris', userId)
-  const submitScore = useSubmitScore('tetris', userId)
+  const personalBest = usePersonalBest('tetris')
+  const submitScore = useSubmitScore('tetris')
   const submitted = useRef(false)
   const bestBeforeGame = useRef(0)
   const [record, setRecord] = useState(false)

@@ -1,4 +1,5 @@
-import type { TournamentFormat } from './types'
+/** Samme to formater som `tournaments.format` i skemaet. */
+export type TournamentFormat = 'round_robin' | 'single_elimination'
 
 /** De fleste kampe går over tre spil. */
 export const BEST_OF_DEFAULT = 3

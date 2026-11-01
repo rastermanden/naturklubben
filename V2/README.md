@@ -7,24 +7,25 @@ uændret, og `main`-deployet peger stadig på den.**
 
 ## Status
 
-Alle domæner er portet og integreret. **Der er stadig ikke kørt et build eller
-en test mod et rigtigt Convex-deployment** — se "Verifikation".
+Alle domæner er portet og integreret. Typecheck, build, test, lint og
+formatering er kørt lokalt. **Der er stadig ikke kørt et deploy mod et rigtigt
+Convex-deployment** — se "Verifikation".
 
-| Del | Status |
-| --- | --- |
-| Værktøjskæde (Vite, React, TypeScript, Tailwind, Vitest) | på plads |
-| `convex/schema.ts` + 6 domænefiler i `convex/tables/` | på plads |
-| Autorisationslag (`convex/authz.ts`) | på plads |
-| Convex Auth (adgangskode) | konfigureret, ikke afprøvet |
-| Medlemmer, allowlist, admin-roller | portet |
-| Kalender, aktiviteter, venteliste, iCal-feed | portet |
+| Del                                                           | Status                                                    |
+| ------------------------------------------------------------- | --------------------------------------------------------- |
+| Værktøjskæde (Vite, React, TypeScript, Tailwind, Vitest)      | på plads                                                  |
+| `convex/schema.ts` + 6 domænefiler i `convex/tables/`         | på plads                                                  |
+| Autorisationslag (`convex/authz.ts`)                          | på plads                                                  |
+| Convex Auth (adgangskode)                                     | konfigureret, ikke afprøvet                               |
+| Medlemmer, allowlist, admin-roller                            | portet                                                    |
+| Kalender, aktiviteter, venteliste, iCal-feed                  | portet                                                    |
 | Chat: beskeder, reaktioner, afstemninger, søgning, offline-kø | portet (søgning og presence er tilnærmelser, se nedenfor) |
-| Galleri: billeder, albums, kommentarer, optimering | portet undtagen selve billedbehandlingen |
-| Fællesskab: badges, naturlog, spillenes scorer, turneringer | portet |
-| Notifikationer, nyheder, prøvemedlemskab, konto | portet; push kan ikke sendes endnu |
-| Kontosletning på tværs af alle domæner + dataudlevering | portet, med `account.test.ts` |
-| Cron (5 jobber) | portet |
-| CI/deploy + PR-preview | workflows tilføjet, kræver secrets |
+| Galleri: billeder, albums, kommentarer, optimering            | portet undtagen selve billedbehandlingen                  |
+| Fællesskab: badges, naturlog, spillenes scorer, turneringer   | portet                                                    |
+| Notifikationer, nyheder, prøvemedlemskab, konto               | portet; push kan ikke sendes endnu                        |
+| Kontosletning på tværs af alle domæner + dataudlevering       | portet, med `account.test.ts`                             |
+| Cron (5 jobber)                                               | portet                                                    |
+| CI/deploy + PR-preview                                        | workflows tilføjet, kræver secrets                        |
 
 Tre ting er **bevidst ikke** færdige, og de står her fordi de er valg, ikke
 glemsel:
@@ -157,7 +158,7 @@ Supabase gav hver PR en Preview Branch med PR'ens egne migrationer, og
 `pr-preview.yml` byggede frontend mod netop den database.
 
 Convex har noget tilsvarende, men det er en **beta-funktion** og virker
-anderledes: `npx convex deploy` med en *preview deploy key* opretter et
+anderledes: `npx convex deploy` med en _preview deploy key_ opretter et
 midlertidigt deployment pr. git-branch — navnet tages automatisk fra branchen i
 GitHub Actions — og genbruger det, hvis det findes. Deploymentet ryddes
 automatisk efter 5 dage (14 på de betalte planer). `--preview-run <funktion>`
@@ -177,26 +178,24 @@ ingen secrets og dermed intet preview, præcis som i dag.
 
 ## Verifikation
 
-Vigtigt: **intet i V2 er kompileret, lintet eller formateret endnu.**
-Arbejdsmiljøet, V2 er skrevet i, har hverken Node eller `node_modules`, så
-følgende er *ikke* kørt og skal køres som det første, når V2 åbnes i CI eller
-på en maskine med Node:
+Kørt lokalt, uden et Convex-deployment:
 
-1. `cd V2 && npm install` — versionsnumrene i `package.json` er ikke afstemt
-   mod registry'et, så en afhængighed kan skulle rettes her.
-2. `npx convex dev` — genererer `convex/_generated/`, som `tsc` og
-   `convex-test` forudsætter.
-3. `npm run build` og `npm test` i `V2`.
-4. `npx prettier --write V2` fra roden, så `format:check` i `ci.yml` ikke
-   fejler på de nye filer.
-5. `npm run lint` og `npx tsc -b` fra roden — `ci.yml` dækker begge og ser også
-   V2's filer.
+- I `V2/`: `npm ci`, `npx tsc -p tsconfig.convex.json --noEmit`,
+  `npx tsc -p convex/tsconfig.json --noEmit`, `npm run build` (med
+  `VITE_CONVEX_URL` sat, så Vite ikke stopper buildet), `npm test` og
+  `npm run lint`.
+- Fra roden: `npx prettier --check V2`, `npm run lint` og `npx tsc -b`.
 
-Først derefter kan nogen sige, at fundamentet holder. Indtil da er status
-"skrevet, ikke afprøvet".
+`convex/tsconfig.json` er Convex CLI'ens typecheck. `tsconfig.convex.json`
+udvider den, så de to ikke kan drive fra hinanden.
+
+`npx convex dev` og `npx convex deploy` er ikke kørt. De kræver en
+deploy-nøgle. Convex Auth, de rigtige miljøvariabler og selve push-afsendelsen
+er derfor stadig uafprøvet mod et deployment.
 
 Mappestrukturen er den samme som i den gamle app, så en fil kan findes på det
 samme sted i begge:
+
 ```
 V2/
   convex/
@@ -218,23 +217,22 @@ Docs-indekset er <https://docs.convex.dev/llms.txt> (enhver side findes også so
 `.md`). Følgende sider blev læst, før V2 blev skrevet, fordi de afgør valg, som
 ellers ville være gætteri:
 
-| Side | Hvad den afgjorde |
-| --- | --- |
-| `production/regions.md` | Der findes en EU-region (`aws-eu-west-1`, +30 %). Den kan ikke ændres bagefter. |
-| `production/multiple-deployments.md`, `cli/reference/deploy.md` | Preview-deployments findes (beta): ét pr. branch, automatisk navn i GitHub Actions, ryddes efter 5 dage, `--preview-run` kan seede. |
-| `database/advanced/occ.md` | Mutationer er serialiserbare, så "der er stadig en anden admin" kan ikke blive falsk mellem læsning og skrivning. Advisory locks behøves ikke. |
-| `functions/error-handling/application-errors.md` | `ConvexError` er den eneste vej til at få en fejlkode frem til klienten; en almindelig `Error` sløres i produktion. |
-| `search/text-search.md` | Søgning er term- og præfiksbaseret på Tantivy. Midt-i-ord-søgning findes ikke — derfor skal chat-søgningen bygges om. |
-| `functions/runtimes.md` | `"use node"` giver Node-pakker i actions, men filen må ikke indeholde queries/mutations. Billedbehandling og Web Push kræver hver sin Node-action-fil. |
-| `file-storage/overview.md` | En `getUrl`-adresse er en bearer-URL: enhver, der kender den, kan hente filen, og den kan kun trækkes tilbage ved at slette filen. HTTP-action er den dokumenterede vej til adgangskontrol. |
+| Side                                                            | Hvad den afgjorde                                                                                                                                                                           |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `production/regions.md`                                         | Der findes en EU-region (`aws-eu-west-1`, +30 %). Den kan ikke ændres bagefter.                                                                                                             |
+| `production/multiple-deployments.md`, `cli/reference/deploy.md` | Preview-deployments findes (beta): ét pr. branch, automatisk navn i GitHub Actions, ryddes efter 5 dage, `--preview-run` kan seede.                                                         |
+| `database/advanced/occ.md`                                      | Mutationer er serialiserbare, så "der er stadig en anden admin" kan ikke blive falsk mellem læsning og skrivning. Advisory locks behøves ikke.                                              |
+| `functions/error-handling/application-errors.md`                | `ConvexError` er den eneste vej til at få en fejlkode frem til klienten; en almindelig `Error` sløres i produktion.                                                                         |
+| `search/text-search.md`                                         | Søgning er term- og præfiksbaseret på Tantivy. Midt-i-ord-søgning findes ikke — derfor skal chat-søgningen bygges om.                                                                       |
+| `functions/runtimes.md`                                         | `"use node"` giver Node-pakker i actions, men filen må ikke indeholde queries/mutations. Billedbehandling og Web Push kræver hver sin Node-action-fil.                                      |
+| `file-storage/overview.md`                                      | En `getUrl`-adresse er en bearer-URL: enhver, der kender den, kan hente filen, og den kan kun trækkes tilbage ved at slette filen. HTTP-action er den dokumenterede vej til adgangskontrol. |
 
 Det, der stadig er **uverificeret** og skal afgøres mod et rigtigt deployment:
 
 - Convex Auth: om `signUp` gemmer navnet på `users`, om sessionen er sat før et
-efterfølgende `claimProfile`, og hvordan nulstillingsmails sendes (der kræves
-en mailudbyder og en hemmelighed på deploymentet — se `convex/auth.ts`).
+  efterfølgende `claimProfile`, og hvordan nulstillingsmails sendes (der kræves
+  en mailudbyder og en hemmelighed på deploymentet — se `convex/auth.ts`).
 - Om `authAccounts` har et stabilt indeks til e-mailopslag; `members.ts` bruger
   `filter` for ikke at binde sig til et biblioteksinternt indeksnavn.
 - `ctx.db.system.get` og `v.id('_storage')` i praksis, samt indeks over
   valgfrie felter (`by_client_upload`).
-

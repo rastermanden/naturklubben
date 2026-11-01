@@ -70,7 +70,10 @@ export function pendingPhotosToOptimize(
       !alreadyRequested.has(photo.id) &&
       ((photo.optimizationStatus === 'pending' &&
         !isPendingOptimizationActive(
-          { optimizationStatus: photo.optimizationStatus, createdAt: photo.createdAt },
+          {
+            optimizationStatus: photo.optimizationStatus,
+            createdAt: photo.createdAt,
+          },
           now,
         )) ||
         isStaleOptimization(photo, now)),

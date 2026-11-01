@@ -189,7 +189,9 @@ function MyNominationList() {
 
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-lg font-semibold text-ink-body">Mine indstillinger</h3>
+      <h3 className="text-lg font-semibold text-ink-body">
+        Mine indstillinger
+      </h3>
       <ul className="flex flex-col gap-1 text-sm">
         {nominations.map((nomination) => (
           <li

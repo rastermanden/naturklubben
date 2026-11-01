@@ -103,8 +103,8 @@ export default function WelcomePage() {
       </h1>
       <p className="text-ink-muted">
         Din bruger er klar, og du er logget ind. Nu kan du se medlemmerne og
-        tilpasse din profil -- resten af appen følger efter, efterhånden som
-        den bliver portet.
+        tilpasse din profil -- resten af appen følger efter, efterhånden som den
+        bliver portet.
       </p>
       <Link
         to="/medlemmer"

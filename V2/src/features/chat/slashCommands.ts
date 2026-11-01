@@ -214,7 +214,9 @@ export function matchSlashCommandHints(rawInput: string): SlashCommandHint[] {
   const hasArguments = text.length > typedWord.length
 
   return SLASH_COMMANDS.filter((command) =>
-    hasArguments ? typed === command.command : command.command.startsWith(typed),
+    hasArguments
+      ? typed === command.command
+      : command.command.startsWith(typed),
   ).map((command) => ({
     ...command,
     completion: `${command.command} `,

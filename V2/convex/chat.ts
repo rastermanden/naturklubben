@@ -167,10 +167,7 @@ async function indexMessageContent(
 }
 
 /** Fjerner søgeindekset igen, når beskeden slettes. */
-async function clearMessageIndex(
-  ctx: MutationCtx,
-  messageId: Id<'messages'>,
-) {
+async function clearMessageIndex(ctx: MutationCtx, messageId: Id<'messages'>) {
   const tokens = await ctx.db
     .query('messageSearchTokens')
     .withIndex('by_message', (q) => q.eq('messageId', messageId))
@@ -194,7 +191,8 @@ async function messageView(
   viewer: Doc<'profiles'>,
   cache: Map<Id<'profiles'>, string>,
 ) {
-  const author = message.authorId === undefined ? null : await ctx.db.get(message.authorId)
+  const author =
+    message.authorId === undefined ? null : await ctx.db.get(message.authorId)
   const reactions = await ctx.db
     .query('messageReactions')
     .withIndex('by_message', (q) => q.eq('messageId', message._id))
@@ -234,8 +232,7 @@ async function messageView(
     deletedAt: message.deletedAt ?? null,
     /** Slettet af en anden end afsenderen -- altså af en administrator. */
     deletedByAdmin:
-      message.deletedBy !== undefined &&
-      message.deletedBy !== message.authorId,
+      message.deletedBy !== undefined && message.deletedBy !== message.authorId,
     replyTo:
       parent === null
         ? null
@@ -388,7 +385,11 @@ export const search = query({
       return { messages: [], hasMore: false }
     }
 
-    const limit = clamp(args.limit ?? SEARCH_RESULT_LIMIT, 1, SEARCH_RESULT_LIMIT * 2)
+    const limit = clamp(
+      args.limit ?? SEARCH_RESULT_LIMIT,
+      1,
+      SEARCH_RESULT_LIMIT * 2,
+    )
 
     // Området på indekset: alle tokens, der begynder med det længste søgeord.
     // `\uffff` er større end alle tegn, der kan følge efter ordet.
@@ -633,10 +634,7 @@ export const sendMessage = mutation({
     if (args.clientId.trim().length === 0) {
       throw new ConvexError('MESSAGE_SEND_MISSING_CLIENT_ID')
     }
-    if (
-      args.content.length < 1 ||
-      args.content.length > MESSAGE_MAX_LENGTH
-    ) {
+    if (args.content.length < 1 || args.content.length > MESSAGE_MAX_LENGTH) {
       throw new ConvexError('MESSAGE_SEND_INVALID_CONTENT')
     }
 
@@ -659,7 +657,8 @@ export const sendMessage = mutation({
       if (parent === null) throw new ConvexError('MESSAGE_REPLY_NOT_FOUND')
       // Fremmednøglen i den gamle app krævede blot, at beskeden fandtes. Her
       // kræves også samme rum, så et svar ikke kan pege ind i admin-rummet.
-      if (parent.room !== args.room) throw new ConvexError('MESSAGE_REPLY_WRONG_ROOM')
+      if (parent.room !== args.room)
+        throw new ConvexError('MESSAGE_REPLY_WRONG_ROOM')
       if (parent.deletedAt !== undefined) {
         throw new ConvexError('MESSAGE_REPLY_DELETED')
       }
@@ -684,13 +683,7 @@ export const sendMessage = mutation({
 
     // Søgeindekset skrives i samme mutation som beskeden, så de to ikke kan
     // komme ud af trit.
-    await indexMessageContent(
-      ctx,
-      messageId,
-      args.room,
-      args.content,
-      now,
-    )
+    await indexMessageContent(ctx, messageId, args.room, args.content, now)
 
     return { messageId, inserted: true }
   },
@@ -750,7 +743,8 @@ export const toggleReaction = mutation({
     const message = await ctx.db.get(args.messageId)
     if (message === null) throw new ConvexError('MESSAGE_NOT_FOUND')
     requireRoomAccess(profile, message.room)
-    if (message.deletedAt !== undefined) throw new ConvexError('MESSAGE_DELETED')
+    if (message.deletedAt !== undefined)
+      throw new ConvexError('MESSAGE_DELETED')
 
     const existing = await ctx.db
       .query('messageReactions')

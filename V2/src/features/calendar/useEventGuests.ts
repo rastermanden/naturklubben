@@ -3,10 +3,7 @@ import { useQuery } from 'convex/react'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { api } from '../../../convex/_generated/api'
 import { guestRequestUrl } from './feedUrl'
-import {
-  GuestRequestError,
-  toGuestRequestError,
-} from './guestRequestErrors'
+import { GuestRequestError, toGuestRequestError } from './guestRequestErrors'
 
 // Gæster på åbne begivenheder (#224).
 //

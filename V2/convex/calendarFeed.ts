@@ -1,5 +1,5 @@
 import type { HttpRouter } from 'convex/server'
-import { httpAction } from './_generated/server'
+import { env, httpAction } from './_generated/server'
 import { internal } from './_generated/api'
 
 /**
@@ -154,7 +154,7 @@ function generateIcal(
 // ---------------------------------------------------------------------------
 
 function expectedFeedToken(): string {
-  return process.env.CALENDAR_FEED_TOKEN ?? DEFAULT_FEED_TOKEN
+  return env.CALENDAR_FEED_TOKEN ?? DEFAULT_FEED_TOKEN
 }
 
 /** Tokenet fra `/calendar/<token>.ics`, eller null hvis stien ikke passer. */

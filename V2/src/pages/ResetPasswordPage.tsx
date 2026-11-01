@@ -164,7 +164,10 @@ export default function ResetPasswordPage() {
         </button>
       </form>
 
-      <Link to="/glemt-adgangskode" className="text-sm text-ink-muted underline">
+      <Link
+        to="/glemt-adgangskode"
+        className="text-sm text-ink-muted underline"
+      >
         Send en ny kode
       </Link>
     </main>

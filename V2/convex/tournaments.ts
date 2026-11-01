@@ -97,7 +97,10 @@ export const detail = query({
       .take(DETAIL_GAMES_LIMIT)
 
     const participantById = new Map(
-      participants.map((participant) => [participant._id as string, participant]),
+      participants.map((participant) => [
+        participant._id as string,
+        participant,
+      ]),
     )
 
     // Stillingen er gemt som felter pr. deltager; her lægges den sammen med
@@ -183,10 +186,7 @@ function asParticipantId(
  */
 export const create = mutation({
   args: {
-    format: v.union(
-      v.literal('round_robin'),
-      v.literal('single_elimination'),
-    ),
+    format: v.union(v.literal('round_robin'), v.literal('single_elimination')),
     participantProfileIds: v.array(v.id('profiles')),
   },
   handler: async (ctx, args) => {
@@ -220,7 +220,8 @@ export const create = mutation({
       const profile = await ctx.db.get(profileId)
       // Et manglende medlem vælter hele mutationen, så turneringen ikke bliver
       // oprettet med en tom plads i bracketten.
-      if (profile === null) throw new ConvexError('TOURNAMENT_PARTICIPANT_NOT_FOUND')
+      if (profile === null)
+        throw new ConvexError('TOURNAMENT_PARTICIPANT_NOT_FOUND')
 
       participantIds.push(
         await ctx.db.insert('tournamentParticipants', {
@@ -331,7 +332,8 @@ export const record = mutation({
       throw new ConvexError('MATCH_TOO_MANY_GAMES')
     }
 
-    if (match.status !== 'pending') throw new ConvexError('MATCH_ALREADY_COMPLETED')
+    if (match.status !== 'pending')
+      throw new ConvexError('MATCH_ALREADY_COMPLETED')
     if (match.bye) throw new ConvexError('MATCH_IS_BYE')
 
     const firstId = match.participant1Id
@@ -442,8 +444,10 @@ export const undo = mutation({
 
     const match = await ctx.db.get(args.matchId)
     if (match === null) throw new ConvexError('MATCH_NOT_FOUND')
-    if (match.status !== 'completed') throw new ConvexError('MATCH_NOT_COMPLETED')
-    if (match.participant2Id === undefined) throw new ConvexError('MATCH_IS_BYE')
+    if (match.status !== 'completed')
+      throw new ConvexError('MATCH_NOT_COMPLETED')
+    if (match.participant2Id === undefined)
+      throw new ConvexError('MATCH_IS_BYE')
 
     const tournament = await ctx.db.get(match.tournamentId)
     if (tournament === null) throw new ConvexError('TOURNAMENT_NOT_FOUND')
@@ -522,7 +526,8 @@ export const undo = mutation({
 
     await ctx.db.patch(tournament._id, {
       pendingMatchCount,
-      status: tournament.status === 'completed' ? 'in_progress' : tournament.status,
+      status:
+        tournament.status === 'completed' ? 'in_progress' : tournament.status,
     })
   },
 })

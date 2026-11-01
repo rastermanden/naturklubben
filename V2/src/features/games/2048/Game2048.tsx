@@ -37,8 +37,8 @@ export function Game2048() {
   const { state } = controls
   const swipe = useSwipeDirection(controls.move)
 
-  const personalBest = usePersonalBest('2048', userId)
-  const submitScore = useSubmitScore('2048', userId)
+  const personalBest = usePersonalBest('2048')
+  const submitScore = useSubmitScore('2048')
   const submitted = useRef(false)
   const bestBeforeGame = useRef(0)
   const [record, setRecord] = useState(false)

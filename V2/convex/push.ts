@@ -1,4 +1,10 @@
-import { action, internalMutation, internalQuery, mutation, query } from './_generated/server'
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
@@ -502,10 +508,7 @@ async function claimDelivery(
   const existing = await ctx.db
     .query('pushDeliveries')
     .withIndex('by_kind_and_subject_and_profile', (q) =>
-      q
-        .eq('kind', kind)
-        .eq('subjectId', subjectId)
-        .eq('profileId', profileId),
+      q.eq('kind', kind).eq('subjectId', subjectId).eq('profileId', profileId),
     )
     .unique()
   if (existing) return false

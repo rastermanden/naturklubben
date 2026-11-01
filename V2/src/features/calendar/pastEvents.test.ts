@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { isPastEvent, monthRange, pastRangeOfMonth, startOfDay } from './pastEvents'
+import {
+  isPastEvent,
+  monthRange,
+  pastRangeOfMonth,
+  startOfDay,
+} from './pastEvents'
 
 const now = new Date(2026, 8, 27, 14, 30)
 

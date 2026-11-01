@@ -230,8 +230,8 @@ export function usePushNotifications() {
     setError(null)
     setIsWorking(true)
     try {
-      const subscription = await prepareBrowserPushSubscription(async () =>
-        await fetchVapidPublicKey({}),
+      const subscription = await prepareBrowserPushSubscription(
+        async () => await fetchVapidPublicKey({}),
       )
       await registerSubscription(subscription)
       setEndpoint(subscription.endpoint)

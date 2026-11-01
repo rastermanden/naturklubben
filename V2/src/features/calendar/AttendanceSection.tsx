@@ -3,10 +3,7 @@ import { useMutation } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { toFriendlyCalendarError } from './guestRequestErrors'
 import type { AttendanceRow, EventWithResponse } from './types'
-import {
-  useAttendance,
-  useMembersWithoutResponse,
-} from './useEventAttendance'
+import { useAttendance, useMembersWithoutResponse } from './useEventAttendance'
 import {
   attendingEntries,
   declinedEntries,

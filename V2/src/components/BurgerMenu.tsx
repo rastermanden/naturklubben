@@ -88,7 +88,9 @@ export function BurgerMenu({
               onClick={onClose}
               className={({ isActive }) =>
                 `flex min-h-11 items-center rounded px-3 py-2 text-lg ${
-                  isActive ? 'bg-surface-raised text-ink-body' : 'text-ink-muted'
+                  isActive
+                    ? 'bg-surface-raised text-ink-body'
+                    : 'text-ink-muted'
                 }`
               }
             >

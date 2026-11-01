@@ -102,16 +102,15 @@ export function useChatSearch(room: ChatRoom, term: string) {
     isSearching:
       trimmed.length > 0 && (debounced !== trimmed || result === undefined),
     loadMore: () =>
-      setLimit((current) => Math.min(current + SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE * 2)),
+      setLimit((current) =>
+        Math.min(current + SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE * 2),
+      ),
   }
 }
 
 /** Beskederne omkring en bestemt besked -- det, et søgeresultat åbner. */
 export function useChatContext(messageId: Id<'messages'> | null) {
-  return useQuery(
-    api.chat.context,
-    messageId === null ? 'skip' : { messageId },
-  )
+  return useQuery(api.chat.context, messageId === null ? 'skip' : { messageId })
 }
 
 /** "Online nu" -- dem, der har skrevet heartbeat inden for vinduet. */
@@ -207,7 +206,7 @@ export function useMessages(room: ChatRoom, profileId: Id<'profiles'>) {
         content: entry.content,
         messageType: entry.messageType,
         mentions: entry.mentions,
-        replyToMessageId: entry.replyToMessageId,
+        replyToId: entry.replyToMessageId,
         writtenAt: entry.writtenAt,
       }),
     deliver: () => {
@@ -243,7 +242,7 @@ export function useMessages(room: ChatRoom, profileId: Id<'profiles'>) {
           content: input.content,
           messageType: input.messageType ?? 'text',
           mentions: input.mentions ?? [],
-          replyToMessageId: input.replyToMessageId,
+          replyToId: input.replyToMessageId,
         })
         return { messageId: result.messageId, inserted: result.inserted }
       } catch (error) {

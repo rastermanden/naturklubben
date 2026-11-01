@@ -94,8 +94,7 @@ export function toFriendlyGuestRequestError(error: unknown): string {
 
 /** Findes en af backendens faste koder i fejlen? */
 function hasCode(error: unknown, ...codes: string[]): boolean {
-  const message =
-    error instanceof Error ? error.message : String(error ?? '')
+  const message = error instanceof Error ? error.message : String(error ?? '')
   return codes.some((code) => message.includes(code))
 }
 

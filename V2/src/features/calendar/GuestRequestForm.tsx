@@ -1,10 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { toFriendlyGuestRequestError } from './guestRequestErrors'
 import type { PublicEvent } from './types'
-import {
-  MAX_GUEST_PARTY_SIZE,
-  useSubmitGuestRequest,
-} from './useEventGuests'
+import { MAX_GUEST_PARTY_SIZE, useSubmitGuestRequest } from './useEventGuests'
 
 interface GuestRequestFormProps {
   event: PublicEvent

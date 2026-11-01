@@ -8,4 +8,8 @@
 export { AdminRoute } from './AdminRoute'
 export { ProtectedRoute } from './ProtectedRoute'
 export { useCurrentProfile } from './useCurrentProfile'
-export { errorCode, toFriendlyAuthError, toFriendlyMemberError } from './authErrors'
+export {
+  errorCode,
+  toFriendlyAuthError,
+  toFriendlyMemberError,
+} from './authErrors'

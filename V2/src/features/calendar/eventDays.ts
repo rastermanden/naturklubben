@@ -126,5 +126,7 @@ export function formatEventTimeShort(event: EventTimes): string {
 
 /** Sluttidspunktet som klokkeslæt, til den sidste dag i månedsvisningen. */
 export function formatEndTime(event: EventTimes): string | null {
-  return event.endAt === null ? null : timeFormatter.format(new Date(event.endAt))
+  return event.endAt === null
+    ? null
+    : timeFormatter.format(new Date(event.endAt))
 }

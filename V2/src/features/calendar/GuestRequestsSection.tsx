@@ -173,7 +173,10 @@ export function GuestRequestsSection({ event }: { event: EventWithResponse }) {
           <h4 className="text-sm font-medium text-ink-subtle">
             Godkendte gæster
           </h4>
-          <ul className="mt-2 flex flex-col gap-1" aria-label="Godkendte gæster">
+          <ul
+            className="mt-2 flex flex-col gap-1"
+            aria-label="Godkendte gæster"
+          >
             {approved.map((request) => (
               <li
                 key={request.id}

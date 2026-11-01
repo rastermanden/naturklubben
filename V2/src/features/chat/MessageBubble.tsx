@@ -120,7 +120,9 @@ export function MessageBubble({
   }, [])
 
   const isFormerMember = message.authorId === null
-  const name = isFormerMember ? 'Tidligere medlem' : (message.authorName ?? 'Medlem')
+  const name = isFormerMember
+    ? 'Tidligere medlem'
+    : (message.authorName ?? 'Medlem')
   const color = message.chatColor
   const isAction = message.messageType === 'action'
   // En besked, der har ligget i offline-køen, viser det tidspunkt, den blev
