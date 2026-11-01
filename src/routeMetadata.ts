@@ -124,6 +124,11 @@ export const routeMetadata = [
     announcement: 'Fugletræk indlæst',
   },
   {
+    path: '/spil/kabale',
+    documentTitle: '7-kabale | Naturklubben',
+    announcement: '7-kabale indlæst',
+  },
+  {
     path: '/aktiviteter/btg-turnering',
     documentTitle: 'BTG turnering | Naturklubben',
     announcement: 'BTG turnering indlæst',
