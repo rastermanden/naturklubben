@@ -160,7 +160,9 @@ jobs:
             js=$(printf '%s' "$html" | grep -oE 'assets/index-[^"]+\.js' | head -1 || true)
             if [ -n "${js:-}" ]; then
               body=$(curl -fsS "$url$js?cb=$cb" || true)
-              if printf '%s' "$body" | grep -F -q "$host" && ! printf '%s' "$body" | grep -F -q 'supabase.co'; then
+              # Uden -q: med pipefail lukker grep -q røret, og printf dør
+              # af SIGPIPE, så et rigtigt match bliver talt som fejl.
+              if printf '%s' "$body" | grep -F "$host" >/dev/null && ! printf '%s' "$body" | grep -F 'supabase.co' >/dev/null; then
                 echo "Live bundle $js peger på $host og ikke på Supabase."
                 exit 0
               fi
