@@ -103,6 +103,14 @@ export interface DatePollVoteExport {
   } | null
 }
 
+/** Hvor langt man senest har læst i hvert chatrum (#294). */
+export interface ChatReadPositionExport {
+  room: string
+  last_read_message_id: string | null
+  last_read_at: string
+  updated_at: string
+}
+
 export interface PhotoCommentExport {
   id: string
   photo_id: string
@@ -131,6 +139,7 @@ export interface AccountExportRepository {
   getAttendance(userId: string): Promise<AttendanceExport[]>
   getPollVotes(userId: string): Promise<PollVoteExport[]>
   getDatePollVotes(userId: string): Promise<DatePollVoteExport[]>
+  getChatReadPositions(userId: string): Promise<ChatReadPositionExport[]>
   getPhotoComments(userId: string): Promise<PhotoCommentExport[]>
   getObservations(userId: string): Promise<ObservationExport[]>
   getPhotoDownloadUrls(photo: PhotoExport): Promise<PhotoDownloadUrls>
@@ -203,6 +212,7 @@ export async function handleExportAccount(
       attendance,
       pollVotes,
       datePollVotes,
+      chatReadPositions,
       photoComments,
       observations,
     ] = await Promise.all([
@@ -212,6 +222,7 @@ export async function handleExportAccount(
       repository.getAttendance(user.id),
       repository.getPollVotes(user.id),
       repository.getDatePollVotes(user.id),
+      repository.getChatReadPositions(user.id),
       repository.getPhotoComments(user.id),
       repository.getObservations(user.id),
     ])
@@ -244,6 +255,7 @@ export async function handleExportAccount(
         activity_registrations: attendance,
         poll_votes: pollVotes,
         date_poll_votes: datePollVotes,
+        chat_read_positions: chatReadPositions,
         observations,
       }),
       {

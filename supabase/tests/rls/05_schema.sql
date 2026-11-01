@@ -49,7 +49,7 @@ select set_eq(
   $$select tablename
     from pg_publication_tables
     where pubname = 'supabase_realtime'$$,
-  $$values ('messages'), ('photos'), ('message_reactions'), ('polls'), ('poll_options'), ('poll_votes'), ('photo_comments')$$,
+  $$values ('messages'), ('photos'), ('message_reactions'), ('polls'), ('poll_options'), ('poll_votes'), ('photo_comments'), ('chat_read_positions')$$,
   'realtime-publikationen indeholder præcis de tabeller, klienten abonnerer på'
 );
 

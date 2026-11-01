@@ -6,6 +6,8 @@ import { useMessages, useMessageSearch } from '../features/chat/useMessages'
 import type { ChatRoom } from '../features/chat/useMessages'
 import { PendingMessage } from '../features/chat/PendingMessage'
 import { useReactions } from '../features/chat/useReactions'
+import { useReadReceipts } from '../features/chat/useReadReceipts'
+import { readersByMessage } from '../features/chat/readReceipts'
 import {
   groupReactionsByMessage,
   summarizeReactions,
@@ -85,6 +87,18 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [newMessageCount, setNewMessageCount] = useState(0)
   const [isNearBottom, setIsNearBottom] = useState(true)
+  // Læsekvitteringer (#294): den nyeste besked tæller som læst, når bunden
+  // af listen er på skærmen.
+  const { positions: readPositions } = useReadReceipts(
+    room,
+    messages,
+    userId,
+    isNearBottom,
+  )
+  const readersMap = useMemo(
+    () => readersByMessage(messages, readPositions, userId),
+    [messages, readPositions, userId],
+  )
   const [replyingToId, setReplyingToId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   // På en telefon er lodret plads det knappeste: søgefelt og
@@ -209,6 +223,14 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
     previousOldestMessageId.current = oldestMessageId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages])
+
+  // Læsernes avatarer (#294) lægger en linje til under beskederne. Står man
+  // nederst, skal den nyeste besked stadig være helt synlig, når de dukker op
+  // eller flytter sig.
+  useEffect(() => {
+    if (isNearBottom) scrollToBottom('auto')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readersMap])
 
   useEffect(() => {
     if (!highlightedMessageId) return
@@ -782,6 +804,12 @@ function ChatPage({ room = 'general' }: ChatPageProps) {
                     closePoll.isPending &&
                     pollsByMessage.get(message.id)?.id === closePoll.variables
                   }
+                  readers={(readersMap.get(message.id) ?? []).map((id) => ({
+                    id,
+                    name: nameForMember(id),
+                    avatarUrl: profiles?.[id]?.avatar_url ?? null,
+                    color: profiles?.[id]?.chat_color ?? '#16a34a',
+                  }))}
                 />
               ))}
               {queuedMessages.map((entry) => {

@@ -5,6 +5,7 @@ import {
   SIGNED_URL_TTL_SECONDS,
   type AccountExportRepository,
   type AttendanceExport,
+  type ChatReadPositionExport,
   type DatePollVoteExport,
   type MessageExport,
   type ObservationExport,
@@ -157,6 +158,16 @@ Deno.serve(async (req) => {
           }
         }) as DatePollVoteExport[]
       })
+    },
+
+    async getChatReadPositions(userId) {
+      const { data, error } = await supabase
+        .from('chat_read_positions')
+        .select('room, last_read_message_id, last_read_at, updated_at')
+        .eq('user_id', userId)
+        .order('room', { ascending: true })
+      queryError('Læsepositioner i chatten kunne ikke hentes', error)
+      return (data ?? []) satisfies ChatReadPositionExport[]
     },
 
     async getPhotoComments(userId) {
