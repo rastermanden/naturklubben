@@ -82,7 +82,9 @@ jobs:
         working-directory: V2
         run: |
           set -euo pipefail
-          mapfile -t hosts < <(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u || true)
+          # ConvexReactClient har eksempel-URL'en happy-otter-123 i en
+          # fejltekst, så den ligger altid i bundlen. Den er ikke deploymentet.
+          mapfile -t hosts < <(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123' || true)
           if [ "${#hosts[@]}" -eq 0 ]; then
             echo "Ingen Convex-vært i dist/assets. Buildet har ikke fået VITE_CONVEX_URL."
             exit 1
