@@ -46,6 +46,11 @@ export function parseAdminTab(value: string | null): AdminTabId {
     : DEFAULT_ADMIN_TAB
 }
 
+/** Link til en bestemt fane i admin-panelet, fx fra kalenderen. */
+export function adminTabPath(tabId: AdminTabId) {
+  return `/admin?${new URLSearchParams({ [ADMIN_TAB_PARAM]: tabId })}`
+}
+
 /** DOM-id'er, der binder fane og panel sammen via aria-controls/-labelledby. */
 export function adminTabElementId(tabId: AdminTabId) {
   return `admin-tab-${tabId}`
