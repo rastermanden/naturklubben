@@ -72,7 +72,7 @@ async function waitForRegistration(): Promise<ServiceWorkerRegistration | null> 
   if (!('serviceWorker' in navigator)) return null
   return Promise.race([
     navigator.serviceWorker.ready,
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000)),
   ])
 }
 

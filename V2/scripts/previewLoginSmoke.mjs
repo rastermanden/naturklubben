@@ -300,11 +300,7 @@ async function probePush(page, hosts) {
   }
 }
 
-async function probePushOnce(page, hosts) {
-  await page.goto(`${base}profil`, {
-    waitUntil: 'domcontentloaded',
-    timeout: 20000,
-  })
+async function turnNotificationsOn(page) {
   await page.waitForFunction(
     () =>
       [...document.querySelectorAll('button')].some((el) =>
@@ -318,6 +314,7 @@ async function probePushOnce(page, hosts) {
     )
     return button?.textContent ?? ''
   })
+  if (label.includes('Notifikationer til')) return true
   if (label.includes('Slå notifikationer til')) {
     const handle = await page.evaluateHandle(() =>
       [...document.querySelectorAll('button')].find((el) =>
@@ -325,12 +322,12 @@ async function probePushOnce(page, hosts) {
       ),
     )
     const button = handle.asElement()
-    if (!button) throw new Error('Knappen til notifikationer forsvandt')
+    if (!button) return false
     // Rigtigt klik, ikke element.click() inde i siden: tilladelsen kræver
     // en brugerhandling, hvis browseren ikke allerede har givet den.
     await button.click()
   }
-  const enabled = await page
+  return page
     .waitForFunction(
       () =>
         [...document.querySelectorAll('button')].some((el) =>
@@ -340,6 +337,21 @@ async function probePushOnce(page, hosts) {
     )
     .then(() => true)
     .catch(() => false)
+}
+
+async function probePushOnce(page, hosts) {
+  await page.goto(`${base}profil`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 20000,
+  })
+  let enabled = await turnNotificationsOn(page)
+  if (!enabled) {
+    await page.goto(`${base}profil`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    })
+    enabled = await turnNotificationsOn(page)
+  }
   if (!enabled) {
     const detail = await page.evaluate(async () => {
       const regs = await navigator.serviceWorker.getRegistrations()
@@ -356,6 +368,10 @@ async function probePushOnce(page, hosts) {
           .map((el) => el.textContent?.trim())
           .filter((text) => text?.toLowerCase().includes('notifikation'))
           .join(' | '),
+        note:
+          [...document.querySelectorAll('p')]
+            .map((el) => el.textContent?.trim() ?? '')
+            .find((text) => text.toLowerCase().includes('notifikation')) ?? '',
         alert: document.querySelector('[role="alert"]')?.textContent ?? '',
       }
     })
