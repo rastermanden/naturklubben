@@ -133,6 +133,25 @@ jobs:
           # nøglepar på selve previewet. Prod-nøglerne følger ikke med.
           node scripts/ensurePreviewAuthKeys.mjs "$preview"
 
+      # Sætter Resend-nøglen, så oprettelse og glemt adgangskode kan sende.
+      # Nøglen skrives via stdin. Trinnet fjernes igen, men nøglen bliver.
+      - if: github.event.action != 'closed'
+        name: Sæt Resend-nøgle til mailtest
+        working-directory: V2
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RESEND_API_KEY}" ]; then
+            echo "Mangler RESEND_API_KEY."
+            exit 1
+          fi
+          preview="pr-${{ github.event.number }}"
+          printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY --preview-name "$preview"
+          npx convex run mailProbe:allow '{}' --preview-name "$preview"
+          echo "Resend-nøgle sat. Test-indbakken er på listen."
+
       # `pr-preview.yml` udgiver ikke, når PR'en rører V2/. Derfor er der
       # ingen venten på V1: den kørsel pushede alligevel til gh-pages efter
       # V2, fordi status "completed" ikke garanterede, at V1's push var den
