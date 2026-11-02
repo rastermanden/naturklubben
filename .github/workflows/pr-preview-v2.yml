@@ -133,41 +133,6 @@ jobs:
           # nøglepar på selve previewet. Prod-nøglerne følger ikke med.
           node scripts/ensurePreviewAuthKeys.mjs "$preview"
 
-      # Engangs-prøve af oprettelse og glemt adgangskode. Filen
-      # `.github/SIGNUP_PROBE` styrer den og fjernes igen bagefter.
-      # SET sætter Resend-nøglen. REMOVE fjerner den og sletter prøvebrugeren.
-      # Nøglen skrives via stdin, så loggen kun viser navnet.
-      - if: github.event.action != 'closed'
-        name: Prøv oprettelse og glemt adgangskode
-        working-directory: V2
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-        run: |
-          set -euo pipefail
-          if [ ! -f ../.github/SIGNUP_PROBE ]; then
-            echo "Ingen prøve."
-            exit 0
-          fi
-          mode=$(tr -d '[:space:]' < ../.github/SIGNUP_PROBE)
-          preview="pr-${{ github.event.number }}"
-          if [ "$mode" = "SET" ]; then
-            if [ -z "${RESEND_API_KEY}" ]; then
-              echo "Mangler RESEND_API_KEY."
-              exit 1
-            fi
-            printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY --preview-name "$preview"
-            npx convex run signupProbe:allow '{}' --preview-name "$preview"
-            echo "Resend-nøgle sat. Adressen er på listen."
-          elif [ "$mode" = "REMOVE" ]; then
-            npx convex env remove RESEND_API_KEY --preview-name "$preview"
-            npx convex run signupProbe:purge '{"confirm":"PURGE_SIGNUP_PROBE"}' --preview-name "$preview"
-            echo "Resend-nøgle fjernet. Prøvebruger slettet."
-          else
-            echo "Ukendt prøve-tilstand."
-            exit 1
-          fi
-
       # `pr-preview.yml` udgiver ikke, når PR'en rører V2/. Derfor er der
       # ingen venten på V1: den kørsel pushede alligevel til gh-pages efter
       # V2, fordi status "completed" ikke garanterede, at V1's push var den
