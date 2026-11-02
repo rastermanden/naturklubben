@@ -27,18 +27,33 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: V2/package-lock.json
 
-      - run: npm ci
+      - name: Install
+        working-directory: V2
+        run: npm ci
 
-      - name: Build
-        run: npm run build
+      # V2 på produktionsadressen. Deployment-URL'en kommer fra prod-nøglen,
+      # ikke fra en gemt variabel, så buildet ikke kan pege på et preview.
+      - name: Deploy Convex og byg
+        working-directory: V2
         env:
-          # Begge nøgler ender alligevel i klient-bundlen, så de kan ligge som
-          # enten variable eller secret -- vi læser begge steder, så et build
-          # ikke stille bygger med tom env, fordi værdien blev lagt det
-          # "forkerte" sted. Vite-configen fejler buildet, hvis de er tomme.
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          VITE_BASE_PATH: /
+        run: |
+          set -euo pipefail
+          npx convex deploy \
+            --cmd 'npm run build' \
+            --cmd-url-env-var-name VITE_CONVEX_URL
+          printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY
+          npx convex env set SITE_URL https://naturklubben.dk
+          host=$(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123')
+          echo "Build peger på $host"
+          if [[ "$host" != *quaint-parakeet-652* ]]; then
+            echo "Produktionsbuildet peger ikke på prod."
+            exit 1
+          fi
 
       # Deployer til roden af gh-pages-branchen. clean: false bevarer
       # pr-preview/pr-<nr>/-undermapperne, som pr-preview.yml pusher til samme branch.
@@ -57,7 +72,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages
-          folder: dist
+          folder: V2/dist
           clean: false
           force: false
           attempt-limit: 5

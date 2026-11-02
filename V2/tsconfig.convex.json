@@ -1,0 +1,8 @@
+{
+  // `npx convex dev` typechecker kun `convex/tsconfig.json`. Denne fil udvider
+  // den, så `tsc -b` og `tsc -p tsconfig.convex.json` bruger samme indstillinger.
+  "extends": "./convex/tsconfig.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.convex.tsbuildinfo"
+  }
+}

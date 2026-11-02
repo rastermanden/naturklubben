@@ -1,0 +1,59 @@
+name: Migrér V1 til Convex
+
+# Prøvekørsel på et tomt preview-deployment ved pull request.
+# Produktion kun ved manuel kørsel med target=prod.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'rehearsal eller prod'
+        required: true
+        default: rehearsal
+        type: choice
+        options:
+          - rehearsal
+          - prod
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/migrate-v1.yml'
+      - 'V2/convex/migrateV1.ts'
+      - 'V2/scripts/migrateFromSupabase.mjs'
+      - 'V2/convex/tables/migrate.ts'
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: V2/package-lock.json
+      - name: Install
+        working-directory: V2
+        run: npm ci
+      - name: Vælg mål
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.target }}" = "prod" ]; then
+            echo "name=prod" >> "$GITHUB_OUTPUT"
+          elif [ -f .github/MIGRATE_PROD ]; then
+            echo "name=prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=rehearsal" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Mål er sat."
+      - name: Importér
+        working-directory: V2
+        env:
+          MIGRATE_TARGET: ${{ steps.target.outputs.name }}
+          CONFIRM_PROD_IMPORT: ${{ steps.target.outputs.name == 'prod' && 'IMPORT_V1_TO_PROD' || '' }}
+          CONVEX_DEPLOY_KEY: ${{ steps.target.outputs.name == 'prod' && secrets.CONVEX_DEPLOY_KEY || secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: qqsuqbcasbxebmwfchdi
+        run: node scripts/migrateFromSupabase.mjs

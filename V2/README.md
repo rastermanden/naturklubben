@@ -1,0 +1,340 @@
+# Naturklubben V2 — Convex-native omskrivning
+
+V2 er den samme medlemsapp bygget om på Convex i stedet for Supabase. Den ligger
+i sin egen mappe med sit eget `package.json` og sit eget build, så den kan
+deployes uden at røre den nuværende app. **Den nuværende app i roden er
+uændret, og `main`-deployet peger stadig på den.**
+
+## Status
+
+Alle domæner er portet og integreret. Typecheck, build, test, lint og
+formatering er kørt lokalt. **Der er stadig ikke kørt et deploy mod et rigtigt
+Convex-deployment** — se "Verifikation".
+
+| Del                                                           | Status                                                    |
+| ------------------------------------------------------------- | --------------------------------------------------------- |
+| Værktøjskæde (Vite, React, TypeScript, Tailwind, Vitest)      | på plads                                                  |
+| `convex/schema.ts` + 6 domænefiler i `convex/tables/`         | på plads                                                  |
+| Autorisationslag (`convex/authz.ts`)                          | på plads                                                  |
+| Convex Auth (adgangskode)                                     | konfigureret, ikke afprøvet                               |
+| Medlemmer, allowlist, admin-roller                            | portet                                                    |
+| Kalender, aktiviteter, venteliste, iCal-feed                  | portet                                                    |
+| Chat: beskeder, reaktioner, afstemninger, søgning, offline-kø | portet (søgning og presence er tilnærmelser, se nedenfor) |
+| Galleri: billeder, albums, kommentarer, optimering            | portet undtagen selve billedbehandlingen                  |
+| Fællesskab: badges, naturlog, spillenes scorer, turneringer   | portet                                                    |
+| Notifikationer, nyheder, prøvemedlemskab, konto               | portet; push kan ikke sendes endnu                        |
+| Kontosletning på tværs af alle domæner + dataudlevering       | portet, med `account.test.ts`                             |
+| Cron (5 jobber)                                               | portet                                                    |
+| CI/deploy + PR-preview                                        | workflows tilføjet, kræver secrets                        |
+
+Tre ting er **bevidst ikke** færdige, og de står her fordi de er valg, ikke
+glemsel:
+
+1. **Push kan ikke sendes.** Alt omkring det er portet — modtagere,
+   præferencer, leveringslog, VAPID-nøgler, forsøgshegn — men selve
+   Web Push-krypteringen kræver `web-push` og en Node-action. Indtil da kaster
+   `sendWebPush`, og en nyhed eller et ansøgningssvar ender som `failed` i
+   outboxen med sit forsøgsnummer bevaret.
+2. **Billedbehandling mangler.** Originalen gemmes og kan hentes; der laves
+   ingen nedskaleret webudgave eller thumbnail, fordi det kræver en Node-action
+   med en billedpakke. `ready` betyder derfor "originalen er hentbar".
+3. **Kontosletningen læser hele tabeller.** `messages`, `pollVotes`,
+   `messageReactions`, `eventTasks`, `chatPolls` og `photoModerationLog` har
+   ikke indeks på profil-id, så oprydningen er en fuld gennemlæsning pr.
+   slettet konto. Det holder i en klub af denne størrelse, men en Convex-mutation
+   har en grænse for hvor meget den må læse. Kommer klubben derop, skal
+   oprydningen deles op i batches med `ctx.scheduler`, og tabellerne have
+   indeks på `profileId`/`authorId`.
+
+## Kom i gang
+
+V2 kan ikke bygges eller testes, før der findes et Convex-deployment. Det er et
+**engangs manuelt trin**, på samme måde som Supabase-projektet var det (issue
+#2): nogen med adgang til Convex skal oprette projektet og lægge nøglerne i
+GitHub.
+
+1. Opret et projekt på <https://dashboard.convex.dev> (eller kør
+   `npx convex dev` lokalt første gang, som logger ind via browseren). **Vælg
+   `aws-us-east-1`** — det er den billigste region (uden det 30 %
+   regionaltillæg, som EU, Sydney og Canada koster), og beslutningen er taget:
+   pris frem for placering. Konsekvensen skal siges højt: medlemsdata,
+   billeder og chat ligger dermed uden for EU. Regionen kan ikke ændres
+   bagefter — en flytning kræver eksport/import til et nyt projekt — så skal
+   det ændres, er det en ny beslutning med en ny opsætning.
+2. `cd V2 && npm install`
+3. `npx convex dev` — opretter udviklings-deploymentet, skriver
+   `VITE_CONVEX_URL` i `V2/.env.local` og genererer `convex/_generated/`.
+   Sidstnævnte er forudsætningen for, at `tsc` og `convex-test` kan køre
+   overhovedet; mappen committes.
+4. `npm run dev` — appen kører på `http://localhost:5173/v2/`.
+
+Til GitHub Actions skal der bruges to ting i repoets indstillinger:
+
+- `CONVEX_DEPLOY_KEY` (secret) — til `npx convex deploy` fra CI mod
+  produktions-deploymentet.
+- `CONVEX_PREVIEW_DEPLOY_KEY` (secret) — en **preview** deploy key, som
+  `pr-preview-v2.yml` bruger. Den kan kun oprette og deploye til preview-
+  deployments, ikke til produktion; den findes på projektets indstillingsside.
+- `VITE_CONVEX_URL` (variable eller secret) — til frontend-buildet i
+  `deploy-v2.yml`. PR-previewet skal ikke bruge den: der kommer URL'en fra
+  deployet selv.
+
+## Skift mellem de to apps
+
+De to apps har hvert sit build og deler ikke kode. Et skift er derfor et
+deploy-valg, ikke en kodeændring:
+
+- **Begge samtidigt.** `deploy-v2.yml` bygger V2 med standardstien `/v2/`
+  og lægger den ved siden af den nuværende app på naturklubben.dk. Intet af
+  den gamle app røres.
+- **V2 som den rigtige app.** Kør samme workflow med `base_path` sat til `/`
+  og `publish_to_root` slået til. V2 overskriver da
+  `index.html` på produktions-URL'en; den gamle app ligger stadig i git og kan
+  deployes tilbage med `deploy.yml`.
+- **Tilbage til den gamle app.** Kør `deploy.yml` igen. Der er intet at
+  migrere tilbage, fordi V2 ikke skriver i den gamle apps database.
+
+Begge apps kan køre mod hver sin backend samtidigt; de deler kun domænet.
+
+## Hvad der er anderledes end den gamle app
+
+Convex er ikke Postgres med et andet API. Forskellene herunder er valg, ikke
+mangler — men de skal kendes, fordi nogle af dem er sikkerhedsmæssige.
+
+### Autorisation
+
+Den gamle app havde 115 RLS-politikker, som databasen håndhævede for enhver
+kode, der spurgte. Convex har ingen RLS. Enhver `query` og `mutation` ser de
+data, den selv læser, og kan kaldes af enhver, der kender dens navn.
+
+Reglen i V2 er derfor: **hver eksporteret funktion kalder `requireProfile`,
+`requireWritableProfile` eller `requireAdmin` fra `convex/authz.ts`, før den
+rører data.** En funktion uden et sådant kald er offentlig. Det erstatter 115
+politikker med et krav om, at hver funktion gør det rigtige — og det er præcis
+den slags, der skal have en test.
+
+`convex-test`-tests erstatter pgTAP-testene i `supabase/tests/rls/`. Kravet fra
+`AGENTS.md` gælder uændret: rører en ændring autorisationsmodellen, skal den
+have en test, der kalder funktionen som den rigtige rolle og måler, hvad der
+faktisk sker.
+
+### Adgangskoder
+
+Supabase gemmer bcrypt-hashes i `auth.users.encrypted_password`. Convex Auth
+gemmer Lucia-Scrypt. De kan ikke læses gennem Supabase' API, men de kan
+eksporteres med SQL-adgang til databasen og lægges ind i Convex.
+
+`convex/passwords.ts` gør to ting:
+
+1. `importHashes` (intern) skriver bcrypt-hashen urørt ind som kontoens
+   hemmelighed og markerer e-mailen som bekræftet. Den hasher ikke igen.
+2. Ved login tjekkes bcrypt, og hashen skrives om til Scrypt med det samme,
+   så næste login kun kender Convex' egen hash.
+
+Sådan køres importen, når flytningen er aftalt -- ikke før, og ikke mod
+rigtige data i utide:
+
+```sql
+select u.email, u.encrypted_password, p.is_admin
+from auth.users u
+join public.profiles p on p.id = u.id
+where u.encrypted_password like '$2%';
+```
+
+```bash
+npx convex run passwords:importHashes --prod \
+  '{"confirm":"IMPORT_BCRYPT_HASHES","accounts":[{"email":"medlem@example.com","bcryptHash":"$2a$10$...","isAdmin":false}]}'
+```
+
+`isAdmin` er `profiles.is_admin`. Den skrives på adgangslisten, så en senere
+oprettelse får rollen, og på profilen, hvis den allerede findes. Uden feltet
+røres rollen ikke.
+
+`confirm` skal være præcis `IMPORT_BCRYPT_HASHES`. Uden den gør mutationen
+ingenting. Funktionen er intern, så appen kan ikke kalde den. Den er ikke
+kørt mod produktion.
+
+Nye adgangskoder (oprettelse, nulstilling, omhashning) er Scrypt. Mindste
+længde er 6 tegn, som i den nuværende app.
+
+### Mails
+
+Bekræftelse ved oprettelse og glemt adgangskode sendes gennem Resends REST
+API (`fetch` i `convex/authEmail.ts`, ingen `resend`-pakke). Afsenderen er
+`Naturklubben <noreply@naturklubben.dk>`, medmindre `AUTH_EMAIL_FROM` er sat.
+Linket i bekræftelsen lander på `/velkommen`, linket ved glemt adgangskode
+på `/ny-adgangskode`. Siderne og teksterne er de samme som i den nuværende
+app.
+
+`RESEND_API_KEY` ligger i repoets Actions-secrets og sættes via stdin, både
+på produktion (`deploy-v2.yml`) og på hvert preview-deploy
+(`pr-preview-v2.yml`). Den må ikke commits, og preview-workflowet fjerner
+den ikke igen. Uden nøglen logges mailen, og kaldet lykkes. Previewets
+testbruger markeres som bekræftet, så login-smoken ikke venter på en mail.
+
+I previewet (`PREVIEW_SEED=1`) sendes auth-mail kun til adresser på
+adgangslisten. Glemt adgangskode sender ikke til en adresse uden bruger
+og heller ikke til en adresse, der ikke står på listen. Siden siger
+stadig "Tjek din e-mail", så den ikke fortæller, hvem der findes.
+Oprettelse af en adresse uden for listen afvises, før der sendes mail.
+
+Seedet lægger kun disse adresser på adgangslisten og opretter ikke
+brugere for dem. Administratorer, som i den nuværende app:
+`martin.martinjensen@gmail.com`, `kaspermoller@gmail.com`,
+`troelsranum@gmail.com`, `mikkellinnet@gmail.com` og
+`uffeschjoedt@gmail.com`. `kaspermoller+test@gmail.com` og
+`naturklubben-test@agentmail.to` er ikke administratorer. En bruger, der
+allerede er oprettet, får rollen ved næste seed. En eksisterende
+auth-bruger med test-indbakken fjernes ved seed, så den adresse kan
+oprettes forfra. Der sendes ingen mail herfra. Medlemmerne opretter sig
+selv fra previewet.
+
+Prøvemedlemskab og gæsteansøgninger sender ikke mail i den nuværende app
+(push og en mailto-kladde). De er ikke flyttet til Resend.
+
+`SITE_URL` skal være `https://naturklubben.dk`, så et link tilbage til
+preview-stien `/pr-preview/pr-<nr>/velkommen` accepteres.
+
+Mailtests sendes kun til **naturklubben-test@agentmail.to**. Det er
+test-indbakken. Den kan læses fra Martins side, ikke herfra, og der sendes
+ikke prøvemail til andre adresser.
+
+#### DNS hos my.host
+
+Domænet `naturklubben.dk` er verificeret i Resend i region **eu-west-1**.
+Værdien på DKIM-posten er den, Resend viser for domænet -- den står ikke her.
+
+| Type  | Navn                | Indhold                     |
+| ----- | ------------------- | --------------------------- |
+| TXT   | `resend._domainkey` | DKIM-nøglen fra Resend      |
+| CNAME | `rsend`             | `rsend-euw1.forge.rmta.net` |
+| CNAME | `send`              | `send.forge.rmta.net`       |
+
+Eksisterende mail-poster for klubbens almindelige post må ikke overskrives.
+Domænet er verificeret, og afsenderen `noreply@naturklubben.dk` kan sende.
+
+### Data
+
+Der er ingen automatisk overførsel. En flytning kræver eksport fra Postgres,
+transform til Convex-dokumenter og indlæsning i batches. Rækkefølgen er styret
+af referencer, og filer (billeder, avatarer) skal uploades igen til Convex
+filstorage.
+
+### Søgning
+
+Den gamle app søger i chatten med `ilike` og trigram-indeks, altså vilkårlige
+dele af ord. Convex' søgeindeks matcher tokens og præfikser. Midt-i-ord-søgning
+skal derfor genopbygges (fx med et token-tabel eller n-grammer) — det er ikke
+en indstilling.
+
+### Aggregeringer
+
+Convex har ingen `count(*)`, `group by` eller joins i queries. Optællinger som
+`gallery_event_photo_counts` og turneringsstillinger skal vedligeholdes som
+tal i dokumenter, opdateret i samme mutation som ændringen.
+
+### CI og previews
+
+Supabase gav hver PR en Preview Branch med PR'ens egne migrationer, og
+`pr-preview.yml` byggede frontend mod netop den database.
+
+Convex har noget tilsvarende, men det er en **beta-funktion** og virker
+anderledes: `npx convex deploy` med en _preview deploy key_ opretter et
+midlertidigt deployment pr. git-branch — navnet tages automatisk fra branchen i
+GitHub Actions — og genbruger det, hvis det findes. Deploymentet ryddes
+automatisk efter 5 dage (14 på de betalte planer). `--preview-run <funktion>`
+kan seede data ved oprettelsen, hvilket er den nærmeste pendant til at køre
+migrationer på en frisk preview-database.
+
+Det betyder, at V2 kan få et per-PR-backend som den gamle app — og det er
+skrevet: `.github/workflows/pr-preview-v2.yml` kører `npx convex deploy` med
+`--preview-name pr-<nr>` og `--cmd 'npm run build'` /
+`--cmd-url-env-var-name VITE_CONVEX_URL`, så backend og frontend hører sammen i
+samme build, og lægger resultatet i `pr-preview/pr-<nr>/` med samme action som
+den gamle app. Tre forbehold hører med: preview-deployments er en
+**beta-funktion** og ryddes efter 5 dage (14 på betalte planer), deploymentet
+starter **tomt** (ingen brugere, ingen data — skal et preview testes logget ind,
+oprettes en bruger der), og PR'er fra forks eller fra Copilot coding agent får
+ingen secrets og dermed intet preview, præcis som i dag.
+
+## Verifikation
+
+Kørt lokalt, uden et Convex-deployment:
+
+- I `V2/`: `npm ci`, `npx tsc -p tsconfig.convex.json --noEmit`,
+  `npx tsc -p convex/tsconfig.json --noEmit`, `npm run build` (med
+  `VITE_CONVEX_URL` sat, så Vite ikke stopper buildet), `npm test` og
+  `npm run lint`.
+- Fra roden: `npx prettier --check V2`, `npm run lint` og `npx tsc -b`.
+
+`convex/tsconfig.json` er Convex CLI'ens typecheck. `tsconfig.convex.json`
+udvider den, så de to ikke kan drive fra hinanden.
+
+`npx convex dev` og `npx convex deploy` er ikke kørt. De kræver en
+deploy-nøgle. Convex Auth, de rigtige miljøvariabler og selve push-afsendelsen
+er derfor stadig uafprøvet mod et deployment.
+
+Mappestrukturen er den samme som i den gamle app, så en fil kan findes på det
+samme sted i begge:
+
+```
+V2/
+  convex/
+    schema.ts        # samler tabel-filerne
+    tables/          # ét domæne pr. fil
+    authz.ts         # al autorisation
+    auth.ts          # Convex Auth
+    http.ts          # offentlige HTTP-ruter (iCal, gæsteformular)
+  src/
+    pages/           # sidekomponenter
+    features/        # feature-logik, en mappe pr. domæne
+    components/      # delt UI
+    lib/             # convexClient, versionsvisning, SPA-fallback
+```
+
+## Kilder
+
+Docs-indekset er <https://docs.convex.dev/llms.txt> (enhver side findes også som
+`.md`). Følgende sider blev læst, før V2 blev skrevet, fordi de afgør valg, som
+ellers ville være gætteri:
+
+| Side                                                            | Hvad den afgjorde                                                                                                                                                                           |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `production/regions.md`                                         | Der findes en EU-region (`aws-eu-west-1`, +30 %). Den kan ikke ændres bagefter.                                                                                                             |
+| `production/multiple-deployments.md`, `cli/reference/deploy.md` | Preview-deployments findes (beta): ét pr. branch, automatisk navn i GitHub Actions, ryddes efter 5 dage, `--preview-run` kan seede.                                                         |
+| `database/advanced/occ.md`                                      | Mutationer er serialiserbare, så "der er stadig en anden admin" kan ikke blive falsk mellem læsning og skrivning. Advisory locks behøves ikke.                                              |
+| `functions/error-handling/application-errors.md`                | `ConvexError` er den eneste vej til at få en fejlkode frem til klienten; en almindelig `Error` sløres i produktion.                                                                         |
+| `search/text-search.md`                                         | Søgning er term- og præfiksbaseret på Tantivy. Midt-i-ord-søgning findes ikke — derfor skal chat-søgningen bygges om.                                                                       |
+| `functions/runtimes.md`                                         | `"use node"` giver Node-pakker i actions, men filen må ikke indeholde queries/mutations. Billedbehandling og Web Push kræver hver sin Node-action-fil.                                      |
+| `file-storage/overview.md`                                      | En `getUrl`-adresse er en bearer-URL: enhver, der kender den, kan hente filen, og den kan kun trækkes tilbage ved at slette filen. HTTP-action er den dokumenterede vej til adgangskontrol. |
+
+Det, der stadig er **uverificeret** og skal afgøres mod et rigtigt deployment:
+
+- Convex Auth: om `signUp` gemmer navnet på `users`, om sessionen er sat før et
+  efterfølgende `claimProfile`, og hvordan nulstillingsmails sendes (der kræves
+  en mailudbyder og en hemmelighed på deploymentet — se `convex/auth.ts`).
+- Om `authAccounts` har et stabilt indeks til e-mailopslag; `members.ts` bruger
+  `filter` for ikke at binde sig til et biblioteksinternt indeksnavn.
+- `ctx.db.system.get` og `v.id('_storage')` i praksis, samt indeks over
+  valgfrie felter (`by_client_upload`).
+
+## Tjekliste: V1 og V2
+
+Det, medlemmerne kan se, skal være det samme. Preview må have testdata
+(Preview-tur, prøvebesked, prøvebillede) og skjule "Installér app".
+Aktiviteterne er de samme som på naturklubben.dk. Alt andet i tabellen skal
+kunne efterprøves i previewet med testbrugeren.
+
+| Område        | V1                                                                                                                                                                   | V2                                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Menu          | Forside, Aktiviteter, Kalender, Billeder, Chat, Medlemmer, Nyheder, Profil, Admin, Admin-chat                                                                        | Samme punkter og samme skjuleregler                                                                 |
+| Aktiviteter   | Logget ud: BTG og de fem klubaktiviteter. Logget ind også Naturlog og Spil. Links fra data, heriblandt `https://bral.dk` og `https://rastermanden.github.io/btg/`    | Samme kort, samme rækkefølge og samme links. Naturlog og Spil kun for medlemmer                     |
+| BTG           | Liste, så detalje. Deltager-vælger med avatar, loft 8, Alle-mod-alle / Udslagsrunder, "Hvem sidder over i runde 1?", "Start turnering", stilling, kampe, pink shorts | Samme tekster, samme vælger, bye gemmes på Convex                                                   |
+| Naturlog      | Klik på billedet åbner galleriets lyskasse                                                                                                                           | Samme lyskasse (`PhotoLightbox`)                                                                    |
+| Offline       | Service worker precacher app-shellen, falder tilbage til `index.html` og cacher billeder stale-while-revalidate. Push og chat-køens Background Sync er med           | Samme. Billedcachen er Convex-filer (`*.convex.cloud/api/storage/`), ikke Supabase                  |
+| Galleri-link  | Et lækket link udløber eller kan ikke bruges, når adgangen trækkes tilbage, uden at filen slettes                                                                    | Samme. URL'en bærer et token. "Træk link tilbage" skifter tokenet, og den gamle adresse svarer 404  |
+| Installér app | Vises, når browseren tilbyder det                                                                                                                                    | Skjult i preview. I produktion samme knap                                                           |
+| Admin         | Faner: Ansøgninger, Medlemmer, Badges, Aktiviteter, Find en dato, Adgang, Indstillinger                                                                              | Samme faner. Datoafstemninger kan oprettes og besvares. Admin kan taste en e-mail på adgangslisten. |
+| Flytning      | Besked på den gamle GitHub Pages-adresse                                                                                                                             | Samme besked, hvis V2 åbnes derfra                                                                  |
+
+Bevidst anderledes, kun i preview: testdata (Preview-tur, prøvebesked, prøvebillede, prøveobservation), at "Installér app" er skjult, og at adgangslisten også har de nuværende medlemmers e-mailadresser uden brugere. Aktivitetslisten er den samme som i den nuværende app. Billedcachen peger på Convex-filer, fordi V2 ikke har Supabase Storage. Versionslinjen følger commit'en. Previewet sender rigtige auth-mails, men kun til adgangslisten.
