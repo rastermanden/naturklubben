@@ -43,6 +43,10 @@ export const PREVIEW_GUEST_ALLOWLIST = [
   'kaspermoller@gmail.com',
   'kaspermoller+test@gmail.com',
   PREVIEW_AGENTMAIL_ADDRESS,
+  'martin.martinjensen@gmail.com',
+  'troelsranum@gmail.com',
+  'mikkellinnet@gmail.com',
+  'uffeschjoedt@gmail.com',
 ] as const
 
 /**
@@ -491,28 +495,42 @@ export const forgetAgentmailSignup = internalMutation({
   },
 })
 
-/** Om test-indbakken kan oprettes forfra: på listen, uden bruger. */
-export const agentmailSignupReady = internalQuery({
+/**
+ * Om gæsteadresserne ligger på listen. Returværdien er kun tal, så loggen
+ * ikke skriver adresserne. `accounts` er auth-brugere for netop de adresser.
+ */
+export const guestAllowlistReady = internalQuery({
   args: {},
   returns: v.object({
-    listed: v.boolean(),
-    hasAccount: v.boolean(),
+    listed: v.number(),
+    expected: v.number(),
+    accounts: v.number(),
   }),
-  handler: async (ctx): Promise<{ listed: boolean; hasAccount: boolean }> => {
+  handler: async (
+    ctx,
+  ): Promise<{ listed: number; expected: number; accounts: number }> => {
     assertAllowedOnThisDeployment()
-    const allowed = await ctx.db
-      .query('allowedEmails')
-      .withIndex('by_email', (q) => q.eq('email', PREVIEW_AGENTMAIL_ADDRESS))
-      .unique()
-    const account = await ctx.db
-      .query('authAccounts')
-      .withIndex('providerAndAccountId', (q) =>
-        q
-          .eq('provider', 'password')
-          .eq('providerAccountId', PREVIEW_AGENTMAIL_ADDRESS),
-      )
-      .unique()
-    return { listed: allowed !== null, hasAccount: account !== null }
+    let listed = 0
+    let accounts = 0
+    for (const email of PREVIEW_GUEST_ALLOWLIST) {
+      const allowed = await ctx.db
+        .query('allowedEmails')
+        .withIndex('by_email', (q) => q.eq('email', email))
+        .unique()
+      if (allowed !== null) listed += 1
+      const account = await ctx.db
+        .query('authAccounts')
+        .withIndex('providerAndAccountId', (q) =>
+          q.eq('provider', 'password').eq('providerAccountId', email),
+        )
+        .unique()
+      if (account !== null) accounts += 1
+    }
+    return {
+      listed,
+      expected: PREVIEW_GUEST_ALLOWLIST.length,
+      accounts,
+    }
   },
 })
 
