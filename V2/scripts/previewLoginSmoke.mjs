@@ -143,6 +143,8 @@ async function runOnce() {
     await assertText(page, 'V2 ·', 8000)
     await clickText(page, 'Se aktiviteter')
     await assertText(page, 'Skovtur')
+    await assertText(page, 'Læs om valutaen på bral.dk')
+    await assertText(page, 'Se BøsseTennisGolf-siden')
     await clickText(page, 'Naturklubben')
     await clickText(page, 'Se åbne ture')
     await assertText(page, 'Preview-tur')

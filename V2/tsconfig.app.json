@@ -28,5 +28,6 @@
       "@convex/*": ["./convex/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/sw-prod.ts"]
 }

@@ -292,3 +292,27 @@ Det, der stadig er **uverificeret** og skal afgøres mod et rigtigt deployment:
   `filter` for ikke at binde sig til et biblioteksinternt indeksnavn.
 - `ctx.db.system.get` og `v.id('_storage')` i praksis, samt indeks over
   valgfrie felter (`by_client_upload`).
+
+## Tjekliste: V1 og V2
+
+Det, medlemmerne kan se, skal være det samme. Preview må have testdata
+(Skovtur, Preview-tur, prøvebesked, prøvebillede) og skjule "Installér app".
+Alt andet i tabellen skal kunne efterprøves i previewet med testbrugeren.
+
+| Område        | V1                                                                                                                                                                                         | V2                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Menu          | Forside, Aktiviteter, Kalender, Billeder, Chat, Medlemmer, Nyheder, Profil, Admin, Admin-chat                                                                                              | Samme punkter og samme skjuleregler                                                                                |
+| Aktiviteter   | Kort til BTG, Naturlog og Spil. Eksterne links fra data, heriblandt `https://bral.dk` ("Læs om valutaen på bral.dk") og `https://rastermanden.github.io/btg/` ("Se BøsseTennisGolf-siden") | Samme kort og samme links. Preview har derudover testdata                                                          |
+| BTG           | Liste, så detalje. Deltager-vælger med avatar, loft 8, Alle-mod-alle / Udslagsrunder, "Hvem sidder over i runde 1?", "Start turnering", stilling, kampe, pink shorts                       | Samme tekster, samme vælger, bye gemmes på Convex                                                                  |
+| Naturlog      | Klik på billedet åbner galleriets lyskasse                                                                                                                                                 | Samme lyskasse (`PhotoLightbox`)                                                                                   |
+| Offline       | Service worker precacher app-shellen, falder tilbage til `index.html` og cacher billeder stale-while-revalidate. Push og chat-køens Background Sync er med                                 | Samme. Billedcachen er Convex-filer (`*.convex.cloud/api/storage/`), ikke Supabase                                 |
+| Installér app | Vises, når browseren tilbyder det                                                                                                                                                          | Skjult i preview. I produktion samme knap                                                                          |
+| Admin         | Faner: Ansøgninger, Medlemmer, Badges, Aktiviteter, Find en dato, Adgang, Indstillinger                                                                                                    | Samme faner. Aktiviteter kan redigeres, inklusive links. Datoafstemninger og invitationsformularen er ikke færdige |
+| Flytning      | Besked på den gamle GitHub Pages-adresse                                                                                                                                                   | Samme besked, hvis V2 åbnes derfra                                                                                 |
+
+Ikke identisk endnu, og derfor ikke skjult:
+
+- Datoafstemninger ("Find en dato") har ingen tabeller i Convex.
+- Admin kan ikke selv taste en e-mail på adgangslisten; en godkendt ansøgning kan.
+- Galleriets fil-URL kan ikke trækkes tilbage uden at slette filen. Convex har ikke signerede Storage-URL'er.
+- Previewets medlemmer, ture, chat og billeder er testdata, ikke klubbens rigtige indhold.

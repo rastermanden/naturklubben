@@ -10,6 +10,7 @@ import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { installInstallPromptCapture } from './features/pwa/installPrompt'
 import { isPreviewDeployment } from './features/pwa/previewInstall'
 import { clearStalePreviewServiceWorker } from './lib/previewServiceWorker'
+import { SiteMovedNotice } from './features/siteMove/SiteMovedNotice'
 import { restoreSpaRedirect } from './lib/spaRedirect'
 
 // Skal ske før React Router læser adressen -- ellers ser den rod-ruten i
@@ -49,6 +50,7 @@ createRoot(document.getElementById('root')!).render(
     <ThemeProvider>
       <ConvexAuthProvider client={convex}>
         <BrowserRouter basename={import.meta.env.BASE_URL}>
+          <SiteMovedNotice />
           <AppErrorBoundary>
             <App />
           </AppErrorBoundary>

@@ -18,6 +18,8 @@ import type { QueuedDraft, QueuedMessage } from './offlineQueue'
 import { createQueueStore } from './offlineQueueStore'
 import type { QueueStore } from './offlineQueueStore'
 import type { ChatRoom } from './types'
+import { requestChatQueueSync } from './backgroundSync'
+import { CHAT_QUEUE_FLUSH_MESSAGE } from '../../lib/chatQueueSync'
 
 /**
  * Offline-køen i appen (#219): hvad der venter, og hvornår det sendes.
@@ -26,10 +28,8 @@ import type { ChatRoom } from './types'
  * bliver synlig. Selve afsendelsen er injiceret (`send`), så hooken hverken
  * kender Convex eller beskedlisten -- den kender kun køen og lageret.
  *
- * Den gamle app kunne også vækkes af service workerens Background Sync. V2 har
- * ingen service worker endnu (PWA-delen er ikke portet), så den vej findes
- * ikke her; til gengæld er der intet at vente på ud over det næste
- * `online`-signal eller næste gang, fanen bliver synlig.
+ * Service workeren vækker også fanen via Background Sync, når telefonen igen
+ * har forbindelse. Beskeden er den samme som i den nuværende app.
  */
 export interface ChatQueue {
   /** Beskeder i dette rum, der endnu ikke er bekræftet af serveren. */
@@ -188,6 +188,21 @@ export function useChatQueue({
     }
   }, [flush])
 
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (event: MessageEvent) => {
+      if (
+        (event.data as { type?: unknown } | null)?.type ===
+        CHAT_QUEUE_FLUSH_MESSAGE
+      ) {
+        void flush()
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () =>
+      navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [flush])
+
   const enqueue = useCallback(
     async (draft: QueuedDraft, clientId?: string) => {
       // Kalderen kan give sit eget id med: en afsendelse, der fik et
@@ -204,6 +219,7 @@ export function useChatQueue({
       // Uden forbindelse sker der intet her; skyldtes kø-lægningen en fejlet
       // forespørgsel med forbindelse, får den et forsøg mere med det samme.
       void flush()
+      void requestChatQueueSync()
       return entry
     },
     [commit, flush, store],

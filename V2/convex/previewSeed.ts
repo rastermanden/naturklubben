@@ -32,18 +32,75 @@ export const PROD_DEPLOYMENT_SLUG = 'quaint-parakeet-652'
 
 export const PREVIEW_MEMBER_NAME = 'Preview-tester'
 
+/**
+ * Klubbens egne aktiviteter, som migrationerne i den nuværende app lægger ind.
+ * Linket til bral.dk og BøsseTennisGolf-siden er data, ikke en hårdkodet knap.
+ * Previewets egne prøverækker (Skovtur) ligger oveni og må godt blive.
+ */
+export const CLUB_ACTIVITIES = [
+  {
+    title: 'Design af Mønter',
+    description:
+      'Vi udvikler idéer og udtryk til klubbens egne mønter og finpudser design sammen.',
+    icon: 'footprints',
+    sortOrder: 1,
+    linkUrl: 'https://bral.dk',
+    linkLabel: 'Læs om valutaen på bral.dk',
+  },
+  {
+    title: 'Udvikling af brænder til Aluminium',
+    description:
+      'Vi tester løsninger og materialer til en brænder, der kan bruges i arbejdet med aluminium.',
+    icon: 'binoculars',
+    sortOrder: 2,
+    linkUrl: 'https://bral.dk',
+    linkLabel: 'Læs om valutaen på bral.dk',
+  },
+  {
+    title: 'Madkoordinering',
+    description:
+      'Vi planlægger indkøb, menuer og fordeling af madopgaver til fælles arrangementer.',
+    icon: undefined,
+    sortOrder: 3,
+    linkUrl: undefined,
+    linkLabel: undefined,
+  },
+  {
+    title: 'BøsseTennisGolf',
+    description:
+      'Vi arrangerer BøsseTennisGolf med plads til både konkurrence, grin og skæve regler.',
+    icon: 'footprints',
+    sortOrder: 4,
+    linkUrl: 'https://rastermanden.github.io/btg/',
+    linkLabel: 'Se BøsseTennisGolf-siden',
+  },
+  {
+    title: 'Hornfisk',
+    description:
+      'Vi mødes om hornfisketure, grej og gode historier fra kysten.',
+    icon: 'binoculars',
+    sortOrder: 5,
+    linkUrl: undefined,
+    linkLabel: undefined,
+  },
+] as const
+
 export const PREVIEW_ACTIVITIES = [
   {
     title: 'Skovtur',
     description: 'En tur i skoven, så aktivitetssiden har noget at vise.',
     icon: 'leaf',
-    sortOrder: 1,
+    sortOrder: 100,
+    linkUrl: undefined,
+    linkLabel: undefined,
   },
   {
     title: 'Fuglekiggeri',
     description: 'En tur med kikkert, så listen har mere end ét punkt.',
     icon: 'binoculars',
-    sortOrder: 2,
+    sortOrder: 101,
+    linkUrl: undefined,
+    linkLabel: undefined,
   },
 ] as const
 
@@ -160,17 +217,30 @@ export async function writePreviewSample(
     })
   }
 
-  for (const sample of PREVIEW_ACTIVITIES) {
+  for (const sample of [...CLUB_ACTIVITIES, ...PREVIEW_ACTIVITIES]) {
     const existing = await ctx.db
       .query('activities')
       .filter((q) => q.eq(q.field('title'), sample.title))
       .first()
-    if (existing !== null) continue
+    if (existing !== null) {
+      // Et ældre preview kan have rækken uden link. Linket skal med, så
+      // siden viser det samme som den nuværende app.
+      if (sample.linkUrl && existing.linkUrl !== sample.linkUrl) {
+        await ctx.db.patch(existing._id, {
+          linkUrl: sample.linkUrl,
+          linkLabel: sample.linkLabel,
+        })
+      }
+      continue
+    }
     await ctx.db.insert('activities', {
       title: sample.title,
       description: sample.description,
-      icon: sample.icon,
+      ...(sample.icon ? { icon: sample.icon } : {}),
       sortOrder: sample.sortOrder,
+      ...(sample.linkUrl
+        ? { linkUrl: sample.linkUrl, linkLabel: sample.linkLabel }
+        : {}),
       createdAt: Date.now(),
     })
   }

@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react'
-import type { Doc } from '../../convex/_generated/dataModel'
+import { useAction, useMutation, useQuery } from 'convex/react'
+import { api } from '../../convex/_generated/api'
+import type { Doc, Id } from '../../convex/_generated/dataModel'
+import { PhotoLightbox } from '../features/gallery/PhotoLightbox'
+import type { Photo } from '../features/gallery/types'
 import { ObservationCard } from '../features/naturlog/ObservationCard'
 import { ObservationForm } from '../features/naturlog/ObservationForm'
 import { filterObservations } from '../features/naturlog/observationInput'
@@ -60,6 +64,16 @@ export default function NaturlogPage() {
     center: DENMARK_CENTER,
     zoom: DEFAULT_ZOOM,
   })
+  const [activePhotoId, setActivePhotoId] = useState<Id<'photos'> | null>(null)
+  const [photoActionError, setPhotoActionError] = useState<string | null>(null)
+  const [deletingPhoto, setDeletingPhoto] = useState(false)
+  const [retryingPhoto, setRetryingPhoto] = useState(false)
+  const activePhoto = useQuery(
+    api.gallery.getPhoto,
+    activePhotoId === null ? 'skip' : { photoId: activePhotoId },
+  )
+  const deletePhoto = useMutation(api.gallery.deletePhoto)
+  const optimizePhoto = useAction(api.gallery.optimizePhoto)
 
   const observations = useMemo(
     () => (rows ?? []).map((row) => toView(row)),
@@ -224,7 +238,10 @@ export default function NaturlogPage() {
                   if (row) setEditing(row)
                 }}
                 onDelete={(item) => void deleteObservation(item)}
-                onOpenPhoto={() => undefined}
+                onOpenPhoto={(photo) => {
+                  setPhotoActionError(null)
+                  setActivePhotoId(photo.id as Id<'photos'>)
+                }}
               />
             )
           })}
@@ -246,6 +263,37 @@ export default function NaturlogPage() {
 
       {tab === 'arter' && visible.length > 0 && (
         <SpeciesOverview observations={yearObservations} year={year} />
+      )}
+
+      {activePhoto && (
+        <PhotoLightbox
+          photo={activePhoto as Photo}
+          onClose={() => setActivePhotoId(null)}
+          deleting={deletingPhoto}
+          onDelete={(photo) => {
+            setPhotoActionError(null)
+            setDeletingPhoto(true)
+            void deletePhoto({ photoId: photo.id as Id<'photos'> })
+              .then(() => setActivePhotoId(null))
+              .catch(() =>
+                setPhotoActionError('Billedet kunne ikke slettes. Prøv igen.'),
+              )
+              .finally(() => setDeletingPhoto(false))
+          }}
+          retrying={retryingPhoto}
+          onRetryOptimization={(photo) => {
+            setPhotoActionError(null)
+            setRetryingPhoto(true)
+            void optimizePhoto({ photoId: photo.id as Id<'photos'> })
+              .catch(() =>
+                setPhotoActionError(
+                  'Optimeringen kunne ikke startes. Prøv igen.',
+                ),
+              )
+              .finally(() => setRetryingPhoto(false))
+          }}
+          actionError={photoActionError}
+        />
       )}
     </main>
   )

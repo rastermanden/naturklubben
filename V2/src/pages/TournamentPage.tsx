@@ -6,6 +6,7 @@ import { BracketView } from '../features/tournament/BracketView'
 import { MatchCard } from '../features/tournament/MatchCard'
 import { PinkShorts } from '../features/tournament/PinkShorts'
 import { StandingsTable } from '../features/tournament/StandingsTable'
+import { TournamentSetupForm } from '../features/tournament/TournamentSetupForm'
 import type { TournamentMatch } from '../features/tournament/types'
 import {
   tournamentErrorMessage,
@@ -31,7 +32,7 @@ import {
 
 const dateFormatter = new Intl.DateTimeFormat('da-DK', {
   day: 'numeric',
-  month: 'short',
+  month: 'long',
   year: 'numeric',
 })
 
@@ -45,103 +46,35 @@ function statusLabel(status: Doc<'tournaments'>['status']): string {
   return 'Under opsætning'
 }
 
-interface CreateFormProps {
+function CreateTournamentForm({
+  onCreated,
+}: {
   onCreated: (tournamentId: Id<'tournaments'>) => void
-}
-
-function CreateTournamentForm({ onCreated }: CreateFormProps) {
+}) {
   const candidates = useParticipantCandidates()
   const { create } = useTournamentActions()
-  const [format, setFormat] =
-    useState<Doc<'tournaments'>['format']>('round_robin')
-  const [selected, setSelected] = useState<Id<'profiles'>[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  function toggle(profileId: Id<'profiles'>) {
-    setSelected((current) =>
-      current.includes(profileId)
-        ? current.filter((id) => id !== profileId)
-        : [...current, profileId],
-    )
-  }
-
-  async function submit() {
-    setBusy(true)
-    setError(null)
-    try {
-      // Rækkefølgen er seed-rækkefølgen: den, der vælges først, er seed 1.
-      const tournamentId = await create({
-        format,
-        participantProfileIds: selected,
-      })
-      onCreated(tournamentId)
-    } catch (cause) {
-      setError(tournamentErrorMessage(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-line-soft bg-surface p-4">
-      <h2 className="text-lg font-semibold text-ink-body">Ny turnering</h2>
-
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Format
-        <select
-          value={format}
-          onChange={(event) =>
-            setFormat(event.target.value as Doc<'tournaments'>['format'])
-          }
-          className="min-h-11 rounded-lg border border-line px-3 py-2 text-ink"
-        >
-          <option value="round_robin">Alle-mod-alle</option>
-          <option value="single_elimination">Udslagsrunder</option>
-        </select>
-      </label>
-
-      <fieldset className="flex flex-col gap-1">
-        <legend className="mb-1 text-sm text-ink-muted">Deltagere</legend>
-        {(candidates ?? []).map((candidate) => (
-          <label
-            key={candidate.profileId}
-            className="flex items-center gap-2 text-ink-body"
-          >
-            <input
-              type="checkbox"
-              checked={selected.includes(candidate.profileId)}
-              onChange={() => toggle(candidate.profileId)}
-            />
-            {candidate.displayName}
-          </label>
-        ))}
-        {candidates !== undefined && candidates.length === 0 && (
-          <p className="text-sm text-ink-subtle">
-            Der er ingen medlemmer endnu.
-          </p>
-        )}
-      </fieldset>
-
-      <p className="text-sm text-ink-subtle">
-        {selected.length} valgt. Rækkefølgen bliver seed-rækkefølgen.
-      </p>
-
-      {error && (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      )}
-
-      <button
-        type="button"
-        onClick={() => void submit()}
-        disabled={busy || selected.length < 2}
-        className="min-h-11 self-start rounded-lg bg-accent px-4 py-2 font-medium text-on-accent disabled:opacity-60"
-      >
-        {busy ? 'Opretter…' : 'Opret turneringen'}
-      </button>
-    </section>
+    <TournamentSetupForm
+      members={(candidates ?? []).map((candidate) => ({
+        id: candidate.profileId,
+        fullName: candidate.displayName,
+        avatarUrl: candidate.avatarUrl,
+        chatColor: candidate.chatColor,
+      }))}
+      submitting={busy}
+      error={error}
+      onSubmit={(input) => {
+        setBusy(true)
+        setError(null)
+        void create(input)
+          .then(onCreated)
+          .catch((cause: unknown) => setError(tournamentErrorMessage(cause)))
+          .finally(() => setBusy(false))
+      }}
+    />
   )
 }
 
@@ -206,14 +139,13 @@ function WinnerBanner({ names }: { names: string[] }) {
 
 export default function TournamentPage() {
   const tournaments = useTournaments()
-  const [selectedId, setSelectedId] = useState<Id<'tournaments'> | undefined>()
+  const [viewingId, setViewingId] = useState<Id<'tournaments'> | undefined>()
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [removing, setRemoving] = useState(false)
   const { record, undo, removeTournament } = useTournamentActions()
 
-  // Nyeste turnering er valgt, indtil nogen vælger en anden.
-  const currentId = selectedId ?? tournaments?.[0]?._id
-  const detail = useTournament(currentId)
+  const detail = useTournament(viewingId)
 
   const nameFor = (participantId: string) =>
     detail?.participants.find(
@@ -253,15 +185,18 @@ export default function TournamentPage() {
   }
 
   async function handleRemove(tournamentId: Id<'tournaments'>) {
-    if (!window.confirm('Vil du slette turneringen med alle dens kampe?')) {
+    if (!window.confirm('Vil du slette turneringen og alle dens resultater?')) {
       return
     }
     setError(null)
+    setRemoving(true)
     try {
       await removeTournament({ tournamentId })
-      setSelectedId(undefined)
+      setViewingId(undefined)
     } catch (cause) {
       setError(tournamentErrorMessage(cause))
+    } finally {
+      setRemoving(false)
     }
   }
 
@@ -280,32 +215,180 @@ export default function TournamentPage() {
     canUndoMatch(match, matchesById),
   )
 
+  if (viewingId) {
+    return (
+      <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setViewingId(undefined)}
+            className="text-sm text-accent-soft underline"
+          >
+            ← Alle turneringer
+          </button>
+          {detail !== undefined && (
+            <button
+              type="button"
+              onClick={() => void handleRemove(detail.tournament._id)}
+              disabled={removing}
+              className="min-h-11 rounded-lg border border-danger-line-strong px-4 py-2 text-sm text-danger disabled:opacity-60"
+            >
+              {removing ? 'Sletter…' : 'Nulstil turnering'}
+            </button>
+          )}
+        </div>
+        {detail === undefined && (
+          <p className="text-ink-subtle">Henter turnering…</p>
+        )}
+        {error && (
+          <p role="alert" className="text-sm text-danger">
+            {error}
+          </p>
+        )}
+        {detail !== undefined && (
+          <section className="flex flex-col gap-6">
+            <div>
+              <h1 className="text-2xl font-semibold text-ink-body">
+                {formatLabel(detail.tournament.format)}
+              </h1>
+              <p className="text-ink-subtle">
+                {statusLabel(detail.tournament.status)} ·{' '}
+                {detail.participants.length} deltagere
+              </p>
+            </div>
+            <div className="rounded-xl border border-line-soft bg-surface-sunken p-4">
+              <h2 className="text-sm font-medium text-ink-body">Regler</h2>
+              <p className="mt-1 text-sm text-ink-subtle">
+                {rulesSummary(detail.tournament.format)}
+              </p>
+            </div>
+            {roundRobin ? (
+              <>
+                <StandingsTable
+                  standings={detail.standings}
+                  nameFor={nameFor}
+                  leaderIds={
+                    detail.tournament.status === 'completed'
+                      ? new Set(
+                          detail.standings
+                            .filter((standing) => standing.isSharedLeader)
+                            .map((standing) => standing.participantId),
+                        )
+                      : new Set()
+                  }
+                />
+                <div className="flex flex-col gap-3">
+                  <h2 className="text-lg font-medium text-ink-body">Kampe</h2>
+                  {viewMatches.map((match) => (
+                    <MatchCard
+                      key={match.id}
+                      match={match}
+                      nameFor={nameFor}
+                      onRecordResult={(gameWinnerIds) =>
+                        void handleRecord(
+                          match.id as Id<'tournamentMatches'>,
+                          gameWinnerIds as Id<'tournamentParticipants'>[],
+                        )
+                      }
+                      submitting={recordingId === match.id}
+                      canUndo={canUndoMatch(match, matchesById)}
+                      onUndo={() =>
+                        void handleUndo(match.id as Id<'tournamentMatches'>)
+                      }
+                      undoing={undoingId === match.id}
+                    />
+                  ))}
+                </div>
+                {detail.tournament.status === 'completed' &&
+                  leaderNames.length > 0 && (
+                    <WinnerBanner names={leaderNames} />
+                  )}
+              </>
+            ) : (
+              <>
+                <BracketView matches={viewMatches} nameFor={nameFor} />
+                {playable.length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    <h2 className="text-lg font-medium text-ink-body">
+                      Kampe klar til at spille
+                    </h2>
+                    {playable.map((match) => (
+                      <MatchCard
+                        key={match.id}
+                        match={match}
+                        nameFor={nameFor}
+                        onRecordResult={(gameWinnerIds) =>
+                          void handleRecord(
+                            match.id as Id<'tournamentMatches'>,
+                            gameWinnerIds as Id<'tournamentParticipants'>[],
+                          )
+                        }
+                        submitting={recordingId === match.id}
+                        canUndo={false}
+                        onUndo={() => undefined}
+                        undoing={false}
+                      />
+                    ))}
+                  </div>
+                )}
+                {undoable.length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    <h2 className="text-lg font-medium text-ink-body">
+                      Seneste resultater
+                    </h2>
+                    {undoable.map((match) => (
+                      <MatchCard
+                        key={match.id}
+                        match={match}
+                        nameFor={nameFor}
+                        onRecordResult={() => undefined}
+                        submitting={false}
+                        canUndo
+                        onUndo={() =>
+                          void handleUndo(match.id as Id<'tournamentMatches'>)
+                        }
+                        undoing={undoingId === match.id}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        )}
+      </main>
+    )
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 sm:p-6">
       <Link to="/aktiviteter" className="text-sm text-accent-soft underline">
         ← Aktiviteter
       </Link>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-ink-body">BTG turnering</h1>
-        <p className="text-ink-subtle">
-          Hold styr på kampe, resultater og stilling til klubbens turneringer.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-ink-body">
+            BTG turnering
+          </h1>
+          <p className="text-ink-subtle">
+            Hold styr på kampe, resultater og stilling til klubbens turneringer.
+          </p>
+        </div>
+        {!creating && (
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="min-h-11 rounded-lg bg-accent px-5 py-2 font-medium text-on-accent"
+          >
+            Ny turnering
+          </button>
+        )}
       </div>
-
-      {!creating && (
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="min-h-11 self-start rounded-lg bg-accent px-4 py-2 font-medium text-on-accent"
-        >
-          Ny turnering
-        </button>
-      )}
 
       {creating && (
         <CreateTournamentForm
           onCreated={(tournamentId) => {
-            setSelectedId(tournamentId)
+            setViewingId(tournamentId)
             setCreating(false)
           }}
         />
@@ -318,167 +401,41 @@ export default function TournamentPage() {
       )}
 
       {tournaments !== undefined && tournaments.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold text-ink-body">Turneringer</h2>
-          <ul className="flex flex-col gap-2">
-            {tournaments.map((tournament) => (
-              <li key={tournament._id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(tournament._id)}
-                  className={`flex w-full items-baseline justify-between gap-3 rounded-xl border p-3 text-left ${
-                    tournament._id === currentId
-                      ? 'border-line-strong bg-surface-sunken'
-                      : 'border-line-soft bg-surface'
-                  }`}
-                >
-                  <span className="text-ink-body">
-                    {formatLabel(tournament.format)} ·{' '}
-                    {tournament.participantCount} deltagere
+        <ul className="flex flex-col gap-3">
+          {tournaments.map((tournament) => (
+            <li key={tournament._id}>
+              <button
+                type="button"
+                onClick={() => setViewingId(tournament._id)}
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-line-soft bg-surface p-4 text-left hover:bg-surface-sunken"
+              >
+                <span>
+                  <span className="block font-medium text-ink-body">
+                    {formatLabel(tournament.format)}
                   </span>
-                  <span className="flex shrink-0 items-center gap-2 text-xs text-ink-subtle">
-                    {statusLabel(tournament.status)} ·{' '}
-                    {dateFormatter.format(new Date(tournament.createdAt))}
-                    {tournament.status === 'completed' && (
-                      <PinkShorts className="h-6 w-auto" />
-                    )}
+                  <span className="text-sm text-ink-subtle">
+                    {dateFormatter.format(new Date(tournament.createdAt))} ·{' '}
+                    {statusLabel(tournament.status)}
                   </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+                </span>
+                {tournament.status === 'completed' && (
+                  <PinkShorts className="h-6 w-auto shrink-0" />
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
 
       {tournaments !== undefined && tournaments.length === 0 && !creating && (
-        <p className="rounded-xl border border-line-soft bg-surface px-4 py-8 text-center text-ink-subtle">
-          Der er ingen turneringer endnu.
+        <p className="rounded-xl border border-line-soft bg-surface p-6 text-center text-ink-subtle">
+          Der er ingen turneringer endnu. Tryk &quot;Ny turnering&quot; for at
+          komme i gang.
         </p>
       )}
 
-      {currentId === undefined && tournaments === undefined && (
+      {tournaments === undefined && (
         <p className="text-ink-subtle">Henter turneringer…</p>
-      )}
-
-      {detail !== undefined && (
-        <section className="flex flex-col gap-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-2xl font-semibold text-ink-body">
-                {formatLabel(detail.tournament.format)}
-              </h2>
-              <p className="text-ink-subtle">
-                {statusLabel(detail.tournament.status)} ·{' '}
-                {detail.participants.length} deltagere
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleRemove(detail.tournament._id)}
-              className="min-h-11 rounded-lg border border-danger-line-strong px-4 py-2 text-sm text-danger"
-            >
-              Nulstil turnering
-            </button>
-          </div>
-
-          <div className="rounded-xl border border-line-soft bg-surface-sunken p-4">
-            <h3 className="text-sm font-medium text-ink-body">Regler</h3>
-            <p className="mt-1 text-sm text-ink-subtle">
-              {rulesSummary(detail.tournament.format)}
-            </p>
-          </div>
-
-          {roundRobin ? (
-            <>
-              <StandingsTable
-                standings={detail.standings}
-                nameFor={nameFor}
-                leaderIds={
-                  detail.tournament.status === 'completed'
-                    ? new Set(
-                        detail.standings
-                          .filter((standing) => standing.isSharedLeader)
-                          .map((standing) => standing.participantId),
-                      )
-                    : new Set()
-                }
-              />
-              <div className="flex flex-col gap-3">
-                <h3 className="text-lg font-medium text-ink-body">Kampe</h3>
-                {viewMatches.map((match) => (
-                  <MatchCard
-                    key={match.id}
-                    match={match}
-                    nameFor={nameFor}
-                    onRecordResult={(gameWinnerIds) =>
-                      void handleRecord(
-                        match.id as Id<'tournamentMatches'>,
-                        gameWinnerIds as Id<'tournamentParticipants'>[],
-                      )
-                    }
-                    submitting={recordingId === match.id}
-                    canUndo={canUndoMatch(match, matchesById)}
-                    onUndo={() =>
-                      void handleUndo(match.id as Id<'tournamentMatches'>)
-                    }
-                    undoing={undoingId === match.id}
-                  />
-                ))}
-              </div>
-              {detail.tournament.status === 'completed' &&
-                leaderNames.length > 0 && <WinnerBanner names={leaderNames} />}
-            </>
-          ) : (
-            <>
-              <BracketView matches={viewMatches} nameFor={nameFor} />
-              {playable.length > 0 && (
-                <div className="flex flex-col gap-3">
-                  <h3 className="text-lg font-medium text-ink-body">
-                    Kampe klar til at spille
-                  </h3>
-                  {playable.map((match) => (
-                    <MatchCard
-                      key={match.id}
-                      match={match}
-                      nameFor={nameFor}
-                      onRecordResult={(gameWinnerIds) =>
-                        void handleRecord(
-                          match.id as Id<'tournamentMatches'>,
-                          gameWinnerIds as Id<'tournamentParticipants'>[],
-                        )
-                      }
-                      submitting={recordingId === match.id}
-                      canUndo={false}
-                      onUndo={() => undefined}
-                      undoing={false}
-                    />
-                  ))}
-                </div>
-              )}
-              {undoable.length > 0 && (
-                <div className="flex flex-col gap-3">
-                  <h3 className="text-lg font-medium text-ink-body">
-                    Seneste resultater
-                  </h3>
-                  {undoable.map((match) => (
-                    <MatchCard
-                      key={match.id}
-                      match={match}
-                      nameFor={nameFor}
-                      onRecordResult={() => undefined}
-                      submitting={false}
-                      canUndo
-                      onUndo={() =>
-                        void handleUndo(match.id as Id<'tournamentMatches'>)
-                      }
-                      undoing={undoingId === match.id}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </section>
       )}
     </main>
   )

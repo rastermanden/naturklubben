@@ -4,6 +4,7 @@ import path from 'node:path'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 import { computeSpaFallback } from './src/lib/spaFallback.js'
 import { spaIndexFile, spaIndexPaths } from './src/lib/spaRoutes.js'
 
@@ -142,6 +143,26 @@ export default defineConfig(({ command, mode }) => {
       __APP_VERSION__: JSON.stringify(appVersion.version),
       __APP_BUILD_DATE__: JSON.stringify(appVersion.date),
     },
-    plugins: [react(), tailwindcss(), spaFallback(basePath), spaIndexCopies()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      spaFallback(basePath),
+      spaIndexCopies(),
+      // Samme injectManifest som den nuværende app, også i preview: push
+      // skal kunne prøves dér. "Installér app" slås fra i main.tsx, når
+      // adressen er et preview. Registreringen sker i main.tsx, ikke her.
+      VitePWA({
+        injectRegister: null,
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'sw-prod.ts',
+        manifest: false,
+        injectManifest: {
+          globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+          // Den gamle selvafmeldende sw.js skal ikke precaches.
+          globIgnores: ['**/sw.js', '**/sw-prod.js'],
+        },
+      }),
+    ],
   }
 })

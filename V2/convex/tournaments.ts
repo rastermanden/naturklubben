@@ -162,6 +162,8 @@ export const participantCandidates = query({
     return profiles.map((profile) => ({
       profileId: profile._id,
       displayName: displayNameOf(profile),
+      avatarUrl: profile.avatarUrl ?? null,
+      chatColor: profile.chatColor,
     }))
   },
 })
@@ -188,6 +190,8 @@ export const create = mutation({
   args: {
     format: v.union(v.literal('round_robin'), v.literal('single_elimination')),
     participantProfileIds: v.array(v.id('profiles')),
+    /** Hvem der sidder over i runde 1, når udslag har ulige antal. */
+    byeProfileId: v.optional(v.id('profiles')),
   },
   handler: async (ctx, args) => {
     const creator = await requireWritableProfile(ctx)
@@ -243,6 +247,10 @@ export const create = mutation({
         ? generateRoundRobinMatches(participantIds)
         : generateSingleEliminationBracket(
             participantIds.map((id, index) => ({ id, seed: index + 1 })),
+            undefined,
+            args.byeProfileId === undefined
+              ? undefined
+              : participantIds[profileIds.indexOf(args.byeProfileId)],
           )
 
     const matchIds = new Map<string, Id<'tournamentMatches'>>()

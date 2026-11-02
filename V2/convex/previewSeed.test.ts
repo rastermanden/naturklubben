@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { convexTest } from 'convex-test'
 import schema from './schema'
 import {
+  CLUB_ACTIVITIES,
   PREVIEW_ACTIVITIES,
   PREVIEW_CHAT_TEXT,
   PREVIEW_KABALE_SCORE,
@@ -106,8 +107,22 @@ describe('writePreviewSample', () => {
     expect(rows.profiles[0]?.avatarStorageId).toBeDefined()
     expect(rows.profiles[0]?.avatarUrl).toMatch(/^https?:/)
     expect(rows.activities.map((activity) => activity.title).sort()).toEqual(
-      PREVIEW_ACTIVITIES.map((activity) => activity.title).sort(),
+      [...CLUB_ACTIVITIES, ...PREVIEW_ACTIVITIES]
+        .map((activity) => activity.title)
+        .sort(),
     )
+    expect(
+      rows.activities.find((activity) => activity.title === 'Design af Mønter'),
+    ).toMatchObject({
+      linkUrl: 'https://bral.dk',
+      linkLabel: 'Læs om valutaen på bral.dk',
+    })
+    expect(
+      rows.activities.find((activity) => activity.title === 'BøsseTennisGolf'),
+    ).toMatchObject({
+      linkUrl: 'https://rastermanden.github.io/btg/',
+      linkLabel: 'Se BøsseTennisGolf-siden',
+    })
     expect(rows.events).toHaveLength(1)
     expect(rows.events[0]).toMatchObject({
       title: PREVIEW_EVENT_TITLE,
