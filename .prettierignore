@@ -1,3 +1,4 @@
 # Convex skriver disse filer selv, med sit eget format. Næste `npx convex dev`
 # overskriver dem; de skal ikke kæmpe med repoets Prettier.
 V2/convex/_generated
+.github/SIGNUP_PROBE
