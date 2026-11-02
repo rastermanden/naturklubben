@@ -192,7 +192,7 @@ const [
   sql('select * from public.date_poll_options'),
   sql('select * from public.date_poll_votes'),
   sql(
-    "select id::text as id, full_name, email, motivation, status, created_at, reviewed_at, reviewed_by::text as reviewed_by, notification_token, admin_notification_attempts, decision_notification_attempts from public.probation_applications",
+    'select id::text as id, full_name, email, motivation, status, created_at, reviewed_at, reviewed_by::text as reviewed_by, notification_token, admin_notification_attempts, decision_notification_attempts from public.probation_applications',
   ),
   sql(
     'select public_key, private_key, created_at from public.push_vapid_keys limit 1',
@@ -210,9 +210,7 @@ const sourceCounts = {
   files: objects.length,
 }
 console.log(`Kilde: ${JSON.stringify(sourceCounts)}`)
-console.log(
-  `probation ${probation.length} id ${typeof probation[0]?.id}`,
-)
+console.log(`probation ${probation.length} id ${typeof probation[0]?.id}`)
 
 const key = await serviceKey()
 const files = {}

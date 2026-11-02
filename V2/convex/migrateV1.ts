@@ -510,7 +510,8 @@ export const importBundle = internalMutation({
     for (const row of bundle.announcements ?? []) {
       const sourceId = idOf(row.id)
       const slug = text(row.slug)
-      if (!sourceId || !slug || (await seen('announcements', sourceId))) continue
+      if (!sourceId || !slug || (await seen('announcements', sourceId)))
+        continue
       const status =
         row.push_status === 'pending' ||
         row.push_status === 'sending' ||
