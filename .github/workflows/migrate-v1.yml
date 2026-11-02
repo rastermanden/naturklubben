@@ -37,12 +37,23 @@ jobs:
       - name: Install
         working-directory: V2
         run: npm ci
+      - name: Vælg mål
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.target }}" = "prod" ]; then
+            echo "name=prod" >> "$GITHUB_OUTPUT"
+          elif [ -f .github/MIGRATE_PROD ]; then
+            echo "name=prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=rehearsal" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Mål er sat."
       - name: Importér
         working-directory: V2
         env:
-          MIGRATE_TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'rehearsal' }}
-          CONFIRM_PROD_IMPORT: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'prod' && 'IMPORT_V1_TO_PROD' || '' }}
-          CONVEX_DEPLOY_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'prod' && secrets.CONVEX_DEPLOY_KEY || secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          MIGRATE_TARGET: ${{ steps.target.outputs.name }}
+          CONFIRM_PROD_IMPORT: ${{ steps.target.outputs.name == 'prod' && 'IMPORT_V1_TO_PROD' || '' }}
+          CONVEX_DEPLOY_KEY: ${{ steps.target.outputs.name == 'prod' && secrets.CONVEX_DEPLOY_KEY || secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: qqsuqbcasbxebmwfchdi
         run: node scripts/migrateFromSupabase.mjs
