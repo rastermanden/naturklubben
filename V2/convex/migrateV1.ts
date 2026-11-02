@@ -160,7 +160,7 @@ export const importBundle = internalMutation({
     let inserted = 0
     let reused = 0
 
-    const use = async (source: string, sourceId: string) => {
+    const seen = async (source: string, sourceId: string) => {
       const found = await existingRef(ctx, source, sourceId)
       if (found !== null) reused += 1
       return found
@@ -175,7 +175,7 @@ export const importBundle = internalMutation({
       const email = text(user.email)?.toLowerCase()
       const hash = text(user.hash)
       if (!sourceId || !email || !hash) continue
-      if (await use('profiles', sourceId)) {
+      if (await seen('profiles', sourceId)) {
         await applyImportedAdmin(ctx, email, bool(user.is_admin))
         continue
       }
@@ -243,7 +243,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.activities ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('activities', sourceId))) continue
+      if (!sourceId || (await seen('activities', sourceId))) continue
       const id = await ctx.db.insert('activities', {
         title: text(row.title) ?? 'Aktivitet',
         description: text(row.description) ?? '',
@@ -258,7 +258,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.events ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('events', sourceId))) continue
+      if (!sourceId || (await seen('events', sourceId))) continue
       const startAt = ms(row.start_at)
       const endAt = row.end_at ? ms(row.end_at) : undefined
       const id = await ctx.db.insert('events', {
@@ -284,7 +284,7 @@ export const importBundle = internalMutation({
       const user = idOf(row.user_id)
       if (!event || !user) continue
       const key = `${event}:${user}`
-      if (await use('attendance', key)) continue
+      if (await seen('attendance', key)) continue
       const eventId = await existingRef(ctx, 'events', event)
       const who = await profileId(ctx, user)
       if (!eventId || !who) continue
@@ -314,7 +314,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.tasks ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('tasks', sourceId))) continue
+      if (!sourceId || (await seen('tasks', sourceId))) continue
       const eventId = await existingRef(ctx, 'events', idOf(row.event_id) ?? '')
       const createdBy = await profileId(ctx, idOf(row.created_by))
       if (!eventId || !createdBy) continue
@@ -330,7 +330,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.messages ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('messages', sourceId))) continue
+      if (!sourceId || (await seen('messages', sourceId))) continue
       const mentions: Id<'profiles'>[] = []
       if (Array.isArray(row.mentions)) {
         for (const mention of row.mentions) {
@@ -370,7 +370,7 @@ export const importBundle = internalMutation({
       const emoji = text(row.emoji)
       if (!message || !user || !emoji || !REACTIONS.has(emoji)) continue
       const key = `${message}:${user}:${emoji}`
-      if (await use('reactions', key)) continue
+      if (await seen('reactions', key)) continue
       const messageId = await existingRef(ctx, 'messages', message)
       const who = await profileId(ctx, user)
       if (!messageId || !who) continue
@@ -388,7 +388,7 @@ export const importBundle = internalMutation({
       const room = row.room === 'admin' ? 'admin' : 'general'
       if (!user) continue
       const key = `${user}:${room}`
-      if (await use('reads', key)) continue
+      if (await seen('reads', key)) continue
       const who = await profileId(ctx, user)
       if (!who) continue
       const message = idOf(row.last_read_message_id)
@@ -410,7 +410,7 @@ export const importBundle = internalMutation({
     for (const row of bundle.photos ?? []) {
       const sourceId = idOf(row.id)
       const original = text(row.storage_path)
-      if (!sourceId || !original || (await use('photos', sourceId))) continue
+      if (!sourceId || !original || (await seen('photos', sourceId))) continue
       const storageId = files[original]
       if (!storageId) continue
       const uploader = await profileId(ctx, idOf(row.uploaded_by))
@@ -469,7 +469,7 @@ export const importBundle = internalMutation({
       albums.set(key, current)
     }
     for (const [key, album] of albums) {
-      if (await use('albums', key)) continue
+      if (await seen('albums', key)) continue
       const cover = album.cover
         ? await existingRef(ctx, 'photos', album.cover)
         : null
@@ -488,7 +488,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.observations ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('observations', sourceId))) continue
+      if (!sourceId || (await seen('observations', sourceId))) continue
       const who = await profileId(ctx, idOf(row.created_by))
       const profile = who ? await ctx.db.get(who) : null
       const id = await ctx.db.insert('observations', {
@@ -510,7 +510,7 @@ export const importBundle = internalMutation({
     for (const row of bundle.announcements ?? []) {
       const sourceId = idOf(row.id)
       const slug = text(row.slug)
-      if (!sourceId || !slug || (await use('announcements', sourceId))) continue
+      if (!sourceId || !slug || (await seen('announcements', sourceId))) continue
       const status =
         row.push_status === 'pending' ||
         row.push_status === 'sending' ||
@@ -538,7 +538,7 @@ export const importBundle = internalMutation({
       const user = idOf(row.user_id)
       if (!announcement || !user) continue
       const key = `${announcement}:${user}`
-      if (await use('announcementReads', key)) continue
+      if (await seen('announcementReads', key)) continue
       const announcementId = await existingRef(
         ctx,
         'announcements',
@@ -557,7 +557,7 @@ export const importBundle = internalMutation({
     for (const row of bundle.pushSubs ?? []) {
       const sourceId = idOf(row.id)
       const endpoint = text(row.endpoint)
-      if (!sourceId || !endpoint || (await use('pushSubs', sourceId))) continue
+      if (!sourceId || !endpoint || (await seen('pushSubs', sourceId))) continue
       const who = await profileId(ctx, idOf(row.user_id))
       if (!who) continue
       const id = await ctx.db.insert('pushSubscriptions', {
@@ -576,7 +576,7 @@ export const importBundle = internalMutation({
       const subscription = idOf(row.subscription_id)
       if (!announcement || !subscription) continue
       const key = `${announcement}:${subscription}`
-      if (await use('announcementDeliveries', key)) continue
+      if (await seen('announcementDeliveries', key)) continue
       const announcementId = await existingRef(
         ctx,
         'announcements',
@@ -606,7 +606,7 @@ export const importBundle = internalMutation({
         continue
       }
       const key = `${kind}:${subject}:${user}`
-      if (await use('pushDeliveries', key)) continue
+      if (await seen('pushDeliveries', key)) continue
       const who = await profileId(ctx, user)
       if (!who) continue
       const id = await ctx.db.insert('pushDeliveries', {
@@ -621,7 +621,7 @@ export const importBundle = internalMutation({
     for (const row of bundle.games ?? []) {
       const sourceId = idOf(row.id)
       const game = text(row.game)
-      if (!sourceId || !game || (await use('games', sourceId))) continue
+      if (!sourceId || !game || (await seen('games', sourceId))) continue
       const games = new Set([
         'tetris',
         'kaper',
@@ -650,7 +650,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.tournaments ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('tournaments', sourceId))) continue
+      if (!sourceId || (await seen('tournaments', sourceId))) continue
       const who = await profileId(ctx, idOf(row.created_by))
       const profile = who ? await ctx.db.get(who) : null
       const id = await ctx.db.insert('tournaments', {
@@ -674,7 +674,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.participants ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('participants', sourceId))) continue
+      if (!sourceId || (await seen('participants', sourceId))) continue
       const tournament = await existingRef(
         ctx,
         'tournaments',
@@ -703,7 +703,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.matches ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('matches', sourceId))) continue
+      if (!sourceId || (await seen('matches', sourceId))) continue
       const tournament = await existingRef(
         ctx,
         'tournaments',
@@ -755,7 +755,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.gamesInMatch ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('matchGames', sourceId))) continue
+      if (!sourceId || (await seen('matchGames', sourceId))) continue
       const match = await existingRef(ctx, 'matches', idOf(row.match_id) ?? '')
       const winner = await existingRef(
         ctx,
@@ -778,7 +778,7 @@ export const importBundle = internalMutation({
     for (const row of bundle.badges ?? []) {
       const sourceId = idOf(row.id)
       const image = text(row.image_path)
-      if (!sourceId || !image || (await use('badges', sourceId))) continue
+      if (!sourceId || !image || (await seen('badges', sourceId))) continue
       const storageId = files[image]
       if (!storageId) continue
       const mime =
@@ -812,7 +812,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.nominations ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('nominations', sourceId))) continue
+      if (!sourceId || (await seen('nominations', sourceId))) continue
       const badge = await existingRef(ctx, 'badges', idOf(row.badge_id) ?? '')
       const nominee = await profileId(ctx, idOf(row.nominee_id))
       if (!badge || !nominee) continue
@@ -843,7 +843,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.approvals ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('approvals', sourceId))) continue
+      if (!sourceId || (await seen('approvals', sourceId))) continue
       const nomination = await existingRef(
         ctx,
         'nominations',
@@ -876,7 +876,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.datePolls ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('datePolls', sourceId))) continue
+      if (!sourceId || (await seen('datePolls', sourceId))) continue
       const id = await ctx.db.insert('datePolls', {
         title: text(row.title) ?? 'Dato',
         description: text(row.description),
@@ -890,7 +890,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.dateOptions ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('dateOptions', sourceId))) continue
+      if (!sourceId || (await seen('dateOptions', sourceId))) continue
       const poll = await existingRef(ctx, 'datePolls', idOf(row.poll_id) ?? '')
       if (!poll) continue
       const id = await ctx.db.insert('datePollOptions', {
@@ -907,7 +907,7 @@ export const importBundle = internalMutation({
       const user = idOf(row.user_id)
       if (!option || !user) continue
       const key = `${option}:${user}`
-      if (await use('dateVotes', key)) continue
+      if (await seen('dateVotes', key)) continue
       const optionId = await existingRef(ctx, 'dateOptions', option)
       const who = await profileId(ctx, user)
       if (!optionId || !who) continue
@@ -924,7 +924,7 @@ export const importBundle = internalMutation({
 
     for (const row of bundle.probation ?? []) {
       const sourceId = idOf(row.id)
-      if (!sourceId || (await use('probation', sourceId))) continue
+      if (!sourceId || (await seen('probation', sourceId))) continue
       const status =
         row.status === 'approved' || row.status === 'rejected'
           ? row.status
@@ -946,7 +946,7 @@ export const importBundle = internalMutation({
       await keep('probation', sourceId, id)
     }
 
-    if (bundle.vapid && !(await use('vapid', 'vapid'))) {
+    if (bundle.vapid && !(await seen('vapid', 'vapid'))) {
       const publicKey = text(bundle.vapid.public_key)
       const privateKey = text(bundle.vapid.private_key)
       if (publicKey && privateKey) {
