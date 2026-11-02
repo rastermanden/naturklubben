@@ -10,6 +10,8 @@ import { EventTasksSection } from '../features/calendar/EventTasksSection'
 import { GuestRequestsSection } from '../features/calendar/GuestRequestsSection'
 import { SubscribeDialog } from '../features/calendar/SubscribeDialog'
 import { calendarFeedUrl } from '../features/calendar/feedUrl'
+import { adminTabPath } from '../features/admin/adminTabs'
+import { useCurrentProfile } from '../features/auth/useCurrentProfile'
 import { toFriendlyCalendarError } from '../features/calendar/guestRequestErrors'
 import {
   dayPosition,
@@ -319,6 +321,7 @@ function CalendarPage() {
   const createEvent = useMutation(api.calendar.createEvent)
   const updateEvent = useMutation(api.calendar.updateEvent)
   const deleteEvent = useMutation(api.calendar.deleteEvent)
+  const { profile } = useCurrentProfile()
 
   const dayStart = useMemo(() => startOfDay(new Date()), [])
   // null = "ikke valgt": den måned, den åbner i, er den nuværende.
@@ -424,6 +427,14 @@ function CalendarPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          {profile?.isAdmin === true && (
+            <Link
+              to={adminTabPath('datoer')}
+              className="flex min-h-11 items-center rounded border border-accent-soft px-5 py-2 text-ink-muted hover:bg-surface-sunken"
+            >
+              Find en dato
+            </Link>
+          )}
           {calendarFeedUrl !== null && (
             <button
               type="button"

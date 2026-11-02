@@ -31,6 +31,13 @@ export const galleryTables = {
     /** Originalen, som medlemmet uploadede. */
     storageId: v.id('_storage'),
     /**
+     * Hemmeligheder i billed-URL'en. HTTP-handlingen udleverer filen kun, når
+     * tokenet stadig er det aktuelle. Et nyt token trækker det gamle link
+     * tilbage, uden at filen slettes.
+     */
+    displayToken: v.optional(v.string()),
+    thumbnailToken: v.optional(v.string()),
+    /**
      * Afledte filer. De findes ikke i V2 endnu: der er ingen billedbehandling
      * i Convex' runtime (se `optimizePhoto` i `convex/gallery.ts`). Felterne
      * er med, så en senere Node-action kan sætte dem uden en migration.
@@ -101,7 +108,9 @@ export const galleryTables = {
     .index('by_uploader', ['uploaderId', 'createdAt'])
     .index('by_uploader_status', ['uploaderId', 'optimizationStatus'])
     .index('by_client_upload', ['uploaderId', 'clientUploadId'])
-    .index('by_status', ['optimizationStatus', 'optimizationStartedAt']),
+    .index('by_status', ['optimizationStatus', 'optimizationStartedAt'])
+    .index('by_display_token', ['displayToken'])
+    .index('by_thumbnail_token', ['thumbnailToken']),
 
   /**
    * Ét album pr. begivenhed, plus "Uden begivenhed" -- det samme som viewet

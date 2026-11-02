@@ -1,5 +1,12 @@
 import { paginationOptsValidator } from 'convex/server'
-import { internalMutation, mutation, query, action } from './_generated/server'
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  action,
+  httpAction,
+} from './_generated/server'
 import { internal } from './_generated/api'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
@@ -71,6 +78,19 @@ function displayName(fullName: string | undefined) {
   return trimmed ? trimmed : 'Unavngivet medlem'
 }
 
+function newFileToken() {
+  return crypto.randomUUID().replaceAll('-', '')
+}
+
+function photoFileUrl(token: string | undefined): string | null {
+  if (!token) return null
+  const site = (
+    globalThis as { process?: { env?: Record<string, string | undefined> } }
+  ).process?.env?.CONVEX_SITE_URL
+  if (!site) return null
+  return `${site}/photo?token=${encodeURIComponent(token)}`
+}
+
 function isStaleProcessing(photo: Doc<'photos'>, now: number) {
   if (photo.optimizationStatus !== 'processing') return false
   if (photo.optimizationStartedAt === undefined) return true
@@ -91,15 +111,10 @@ async function albumByKey(ctx: QueryCtx | MutationCtx, albumKey: string) {
  * "der findes en mindre udgave".
  */
 async function photoView(
-  ctx: QueryCtx | MutationCtx,
+  _ctx: QueryCtx | MutationCtx,
   photo: Doc<'photos'>,
   viewer: Doc<'profiles'>,
 ) {
-  const displayId =
-    photo.optimizedStorageId ?? photo.thumbnailStorageId ?? photo.storageId
-  const thumbnailId =
-    photo.thumbnailStorageId ?? photo.optimizedStorageId ?? photo.storageId
-
   return {
     id: photo._id,
     caption: photo.caption ?? null,
@@ -119,8 +134,8 @@ async function photoView(
     // igen -- denne kopi er kun til at vise knappen.
     canDelete: viewer.isAdmin || photo.uploaderId === viewer._id,
     isUploader: photo.uploaderId === viewer._id,
-    displayUrl: await ctx.storage.getUrl(displayId),
-    thumbnailUrl: await ctx.storage.getUrl(thumbnailId),
+    displayUrl: photoFileUrl(photo.displayToken),
+    thumbnailUrl: photoFileUrl(photo.thumbnailToken ?? photo.displayToken),
   }
 }
 
@@ -138,10 +153,9 @@ export const listAlbums = query({
     const albums = await ctx.db.query('photoAlbums').collect()
     const views = await Promise.all(
       albums.map(async (album) => {
-        const coverId =
-          album.coverThumbnailStorageId ??
-          album.coverOptimizedStorageId ??
-          undefined
+        const cover = album.coverPhotoId
+          ? await ctx.db.get(album.coverPhotoId)
+          : null
         return {
           albumId: album.albumKey,
           eventId: album.eventId ?? null,
@@ -153,7 +167,7 @@ export const listAlbums = query({
           photoCount: album.photoCount,
           latestPhotoAt: album.latestPhotoAt ?? null,
           coverPhotoId: album.coverPhotoId ?? null,
-          coverUrl: coverId ? await ctx.storage.getUrl(coverId) : null,
+          coverUrl: photoFileUrl(cover?.thumbnailToken ?? cover?.displayToken),
         }
       }),
     )
@@ -495,6 +509,8 @@ export const createPhoto = mutation({
       optimizationAttempts: 0,
       optimizationCompletedAt: ready ? now : undefined,
       commentCount: 0,
+      displayToken: newFileToken(),
+      thumbnailToken: newFileToken(),
     })
 
     await addPhotoToAlbum(ctx, {
@@ -906,6 +922,105 @@ export const optimizePhoto = action({
         error: 'Billedet kunne ikke optimeres. Prøv igen.',
       })
       return 'failed'
+    }
+  },
+})
+
+/** Giver ældre billeder et token, så de kan vises gennem HTTP-handlingen. */
+export const mintPhotoTokens = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireProfile(ctx)
+    const photos = await ctx.db.query('photos').take(200)
+    let minted = 0
+    for (const photo of photos) {
+      if (photo.displayToken && photo.thumbnailToken) continue
+      await ctx.db.patch(photo._id, {
+        displayToken: photo.displayToken ?? newFileToken(),
+        thumbnailToken: photo.thumbnailToken ?? newFileToken(),
+      })
+      minted += 1
+    }
+    return { minted }
+  },
+})
+
+/** Nyt token. Det gamle link virker ikke mere. Filen bliver. */
+export const revokePhotoLink = mutation({
+  args: { photoId: v.id('photos') },
+  handler: async (ctx, args) => {
+    const profile = await requireProfile(ctx)
+    const photo = await ctx.db.get(args.photoId)
+    if (photo === null) throw new ConvexError('PHOTO_NOT_FOUND')
+    if (!profile.isAdmin && photo.uploaderId !== profile._id) {
+      throw new ConvexError('PHOTO_NOT_ALLOWED')
+    }
+    await ctx.db.patch(photo._id, {
+      displayToken: newFileToken(),
+      thumbnailToken: newFileToken(),
+    })
+    return null
+  },
+})
+
+export const servePhoto = httpAction(async (ctx, request) => {
+  const token = new URL(request.url).searchParams.get('token')
+  if (!token) return new Response('Mangler token', { status: 400 })
+  const byDisplay = await ctx.runQuery(internal.gallery.photoForToken, {
+    token,
+    kind: 'display',
+  })
+  const match =
+    byDisplay ??
+    (await ctx.runQuery(internal.gallery.photoForToken, {
+      token,
+      kind: 'thumbnail',
+    }))
+  if (match === null)
+    return new Response('Linket virker ikke længere', { status: 404 })
+  const file = await ctx.storage.get(match.storageId)
+  if (file === null) return new Response('Filen findes ikke', { status: 404 })
+  return new Response(file, {
+    headers: {
+      'Content-Type': match.contentType,
+      'Cache-Control': 'private, max-age=3600',
+    },
+  })
+})
+
+export const photoForToken = internalQuery({
+  args: {
+    token: v.string(),
+    kind: v.union(v.literal('display'), v.literal('thumbnail')),
+  },
+  handler: async (ctx, args) => {
+    const photo =
+      args.kind === 'display'
+        ? await ctx.db
+            .query('photos')
+            .withIndex('by_display_token', (q) =>
+              q.eq('displayToken', args.token),
+            )
+            .unique()
+        : await ctx.db
+            .query('photos')
+            .withIndex('by_thumbnail_token', (q) =>
+              q.eq('thumbnailToken', args.token),
+            )
+            .unique()
+    if (photo === null) return null
+    const storageId =
+      args.kind === 'display'
+        ? (photo.optimizedStorageId ??
+          photo.thumbnailStorageId ??
+          photo.storageId)
+        : (photo.thumbnailStorageId ??
+          photo.optimizedStorageId ??
+          photo.storageId)
+    const meta = await ctx.db.system.get(storageId)
+    return {
+      storageId,
+      contentType: meta?.contentType ?? 'application/octet-stream',
     }
   },
 })

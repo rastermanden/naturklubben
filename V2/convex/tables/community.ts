@@ -306,4 +306,32 @@ export const communityTables = {
   })
     .index('by_match_game', ['matchId', 'gameNumber'])
     .index('by_tournament', ['tournamentId']),
+
+  /** Datoafstemninger for admins (#288). Kun admins læser og skriver. */
+  datePolls: defineTable({
+    title: v.string(),
+    description: v.optional(v.string()),
+    createdBy: v.optional(v.id('profiles')),
+    createdAt: v.number(),
+    closedAt: v.optional(v.number()),
+    closedBy: v.optional(v.id('profiles')),
+    chosenOptionId: v.optional(v.id('datePollOptions')),
+    eventId: v.optional(v.id('events')),
+  }).index('by_created', ['createdAt']),
+
+  datePollOptions: defineTable({
+    pollId: v.id('datePolls'),
+    position: v.number(),
+    startsAt: v.number(),
+    endsAt: v.optional(v.number()),
+  }).index('by_poll', ['pollId']),
+
+  datePollVotes: defineTable({
+    optionId: v.id('datePollOptions'),
+    voterId: v.id('profiles'),
+    answer: v.union(v.literal('yes'), v.literal('maybe'), v.literal('no')),
+    updatedAt: v.number(),
+  })
+    .index('by_option', ['optionId'])
+    .index('by_option_voter', ['optionId', 'voterId']),
 }

@@ -23,8 +23,10 @@ interface PhotoLightboxProps {
   photo: Photo
   onClose: () => void
   onDelete: (photo: Photo) => void
+  onRevoke?: (photo: Photo) => void
   onRetryOptimization: (photo: Photo) => void
   deleting: boolean
+  revoking?: boolean
   retrying: boolean
   actionError: string | null
   onPrevious?: (() => void) | null
@@ -36,8 +38,10 @@ export function PhotoLightbox({
   photo,
   onClose,
   onDelete,
+  onRevoke,
   onRetryOptimization,
   deleting,
+  revoking = false,
   retrying,
   actionError,
   onPrevious = null,
@@ -214,6 +218,19 @@ export function PhotoLightbox({
             className="min-h-11 rounded bg-white px-4 py-2 text-green-900 disabled:opacity-60"
           >
             {retrying ? 'Starter igen…' : 'Prøv optimering igen'}
+          </button>
+        )}
+        {photo.canDelete && onRevoke && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onRevoke(photo)
+            }}
+            disabled={revoking}
+            className="min-h-11 rounded bg-white px-4 py-2 text-ink disabled:opacity-60"
+          >
+            {revoking ? 'Trækker tilbage…' : 'Træk link tilbage'}
           </button>
         )}
         {photo.canDelete && (

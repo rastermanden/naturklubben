@@ -82,6 +82,8 @@ function GalleryPage() {
   )
 
   const deletePhoto = useMutation(api.gallery.deletePhoto)
+  const revokePhotoLink = useMutation(api.gallery.revokePhotoLink)
+  const mintPhotoTokens = useMutation(api.gallery.mintPhotoTokens)
   const optimizePhoto = useAction(api.gallery.optimizePhoto)
   const upload = useUploadPhotos()
   useAutoOptimizePendingPhotos()
@@ -92,10 +94,18 @@ function GalleryPage() {
   const [dragActive, setDragActive] = useState(false)
   const [busyPhotoId, setBusyPhotoId] = useState<string | null>(null)
   const [retryingPhotoId, setRetryingPhotoId] = useState<string | null>(null)
+  const [revokingPhotoId, setRevokingPhotoId] = useState<string | null>(null)
+  const mintedTokens = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const photos: Photo[] = photosQuery.results
+  useEffect(() => {
+    if (mintedTokens.current) return
+    if (!photos.some((photo) => photo.displayUrl === null)) return
+    mintedTokens.current = true
+    void mintPhotoTokens({})
+  }, [mintPhotoTokens, photos])
   const activePhoto =
     photoParam === null
       ? null
@@ -438,6 +448,16 @@ function GalleryPage() {
           positionLabel={positionLabel}
           deleting={busyPhotoId === activePhoto.id}
           onDelete={removePhoto}
+          revoking={revokingPhotoId === activePhoto.id}
+          onRevoke={(photo) => {
+            setActionError(null)
+            setRevokingPhotoId(photo.id)
+            void revokePhotoLink({ photoId: photo.id as Id<'photos'> })
+              .catch(() =>
+                setActionError('Linket kunne ikke trækkes tilbage. Prøv igen.'),
+              )
+              .finally(() => setRevokingPhotoId(null))
+          }}
           retrying={retryingPhotoId === activePhoto.id}
           onRetryOptimization={retryOptimization}
           actionError={actionError}

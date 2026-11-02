@@ -62,6 +62,10 @@ export const memberTables = {
      * gamle app, og den holdes i sync af `members.setAdmin`.
      */
     isAdmin: v.optional(v.boolean()),
+    /** Valgfri note, som den inviterende admin skrev. */
+    note: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+    invitedBy: v.optional(v.id('profiles')),
   }).index('by_email', ['email']),
 
   /** Revisionsspor for "gør X til admin / fjern admin". */

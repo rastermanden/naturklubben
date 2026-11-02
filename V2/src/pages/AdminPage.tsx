@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { ActivitiesSection } from '../features/activities/ActivitiesSection'
+import { AllowedEmailsSection } from '../features/admin/AllowedEmailsSection'
+import { DatePollsSection } from '../features/datePolls/DatePollsSection'
 import { AdminTabPanel, AdminTabs } from '../features/admin/AdminTabs'
 import {
   adminTabPath,
@@ -138,26 +140,10 @@ export default function AdminPage() {
         <ActivitiesSection />
       </AdminTabPanel>
       <AdminTabPanel tab="datoer" activeTab={activeTab}>
-        <AdminSection
-          title="Find en dato"
-          description="Afstemninger om, hvornår den næste tur kan ligge."
-        >
-          <p className="text-sm text-ink-subtle">
-            Datoafstemninger er ikke med endnu. Fanen står her, så menuen er den
-            samme.
-          </p>
-        </AdminSection>
+        <DatePollsSection adminId={profile._id} />
       </AdminTabPanel>
       <AdminTabPanel tab="adgang" activeTab={activeTab}>
-        <AdminSection
-          title="Inviter en e-mail"
-          description="Kun adresser på listen kan oprette en bruger i klubbens app."
-        >
-          <p className="text-sm text-ink-subtle">
-            Invitationer fra panelet er ikke med endnu. En godkendt ansøgning
-            lægger stadig adressen på listen.
-          </p>
-        </AdminSection>
+        <AllowedEmailsSection />
       </AdminTabPanel>
       <AdminTabPanel tab="indstillinger" activeTab={activeTab}>
         <AdminSection

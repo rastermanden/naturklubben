@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { useConvexAuth, useMutation } from 'convex/react'
 import { api } from '../../convex/_generated/api'
+import { clearAuthCodeWait, noteAuthCode } from '../features/auth/authCodeWait'
 import { toFriendlyMemberError } from '../features/auth/authErrors'
 import { useCurrentProfile } from '../features/auth/useCurrentProfile'
 
@@ -25,6 +26,19 @@ export default function WelcomePage() {
   const attempted = useRef(false)
   const [claiming, setClaiming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [gaveUp, setGaveUp] = useState(false)
+  const waitingForCode = noteAuthCode(
+    typeof window === 'undefined' ? '' : window.location.search,
+  )
+
+  useEffect(() => {
+    if (!waitingForCode || isAuthenticated) {
+      if (isAuthenticated) clearAuthCodeWait()
+      return
+    }
+    const timeout = window.setTimeout(() => setGaveUp(true), 20000)
+    return () => window.clearTimeout(timeout)
+  }, [isAuthenticated, waitingForCode])
 
   useEffect(() => {
     if (!isAuthenticated || profile !== null || attempted.current) return
@@ -40,12 +54,15 @@ export default function WelcomePage() {
       })
   }, [claimProfile, isAuthenticated, profile])
 
-  if (authLoading || isLoading || claiming) {
+  if (
+    (waitingForCode && !gaveUp && !isAuthenticated) ||
+    authLoading ||
+    isLoading ||
+    claiming
+  ) {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
-        <h1 className="text-2xl font-semibold text-ink-body">
-          {authLoading ? 'Bekræfter din e-mail…' : 'Gør din bruger klar…'}
-        </h1>
+        <h1 className="text-2xl font-semibold text-ink-body">Et øjeblik…</h1>
       </main>
     )
   }

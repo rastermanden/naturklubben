@@ -486,3 +486,60 @@ export const listAdminRoleChanges = query({
       .take(ROLE_HISTORY_LIMIT)
   },
 })
+
+/** Adgangslisten. Kun admins. Nyeste invitation først. */
+export const listAllowedEmails = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx)
+    const rows = await ctx.db.query('allowedEmails').collect()
+    return rows
+      .map((row) => ({
+        email: row.email,
+        note: row.note ?? null,
+        createdAt: row.createdAt ?? 0,
+        isAdmin: row.isAdmin === true,
+      }))
+      .sort((a, b) => b.createdAt - a.createdAt)
+  },
+})
+
+export const addAllowedEmail = mutation({
+  args: {
+    email: v.string(),
+    note: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const admin = await requireAdmin(ctx)
+    const email = normalizeEmail(args.email)
+    if (!email.includes('@')) throw new ConvexError('ALLOWED_EMAIL_INVALID')
+    const existing = await ctx.db
+      .query('allowedEmails')
+      .withIndex('by_email', (q) => q.eq('email', email))
+      .unique()
+    if (existing !== null) throw new ConvexError('ALLOWED_EMAIL_EXISTS')
+    await ctx.db.insert('allowedEmails', {
+      email,
+      note: args.note?.trim() || undefined,
+      createdAt: Date.now(),
+      invitedBy: admin._id,
+      isAdmin: false,
+    })
+    return null
+  },
+})
+
+export const removeAllowedEmail = mutation({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx)
+    const email = normalizeEmail(args.email)
+    const existing = await ctx.db
+      .query('allowedEmails')
+      .withIndex('by_email', (q) => q.eq('email', email))
+      .unique()
+    if (existing === null) throw new ConvexError('ALLOWED_EMAIL_NOT_FOUND')
+    await ctx.db.delete(existing._id)
+    return null
+  },
+})
