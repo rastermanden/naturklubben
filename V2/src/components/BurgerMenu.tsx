@@ -82,7 +82,7 @@ export function BurgerMenu({
 
         <nav
           aria-label="Menupunkter"
-          className="flex min-h-40 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain"
+          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain"
         >
           {links.map((link) => (
             <NavLink

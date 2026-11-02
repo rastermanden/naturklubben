@@ -3,6 +3,8 @@ import { MemberAvatar } from './MemberAvatar'
 import { MessageReactions, ReactionPicker } from './MessageReactions'
 import { PollCard } from './PollCard'
 import { readableTextColor } from './constants'
+import { CauseMarks } from '../profile/CauseMarks'
+import { displayPronouns } from '../profile/pronouns'
 import { formatRelativeTime } from './formatRelativeTime'
 import { splitLinks } from './linkify'
 import { splitMentions } from './mentions'
@@ -128,6 +130,11 @@ export function MessageBubble({
     ? 'Tidligere medlem'
     : (message.authorName ?? 'Medlem')
   const color = message.chatColor
+  // Pronominerne står efter navnet, så ingen behøver at gætte midt i en
+  // samtale. Et tidligere medlem har ingen profil og dermed ingen.
+  const pronouns = isFormerMember
+    ? null
+    : displayPronouns(message.authorPronouns)
   const isAction = message.messageType === 'action'
   // En besked, der har ligget i offline-køen, viser det tidspunkt, den blev
   // skrevet; rækkefølgen i listen er stadig serverens. Er de to forskellige,
@@ -191,6 +198,12 @@ export function MessageBubble({
             }`}
           >
             {!isAction && <span className="font-medium">{name}</span>}
+            {!isAction && pronouns && (
+              <span className="opacity-70">{pronouns}</span>
+            )}
+            {!isAction && !isFormerMember && (
+              <CauseMarks causes={message.authorCauses} className="text-xs" />
+            )}
             {/* Kort form på skærmen, præcist tidspunkt til den, der peger på
               det -- og til skærmlæseren, som ellers ville læse "6 d" op. */}
             <time

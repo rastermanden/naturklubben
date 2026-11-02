@@ -91,7 +91,7 @@ export function Navbar() {
         Naturklubben
       </Link>
 
-      <nav className="hidden items-center gap-4 md:flex">
+      <nav className="hidden min-w-0 flex-1 items-center gap-4 overflow-x-auto md:flex">
         {visibleLinks.map((link) => (
           <NavLink
             key={link.to}

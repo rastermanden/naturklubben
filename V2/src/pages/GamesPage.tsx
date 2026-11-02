@@ -8,7 +8,7 @@ import { games } from '../features/games/games'
  */
 export default function GamesPage() {
   return (
-    <div className="flex flex-col gap-8">
+    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-4 sm:p-6">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold text-ink-body">Spil</h1>
         <p className="text-ink-subtle">
@@ -51,6 +51,6 @@ export default function GamesPage() {
           </Link>
         </div>
       ))}
-    </div>
+    </main>
   )
 }

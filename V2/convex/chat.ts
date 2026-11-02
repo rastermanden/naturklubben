@@ -241,6 +241,9 @@ async function messageView(
     /** Tom, når medlemmet er slettet; visningen skriver "Tidligere medlem". */
     authorId: message.authorId ?? null,
     authorName: author === null ? null : nameOf(author),
+    /** Fri tekst fra profilen. `null`, når den ikke skal vises. */
+    authorPronouns: author?.pronouns ?? null,
+    authorCauses: author?.causes ?? [],
     chatColor: author?.chatColor ?? FORMER_MEMBER_COLOR,
     avatarUrl: author?.avatarUrl ?? null,
     content: message.content,

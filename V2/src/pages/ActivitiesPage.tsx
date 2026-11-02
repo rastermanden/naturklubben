@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
+import { useConvexAuth } from 'convex/react'
 import { ActivityIcon } from '../features/activities/ActivityIcon'
 import { useActivities } from '../features/activities/useActivities'
-import { useCurrentProfile } from '../features/auth/useCurrentProfile'
 
 function ClubLinkCard({
   to,
@@ -37,7 +37,7 @@ function ClubLinkCard({
 function ActivitiesPage() {
   const activitiesQuery = useActivities()
   const activities = activitiesQuery ?? []
-  const { profile } = useCurrentProfile()
+  const { isAuthenticated } = useConvexAuth()
 
   return (
     <main className="bg-surface-sunken/60 px-4 py-12 sm:px-6 sm:py-16">
@@ -64,7 +64,9 @@ function ActivitiesPage() {
             title="BTG turnering"
             description="Hold styr på kampe, resultater og stilling til klubbens bøssetennisgolf-turneringer."
           />
-          {profile && (
+          {/* Naturlog og Spil har ikke egne menupunkter. De står her, og
+              burgermenuen markerer Aktiviteter, mens man er på dem. */}
+          {isAuthenticated && (
             <>
               <ClubLinkCard
                 to="/naturlog"
