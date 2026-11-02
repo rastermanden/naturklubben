@@ -138,6 +138,7 @@ jobs:
           # Uden --secret skriver loggen kun navnet.
           printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY --preview-name "$preview"
           npx convex run previewSeed:ensure '{}' --preview-name "$preview"
+          npx convex run previewSeed:agentmailSignupReady '{}' --preview-name "$preview"
           # Login kan først udstede en session, når Convex Auth har et
           # nøglepar på selve previewet. Prod-nøglerne følger ikke med.
           node scripts/ensurePreviewAuthKeys.mjs "$preview"

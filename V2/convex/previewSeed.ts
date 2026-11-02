@@ -33,13 +33,16 @@ export const PROD_DEPLOYMENT_SLUG = 'quaint-parakeet-652'
 export const PREVIEW_MEMBER_NAME = 'Preview-tester'
 
 /**
- * Adresser, Kasper selv kan oprette sig med i previewet.
+ * Adresser, der selv må oprette sig i previewet.
  * Seedet lægger dem kun på adgangslisten. Der oprettes ingen bruger,
  * og der sendes ingen mail.
  */
+export const PREVIEW_AGENTMAIL_ADDRESS = 'naturklubben-test@agentmail.to'
+
 export const PREVIEW_GUEST_ALLOWLIST = [
   'kaspermoller@gmail.com',
   'kaspermoller+test@gmail.com',
+  PREVIEW_AGENTMAIL_ADDRESS,
 ] as const
 
 /**
@@ -420,11 +423,107 @@ export const applySample = internalMutation({
   },
 })
 
+/**
+ * Fjerner en auth-bruger, så adressen kan oprettes forfra.
+ * Adgangslisten røres ikke, og der sendes ingen mail.
+ */
+export async function removePasswordSignup(
+  ctx: MutationCtx,
+  email: string,
+): Promise<boolean> {
+  const account = await ctx.db
+    .query('authAccounts')
+    .withIndex('providerAndAccountId', (q) =>
+      q.eq('provider', 'password').eq('providerAccountId', email),
+    )
+    .unique()
+  const byEmail = await ctx.db
+    .query('users')
+    .withIndex('email', (q) => q.eq('email', email))
+    .unique()
+  const userId = account?.userId ?? byEmail?._id
+  if (userId === undefined) return false
+
+  const sessions = await ctx.db
+    .query('authSessions')
+    .withIndex('userId', (q) => q.eq('userId', userId))
+    .collect()
+  for (const session of sessions) {
+    const tokens = await ctx.db
+      .query('authRefreshTokens')
+      .withIndex('sessionId', (q) => q.eq('sessionId', session._id))
+      .collect()
+    for (const token of tokens) await ctx.db.delete(token._id)
+    await ctx.db.delete(session._id)
+  }
+
+  const accounts = await ctx.db
+    .query('authAccounts')
+    .withIndex('userIdAndProvider', (q) => q.eq('userId', userId))
+    .collect()
+  for (const row of accounts) {
+    const codes = await ctx.db
+      .query('authVerificationCodes')
+      .withIndex('accountId', (q) => q.eq('accountId', row._id))
+      .collect()
+    for (const code of codes) await ctx.db.delete(code._id)
+    await ctx.db.delete(row._id)
+  }
+
+  const profile = await ctx.db
+    .query('profiles')
+    .withIndex('by_user', (q) => q.eq('userId', userId))
+    .unique()
+  if (profile !== null) await ctx.db.delete(profile._id)
+
+  const user = await ctx.db.get(userId)
+  if (user !== null) await ctx.db.delete(userId)
+  return true
+}
+
+export const forgetAgentmailSignup = internalMutation({
+  args: {},
+  returns: v.object({ removed: v.boolean() }),
+  handler: async (ctx): Promise<{ removed: boolean }> => {
+    assertAllowedOnThisDeployment()
+    const removed = await removePasswordSignup(ctx, PREVIEW_AGENTMAIL_ADDRESS)
+    return { removed }
+  },
+})
+
+/** Om test-indbakken kan oprettes forfra: på listen, uden bruger. */
+export const agentmailSignupReady = internalQuery({
+  args: {},
+  returns: v.object({
+    listed: v.boolean(),
+    hasAccount: v.boolean(),
+  }),
+  handler: async (ctx): Promise<{ listed: boolean; hasAccount: boolean }> => {
+    assertAllowedOnThisDeployment()
+    const allowed = await ctx.db
+      .query('allowedEmails')
+      .withIndex('by_email', (q) => q.eq('email', PREVIEW_AGENTMAIL_ADDRESS))
+      .unique()
+    const account = await ctx.db
+      .query('authAccounts')
+      .withIndex('providerAndAccountId', (q) =>
+        q
+          .eq('provider', 'password')
+          .eq('providerAccountId', PREVIEW_AGENTMAIL_ADDRESS),
+      )
+      .unique()
+    return { listed: allowed !== null, hasAccount: account !== null }
+  },
+})
+
 export const ensure = internalAction({
   args: {},
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx): Promise<{ ok: true }> => {
     assertAllowedOnThisDeployment()
+    // En tidligere oprettelse med test-indbakken må ikke spærre en ny.
+    // Returværdien logges ikke her, og kaldet sender ingen mail.
+    await ctx.runMutation(internal.previewSeed.forgetAgentmailSignup, {})
 
     const email = normalizePreviewEmail(env.PREVIEW_TEST_EMAIL)
     const password = normalizePreviewPassword(env.PREVIEW_TEST_PASSWORD)

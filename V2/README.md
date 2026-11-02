@@ -173,9 +173,11 @@ og heller ikke til en adresse, der ikke står på listen. Siden siger
 stadig "Tjek din e-mail", så den ikke fortæller, hvem der findes.
 Oprettelse af en adresse uden for listen afvises, før der sendes mail.
 
-Seedet lægger `kaspermoller@gmail.com` og `kaspermoller+test@gmail.com`
-på adgangslisten og opretter ikke brugere for dem. Kasper opretter sig
-selv fra previewet. Der sendes ingen mail til de adresser herfra.
+Seedet lægger `kaspermoller@gmail.com`, `kaspermoller+test@gmail.com` og
+`naturklubben-test@agentmail.to` på adgangslisten og opretter ikke brugere
+for dem. En eksisterende auth-bruger med test-indbakken fjernes ved seed,
+så adressen kan oprettes forfra. Der sendes ingen mail herfra. Kasper
+opretter sig selv fra previewet.
 
 Prøvemedlemskab og gæsteansøgninger sender ikke mail i den nuværende app
 (push og en mailto-kladde). De er ikke flyttet til Resend.
@@ -325,4 +327,4 @@ kunne efterprøves i previewet med testbrugeren.
 | Admin         | Faner: Ansøgninger, Medlemmer, Badges, Aktiviteter, Find en dato, Adgang, Indstillinger                                                                              | Samme faner. Datoafstemninger kan oprettes og besvares. Admin kan taste en e-mail på adgangslisten. |
 | Flytning      | Besked på den gamle GitHub Pages-adresse                                                                                                                             | Samme besked, hvis V2 åbnes derfra                                                                  |
 
-Bevidst anderledes, kun i preview: testdata (Preview-tur, prøvebesked, prøvebillede, prøveobservation), at "Installér app" er skjult, og at adgangslisten også har kaspermoller@gmail.com og kaspermoller+test@gmail.com uden brugere. Aktivitetslisten er den samme som i den nuværende app. Billedcachen peger på Convex-filer, fordi V2 ikke har Supabase Storage. Versionslinjen følger commit'en. Previewet sender rigtige auth-mails, men kun til adgangslisten.
+Bevidst anderledes, kun i preview: testdata (Preview-tur, prøvebesked, prøvebillede, prøveobservation), at "Installér app" er skjult, og at adgangslisten også har kaspermoller@gmail.com, kaspermoller+test@gmail.com og naturklubben-test@agentmail.to uden brugere. Aktivitetslisten er den samme som i den nuværende app. Billedcachen peger på Convex-filer, fordi V2 ikke har Supabase Storage. Versionslinjen følger commit'en. Previewet sender rigtige auth-mails, men kun til adgangslisten.

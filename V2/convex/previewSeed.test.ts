@@ -8,9 +8,11 @@ import {
   PREVIEW_KABALE_SCORE,
   PREVIEW_OBSERVATION_SPECIES,
   PREVIEW_PHOTO_CAPTION,
+  PREVIEW_AGENTMAIL_ADDRESS,
   PREVIEW_EVENT_TITLE,
   PREVIEW_GUEST_ALLOWLIST,
   PREVIEW_MEMBER_NAME,
+  removePasswordSignup,
   PROD_DEPLOYMENT_SLUG,
   assertPreviewSeedAllowed,
   normalizePreviewEmail,
@@ -244,6 +246,66 @@ describe('writePreviewSample', () => {
     expect(food?.icon).toBeUndefined()
     expect(food?.linkUrl).toBeUndefined()
     expect(food?.linkLabel).toBeUndefined()
+  })
+
+  it('fjerner agentmail-brugeren og lader adressen blive på listen', async () => {
+    const t = convexTest(schema, modules)
+    await t.run(async (ctx) => {
+      const userId = await ctx.db.insert('users', {
+        email: PREVIEW_AGENTMAIL_ADDRESS,
+      })
+      const accountId = await ctx.db.insert('authAccounts', {
+        userId,
+        provider: 'password',
+        providerAccountId: PREVIEW_AGENTMAIL_ADDRESS,
+      })
+      await ctx.db.insert('profiles', {
+        userId,
+        fullName: 'Agent',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+      const sessionId = await ctx.db.insert('authSessions', {
+        userId,
+        expirationTime: Date.now() + 1000,
+      })
+      await ctx.db.insert('authRefreshTokens', {
+        sessionId,
+        expirationTime: Date.now() + 1000,
+      })
+      await ctx.db.insert('authVerificationCodes', {
+        accountId,
+        provider: 'password-verify',
+        code: 'kode',
+        expirationTime: Date.now() + 1000,
+      })
+      await ctx.db.insert('allowedEmails', {
+        email: PREVIEW_AGENTMAIL_ADDRESS,
+        isAdmin: false,
+      })
+      await removePasswordSignup(ctx, PREVIEW_AGENTMAIL_ADDRESS)
+    })
+
+    const left = await t.run(async (ctx) => ({
+      users: await ctx.db.query('users').collect(),
+      accounts: await ctx.db.query('authAccounts').collect(),
+      profiles: await ctx.db.query('profiles').collect(),
+      sessions: await ctx.db.query('authSessions').collect(),
+      codes: await ctx.db.query('authVerificationCodes').collect(),
+      allowed: await ctx.db.query('allowedEmails').collect(),
+    }))
+    expect(left.users).toEqual([])
+    expect(left.accounts).toEqual([])
+    expect(left.profiles).toEqual([])
+    expect(left.sessions).toEqual([])
+    expect(left.codes).toEqual([])
+    expect(left.allowed.map((row) => row.email)).toEqual([
+      PREVIEW_AGENTMAIL_ADDRESS,
+    ])
   })
 
   it('rykker en forbi preview-tur frem i stedet for at lave en ny', async () => {
