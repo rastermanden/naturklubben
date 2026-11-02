@@ -133,24 +133,6 @@ jobs:
           # nøglepar på selve previewet. Prod-nøglerne følger ikke med.
           node scripts/ensurePreviewAuthKeys.mjs "$preview"
 
-      # Engangs-oprydning af mailtesten. Filen slettes bagefter, så trinnet
-      # ikke kører igen. Der sendes ingen mail.
-      - if: github.event.action != 'closed'
-        name: Ryd mailtest
-        working-directory: V2
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
-        run: |
-          set -euo pipefail
-          if [ ! -f ../.github/MAIL_CLEANUP ]; then
-            echo "Ingen oprydning."
-            exit 0
-          fi
-          preview="pr-${{ github.event.number }}"
-          npx convex env remove RESEND_API_KEY --preview-name "$preview"
-          npx convex run mailCleanup:purge '{"confirm":"PURGE_TEST_INBOX"}' --preview-name "$preview"
-          echo "Resend-nøgle fjernet. Testbruger slettet."
-
       # `pr-preview.yml` udgiver ikke, når PR'en rører V2/. Derfor er der
       # ingen venten på V1: den kørsel pushede alligevel til gh-pages efter
       # V2, fordi status "completed" ikke garanterede, at V1's push var den
