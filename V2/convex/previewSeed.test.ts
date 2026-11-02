@@ -9,6 +9,7 @@ import {
   PREVIEW_OBSERVATION_SPECIES,
   PREVIEW_PHOTO_CAPTION,
   PREVIEW_EVENT_TITLE,
+  PREVIEW_GUEST_ALLOWLIST,
   PREVIEW_MEMBER_NAME,
   PROD_DEPLOYMENT_SLUG,
   assertPreviewSeedAllowed,
@@ -94,9 +95,10 @@ describe('writePreviewSample', () => {
       return { allowed, profiles, activities, events }
     })
 
-    expect(rows.allowed).toEqual([
-      expect.objectContaining({ email: 'preview@example.com', isAdmin: false }),
-    ])
+    expect(rows.allowed.map((row) => row.email).sort()).toEqual(
+      ['preview@example.com', ...PREVIEW_GUEST_ALLOWLIST].sort(),
+    )
+    expect(rows.allowed.every((row) => row.isAdmin === false)).toBe(true)
     expect(rows.profiles).toHaveLength(1)
     expect(rows.profiles[0]).toMatchObject({
       userId,

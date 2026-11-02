@@ -111,10 +111,15 @@ jobs:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
           PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
           PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${CONVEX_DEPLOY_KEY}" ]; then
             echo "Mangler preview-nøgle."
+            exit 1
+          fi
+          if [ -z "${RESEND_API_KEY}" ]; then
+            echo "Mangler RESEND_API_KEY."
             exit 1
           fi
           case "${CONVEX_DEPLOY_KEY}" in
@@ -128,6 +133,10 @@ jobs:
           npx convex env set SITE_URL https://naturklubben.dk --preview-name "$preview"
           printf '%s' "$PREVIEW_TEST_EMAIL" | npx convex env set PREVIEW_TEST_EMAIL --preview-name "$preview"
           printf '%s' "$PREVIEW_TEST_PASSWORD" | npx convex env set PREVIEW_TEST_PASSWORD --preview-name "$preview"
+          # Nøglen bliver liggende. Hvert preview-deploy sætter den igen,
+          # så et senere push ikke falder tilbage til at logge mailen.
+          # Uden --secret skriver loggen kun navnet.
+          printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY --preview-name "$preview"
           npx convex run previewSeed:ensure '{}' --preview-name "$preview"
           # Login kan først udstede en session, når Convex Auth har et
           # nøglepar på selve previewet. Prod-nøglerne følger ikke med.

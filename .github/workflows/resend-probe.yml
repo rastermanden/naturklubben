@@ -1,8 +1,8 @@
 name: Prøv Resend
 
-# Én mail til Martin. Nøglen sættes på previewet kun mens prøven kører
-# og fjernes igen, så previewet bliver ved med at logge mails.
-# Modtageren er fast i convex/emailProbe.ts.
+# Manuel prøve. Nøglen på previewet sættes af pr-preview-v2.yml og
+# bliver der. Denne kørsel fjerner den ikke. Afsendelsen nægter, hvis
+# modtageren ikke står på previewets adgangsliste.
 on:
   workflow_dispatch:
     inputs:
@@ -30,7 +30,7 @@ jobs:
         working-directory: V2
         run: npm ci
 
-      - name: Send én prøvemail og fjern nøglen igen
+      - name: Sæt nøglen og prøv afsendelsen
         working-directory: V2
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
@@ -49,9 +49,4 @@ jobs:
             exit 1
           fi
           printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY --preview-name "$preview"
-          set +e
           npx convex run emailProbe:send '{}' --preview-name "$preview"
-          status=$?
-          set -e
-          npx convex env remove RESEND_API_KEY --preview-name "$preview"
-          exit "$status"

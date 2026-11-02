@@ -3,6 +3,7 @@ import {
   DEFAULT_AUTH_FROM,
   authFromAddress,
   authMail,
+  authMailDecision,
   deliverAuthEmail,
   postResendEmail,
 } from './authEmail'
@@ -24,6 +25,60 @@ describe('authMail', () => {
     expect(mail.subject).toContain('Nulstil')
     expect(mail.text).toContain(resetUrl)
     expect(mail.text).toContain('ny adgangskode')
+  })
+})
+
+describe('authMailDecision', () => {
+  it('sender i produktion, også til en adresse uden for listen', () => {
+    expect(
+      authMailDecision({
+        restrictToAllowlist: false,
+        kind: 'reset',
+        onAllowlist: false,
+        hasAccount: false,
+      }),
+    ).toBe('send')
+  })
+
+  it('sender bekræftelse i previewet, når adressen står på listen', () => {
+    expect(
+      authMailDecision({
+        restrictToAllowlist: true,
+        kind: 'verify',
+        onAllowlist: true,
+        hasAccount: true,
+      }),
+    ).toBe('send')
+  })
+
+  it('afviser oprettelse i previewet, når adressen ikke står på listen', () => {
+    expect(
+      authMailDecision({
+        restrictToAllowlist: true,
+        kind: 'verify',
+        onAllowlist: false,
+        hasAccount: true,
+      }),
+    ).toBe('deny')
+  })
+
+  it('sender ikke nulstilling til en ukendt adresse eller en adresse uden for listen', () => {
+    expect(
+      authMailDecision({
+        restrictToAllowlist: true,
+        kind: 'reset',
+        onAllowlist: true,
+        hasAccount: false,
+      }),
+    ).toBe('skip')
+    expect(
+      authMailDecision({
+        restrictToAllowlist: true,
+        kind: 'reset',
+        onAllowlist: false,
+        hasAccount: true,
+      }),
+    ).toBe('skip')
   })
 })
 

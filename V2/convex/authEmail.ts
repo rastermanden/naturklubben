@@ -8,6 +8,27 @@
 
 export type AuthMailKind = 'verify' | 'reset'
 
+/**
+ * Hvad previewet må gøre med en auth-mail.
+ *
+ * Produktion sender som hidtil. I previewet går mail kun til adgangslisten.
+ * Nulstilling til en adresse uden bruger — eller uden for listen — sender
+ * ingenting (`skip`), så siden kan vise det samme svar som ved en ukendt
+ * adresse. Oprettelse uden for listen afvises (`deny`), så siden ikke
+ * påstår, at en bekræftelsesmail er sendt.
+ */
+export function authMailDecision(input: {
+  restrictToAllowlist: boolean
+  kind: AuthMailKind
+  onAllowlist: boolean
+  hasAccount: boolean
+}): 'send' | 'skip' | 'deny' {
+  if (!input.restrictToAllowlist) return 'send'
+  if (!input.onAllowlist) return input.kind === 'reset' ? 'skip' : 'deny'
+  if (input.kind === 'reset' && !input.hasAccount) return 'skip'
+  return 'send'
+}
+
 export const DEFAULT_AUTH_FROM = 'Naturklubben <noreply@naturklubben.dk>'
 
 export function authFromAddress(override: string | undefined): string {

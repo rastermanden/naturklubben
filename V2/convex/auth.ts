@@ -1,5 +1,7 @@
 import { Password } from '@convex-dev/auth/providers/Password'
 import { convexAuth, type EmailConfig } from '@convex-dev/auth/server'
+import { internal } from './_generated/api'
+import type { ActionCtx } from './_generated/server'
 import { env } from './_generated/server'
 import {
   authFromAddress,
@@ -28,6 +30,42 @@ function mailKind(providerId: string): AuthMailKind {
   return providerId === 'password-reset' ? 'reset' : 'verify'
 }
 
+/**
+ * Convex Auth kalder funktionen med handlings-konteksten som andet argument,
+ * selv om typen kun nævner det første. Uden den kan vi ikke slå adgangslisten op.
+ */
+async function sendAuthMail(
+  params: {
+    identifier: string
+    url: string
+    provider: { id: string }
+  },
+  ctx: ActionCtx,
+): Promise<void> {
+  const kind = mailKind(params.provider.id)
+  const decision = await ctx.runQuery(internal.authMailGate.decide, {
+    email: params.identifier,
+    kind,
+  })
+  if (decision === 'deny') {
+    throw new Error('EMAIL_NOT_ALLOWED')
+  }
+  if (decision === 'skip') {
+    // Ingen adresse og intet link i loggen: linket er en engangskode.
+    console.log(`Auth-mail sprunget over (${kind})`)
+    return
+  }
+  await deliverAuthEmail({
+    kind,
+    to: params.identifier,
+    url: params.url,
+    apiKey: env.RESEND_API_KEY,
+    from: env.AUTH_EMAIL_FROM,
+    fetchImpl: fetch,
+    log: (line) => console.log(line),
+  })
+}
+
 function emailProvider(id: string): EmailConfig {
   return {
     id,
@@ -35,17 +73,8 @@ function emailProvider(id: string): EmailConfig {
     name: id,
     from: DEFAULT_FROM,
     maxAge: VERIFICATION_MAX_AGE_SECONDS,
-    sendVerificationRequest: async (params) => {
-      await deliverAuthEmail({
-        kind: mailKind(params.provider.id),
-        to: params.identifier,
-        url: params.url,
-        apiKey: env.RESEND_API_KEY,
-        from: env.AUTH_EMAIL_FROM,
-        fetchImpl: fetch,
-        log: (line) => console.log(line),
-      })
-    },
+    sendVerificationRequest:
+      sendAuthMail as unknown as EmailConfig['sendVerificationRequest'],
   }
 }
 

@@ -33,6 +33,16 @@ export const PROD_DEPLOYMENT_SLUG = 'quaint-parakeet-652'
 export const PREVIEW_MEMBER_NAME = 'Preview-tester'
 
 /**
+ * Adresser, Kasper selv kan oprette sig med i previewet.
+ * Seedet lægger dem kun på adgangslisten. Der oprettes ingen bruger,
+ * og der sendes ingen mail.
+ */
+export const PREVIEW_GUEST_ALLOWLIST = [
+  'kaspermoller@gmail.com',
+  'kaspermoller+test@gmail.com',
+] as const
+
+/**
  * Klubbens egne aktiviteter, som migrationerne i den nuværende app lægger ind.
  * Linket til bral.dk og BøsseTennisGolf-siden er data, ikke en hårdkodet knap.
  * Rækkefølgen er `sortOrder`, den samme som på naturklubben.dk.
@@ -137,6 +147,18 @@ function assertAllowedOnThisDeployment(): void {
   })
 }
 
+async function ensureAllowedEmail(
+  ctx: MutationCtx,
+  email: string,
+): Promise<void> {
+  const existing = await ctx.db
+    .query('allowedEmails')
+    .withIndex('by_email', (q) => q.eq('email', email))
+    .unique()
+  if (existing !== null) return
+  await ctx.db.insert('allowedEmails', { email, isAdmin: false })
+}
+
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -176,12 +198,9 @@ export async function writePreviewSample(
   }
   const email = rawEmail.trim().toLowerCase()
 
-  const allowed = await ctx.db
-    .query('allowedEmails')
-    .withIndex('by_email', (q) => q.eq('email', email))
-    .unique()
-  if (allowed === null) {
-    await ctx.db.insert('allowedEmails', { email, isAdmin: false })
+  await ensureAllowedEmail(ctx, email)
+  for (const guest of PREVIEW_GUEST_ALLOWLIST) {
+    await ensureAllowedEmail(ctx, guest)
   }
 
   const existingProfile = await ctx.db

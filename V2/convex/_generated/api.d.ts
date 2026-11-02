@@ -12,6 +12,7 @@ import type * as account from "../account.js";
 import type * as announcements from "../announcements.js";
 import type * as auth from "../auth.js";
 import type * as authEmail from "../authEmail.js";
+import type * as authMailGate from "../authMailGate.js";
 import type * as authz from "../authz.js";
 import type * as badges from "../badges.js";
 import type * as bracket from "../bracket.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   announcements: typeof announcements;
   auth: typeof auth;
   authEmail: typeof authEmail;
+  authMailGate: typeof authMailGate;
   authz: typeof authz;
   badges: typeof badges;
   bracket: typeof bracket;

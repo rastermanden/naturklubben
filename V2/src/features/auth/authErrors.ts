@@ -70,6 +70,9 @@ export function toFriendlyAuthError(error: unknown): string {
   if (message.includes('auth_email_not_sent')) {
     return 'Mailen kunne ikke sendes. Prøv igen om lidt.'
   }
+  if (message.includes('email_not_allowed')) {
+    return KNOWN_CODES.EMAIL_NOT_ALLOWED
+  }
   if (message.includes('password')) {
     return 'Adgangskoden opfylder ikke kravene.'
   }

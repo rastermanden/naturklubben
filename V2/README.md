@@ -161,10 +161,21 @@ Linket i bekræftelsen lander på `/velkommen`, linket ved glemt adgangskode
 på `/ny-adgangskode`. Siderne og teksterne er de samme som i den nuværende
 app.
 
-`RESEND_API_KEY` ligger i repoets Actions-secrets og sættes på
-produktions-deploymentet af `deploy-v2.yml` via stdin. Den må ikke commits.
-Uden nøglen (sådan er previewet) logges mailen, og kaldet lykkes. Previewets
+`RESEND_API_KEY` ligger i repoets Actions-secrets og sættes via stdin, både
+på produktion (`deploy-v2.yml`) og på hvert preview-deploy
+(`pr-preview-v2.yml`). Den må ikke commits, og preview-workflowet fjerner
+den ikke igen. Uden nøglen logges mailen, og kaldet lykkes. Previewets
 testbruger markeres som bekræftet, så login-smoken ikke venter på en mail.
+
+I previewet (`PREVIEW_SEED=1`) sendes auth-mail kun til adresser på
+adgangslisten. Glemt adgangskode sender ikke til en adresse uden bruger
+og heller ikke til en adresse, der ikke står på listen. Siden siger
+stadig "Tjek din e-mail", så den ikke fortæller, hvem der findes.
+Oprettelse af en adresse uden for listen afvises, før der sendes mail.
+
+Seedet lægger `kaspermoller@gmail.com` og `kaspermoller+test@gmail.com`
+på adgangslisten og opretter ikke brugere for dem. Kasper opretter sig
+selv fra previewet. Der sendes ingen mail til de adresser herfra.
 
 Prøvemedlemskab og gæsteansøgninger sender ikke mail i den nuværende app
 (push og en mailto-kladde). De er ikke flyttet til Resend.
@@ -314,4 +325,4 @@ kunne efterprøves i previewet med testbrugeren.
 | Admin         | Faner: Ansøgninger, Medlemmer, Badges, Aktiviteter, Find en dato, Adgang, Indstillinger                                                                              | Samme faner. Datoafstemninger kan oprettes og besvares. Admin kan taste en e-mail på adgangslisten. |
 | Flytning      | Besked på den gamle GitHub Pages-adresse                                                                                                                             | Samme besked, hvis V2 åbnes derfra                                                                  |
 
-Bevidst anderledes, kun i preview: testdata (Preview-tur, prøvebesked, prøvebillede, prøveobservation) og at "Installér app" er skjult. Aktivitetslisten er den samme som i den nuværende app. Billedcachen peger på Convex-filer, fordi V2 ikke har Supabase Storage. Versionslinjen følger commit'en.
+Bevidst anderledes, kun i preview: testdata (Preview-tur, prøvebesked, prøvebillede, prøveobservation), at "Installér app" er skjult, og at adgangslisten også har kaspermoller@gmail.com og kaspermoller+test@gmail.com uden brugere. Aktivitetslisten er den samme som i den nuværende app. Billedcachen peger på Convex-filer, fordi V2 ikke har Supabase Storage. Versionslinjen følger commit'en. Previewet sender rigtige auth-mails, men kun til adgangslisten.
