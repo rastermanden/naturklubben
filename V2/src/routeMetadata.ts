@@ -1,0 +1,163 @@
+export interface RouteMetadata {
+  path: string
+  documentTitle: string
+  announcement: string
+}
+
+export const routeMetadata = [
+  {
+    path: '/',
+    documentTitle: 'Naturklubben',
+    announcement: 'Forside indlæst',
+  },
+  {
+    path: '/aktiviteter',
+    documentTitle: 'Aktiviteter | Naturklubben',
+    announcement: 'Aktiviteter indlæst',
+  },
+  {
+    path: '/datapolitik',
+    documentTitle: 'Datapolitik | Naturklubben',
+    announcement: 'Datapolitik indlæst',
+  },
+  {
+    path: '/konto-slettet',
+    documentTitle: 'Konto slettet | Naturklubben',
+    announcement: 'Konto slettet indlæst',
+  },
+  {
+    path: '/login',
+    documentTitle: 'Log ind | Naturklubben',
+    announcement: 'Log ind indlæst',
+  },
+  {
+    path: '/proevemedlemskab',
+    documentTitle: 'Prøvemedlemskab | Naturklubben',
+    announcement: 'Prøvemedlemskab indlæst',
+  },
+  {
+    path: '/opret',
+    documentTitle: 'Opret bruger | Naturklubben',
+    announcement: 'Opret bruger indlæst',
+  },
+  {
+    path: '/glemt-adgangskode',
+    documentTitle: 'Glemt adgangskode | Naturklubben',
+    announcement: 'Glemt adgangskode indlæst',
+  },
+  {
+    path: '/velkommen',
+    documentTitle: 'Velkommen | Naturklubben',
+    announcement: 'Velkommen indlæst',
+  },
+  {
+    path: '/ny-adgangskode',
+    documentTitle: 'Ny adgangskode | Naturklubben',
+    announcement: 'Ny adgangskode indlæst',
+  },
+  {
+    path: '/kalender',
+    documentTitle: 'Kalender | Naturklubben',
+    announcement: 'Kalender indlæst',
+  },
+  {
+    path: '/kalender/offentlig',
+    documentTitle: 'Åbne ture | Naturklubben',
+    announcement: 'Åbne ture indlæst',
+  },
+  // En enkelt begivenhed, åbnet fra en notifikation (#216) eller et delt link.
+  // Dynamiske stier efter deres statiske søskende: RouteNavigation finder
+  // siden ved første match, og denne matcher også /kalender/offentlig.
+  {
+    path: '/kalender/:eventId',
+    documentTitle: 'Kalender | Naturklubben',
+    announcement: 'Kalender indlæst',
+  },
+  {
+    path: '/billeder',
+    documentTitle: 'Billeder | Naturklubben',
+    announcement: 'Billeder indlæst',
+  },
+  {
+    path: '/chat',
+    documentTitle: 'Chat | Naturklubben',
+    announcement: 'Chat indlæst',
+  },
+  {
+    path: '/naturlog',
+    documentTitle: 'Naturlog | Naturklubben',
+    announcement: 'Naturlog indlæst',
+  },
+  {
+    path: '/spil',
+    documentTitle: 'Spil | Naturklubben',
+    announcement: 'Spil indlæst',
+  },
+  {
+    path: '/spil/tetris',
+    documentTitle: 'Tetris | Naturklubben',
+    announcement: 'Tetris indlæst',
+  },
+  {
+    path: '/spil/kaper',
+    documentTitle: 'Kaptajn Kaper i Kattegat | Naturklubben',
+    announcement: 'Kaptajn Kaper i Kattegat indlæst',
+  },
+  {
+    path: '/spil/2048',
+    documentTitle: '2048 | Naturklubben',
+    announcement: '2048 indlæst',
+  },
+  {
+    path: '/spil/naturquiz',
+    documentTitle: 'Naturquiz | Naturklubben',
+    announcement: 'Naturquiz indlæst',
+  },
+  {
+    path: '/spil/sti',
+    documentTitle: 'Stifinderen | Naturklubben',
+    announcement: 'Stifinderen indlæst',
+  },
+  {
+    path: '/spil/fugletraek',
+    documentTitle: 'Fugletræk | Naturklubben',
+    announcement: 'Fugletræk indlæst',
+  },
+  {
+    path: '/spil/kabale',
+    documentTitle: '7-kabale | Naturklubben',
+    announcement: '7-kabale indlæst',
+  },
+  {
+    path: '/aktiviteter/btg-turnering',
+    documentTitle: 'BTG turnering | Naturklubben',
+    announcement: 'BTG turnering indlæst',
+  },
+  {
+    path: '/medlemmer',
+    documentTitle: 'Medlemmer | Naturklubben',
+    announcement: 'Medlemmer indlæst',
+  },
+  {
+    path: '/nyheder',
+    documentTitle: 'Nyheder | Naturklubben',
+    announcement: 'Nyheder indlæst',
+  },
+  {
+    path: '/admin',
+    documentTitle: 'Admin | Naturklubben',
+    announcement: 'Admin indlæst',
+  },
+  {
+    path: '/admin/chat',
+    documentTitle: 'Admin-chat | Naturklubben',
+    announcement: 'Admin-chat indlæst',
+  },
+  {
+    path: '/profil',
+    documentTitle: 'Min profil | Naturklubben',
+    announcement: 'Min profil indlæst',
+  },
+] as const satisfies readonly RouteMetadata[]
+
+export type AppRoutePath = (typeof routeMetadata)[number]['path']

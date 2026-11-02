@@ -91,12 +91,11 @@ export function Navbar() {
         Naturklubben
       </Link>
 
-      <nav className="hidden min-w-0 flex-1 items-center gap-4 overflow-x-auto md:flex">
+      <nav className="hidden items-center gap-4 md:flex">
         {visibleLinks.map((link) => (
           <NavLink
             key={link.to}
             to={link.to}
-            end={link.to === '/'}
             className={({ isActive }) =>
               desktopLinkClass({
                 isActive: navLinkIsActive(link, pathname, isActive),
@@ -106,7 +105,6 @@ export function Navbar() {
             {link.label}
           </NavLink>
         ))}
-        <InstallAppButton className="rounded border border-line-strong px-3 py-1 text-ink-muted" />
         {!isAuthenticated && (
           <NavLink
             to="/login"
@@ -115,6 +113,7 @@ export function Navbar() {
             Log ind
           </NavLink>
         )}
+        <InstallAppButton className="rounded border border-line-strong px-3 py-1 text-ink-muted" />
       </nav>
 
       <button

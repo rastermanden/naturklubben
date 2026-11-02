@@ -4,7 +4,6 @@ import { convexTest } from 'convex-test'
 import schema from './schema'
 import {
   CLUB_ACTIVITIES,
-  PREVIEW_ACTIVITIES,
   PREVIEW_CHAT_TEXT,
   PREVIEW_KABALE_SCORE,
   PREVIEW_OBSERVATION_SPECIES,
@@ -107,10 +106,11 @@ describe('writePreviewSample', () => {
     expect(rows.profiles[0]?.avatarStorageId).toBeDefined()
     expect(rows.profiles[0]?.avatarUrl).toMatch(/^https?:/)
     expect(rows.activities.map((activity) => activity.title).sort()).toEqual(
-      [...CLUB_ACTIVITIES, ...PREVIEW_ACTIVITIES]
-        .map((activity) => activity.title)
-        .sort(),
+      CLUB_ACTIVITIES.map((activity) => activity.title).sort(),
     )
+    expect(
+      rows.activities.map((activity) => activity.sortOrder).sort(),
+    ).toEqual([1, 2, 3, 4, 5])
     expect(
       rows.activities.find((activity) => activity.title === 'Design af Mønter'),
     ).toMatchObject({
@@ -173,6 +173,75 @@ describe('writePreviewSample', () => {
       content: PREVIEW_CHAT_TEXT,
       messageType: 'text',
     })
+  })
+
+  it('retter rækkefølge og fjerner de gamle prøveaktiviteter', async () => {
+    const t = convexTest(schema, modules)
+    const userId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert('users', { email: 'preview@example.com' })
+      await ctx.db.insert('authAccounts', {
+        userId: id,
+        provider: 'password',
+        providerAccountId: 'preview@example.com',
+      })
+      await ctx.db.insert('activities', {
+        title: 'Skovtur',
+        description: 'Gammel prøve',
+        icon: 'leaf',
+        sortOrder: 1,
+        createdAt: 1,
+      })
+      await ctx.db.insert('activities', {
+        title: 'Fuglekiggeri',
+        description: 'Gammel prøve',
+        sortOrder: 2,
+        createdAt: 1,
+      })
+      await ctx.db.insert('activities', {
+        title: 'Design af Mønter',
+        description: 'Uden link',
+        icon: 'leaf',
+        sortOrder: 50,
+        createdAt: 1,
+      })
+      await ctx.db.insert('activities', {
+        title: 'Madkoordinering',
+        description: 'Med et ikon, der ikke hører til',
+        icon: 'leaf',
+        sortOrder: 9,
+        linkUrl: 'https://example.com',
+        linkLabel: 'Forkert',
+        createdAt: 1,
+      })
+      return id
+    })
+
+    await t.run(async (ctx) => {
+      await writePreviewSample(ctx, userId)
+    })
+
+    const activities = await t.run(async (ctx) =>
+      ctx.db.query('activities').collect(),
+    )
+    expect(activities.map((activity) => activity.title).sort()).toEqual(
+      CLUB_ACTIVITIES.map((activity) => activity.title).sort(),
+    )
+    const coins = activities.find(
+      (activity) => activity.title === 'Design af Mønter',
+    )
+    expect(coins).toMatchObject({
+      sortOrder: 1,
+      icon: 'footprints',
+      linkUrl: 'https://bral.dk',
+      linkLabel: 'Læs om valutaen på bral.dk',
+    })
+    const food = activities.find(
+      (activity) => activity.title === 'Madkoordinering',
+    )
+    expect(food?.sortOrder).toBe(3)
+    expect(food?.icon).toBeUndefined()
+    expect(food?.linkUrl).toBeUndefined()
+    expect(food?.linkLabel).toBeUndefined()
   })
 
   it('rykker en forbi preview-tur frem i stedet for at lave en ny', async () => {

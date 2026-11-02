@@ -43,7 +43,7 @@ export const ANNOUNCEMENT_PATH = 'nyheder'
  * ikke hvad der er refaktoreret. `slug` er stabil og skrives i små bogstaver
  * med bindestreger; `path` er relativ og uden skråstreg foran.
  *
- * Næste domæne, der portes, lægger sin egen række her.
+ * Teksterne er de samme som migrationernes `feature_announcements`.
  */
 export const ANNOUNCEMENTS = [
   {
@@ -53,52 +53,188 @@ export const ANNOUNCEMENTS = [
     path: 'nyheder',
   },
   {
+    slug: 'naturlog',
+    title: 'Ny: Naturlog -- skriv, hvad du har set',
+    body: 'Set en rød glente eller fundet kantareller? Åbn Naturlog i menuen, skriv art, sted og dato -- og læg gerne et billede og din position ved. Hele klubben kan se loggen, og billedet ryger også i galleriet.',
+    path: 'naturlog',
+  },
+  {
+    slug: 'chat-klikbare-links',
+    title: 'Links i chatten er nu klikbare',
+    body: 'Sæt en tur- eller artikellink ind i en besked, og det bliver automatisk til et link, man kan trykke på.',
+    path: 'chat',
+  },
+  {
+    slug: 'moerkt-tema',
+    title: 'Appen kan nu blive mørk om aftenen',
+    body: 'Nederst på siden -- og i menuen på telefonen -- kan du nu vælge mellem Lys, Mørk og Auto. Auto følger telefonens egen indstilling, så appen selv bliver mørk, når din telefon gør det om aftenen. Valget gælder den enhed, du sidder med.',
+  },
+  {
+    slug: 'chat-fuldskaerm',
+    title: 'Chatten fylder nu skærmen på telefonen',
+    body: 'Beskederne har fået den plads, der før gik til søgefelt og knapper -- de ligger nu bag tandhjulet øverst i chatten. Vil du have det hele, så tryk på ⤢ og læs chatten i fuldskærm; tryk på ⤡ for at komme ud igen.',
+    path: 'chat',
+  },
+  {
+    slug: 'kompakte-beskeder',
+    title: 'Der er plads til flere beskeder på skærmen',
+    body: 'Hver besked fylder nu det halve: afsender, tidspunkt og knapper står på én linje øverst i boblen. Svar er blevet til ↩︎, Reagér til ☺︎ og Slet til ×. Tryk og hold på tidspunktet for at se det præcise klokkeslæt.',
+    path: 'chat',
+  },
+  {
+    slug: 'spil-tetris',
+    title: 'Nyt: Spil Tetris mod resten af klubben',
+    body: 'Der er kommet en spil-side i menuen. Første spil er Tetris -- spil på telefonen eller med piletasterne, og dit bedste resultat ryger på klubbens resultatliste. Hvor højt kan du komme?',
+    path: 'spil',
+  },
+  {
+    slug: 'spil-kaptajn-kaper',
+    title: 'Nyt spil: Kaptajn Kaper i Kattegat',
+    body: "Kongen har givet dig kaperbrev. Jag de engelske skibe i Kattegat, skyd dem mør eller entr dem, sejl priserne til København -- og bliv adlet, før rivalen får komtessen. Et hjemmecomputerspil fra 1980'erne, genskabt til telefonen. Find det under Spil.",
+    path: 'spil/kaper',
+  },
+  {
+    slug: 'profil-pronominer',
+    title: 'Fortæl de andre, hvad du gerne vil kaldes',
+    body: 'På din profil kan du nu vælge dine pronominer -- fx hun/hende, han/ham, de/dem eller hen/hen -- eller skrive dine egne. De vises ved dit navn på medlemslisten og i chatten, så ingen behøver at gætte -- og de andre får besked i chatten, når du vælger.',
+    path: 'profil',
+  },
+  {
+    slug: 'profil-hjertesager',
+    title: 'Vis, hvad du står for, ved dit navn',
+    body: 'På din profil kan du nu sætte små mærker ved dit navn: 🇺🇦 for Ukraine, 🏳️‍🌈 regnbueflaget og 💉 for vaccineret. De vises på medlemslisten og i chatten -- vælg dem, der passer på dig, eller ingen.',
+    path: 'profil',
+  },
+  {
+    slug: 'profil-flere-hjertesager',
+    title: 'Flere mærker at sætte ved dit navn',
+    body: 'Der er kommet flere hjertesager at vælge imellem på din profil: 🏳️‍⚧️ transflaget, 🌍 klimaet, 🐝 biodiversitet, 🐾 dyrevelfærd, 🌱 plantebaseret, 🕊️ fred, 🩸 bloddonor, 🫀 organdonor og 🚲 cyklist. Vælg dem, der passer på dig.',
+    path: 'profil',
+  },
+  {
+    slug: 'spil-2048',
+    title: 'Nyt spil: 2048',
+    body: 'Skub brikkerne sammen, så to ens bliver til én -- og se, om du kan nå 2048. Stryg over brættet på telefonen eller brug piletasterne. Dit bedste resultat lander på klubbens liste. Find det under Spil.',
+    path: 'spil/2048',
+  },
+  {
+    slug: 'turneringsstyring',
+    title: 'Ny side: styr klubbens turneringer',
+    body: 'Under Turnering kan du oprette en turnering med alle-mod-alle eller udslagsrunder, vælge deltagere blandt medlemmerne og taste resultater ind kamp for kamp, mens I spiller.',
+    path: 'turnering',
+  },
+  {
+    slug: 'offentlig-kalender',
+    title: 'Åbn en tur for folk uden for klubben',
+    body: 'Sæt kryds i "Åben for ikke-medlemmer", når du opretter eller retter en begivenhed. Så kan alle se den på den offentlige kalender og søge om at komme med -- du godkender eller afviser ansøgningerne på begivenheden, og ansøgeren får svar på e-mail. Godkendte gæster tæller med i deltagertallet.',
+    path: 'kalender',
+  },
+  {
     slug: 'push-kalender-og-maerker',
     title: 'Få besked om nye ture i kalenderen',
     body: 'Appen kan nu sende dig en notifikation, når der kommer en ny begivenhed i kalenderen, og dagen før en tur du er tilmeldt. Vælg selv hvilke på din profil under "Notifikationer".',
     path: 'profil',
   },
   {
-    slug: 'spil-7-kabale',
-    title: 'Nyt spil: 7-kabale',
-    body: 'Den klassiske kabale ligger under Spil. Læg kortene i syv rækker, træk fra bunken, og byg de fire grundbunker fra es til konge.',
-    path: 'spil/kabale',
+    slug: 'kalender-venteliste',
+    title: 'Pladsloft og venteliste på ture',
+    body: 'En tur kan nu have et max antal deltagere. Er der fyldt op, kommer du på venteliste og rykker automatisk op, når nogen melder afbud -- så får du besked i chatten. Du kan også melde afbud, så arrangøren ved, du ikke kommer, og arrangøren kan minde dem, der endnu ikke har svaret.',
+    path: 'kalender',
   },
   {
-    slug: 'naturlog',
-    title: 'Skriv, hvad du har set',
-    body: 'Naturloggen ligger under Aktiviteter. Skriv art, sted og dato, så de andre kan se fundet.',
-    path: 'naturlog',
+    slug: 'turnering-finale-bedst-af-fem',
+    title: 'Finalen går nu over fem spil',
+    body: 'I udslagsrunder afgøres finalen nu bedst af fem spil -- resten af kampene er stadig bedst af tre. Reglerne står nu øverst på turneringen, så I kan slå dem op midt i det hele.',
+    path: 'turnering',
   },
   {
-    slug: 'billeder',
-    title: 'Du kan nu lægge billeder op',
-    body: 'Åbn Billeder, vælg et foto, og det gemmes i klubbens galleri. Billedet skaleres på din telefon, før det sendes.',
-    path: 'billeder',
-  },
-  {
-    slug: 'chat',
-    title: 'Chatten er åben',
-    body: 'Skriv til de andre under Chat. Beskederne kommer frem med det samme, også hos dem, der allerede har siden åben.',
+    slug: 'afstemninger-i-chatten',
+    title: 'Afstemninger i chatten',
+    body: 'Skriv /afstemning <spørgsmål> | <svar 1> | <svar 2> i chatten for at lave en afstemning -- fx "hvor skal vi hen på lørdag?". Alle kan stemme med det samme, og stemmerne tælles op live. Opretteren kan lukke afstemningen, når resultatet er klart.',
     path: 'chat',
-  },
-  {
-    slug: 'chat-laest-af',
-    title: 'Nu kan du se, hvem der har læst med i chatten',
-    body: 'Under beskederne i chatten står nu små billeder af dem, der har læst så langt. Tryk på dem for at se navnene. Det gælder også dig: de andre kan se, hvor langt du har læst.',
-    path: 'chat',
-  },
-  {
-    slug: 'profilbillede',
-    title: 'Du kan nu sætte et profilbillede',
-    body: 'Åbn Min profil og tryk på billedet. Det gemmes med det samme, og de andre medlemmer kan se det.',
-    path: 'profil',
   },
   {
     slug: 'venteliste-push',
     title: 'Besked når du rykker op fra ventelisten',
     body: 'Står du på venteliste til en tur, og bliver der plads til dig, kan appen nu også sende dig en notifikation om det -- ikke kun en besked i chatten. Vælg selv til eller fra på din profil under "Notifikationer".',
     path: 'kalender',
+  },
+  {
+    slug: 'spil-naturquiz',
+    title: 'Nyt spil: Naturquiz',
+    body: 'Genkend fuglen, planten eller sporet på billedet blandt fire muligheder. Ti spørgsmål pr. runde, point for at svare rigtigt og hurtigt, og en voksende bonus, hvis du rammer rigtigt flere gange i træk. Dit resultat lander på klubbens liste under Spil.',
+    path: 'spil/naturquiz',
+  },
+  {
+    slug: 'galleri-album-kommentarer',
+    title: 'Album og kommentarer i galleriet',
+    body: 'Billederne er nu samlet i album pr. tur -- med et eget album til billeder uden begivenhed. Åbn et billede og skriv en kommentar, så andre medlemmer kan se den med det samme.',
+    path: 'billeder',
+  },
+  {
+    slug: 'naturlog-kort-artsoversigt',
+    title: 'Kort og årets første i naturloggen',
+    body: 'Observationer med en position kan nu ses på et kort. Under Arter er der en artsoversigt med antal pr. art -- og hvad årets første fund var.',
+    path: 'naturlog',
+  },
+  {
+    slug: 'beskeder-uden-daekning',
+    title: 'Beskeder skrevet uden dækning sendes nu af sig selv',
+    body: 'Er du i skoven uden net, kan du skrive alligevel. Beskeden står med "Sendes, når du er online" og bliver sendt, så snart telefonen har forbindelse igen. Den viser det tidspunkt, du skrev den -- og de andre ser den kun én gang.',
+    path: 'chat',
+  },
+  {
+    slug: 'kalender-tidligere-begivenheder',
+    title: 'Nu kan du se tidligere ture i kalenderen',
+    body: 'Bladr tilbage i kalenderen for at se, hvad klubben har lavet, og hvem der var med. På mobilen finder du dem under "Tidligere begivenheder" nederst på siden.',
+    path: 'kalender',
+  },
+  {
+    slug: 'kalender-flerdagsbegivenheder',
+    title: 'Ture over flere dage står nu på alle dagene',
+    body: 'En weekendtur eller en lejr vises nu i kalenderen på hver dag, den varer, med slutdato og -tid. Og er turen i gang, står den stadig under de kommende, så du kan se, hvem der er med.',
+    path: 'kalender',
+  },
+  {
+    slug: 'kalender-billeder-fra-turen',
+    title: 'Se billederne fra en tur direkte i kalenderen',
+    body: 'Har nogen lagt billeder op fra en tur, står der nu "Se billeder" på turen i kalenderen. Et tryk, og du er i turens album i galleriet.',
+    path: 'kalender',
+  },
+  {
+    slug: 'spil-stifinderen',
+    title: 'Nyt spil: Stifinderen',
+    body: 'Vælg en let, mellemsvær eller svær bane, og gå posterne i rækkefølge. Sti er hurtig, mose er langsom, og vand må du gå udenom. Jo tættere du kommer på den hurtigste rute, jo flere point. Den svære bane kan toppe listen. Find det under Spil.',
+    path: 'spil/sti',
+  },
+  {
+    slug: 'spil-fugletraek',
+    title: 'Nyt spil: Fugletræk',
+    body: 'Vend kortene to ad gangen og find parrene af danske dyr. To ens bliver liggende, to forskellige vendes tilbage. Vælg et let, mellemsvært eller svært bræt. Jo færre vendinger og jo hurtigere, jo flere point. Find det under Spil.',
+    path: 'spil/fugletraek',
+  },
+  {
+    slug: 'flyttet-til-naturklubben-dk',
+    title: 'Naturklubben har fået sin egen adresse: naturklubben.dk',
+    body: 'Appen ligger nu på naturklubben.dk. Har du appen på din hjemmeskærm, så slet den gamle og tilføj den igen herfra. Og bruger du notifikationer, så slå dem til igen under din profil -- de flytter ikke med af sig selv.',
+  },
+  {
+    slug: 'spil-7-kabale',
+    title: 'Nyt spil: 7-kabale',
+    body: 'Den klassiske kabale er kommet under Spil. Læg kortene i syv rækker, træk fra bunken, og byg de fire grundbunker fra es til konge. Tryk to gange på et kort for at lægge det hjem. Et vundet parti kan komme på listen.',
+    path: 'spil/kabale',
+  },
+  {
+    slug: 'menu-naturlog-spil-log-ud',
+    title: 'Naturlog og Spil ligger nu under Aktiviteter',
+    body: 'Menuen er blevet kortere, så den kan ses på en telefon. Naturlog og Spil finder du nu under Aktiviteter, og "Log ud" ligger nederst på din profil.',
+    path: 'aktiviteter',
+  },
+  {
+    slug: 'chat-laest-af',
+    title: 'Nu kan du se, hvem der har læst med i chatten',
+    body: 'Under beskederne i chatten står nu små billeder af dem, der har læst så langt. Tryk på dem for at se navnene. Det gælder også dig: de andre kan se, hvor langt du har læst.',
+    path: 'chat',
   },
 ] as const
 
@@ -262,19 +398,41 @@ export const requestDelivery = mutation({
  * `on conflict (slug) do nothing` i den gamle migration -- så den kan kaldes
  * ved hver app-åbning uden at lave dubletter.
  */
+function announcementPath(
+  announcement: (typeof ANNOUNCEMENTS)[number],
+): string | undefined {
+  return 'path' in announcement ? announcement.path : undefined
+}
+
 async function seed(ctx: MutationCtx) {
   const now = Date.now()
   for (const announcement of ANNOUNCEMENTS) {
+    const path = announcementPath(announcement)
     const existing = await ctx.db
       .query('featureAnnouncements')
       .withIndex('by_slug', (q) => q.eq('slug', announcement.slug))
       .unique()
-    if (existing) continue
+    if (existing) {
+      // Teksten følger koden, også når en ældre række blev skrevet med en
+      // anden formulering. Slug'en er den stabile nøgle.
+      if (
+        existing.title !== announcement.title ||
+        existing.body !== announcement.body ||
+        existing.path !== path
+      ) {
+        await ctx.db.patch(existing._id, {
+          title: announcement.title,
+          body: announcement.body,
+          path,
+        })
+      }
+      continue
+    }
     await ctx.db.insert('featureAnnouncements', {
       slug: announcement.slug,
       title: announcement.title,
       body: announcement.body,
-      path: announcement.path,
+      ...(path ? { path } : {}),
       releasedAt: now,
       createdAt: now,
       pushStatus: 'pending',

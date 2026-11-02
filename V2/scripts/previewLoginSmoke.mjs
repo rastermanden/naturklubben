@@ -58,6 +58,14 @@ async function assertText(page, text, timeout = 20000) {
   )
 }
 
+async function assertAbsent(page, text) {
+  const found = await page.evaluate(
+    (expected) => document.body?.innerText?.includes(expected) ?? false,
+    text,
+  )
+  if (found) throw new Error(`Uventet tekst på siden: ${text}`)
+}
+
 async function open(page, url) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
 }
@@ -142,9 +150,15 @@ async function runOnce() {
     await open(page, `${base}?cb=${Date.now()}`)
     await assertText(page, 'V2 ·', 8000)
     await clickText(page, 'Se aktiviteter')
-    await assertText(page, 'Skovtur')
+    await assertText(page, 'Design af Mønter')
+    await assertText(page, 'Hornfisk')
     await assertText(page, 'Læs om valutaen på bral.dk')
     await assertText(page, 'Se BøsseTennisGolf-siden')
+    await assertAbsent(page, 'Skovtur')
+    await assertAbsent(page, 'Fuglekiggeri')
+    await page.waitForFunction(
+      () => document.title === 'Aktiviteter | Naturklubben',
+    )
     await clickText(page, 'Naturklubben')
     await clickText(page, 'Se åbne ture')
     await assertText(page, 'Preview-tur')
@@ -192,7 +206,7 @@ async function runOnce() {
     const reloads = [
       ['', 'Gå til kalender'],
       ['kalender', 'Preview-tur'],
-      ['aktiviteter', 'Skovtur'],
+      ['aktiviteter', 'Design af Mønter'],
       ['spil', '7-kabale'],
       ['spil/kabale', 'Sådan spiller du'],
       ['billeder', 'Uden begivenhed'],

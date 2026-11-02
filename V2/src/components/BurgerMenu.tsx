@@ -88,7 +88,6 @@ export function BurgerMenu({
             <NavLink
               key={link.to}
               to={link.to}
-              end={link.to === '/'}
               onClick={onClose}
               className={({ isActive }) =>
                 `flex min-h-11 shrink-0 items-center rounded px-3 py-2 text-base ${

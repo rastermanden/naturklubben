@@ -40,7 +40,7 @@ function ActivitiesPage() {
   const { isAuthenticated } = useConvexAuth()
 
   return (
-    <main className="bg-surface-sunken/60 px-4 py-12 sm:px-6 sm:py-16">
+    <main className="flex-1 bg-surface-sunken/60 px-4 py-12 sm:px-6 sm:py-16">
       <div className="mx-auto max-w-5xl">
         <header className="mx-auto max-w-2xl text-center">
           <p className="text-sm font-semibold tracking-widest text-ink-subtle uppercase">

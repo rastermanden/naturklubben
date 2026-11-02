@@ -35,8 +35,12 @@ export const PREVIEW_MEMBER_NAME = 'Preview-tester'
 /**
  * Klubbens egne aktiviteter, som migrationerne i den nuværende app lægger ind.
  * Linket til bral.dk og BøsseTennisGolf-siden er data, ikke en hårdkodet knap.
- * Previewets egne prøverækker (Skovtur) ligger oveni og må godt blive.
+ * Rækkefølgen er `sortOrder`, den samme som på naturklubben.dk.
+ *
+ * Ældre preview-builds lagde Skovtur og Fuglekiggeri ind foran. De er ikke
+ * klubbens aktiviteter og fjernes, så siden viser det samme som den nuværende app.
  */
+export const RETIRED_PREVIEW_ACTIVITIES = ['Skovtur', 'Fuglekiggeri'] as const
 export const CLUB_ACTIVITIES = [
   {
     title: 'Design af Mønter',
@@ -80,25 +84,6 @@ export const CLUB_ACTIVITIES = [
       'Vi mødes om hornfisketure, grej og gode historier fra kysten.',
     icon: 'binoculars',
     sortOrder: 5,
-    linkUrl: undefined,
-    linkLabel: undefined,
-  },
-] as const
-
-export const PREVIEW_ACTIVITIES = [
-  {
-    title: 'Skovtur',
-    description: 'En tur i skoven, så aktivitetssiden har noget at vise.',
-    icon: 'leaf',
-    sortOrder: 100,
-    linkUrl: undefined,
-    linkLabel: undefined,
-  },
-  {
-    title: 'Fuglekiggeri',
-    description: 'En tur med kikkert, så listen har mere end ét punkt.',
-    icon: 'binoculars',
-    sortOrder: 101,
     linkUrl: undefined,
     linkLabel: undefined,
   },
@@ -217,27 +202,37 @@ export async function writePreviewSample(
     })
   }
 
-  for (const sample of [...CLUB_ACTIVITIES, ...PREVIEW_ACTIVITIES]) {
+  const retiredTitles = new Set<string>(RETIRED_PREVIEW_ACTIVITIES)
+  const existingActivities = await ctx.db.query('activities').collect()
+  for (const row of existingActivities) {
+    if (retiredTitles.has(row.title)) await ctx.db.delete(row._id)
+  }
+
+  for (const sample of CLUB_ACTIVITIES) {
     const existing = await ctx.db
       .query('activities')
       .filter((q) => q.eq(q.field('title'), sample.title))
       .first()
+    // Et ældre preview kan have rækken med forkert rækkefølge, ikon eller
+    // uden link. Felterne skrives om, så siden matcher den nuværende app.
+    // `undefined` fjerner et felt, der ikke hører til aktiviteten.
+    // `undefined` på et patch fjerner feltet. På insert skal feltet udelades.
+    const fields = {
+      description: sample.description,
+      sortOrder: sample.sortOrder,
+      icon: sample.icon,
+      linkUrl: sample.linkUrl,
+      linkLabel: sample.linkLabel,
+    }
     if (existing !== null) {
-      // Et ældre preview kan have rækken uden link. Linket skal med, så
-      // siden viser det samme som den nuværende app.
-      if (sample.linkUrl && existing.linkUrl !== sample.linkUrl) {
-        await ctx.db.patch(existing._id, {
-          linkUrl: sample.linkUrl,
-          linkLabel: sample.linkLabel,
-        })
-      }
+      await ctx.db.patch(existing._id, fields)
       continue
     }
     await ctx.db.insert('activities', {
       title: sample.title,
       description: sample.description,
-      ...(sample.icon ? { icon: sample.icon } : {}),
       sortOrder: sample.sortOrder,
+      ...(sample.icon ? { icon: sample.icon } : {}),
       ...(sample.linkUrl
         ? { linkUrl: sample.linkUrl, linkLabel: sample.linkLabel }
         : {}),

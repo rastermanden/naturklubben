@@ -3,9 +3,11 @@ import { Outlet } from 'react-router-dom'
 import { useConvexAuth } from 'convex/react'
 import { FeatureAnnouncementBanner } from '../features/announcements/FeatureAnnouncementBanner'
 import { PronounsReminder } from '../features/profile/PronounsReminder'
+import { routeMetadata } from '../routeMetadata'
 import { AppErrorBoundary } from './AppErrorBoundary'
 import { Footer } from './Footer'
 import { Navbar } from './Navbar'
+import { RouteNavigation } from './RouteNavigation'
 
 /**
  * Samme ramme som den nuværende app: header, indhold i sidernes egen bredde,
@@ -31,12 +33,13 @@ export function Layout() {
         Spring til indhold
       </a>
       <Navbar />
+      <RouteNavigation routes={routeMetadata} />
 
       <div
         id="main-content"
         tabIndex={-1}
-        className={`flex-1 ${
-          keepsContentInViewport ? 'flex min-h-0 flex-col overflow-hidden' : ''
+        className={`flex flex-1 flex-col ${
+          keepsContentInViewport ? 'min-h-0 overflow-hidden' : ''
         }`}
       >
         <AppErrorBoundary>

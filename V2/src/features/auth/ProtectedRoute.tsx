@@ -15,7 +15,9 @@ import { useCurrentProfile } from './useCurrentProfile'
  * gætte ud fra profilen, fordi `null` betyder både "ikke logget ind" og
  * "logget ind, men endnu ikke medlem":
  *
- * 1. ingen session -> login, med den sti man kom fra, så man lander tilbage.
+ * 1. ingen session -> forsiden, med beskeden om at siden kræver login.
+ *    Samme sted som den nuværende app: gæsten bliver på forsiden, ikke på
+ *    login-formularen.
  * 2. session uden profil -> velkomstsiden, som opretter profilen.
  * 3. profil -> siden.
  */
@@ -27,7 +29,13 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   if (authLoading || isLoading) return null
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />
+    return (
+      <Navigate
+        to="/"
+        state={{ authRequired: true, from: location.pathname }}
+        replace
+      />
+    )
   }
 
   if (profile === null) {
