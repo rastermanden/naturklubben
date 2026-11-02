@@ -33,11 +33,13 @@ export async function applyImportedAdmin(
   isAdmin: boolean,
 ): Promise<void> {
   const normalized = normalizeAuthEmail(email)
-  const allowed = await ctx.db
+  const allowedRows = await ctx.db
     .query('allowedEmails')
     .withIndex('by_email', (q) => q.eq('email', normalized))
-    .unique()
-  if (allowed === null) {
+    .collect()
+  const [allowed, ...extraAllowed] = allowedRows
+  for (const dup of extraAllowed) await ctx.db.delete(dup._id)
+  if (allowed === undefined) {
     await ctx.db.insert('allowedEmails', { email: normalized, isAdmin })
   } else if ((allowed.isAdmin ?? false) !== isAdmin) {
     await ctx.db.patch(allowed._id, { isAdmin })
