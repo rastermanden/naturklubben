@@ -3,7 +3,7 @@
  * peger på. Supabase ændres ikke. Kørslen kan gentages.
  *
  * Hemmeligheder skrives ikke ud. Argumenter med hashes sendes til Convex
- * uden at blive printet.
+ * uden at blive printet. Importen kan køres igen lige før skiftet.
  */
 import { spawnSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
