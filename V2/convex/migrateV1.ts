@@ -51,6 +51,7 @@ function bool(value: unknown): boolean {
 }
 
 function idOf(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
   return text(value)
 }
 
@@ -216,7 +217,21 @@ export const importBundle = internalMutation({
     for (const row of bundle.allowed ?? []) {
       const email = text(row.email)?.toLowerCase()
       if (!email) continue
-      if (await use('allowed', email)) continue
+      const rows = await ctx.db
+        .query('allowedEmails')
+        .withIndex('by_email', (q) => q.eq('email', email))
+        .collect()
+      const [first, ...extra] = rows
+      for (const dup of extra) await ctx.db.delete(dup._id)
+      if (first) {
+        if ((first.isAdmin ?? false) !== bool(row.is_admin)) {
+          await ctx.db.patch(first._id, { isAdmin: bool(row.is_admin) })
+        }
+        if ((await existingRef(ctx, 'allowed', email)) === null) {
+          await remember(ctx, 'allowed', email, first._id)
+        }
+        continue
+      }
       const id = await ctx.db.insert('allowedEmails', {
         email,
         isAdmin: bool(row.is_admin),

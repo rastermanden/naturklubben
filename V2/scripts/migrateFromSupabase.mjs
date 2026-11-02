@@ -210,6 +210,9 @@ const sourceCounts = {
   files: objects.length,
 }
 console.log(`Kilde: ${JSON.stringify(sourceCounts)}`)
+console.log(
+  `probation ${probation.length} id ${typeof probation[0]?.id}`,
+)
 
 const key = await serviceKey()
 const files = {}
