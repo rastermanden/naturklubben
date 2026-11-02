@@ -14,8 +14,9 @@ import { Navbar } from './Navbar'
 export function Layout() {
   const { isAuthenticated } = useConvexAuth()
   const { pathname } = useLocation()
-  const keepsContentInViewport =
-    pathname === '/chat' || pathname === '/admin/chat'
+  // Kun den fælles chat fylder skærmen. Admin-chatten beholder footeren,
+  // som i den nuværende app.
+  const keepsContentInViewport = pathname === '/chat'
 
   return (
     <div
