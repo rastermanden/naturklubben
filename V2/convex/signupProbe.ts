@@ -8,22 +8,24 @@ import type { MutationCtx } from './_generated/server'
  * Adressen er fast, så funktionen ikke kan bruges til andre modtagere.
  * Slettes igen, når prøven er kørt.
  */
-const PROBE_EMAIL = 'martin.martinjensen+nktest@gmail.com'
+const PROBE_EMAILS = [
+  'martin.martinjensen+nktest@gmail.com',
+  'naturklubben-test@agentmail.to',
+]
 const PURGE_CONFIRM = 'PURGE_SIGNUP_PROBE'
 
 export const allow = internalMutation({
   args: {},
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx) => {
-    const existing = await ctx.db
-      .query('allowedEmails')
-      .withIndex('by_email', (q) => q.eq('email', PROBE_EMAIL))
-      .unique()
-    if (existing === null) {
-      await ctx.db.insert('allowedEmails', {
-        email: PROBE_EMAIL,
-        isAdmin: false,
-      })
+    for (const email of PROBE_EMAILS) {
+      const existing = await ctx.db
+        .query('allowedEmails')
+        .withIndex('by_email', (q) => q.eq('email', email))
+        .unique()
+      if (existing === null) {
+        await ctx.db.insert('allowedEmails', { email, isAdmin: false })
+      }
     }
     return { ok: true as const }
   },
@@ -42,15 +44,19 @@ export const purge = internalMutation({
 })
 
 async function purgeProbe(ctx: MutationCtx) {
-  const allowed = await ctx.db
-    .query('allowedEmails')
-    .withIndex('by_email', (q) => q.eq('email', PROBE_EMAIL))
-    .unique()
-  if (allowed !== null) await ctx.db.delete(allowed._id)
+  for (const email of PROBE_EMAILS) {
+    const allowed = await ctx.db
+      .query('allowedEmails')
+      .withIndex('by_email', (q) => q.eq('email', email))
+      .unique()
+    if (allowed !== null) await ctx.db.delete(allowed._id)
+  }
 
   const accounts = await ctx.db.query('authAccounts').collect()
   const mine = accounts.filter(
-    (account) => account.providerAccountId === PROBE_EMAIL,
+    (account) =>
+      typeof account.providerAccountId === 'string' &&
+      PROBE_EMAILS.includes(account.providerAccountId),
   )
   const userIds = new Set<Id<'users'>>()
   for (const account of mine) {

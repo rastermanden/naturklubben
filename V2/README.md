@@ -172,11 +172,14 @@ Prøvemedlemskab og gæsteansøgninger sender ikke mail i den nuværende app
 `SITE_URL` skal være `https://naturklubben.dk`, så et link tilbage til
 preview-stien `/pr-preview/pr-<nr>/velkommen` accepteres.
 
+Mailtests sendes kun til **naturklubben-test@agentmail.to**. Det er
+test-indbakken. Den kan læses fra Martins side, ikke herfra, og der sendes
+ikke prøvemail til andre adresser.
+
 #### DNS hos my.host
 
-Domænet `naturklubben.dk` er oprettet i Resend i region **eu-west-1**, men
-endnu ikke verificeret. Kasper lægger disse records ind hos my.host. Værdien
-på DKIM-posten er den, Resend viser for domænet -- den står ikke her.
+Domænet `naturklubben.dk` er verificeret i Resend i region **eu-west-1**.
+Værdien på DKIM-posten er den, Resend viser for domænet -- den står ikke her.
 
 | Type  | Navn                | Indhold                     |
 | ----- | ------------------- | --------------------------- |
@@ -185,8 +188,7 @@ på DKIM-posten er den, Resend viser for domænet -- den står ikke her.
 | CNAME | `send`              | `send.forge.rmta.net`       |
 
 Eksisterende mail-poster for klubbens almindelige post må ikke overskrives.
-Når de tre er lagt ind, trykkes Verify i Resend. Før det afviser Resend
-afsenderen `noreply@naturklubben.dk`, så der sendes ingen prøvemail endnu.
+Domænet er verificeret, og afsenderen `noreply@naturklubben.dk` kan sende.
 
 ### Data
 

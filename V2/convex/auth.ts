@@ -49,11 +49,14 @@ function emailProvider(id: string): EmailConfig {
   }
 }
 
+const verifyEmail = emailProvider('password-verify')
+const resetEmail = emailProvider('password-reset')
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
     Password({
-      verify: emailProvider('password-verify'),
-      reset: emailProvider('password-reset'),
+      verify: verifyEmail,
+      reset: resetEmail,
       validatePasswordRequirements: assertPasswordLength,
       crypto: {
         hashSecret: hashPassword,
@@ -69,5 +72,11 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         return profile
       },
     }),
+    // Koden i mailen er udstedt af disse udbydere. Det offentlige
+    // `auth:signIn`, som klienten kalder med `?code=`, slår kun op i den
+    // almindelige liste -- ikke i Password-udbyderens ekstra liste. Uden
+    // dem her fejler linket med "password-verify is not configured".
+    verifyEmail,
+    resetEmail,
   ],
 })
