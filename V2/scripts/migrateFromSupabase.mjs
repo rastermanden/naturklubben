@@ -40,15 +40,16 @@ function convex(args, input) {
       env: process.env,
     },
   )
+  const combined = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
   if (result.status !== 0) {
-    const err = `${result.stderr ?? ''}\n${result.stdout ?? ''}`
+    const err = combined
       .replace(/re_[A-Za-z0-9_-]+/g, '[key]')
       .replace(/eyJ[A-Za-z0-9._-]+/g, '[jwt]')
       .replace(/\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{20,}/g, '[hash]')
     console.error(err.slice(0, 2000))
     process.exit(result.status ?? 1)
   }
-  return result.stdout ?? ''
+  return combined
 }
 
 async function sql(query) {
