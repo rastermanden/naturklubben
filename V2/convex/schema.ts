@@ -6,6 +6,7 @@ import { chatTables } from './tables/chat'
 import { galleryTables } from './tables/gallery'
 import { notificationTables } from './tables/notifications'
 import { communityTables } from './tables/community'
+import { migrateTables } from './tables/migrate'
 
 /**
  * V2's samlede skema.
@@ -27,4 +28,5 @@ export default defineSchema({
   ...galleryTables,
   ...notificationTables,
   ...communityTables,
+  ...migrateTables,
 })

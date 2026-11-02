@@ -27,6 +27,7 @@ import type * as gallery from "../gallery.js";
 import type * as games from "../games.js";
 import type * as http from "../http.js";
 import type * as members from "../members.js";
+import type * as migrateV1 from "../migrateV1.js";
 import type * as notifications from "../notifications.js";
 import type * as observations from "../observations.js";
 import type * as passwordCrypto from "../passwordCrypto.js";
@@ -43,6 +44,7 @@ import type * as tables_chat from "../tables/chat.js";
 import type * as tables_community from "../tables/community.js";
 import type * as tables_gallery from "../tables/gallery.js";
 import type * as tables_members from "../tables/members.js";
+import type * as tables_migrate from "../tables/migrate.js";
 import type * as tables_notifications from "../tables/notifications.js";
 import type * as tournaments from "../tournaments.js";
 
@@ -72,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   games: typeof games;
   http: typeof http;
   members: typeof members;
+  migrateV1: typeof migrateV1;
   notifications: typeof notifications;
   observations: typeof observations;
   passwordCrypto: typeof passwordCrypto;
@@ -88,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   "tables/community": typeof tables_community;
   "tables/gallery": typeof tables_gallery;
   "tables/members": typeof tables_members;
+  "tables/migrate": typeof tables_migrate;
   "tables/notifications": typeof tables_notifications;
   tournaments: typeof tournaments;
 }>;
