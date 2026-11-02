@@ -24,14 +24,56 @@ export function normalizeAuthEmail(value: string): string {
 }
 
 /**
+ * `profiles.is_admin` fra Supabase. Listen bootstraper nye oprettelser,
+ * og en profil, der allerede findes, får den samme rolle.
+ */
+export async function applyImportedAdmin(
+  ctx: MutationCtx,
+  email: string,
+  isAdmin: boolean,
+): Promise<void> {
+  const normalized = normalizeAuthEmail(email)
+  const allowed = await ctx.db
+    .query('allowedEmails')
+    .withIndex('by_email', (q) => q.eq('email', normalized))
+    .unique()
+  if (allowed === null) {
+    await ctx.db.insert('allowedEmails', { email: normalized, isAdmin })
+  } else if ((allowed.isAdmin ?? false) !== isAdmin) {
+    await ctx.db.patch(allowed._id, { isAdmin })
+  }
+
+  const account = await ctx.db
+    .query('authAccounts')
+    .withIndex('providerAndAccountId', (q) =>
+      q.eq('provider', 'password').eq('providerAccountId', normalized),
+    )
+    .unique()
+  if (account === null) return
+  const profile = await ctx.db
+    .query('profiles')
+    .withIndex('by_user', (q) => q.eq('userId', account.userId))
+    .unique()
+  if (profile !== null && profile.isAdmin !== isAdmin) {
+    await ctx.db.patch(profile._id, { isAdmin })
+  }
+}
+
+/**
  * Lægger en bcrypt-hash fra Supabase (`auth.users.encrypted_password`) ind
  * som kontoens hemmelighed, uden at hashe den igen. Første rigtige login
- * skriver den om til Scrypt. Kør den ikke mod rigtige data, før flytningen
+ * skriver den om til Scrypt. `isAdmin` er `profiles.is_admin` og følger
+ * med, når flytningen køres. Kør den ikke mod rigtige data, før flytningen
  * er aftalt -- se V2/README.md.
  */
 export async function writeImportedPassword(
   ctx: MutationCtx,
-  input: { email: string; bcryptHash: string; name?: string },
+  input: {
+    email: string
+    bcryptHash: string
+    name?: string
+    isAdmin?: boolean
+  },
 ): Promise<Id<'users'>> {
   const email = normalizeAuthEmail(input.email)
   if (!email.includes('@')) throw new ConvexError('INVALID_IMPORT_EMAIL')
@@ -50,6 +92,9 @@ export async function writeImportedPassword(
       secret: input.bcryptHash,
       emailVerified: email,
     })
+    if (input.isAdmin !== undefined) {
+      await applyImportedAdmin(ctx, email, input.isAdmin)
+    }
     return existing.userId
   }
 
@@ -65,6 +110,9 @@ export async function writeImportedPassword(
     secret: input.bcryptHash,
     emailVerified: email,
   })
+  if (input.isAdmin !== undefined) {
+    await applyImportedAdmin(ctx, email, input.isAdmin)
+  }
   return userId
 }
 
@@ -111,6 +159,7 @@ export const importHashes = internalMutation({
         email: v.string(),
         bcryptHash: v.string(),
         name: v.optional(v.string()),
+        isAdmin: v.optional(v.boolean()),
       }),
     ),
   },

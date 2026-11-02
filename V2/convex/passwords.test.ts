@@ -54,6 +54,45 @@ describe('importerede adgangskoder', () => {
     expect(await new Scrypt().verify(after, 'abc')).toBe(true)
   })
 
+  it('tager is_admin med fra Supabase til listen og en eksisterende profil', async () => {
+    const t = convexTest(schema, modules)
+    const userId = await t.run(async (ctx) => {
+      return await writeImportedPassword(ctx, {
+        email: 'Admin@Example.com',
+        bcryptHash: BCRYPT_ABC,
+        isAdmin: true,
+      })
+    })
+    await t.run(async (ctx) => {
+      await ctx.db.insert('profiles', {
+        userId,
+        fullName: 'Admin',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+      await writeImportedPassword(ctx, {
+        email: 'admin@example.com',
+        bcryptHash: BCRYPT_ABC,
+        isAdmin: true,
+      })
+    })
+    const rows = await t.run(async (ctx) => ({
+      allowed: await ctx.db.query('allowedEmails').collect(),
+      profiles: await ctx.db.query('profiles').collect(),
+    }))
+    expect(rows.allowed).toEqual([
+      expect.objectContaining({
+        email: 'admin@example.com',
+        isAdmin: true,
+      }),
+    ])
+    expect(rows.profiles[0]?.isAdmin).toBe(true)
+  })
+
   it('nægter import uden bekræftelsessætningen', async () => {
     const t = convexTest(schema, modules)
     const failure = await t

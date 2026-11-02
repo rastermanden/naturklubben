@@ -135,15 +135,20 @@ Sådan køres importen, når flytningen er aftalt -- ikke før, og ikke mod
 rigtige data i utide:
 
 ```sql
-select email, encrypted_password
-from auth.users
-where encrypted_password like '$2%';
+select u.email, u.encrypted_password, p.is_admin
+from auth.users u
+join public.profiles p on p.id = u.id
+where u.encrypted_password like '$2%';
 ```
 
 ```bash
 npx convex run passwords:importHashes --prod \
-  '{"confirm":"IMPORT_BCRYPT_HASHES","accounts":[{"email":"medlem@example.com","bcryptHash":"$2a$10$..."}]}'
+  '{"confirm":"IMPORT_BCRYPT_HASHES","accounts":[{"email":"medlem@example.com","bcryptHash":"$2a$10$...","isAdmin":false}]}'
 ```
+
+`isAdmin` er `profiles.is_admin`. Den skrives på adgangslisten, så en senere
+oprettelse får rollen, og på profilen, hvis den allerede findes. Uden feltet
+røres rollen ikke.
 
 `confirm` skal være præcis `IMPORT_BCRYPT_HASHES`. Uden den gør mutationen
 ingenting. Funktionen er intern, så appen kan ikke kalde den. Den er ikke
@@ -174,12 +179,15 @@ stadig "Tjek din e-mail", så den ikke fortæller, hvem der findes.
 Oprettelse af en adresse uden for listen afvises, før der sendes mail.
 
 Seedet lægger kun disse adresser på adgangslisten og opretter ikke
-brugere for dem: `kaspermoller@gmail.com`, `kaspermoller+test@gmail.com`,
-`naturklubben-test@agentmail.to`, `martin.martinjensen@gmail.com`,
+brugere for dem. Administratorer, som i den nuværende app:
+`martin.martinjensen@gmail.com`, `kaspermoller@gmail.com`,
 `troelsranum@gmail.com`, `mikkellinnet@gmail.com` og
-`uffeschjoedt@gmail.com`. En eksisterende auth-bruger med test-indbakken
-fjernes ved seed, så den adresse kan oprettes forfra. Der sendes ingen
-mail herfra. Medlemmerne opretter sig selv fra previewet.
+`uffeschjoedt@gmail.com`. `kaspermoller+test@gmail.com` og
+`naturklubben-test@agentmail.to` er ikke administratorer. En bruger, der
+allerede er oprettet, får rollen ved næste seed. En eksisterende
+auth-bruger med test-indbakken fjernes ved seed, så den adresse kan
+oprettes forfra. Der sendes ingen mail herfra. Medlemmerne opretter sig
+selv fra previewet.
 
 Prøvemedlemskab og gæsteansøgninger sender ikke mail i den nuværende app
 (push og en mailto-kladde). De er ikke flyttet til Resend.

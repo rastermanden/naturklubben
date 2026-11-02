@@ -11,6 +11,7 @@ import {
   PREVIEW_AGENTMAIL_ADDRESS,
   PREVIEW_EVENT_TITLE,
   PREVIEW_GUEST_ALLOWLIST,
+  PREVIEW_MARTIN_EMAIL,
   PREVIEW_MEMBER_NAME,
   removePasswordSignup,
   PROD_DEPLOYMENT_SLUG,
@@ -98,9 +99,19 @@ describe('writePreviewSample', () => {
     })
 
     expect(rows.allowed.map((row) => row.email).sort()).toEqual(
-      ['preview@example.com', ...PREVIEW_GUEST_ALLOWLIST].sort(),
+      [
+        'preview@example.com',
+        ...PREVIEW_GUEST_ALLOWLIST.map((guest) => guest.email),
+      ].sort(),
     )
-    expect(rows.allowed.every((row) => row.isAdmin === false)).toBe(true)
+    expect(
+      rows.allowed.find((row) => row.email === 'preview@example.com')?.isAdmin,
+    ).toBe(false)
+    for (const guest of PREVIEW_GUEST_ALLOWLIST) {
+      expect(
+        rows.allowed.find((row) => row.email === guest.email)?.isAdmin,
+      ).toBe(guest.isAdmin)
+    }
     expect(rows.profiles).toHaveLength(1)
     expect(rows.profiles[0]).toMatchObject({
       userId,
@@ -246,6 +257,89 @@ describe('writePreviewSample', () => {
     expect(food?.icon).toBeUndefined()
     expect(food?.linkUrl).toBeUndefined()
     expect(food?.linkLabel).toBeUndefined()
+  })
+
+  it('gør en oprettet V1-admin til admin og lader test-adressen være medlem', async () => {
+    const t = convexTest(schema, modules)
+    const previewId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert('users', { email: 'preview@example.com' })
+      await ctx.db.insert('authAccounts', {
+        userId: id,
+        provider: 'password',
+        providerAccountId: 'preview@example.com',
+      })
+      const martinId = await ctx.db.insert('users', {
+        email: PREVIEW_MARTIN_EMAIL,
+      })
+      await ctx.db.insert('authAccounts', {
+        userId: martinId,
+        provider: 'password',
+        providerAccountId: PREVIEW_MARTIN_EMAIL,
+      })
+      await ctx.db.insert('profiles', {
+        userId: martinId,
+        fullName: 'Martin',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+      await ctx.db.insert('allowedEmails', {
+        email: PREVIEW_MARTIN_EMAIL,
+        isAdmin: false,
+      })
+      const plusId = await ctx.db.insert('users', {
+        email: 'kaspermoller+test@gmail.com',
+      })
+      await ctx.db.insert('authAccounts', {
+        userId: plusId,
+        provider: 'password',
+        providerAccountId: 'kaspermoller+test@gmail.com',
+      })
+      await ctx.db.insert('profiles', {
+        userId: plusId,
+        fullName: 'Kasper test',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+      return id
+    })
+
+    await t.run(async (ctx) => {
+      await writePreviewSample(ctx, previewId)
+      await writePreviewSample(ctx, previewId)
+    })
+
+    const rows = await t.run(async (ctx) => {
+      const profiles = await ctx.db.query('profiles').collect()
+      const allowed = await ctx.db.query('allowedEmails').collect()
+      return { profiles, allowed }
+    })
+    const martin = rows.profiles.find(
+      (profile) => profile.fullName === 'Martin',
+    )
+    const plus = rows.profiles.find(
+      (profile) => profile.fullName === 'Kasper test',
+    )
+    expect(martin?.isAdmin).toBe(true)
+    expect(plus?.isAdmin).toBe(false)
+    expect(
+      rows.allowed.find((row) => row.email === 'kaspermoller@gmail.com')
+        ?.isAdmin,
+    ).toBe(true)
+    expect(
+      rows.allowed.find((row) => row.email === 'kaspermoller+test@gmail.com')
+        ?.isAdmin,
+    ).toBe(false)
+    expect(
+      rows.profiles.filter((profile) => profile.fullName === 'Martin'),
+    ).toHaveLength(1)
   })
 
   it('fjerner agentmail-brugeren og lader adressen blive på listen', async () => {

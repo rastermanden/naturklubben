@@ -39,15 +39,21 @@ export const PREVIEW_MEMBER_NAME = 'Preview-tester'
  */
 export const PREVIEW_AGENTMAIL_ADDRESS = 'naturklubben-test@agentmail.to'
 
+/**
+ * Samme admin-rolle som `profiles.is_admin` i den nuværende app.
+ * `kaspermoller+test@gmail.com` og test-indbakken er ikke administratorer.
+ */
 export const PREVIEW_GUEST_ALLOWLIST = [
-  'kaspermoller@gmail.com',
-  'kaspermoller+test@gmail.com',
-  PREVIEW_AGENTMAIL_ADDRESS,
-  'martin.martinjensen@gmail.com',
-  'troelsranum@gmail.com',
-  'mikkellinnet@gmail.com',
-  'uffeschjoedt@gmail.com',
+  { email: 'kaspermoller@gmail.com', isAdmin: true },
+  { email: 'kaspermoller+test@gmail.com', isAdmin: false },
+  { email: PREVIEW_AGENTMAIL_ADDRESS, isAdmin: false },
+  { email: 'martin.martinjensen@gmail.com', isAdmin: true },
+  { email: 'troelsranum@gmail.com', isAdmin: true },
+  { email: 'mikkellinnet@gmail.com', isAdmin: true },
+  { email: 'uffeschjoedt@gmail.com', isAdmin: true },
 ] as const
+
+export const PREVIEW_MARTIN_EMAIL = 'martin.martinjensen@gmail.com'
 
 /**
  * Klubbens egne aktiviteter, som migrationerne i den nuværende app lægger ind.
@@ -157,13 +163,40 @@ function assertAllowedOnThisDeployment(): void {
 async function ensureAllowedEmail(
   ctx: MutationCtx,
   email: string,
+  isAdmin: boolean,
 ): Promise<void> {
   const existing = await ctx.db
     .query('allowedEmails')
     .withIndex('by_email', (q) => q.eq('email', email))
     .unique()
-  if (existing !== null) return
-  await ctx.db.insert('allowedEmails', { email, isAdmin: false })
+  if (existing === null) {
+    await ctx.db.insert('allowedEmails', { email, isAdmin })
+    return
+  }
+  if ((existing.isAdmin ?? false) !== isAdmin) {
+    await ctx.db.patch(existing._id, { isAdmin })
+  }
+}
+
+/** En bruger, der allerede er oprettet, får den rolle, listen siger. */
+async function syncExistingAdmin(
+  ctx: MutationCtx,
+  email: string,
+  isAdmin: boolean,
+): Promise<void> {
+  const account = await ctx.db
+    .query('authAccounts')
+    .withIndex('providerAndAccountId', (q) =>
+      q.eq('provider', 'password').eq('providerAccountId', email),
+    )
+    .unique()
+  if (account === null) return
+  const profile = await ctx.db
+    .query('profiles')
+    .withIndex('by_user', (q) => q.eq('userId', account.userId))
+    .unique()
+  if (profile === null || profile.isAdmin === isAdmin) return
+  await ctx.db.patch(profile._id, { isAdmin })
 }
 
 function errorText(error: unknown): string {
@@ -205,9 +238,10 @@ export async function writePreviewSample(
   }
   const email = rawEmail.trim().toLowerCase()
 
-  await ensureAllowedEmail(ctx, email)
+  await ensureAllowedEmail(ctx, email, false)
   for (const guest of PREVIEW_GUEST_ALLOWLIST) {
-    await ensureAllowedEmail(ctx, guest)
+    await ensureAllowedEmail(ctx, guest.email, guest.isAdmin)
+    await syncExistingAdmin(ctx, guest.email, guest.isAdmin)
   }
 
   const existingProfile = await ctx.db
@@ -505,31 +539,55 @@ export const guestAllowlistReady = internalQuery({
     listed: v.number(),
     expected: v.number(),
     accounts: v.number(),
+    allowlistAdmins: v.number(),
+    expectedAdmins: v.number(),
+    martinAdmin: v.boolean(),
   }),
   handler: async (
     ctx,
-  ): Promise<{ listed: number; expected: number; accounts: number }> => {
+  ): Promise<{
+    listed: number
+    expected: number
+    accounts: number
+    allowlistAdmins: number
+    expectedAdmins: number
+    martinAdmin: boolean
+  }> => {
     assertAllowedOnThisDeployment()
     let listed = 0
     let accounts = 0
-    for (const email of PREVIEW_GUEST_ALLOWLIST) {
+    let allowlistAdmins = 0
+    let martinAdmin = false
+    for (const guest of PREVIEW_GUEST_ALLOWLIST) {
       const allowed = await ctx.db
         .query('allowedEmails')
-        .withIndex('by_email', (q) => q.eq('email', email))
+        .withIndex('by_email', (q) => q.eq('email', guest.email))
         .unique()
       if (allowed !== null) listed += 1
+      if (allowed?.isAdmin === true) allowlistAdmins += 1
       const account = await ctx.db
         .query('authAccounts')
         .withIndex('providerAndAccountId', (q) =>
-          q.eq('provider', 'password').eq('providerAccountId', email),
+          q.eq('provider', 'password').eq('providerAccountId', guest.email),
         )
         .unique()
       if (account !== null) accounts += 1
+      if (guest.email === PREVIEW_MARTIN_EMAIL && account !== null) {
+        const profile = await ctx.db
+          .query('profiles')
+          .withIndex('by_user', (q) => q.eq('userId', account.userId))
+          .unique()
+        martinAdmin = profile?.isAdmin === true
+      }
     }
     return {
       listed,
       expected: PREVIEW_GUEST_ALLOWLIST.length,
       accounts,
+      allowlistAdmins,
+      expectedAdmins: PREVIEW_GUEST_ALLOWLIST.filter((guest) => guest.isAdmin)
+        .length,
+      martinAdmin,
     }
   },
 })
