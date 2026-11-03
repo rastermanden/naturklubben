@@ -228,3 +228,14 @@ jobs:
           npm init -y --prefix /tmp/preview-smoke >/dev/null
           npm install --prefix /tmp/preview-smoke --silent puppeteer@24.15.0
           node V2/scripts/previewLoginSmoke.mjs
+
+      # Samme session som testbrugeren. Mutationen er den, spillet kalder,
+      # og siden skal vise rækken bagefter.
+      - if: github.event.action != 'closed'
+        name: Gem et Boble-resultat og se det på listen
+        env:
+          PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
+          PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+          PREVIEW_PATH: /pr-preview/pr-${{ github.event.number }}/
+          PUPPETEER_REQUIRE_FROM: /tmp/preview-smoke/package.json
+        run: node V2/scripts/previewBobleScore.mjs
