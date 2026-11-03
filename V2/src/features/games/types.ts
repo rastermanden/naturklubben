@@ -1,7 +1,14 @@
 /** Spil, der kan lægge resultater på klubbens liste. Skal matche
  *  `gameIdValidator` i `convex/tables/community.ts`. */
 export type GameId =
-  'tetris' | 'kaper' | '2048' | 'naturquiz' | 'sti' | 'fugletraek' | 'kabale'
+  | 'tetris'
+  | 'kaper'
+  | '2048'
+  | 'naturquiz'
+  | 'sti'
+  | 'fugletraek'
+  | 'kabale'
+  | 'boble'
 
 /**
  * Et resultat, som det ligger i `gameScores` i Convex.
@@ -18,11 +25,11 @@ export interface GameScore {
   playerName: string
   score: number
   /** Ryddede rækker i Tetris, antal træk i Kaptajn Kaper, antal rigtige svar
-   *  (ud af 10) i Naturquiz, poster i Stifinderen, vendinger i Fugletræk;
-   *  0 i 2048. */
+   *  (ud af 10) i Naturquiz, poster i Stifinderen, vendinger i Fugletræk,
+   *  punkterede modstandere i Boble-spillet; 0 i 2048. */
   lines: number
   /** Niveau i Tetris, rang i Kaptajn Kaper, baneklasse i Stifinderen,
-   *  bræt-klasse i Fugletræk; 1 i 2048 og Naturquiz. */
+   *  bræt-klasse i Fugletræk, bane i Boble-spillet; 1 i 2048 og Naturquiz. */
   level: number
   durationSeconds: number
   createdAt: number

@@ -36,6 +36,24 @@ const LINES_MAX = 99_999
 const LEVEL_MAX = 99
 const DURATION_MAX = 86_400
 
+/** Om et Boble-resultat kan være spillet på den bane. */
+export function bobleScoreIsPlausible(
+  score: number,
+  lines: number,
+  level: number,
+): boolean {
+  if (level < 1) return false
+  const cycle = Math.floor((level - 1) / 3)
+  const slot = (level - 1) % 3
+  const perLevel = [2, 3, 4]
+  let maxPops = cycle * 9
+  for (let index = 0; index <= slot; index += 1) {
+    maxPops += perLevel[index] ?? 0
+  }
+  const perPop = 100 + cycle * 50
+  return lines <= maxPops && score <= lines * perPop
+}
+
 function displayNameOf(profile: Doc<'profiles'>): string {
   const name = profile.fullName?.trim()
   return name && name.length > 0 ? name : 'Ukendt medlem'
@@ -108,6 +126,12 @@ function validateScore(
       // `lines` er træk, `level` er 1 eller 3 kort fra bunken. Loftet er
       // SCORE_CAP i kabale-motoren.
       plausible = (level === 1 || level === 3) && lines >= 1 && score <= 2000
+      break
+    case 'boble':
+      // `lines` er punkterede modstandere, `level` er banen (1, 2, 3 …).
+      // Banerne har 2, 3 og 4 modstandere, og en punktering giver
+      // 100 + 50 pr. omgang af de tre baner.
+      plausible = bobleScoreIsPlausible(score, lines, level)
       break
   }
 
