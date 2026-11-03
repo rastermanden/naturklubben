@@ -155,4 +155,21 @@ describe('importerede adgangskoder', () => {
       'SMOKE_EMAIL_ONLY',
     )
   })
+
+  it('rapporterer en ugyldig kode som udløbet uden at vise den', async () => {
+    const t = convexTest(schema, modules)
+    await t.mutation(internal.passwords.importHashes, {
+      confirm: PASSWORD_IMPORT_CONFIRM,
+      accounts: [
+        {
+          email: 'martin.martinjensen@gmail.com',
+          bcryptHash: BCRYPT_ABC,
+        },
+      ],
+    })
+    const before = await t.query(internal.passwords.resetCodeStatus, {
+      email: 'Martin.MartinJensen@gmail.com',
+    })
+    expect(before).toEqual({ account: true, unexpiredCode: false })
+  })
 })

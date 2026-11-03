@@ -14,12 +14,21 @@ if (process.env.AUTH_SMOKE_CONFIRM !== 'RESET_SMOKE') {
   console.error('Mangler bekræftelse.')
   process.exit(1)
 }
-if (!email.endsWith('@agentmail.to')) {
+const statusAllowed =
+  email.endsWith('@agentmail.to') || email === 'martin.martinjensen@gmail.com'
+if (action === 'status') {
+  if (!statusAllowed) {
+    console.error(
+      'Status kun for testkontoen eller den aftalte medlemsadresse.',
+    )
+    process.exit(1)
+  }
+} else if (!email.endsWith('@agentmail.to')) {
   console.error('Kun en @agentmail.to-adresse.')
   process.exit(1)
 }
-if (action !== 'create' && action !== 'delete') {
-  console.error('action skal være create eller delete.')
+if (action !== 'create' && action !== 'delete' && action !== 'status') {
+  console.error('action skal være create, delete eller status.')
   process.exit(1)
 }
 
@@ -51,7 +60,13 @@ function convex(args) {
   })
 }
 
-if (action === 'create') {
+if (action === 'status') {
+  const result = await convex([
+    'passwords:resetCodeStatus',
+    JSON.stringify({ email }),
+  ])
+  console.log(`Kode-status: ${result}`)
+} else if (action === 'create') {
   const password = `smoke-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`
   const bcryptHash = hashSync(password, 8)
   const payload = JSON.stringify({

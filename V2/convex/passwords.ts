@@ -246,6 +246,39 @@ export const changePassword = action({
   },
 })
 
+/**
+ * Om adressen har en adgangskode-konto og en kode, der ikke er udløbet.
+ * Returnerer ingen kode, hash eller adresse.
+ */
+export const resetCodeStatus = internalQuery({
+  args: { email: v.string() },
+  returns: v.object({
+    account: v.boolean(),
+    unexpiredCode: v.boolean(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ account: boolean; unexpiredCode: boolean }> => {
+    const email = normalizeAuthEmail(args.email)
+    const account = await ctx.db
+      .query('authAccounts')
+      .withIndex('providerAndAccountId', (q) =>
+        q.eq('provider', 'password').eq('providerAccountId', email),
+      )
+      .unique()
+    if (account === null) return { account: false, unexpiredCode: false }
+    const codes = await ctx.db
+      .query('authVerificationCodes')
+      .withIndex('accountId', (q) => q.eq('accountId', account._id))
+      .collect()
+    return {
+      account: true,
+      unexpiredCode: codes.some((code) => code.expirationTime > Date.now()),
+    }
+  },
+})
+
 /** Kun en @agentmail.to-adresse. Rigtige medlemmer kan ikke slettes her. */
 export const SMOKE_DELETE_CONFIRM = 'DELETE_SMOKE_AUTH_USER'
 
