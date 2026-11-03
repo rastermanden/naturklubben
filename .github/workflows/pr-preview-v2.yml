@@ -70,7 +70,7 @@ jobs:
           VITE_BASE_PATH: /pr-preview/pr-${{ github.event.number }}/
         run: |
           npx convex deploy \
-            --preview-name "pr-${{ github.event.number }}" \
+            --preview-create "pr-${{ github.event.number }}" \
             --cmd 'npm run build' \
             --cmd-url-env-var-name VITE_CONVEX_URL
 
