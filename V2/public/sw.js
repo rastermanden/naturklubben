@@ -1,7 +1,7 @@
-// Erstatter en service worker, et ældre preview kan have registreret på
-// /pr-preview/pr-<nr>/sw.js. Den tager over, sletter kun caches der hører
-// til et preview, og afregistrerer sig selv, så næste indlæsning kommer
-// fra netværket. Produktionens worker ligger på /sw.js og røres ikke.
+// Denne fil ligger på /sw.js, som var V1's worker. Når browseren opdaterer
+// den gamle registrering, skal den slippe V1's cache og genindlæse siden,
+// så oprettelse rammer V2 og ikke Supabase. Derefter afmelder den sig.
+// Appen selv registrerer /sw-prod.js.
 self.addEventListener('install', () => {
   self.skipWaiting()
 })
@@ -10,18 +10,10 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys()
-      await Promise.all(
-        keys
-          .filter((name) => name.includes('pr-preview'))
-          .map((name) => caches.delete(name)),
-      )
-      await self.registration.unregister()
+      await Promise.all(keys.map((name) => caches.delete(name)))
       const windows = await self.clients.matchAll({ type: 'window' })
-      await Promise.all(
-        windows
-          .filter((client) => client.url.includes('/pr-preview/'))
-          .map((client) => client.navigate(client.url)),
-      )
+      await Promise.all(windows.map((client) => client.navigate(client.url)))
+      await self.registration.unregister()
     })(),
   )
 })

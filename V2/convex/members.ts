@@ -1,6 +1,11 @@
 import { ConvexError, v } from 'convex/values'
-import { internalMutation, mutation, query } from './_generated/server'
-import type { MutationCtx } from './_generated/server'
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from './_generated/server'
+import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import {
   currentProfile,
@@ -119,6 +124,67 @@ async function emailForUser(
   return typeof fromUser === 'string' && fromUser.length > 0
     ? normalizeEmail(fromUser)
     : null
+}
+
+async function readAssistantSignup(ctx: MutationCtx | QueryCtx) {
+  const email = normalizeEmail(ASSISTANT_EMAIL)
+  const allowed = await ctx.db
+    .query('allowedEmails')
+    .withIndex('by_email', (q) => q.eq('email', email))
+    .unique()
+  const account = await ctx.db
+    .query('authAccounts')
+    .withIndex('providerAndAccountId', (q) =>
+      q.eq('provider', 'password').eq('providerAccountId', email),
+    )
+    .unique()
+  const profile =
+    account === null
+      ? null
+      : await ctx.db
+          .query('profiles')
+          .withIndex('by_user', (q) => q.eq('userId', account.userId))
+          .unique()
+  return {
+    allowlist: allowed !== null,
+    allowlistAdmin: allowed?.isAdmin === true,
+    account: account !== null,
+    profile: profile !== null,
+    profileAdmin: profile?.isAdmin === true,
+  }
+}
+
+async function deleteAuthUser(ctx: MutationCtx, userId: Id<'users'>) {
+  const accounts = await ctx.db
+    .query('authAccounts')
+    .filter((q) => q.eq(q.field('userId'), userId))
+    .collect()
+  for (const account of accounts) {
+    const codes = await ctx.db
+      .query('authVerificationCodes')
+      .withIndex('accountId', (q) => q.eq('accountId', account._id))
+      .collect()
+    for (const code of codes) await ctx.db.delete(code._id)
+    await ctx.db.delete(account._id)
+  }
+  const sessions = await ctx.db
+    .query('authSessions')
+    .withIndex('userId', (q) => q.eq('userId', userId))
+    .collect()
+  for (const session of sessions) {
+    const tokens = await ctx.db
+      .query('authRefreshTokens')
+      .withIndex('sessionId', (q) => q.eq('sessionId', session._id))
+      .collect()
+    for (const token of tokens) await ctx.db.delete(token._id)
+    await ctx.db.delete(session._id)
+  }
+  const profile = await ctx.db
+    .query('profiles')
+    .withIndex('by_user', (q) => q.eq('userId', userId))
+    .unique()
+  if (profile !== null) await ctx.db.delete(profile._id)
+  await ctx.db.delete(userId)
 }
 
 function normalizeName(input: string | null): string | undefined {
@@ -573,6 +639,83 @@ export const allowAssistantAdmin = internalMutation({
       )
       .unique()
     return { listed: true, isAdmin: true, accountExists: account !== null }
+  },
+})
+
+const ASSISTANT_EMAIL = 'naturklubben-test@agentmail.to'
+
+/**
+ * Hvor langt oprettelsen er kommet for assistenten. Ingen hemmeligheder.
+ * `account` uden `profile` er en afbrudt oprettelse, som blokerer et nyt forsøg.
+ */
+export const assistantSignupStatus = internalQuery({
+  args: {},
+  returns: v.object({
+    allowlist: v.boolean(),
+    allowlistAdmin: v.boolean(),
+    account: v.boolean(),
+    profile: v.boolean(),
+    profileAdmin: v.boolean(),
+  }),
+  handler: async (ctx) => {
+    return await readAssistantSignup(ctx)
+  },
+})
+
+/**
+ * Gør et nyt oprettelsesforsøg muligt og sørger for admin-flaget.
+ * Opretter ikke brugeren. En auth-konto uden profil er et afbrudt forsøg
+ * og fjernes. En profil, der allerede findes, får admin-flaget.
+ */
+export const repairAssistantSignup = internalMutation({
+  args: { confirm: v.string() },
+  returns: v.object({
+    allowlist: v.boolean(),
+    allowlistAdmin: v.boolean(),
+    account: v.boolean(),
+    profile: v.boolean(),
+    profileAdmin: v.boolean(),
+    removedLeftoverAccount: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    if (args.confirm !== ALLOW_ASSISTANT_CONFIRM) {
+      throw new ConvexError('NOT_CONFIRMED')
+    }
+    const email = normalizeEmail(ASSISTANT_EMAIL)
+    const rows = await ctx.db
+      .query('allowedEmails')
+      .withIndex('by_email', (q) => q.eq('email', email))
+      .collect()
+    const [existing, ...extra] = rows
+    for (const dup of extra) await ctx.db.delete(dup._id)
+    if (existing === undefined) {
+      await ctx.db.insert('allowedEmails', { email, isAdmin: true })
+    } else if (existing.isAdmin !== true) {
+      await ctx.db.patch(existing._id, { isAdmin: true })
+    }
+
+    const account = await ctx.db
+      .query('authAccounts')
+      .withIndex('providerAndAccountId', (q) =>
+        q.eq('provider', 'password').eq('providerAccountId', email),
+      )
+      .unique()
+    let removedLeftoverAccount = false
+    if (account !== null) {
+      const profile = await ctx.db
+        .query('profiles')
+        .withIndex('by_user', (q) => q.eq('userId', account.userId))
+        .unique()
+      if (profile === null) {
+        await deleteAuthUser(ctx, account.userId)
+        removedLeftoverAccount = true
+      } else if (!profile.isAdmin) {
+        await ctx.db.patch(profile._id, { isAdmin: true })
+      }
+    }
+
+    const status = await readAssistantSignup(ctx)
+    return { ...status, removedLeftoverAccount }
   },
 })
 
