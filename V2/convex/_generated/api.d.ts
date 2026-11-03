@@ -10,6 +10,8 @@
 
 import type * as account from "../account.js";
 import type * as announcements from "../announcements.js";
+import type * as assistantMention from "../assistantMention.js";
+import type * as assistantMentionMail from "../assistantMentionMail.js";
 import type * as auth from "../auth.js";
 import type * as authEmail from "../authEmail.js";
 import type * as authMailGate from "../authMailGate.js";
@@ -57,6 +59,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   account: typeof account;
   announcements: typeof announcements;
+  assistantMention: typeof assistantMention;
+  assistantMentionMail: typeof assistantMentionMail;
   auth: typeof auth;
   authEmail: typeof authEmail;
   authMailGate: typeof authMailGate;

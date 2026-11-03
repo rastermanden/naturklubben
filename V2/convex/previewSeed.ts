@@ -542,6 +542,7 @@ export const guestAllowlistReady = internalQuery({
     allowlistAdmins: v.number(),
     expectedAdmins: v.number(),
     martinAdmin: v.boolean(),
+    martinHasProfile: v.boolean(),
   }),
   handler: async (
     ctx,
@@ -552,12 +553,14 @@ export const guestAllowlistReady = internalQuery({
     allowlistAdmins: number
     expectedAdmins: number
     martinAdmin: boolean
+    martinHasProfile: boolean
   }> => {
     assertAllowedOnThisDeployment()
     let listed = 0
     let accounts = 0
     let allowlistAdmins = 0
     let martinAdmin = false
+    let martinHasProfile = false
     for (const guest of PREVIEW_GUEST_ALLOWLIST) {
       const allowed = await ctx.db
         .query('allowedEmails')
@@ -577,6 +580,7 @@ export const guestAllowlistReady = internalQuery({
           .query('profiles')
           .withIndex('by_user', (q) => q.eq('userId', account.userId))
           .unique()
+        martinHasProfile = profile !== null
         martinAdmin = profile?.isAdmin === true
       }
     }
@@ -588,6 +592,7 @@ export const guestAllowlistReady = internalQuery({
       expectedAdmins: PREVIEW_GUEST_ALLOWLIST.filter((guest) => guest.isAdmin)
         .length,
       martinAdmin,
+      martinHasProfile,
     }
   },
 })

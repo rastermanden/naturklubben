@@ -93,6 +93,15 @@ export const chatTables = {
     .index('by_reply_to', ['replyToId']),
 
   /**
+   * Én mail pr. besked til assistenten. Rækken tages, før mailen sendes,
+   * så et gentaget kald ikke sender den samme omtale to gange.
+   */
+  assistantMentionMails: defineTable({
+    messageId: v.id('messages'),
+    sentAt: v.number(),
+  }).index('by_message', ['messageId']),
+
+  /**
    * Reaktioner. Det kombinerede indeks håndhæver "én af hver reaktion pr.
    * medlem pr. besked" i praksis: mutationen slår op på alle tre felter, før
    * den indsætter eller sletter.
