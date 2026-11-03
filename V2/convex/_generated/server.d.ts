@@ -38,6 +38,7 @@ type Env = {
   readonly PREVIEW_SEED: string | undefined;
   readonly PREVIEW_TEST_EMAIL: string | undefined;
   readonly PREVIEW_TEST_PASSWORD: string | undefined;
+  readonly PREVIEW_SHARED_PASSWORD: string | undefined;
   readonly RESEND_API_KEY: string | undefined;
   readonly AUTH_EMAIL_FROM: string | undefined;
   readonly SITE_URL: string | undefined;

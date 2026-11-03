@@ -21,6 +21,11 @@ const app = defineApp({
     PREVIEW_SEED: v.optional(v.string()),
     PREVIEW_TEST_EMAIL: v.optional(v.string()),
     PREVIEW_TEST_PASSWORD: v.optional(v.string()),
+    /**
+     * Fælles adgangskode til de medlemmer, previewet opretter.
+     * Sættes kun på preview-deploymentet. Uden den springes de konti over.
+     */
+    PREVIEW_SHARED_PASSWORD: v.optional(v.string()),
     /** Resend. Uden den logges auth-mailen i stedet for at blive sendt. */
     RESEND_API_KEY: v.optional(v.string()),
     /** Afsender, fx `Naturklubben <noreply@naturklubben.dk>`. */
