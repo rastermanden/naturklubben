@@ -245,3 +245,80 @@ export const changePassword = action({
     return null
   },
 })
+
+/** Kun en @agentmail.to-adresse. Rigtige medlemmer kan ikke slettes her. */
+export const SMOKE_DELETE_CONFIRM = 'DELETE_SMOKE_AUTH_USER'
+
+/**
+ * Fjerner en midlertidig testkonto efter et nulstillings-tjek.
+ * Bekræftelsen og domænet er begge krævet, så kaldet ikke kan ramme et medlem.
+ */
+export const deleteSmokeAuthUser = internalMutation({
+  args: { confirm: v.string(), email: v.string() },
+  returns: v.object({ deletedAccounts: v.number() }),
+  handler: async (ctx, args): Promise<{ deletedAccounts: number }> => {
+    if (args.confirm !== SMOKE_DELETE_CONFIRM) {
+      throw new ConvexError('NOT_CONFIRMED')
+    }
+    const email = normalizeAuthEmail(args.email)
+    if (!email.endsWith('@agentmail.to')) {
+      throw new ConvexError('SMOKE_EMAIL_ONLY')
+    }
+
+    const accounts = [
+      ...(await ctx.db
+        .query('authAccounts')
+        .withIndex('providerAndAccountId', (q) =>
+          q.eq('provider', 'password').eq('providerAccountId', email),
+        )
+        .collect()),
+      ...(await ctx.db
+        .query('authAccounts')
+        .withIndex('providerAndAccountId', (q) =>
+          q.eq('provider', 'password-reset').eq('providerAccountId', email),
+        )
+        .collect()),
+    ]
+    const userIds = [...new Set(accounts.map((account) => account.userId))]
+
+    for (const account of accounts) {
+      const codes = await ctx.db
+        .query('authVerificationCodes')
+        .withIndex('accountId', (q) => q.eq('accountId', account._id))
+        .collect()
+      for (const code of codes) await ctx.db.delete(code._id)
+      await ctx.db.delete(account._id)
+    }
+
+    for (const userId of userIds) {
+      const sessions = await ctx.db
+        .query('authSessions')
+        .withIndex('userId', (q) => q.eq('userId', userId))
+        .collect()
+      for (const session of sessions) {
+        const refreshTokens = await ctx.db
+          .query('authRefreshTokens')
+          .withIndex('sessionId', (q) => q.eq('sessionId', session._id))
+          .collect()
+        for (const refreshToken of refreshTokens) {
+          await ctx.db.delete(refreshToken._id)
+        }
+        await ctx.db.delete(session._id)
+      }
+      const profile = await ctx.db
+        .query('profiles')
+        .withIndex('by_user', (q) => q.eq('userId', userId))
+        .unique()
+      if (profile !== null) await ctx.db.delete(profile._id)
+      await ctx.db.delete(userId)
+    }
+
+    const limits = await ctx.db
+      .query('authRateLimits')
+      .withIndex('identifier', (q) => q.eq('identifier', email))
+      .collect()
+    for (const limit of limits) await ctx.db.delete(limit._id)
+
+    return { deletedAccounts: accounts.length }
+  },
+})

@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAction } from 'convex/react'
 import { useConvexAuth } from 'convex/react'
@@ -29,6 +29,16 @@ export default function ResetPasswordPage() {
   const repeatedRef = useRef<HTMLInputElement>(null)
   const focusPasswordError = useErrorFocus(passwordRef)
   const focusRepeatedError = useErrorFocus(repeatedRef)
+  const [gaveUp, setGaveUp] = useState(false)
+
+  // Auth-provideren kan blive stående i isLoading, hvis kode-indløsningen
+  // kaster, eller hvis backend'en aldrig bekræfter sessionen. Så viser vi
+  // den samme besked som et udløbet link i stedet for at hænge.
+  useEffect(() => {
+    if (!isLoading || isAuthenticated) return
+    const timeout = window.setTimeout(() => setGaveUp(true), 12000)
+    return () => window.clearTimeout(timeout)
+  }, [isAuthenticated, isLoading])
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -57,7 +67,7 @@ export default function ResetPasswordPage() {
     }
   }
 
-  if (isLoading) {
+  if (isLoading && !gaveUp) {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold text-ink-body">Et øjeblik…</h1>

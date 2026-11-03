@@ -48,6 +48,10 @@ jobs:
             --cmd-url-env-var-name VITE_CONVEX_URL
           printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY
           npx convex env set SITE_URL https://naturklubben.dk
+          # Uden nøgleparret kan en gyldig nulstillingskode ikke udstede en
+          # session. Klienten bliver så hængende på "Et øjeblik…". Preview
+          # sætter nøglerne selv; prod arver dem ikke.
+          node scripts/ensurePreviewAuthKeys.mjs prod
           host=$(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123')
           echo "Build peger på $host"
           if [[ "$host" != *quaint-parakeet-652* ]]; then
