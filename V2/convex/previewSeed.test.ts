@@ -16,8 +16,12 @@ import {
   removePasswordSignup,
   PROD_DEPLOYMENT_SLUG,
   assertPreviewSeedAllowed,
+  acceptSharedPreviewPassword,
+  isExistingAccountError,
   normalizePreviewEmail,
   normalizePreviewPassword,
+  safePreviewSeedError,
+  upsertSharedMemberProfile,
   writePreviewSample,
 } from './previewSeed'
 
@@ -65,6 +69,123 @@ describe('preview-legitimationsoplysninger', () => {
     )
     expect(normalizePreviewPassword('hemmelig\r\n')).toBe('hemmelig')
     expect(normalizePreviewPassword('hemmelig')).toBe('hemmelig')
+  })
+
+  it('springer en manglende eller for kort fælles adgangskode over', () => {
+    expect(acceptSharedPreviewPassword(undefined)).toBeNull()
+    expect(acceptSharedPreviewPassword('')).toBeNull()
+    expect(acceptSharedPreviewPassword('kort')).toBeNull()
+    expect(acceptSharedPreviewPassword('12345\n')).toBeNull()
+    expect(acceptSharedPreviewPassword('123456\r\n')).toBe('123456')
+  })
+
+  it('videresender ikke adgangskoden fra en fejl', () => {
+    const secret = 'delt-hemmelighed-9'
+    const error = new Error(
+      `Account someone@example.com already exists ${secret}`,
+    )
+    expect(isExistingAccountError(error)).toBe(true)
+    expect(isExistingAccountError(new Error('PREVIEW_SEED_FAILED'))).toBe(false)
+    const wrapped = safePreviewSeedError(error)
+    expect(wrapped.message).toBe('PREVIEW_SEED_FAILED')
+    expect(wrapped.message).not.toContain(secret)
+    expect(wrapped.message).not.toContain('someone@example.com')
+  })
+
+  it('giver Grok Bot admin og lader test-adressen være medlem', () => {
+    const byEmail = Object.fromEntries(
+      PREVIEW_GUEST_ALLOWLIST.map((guest) => [guest.email, guest]),
+    )
+    expect(byEmail[PREVIEW_MARTIN_EMAIL]).toMatchObject({
+      isAdmin: true,
+      name: 'Martin',
+    })
+    expect(byEmail['kaspermoller@gmail.com']).toMatchObject({
+      isAdmin: true,
+      name: 'Kasper',
+    })
+    expect(byEmail['kaspermoller+test@gmail.com']).toMatchObject({
+      isAdmin: false,
+      name: 'Kasper (test)',
+    })
+    expect(byEmail[PREVIEW_AGENTMAIL_ADDRESS]).toMatchObject({
+      isAdmin: true,
+      name: 'Grok Bot',
+    })
+    expect(byEmail['troelsranum@gmail.com']?.name).toBe('Troels')
+    expect(byEmail['mikkellinnet@gmail.com']?.name).toBe('Mikkel')
+    expect(byEmail['uffeschjoedt@gmail.com']?.name).toBe('Uffe')
+    expect(PREVIEW_GUEST_ALLOWLIST).toHaveLength(7)
+    expect(
+      PREVIEW_GUEST_ALLOWLIST.filter((guest) => guest.isAdmin),
+    ).toHaveLength(6)
+  })
+})
+
+describe('upsertSharedMemberProfile', () => {
+  it('opretter profilen én gang og beholder et navn, der allerede er sat', async () => {
+    const t = convexTest(schema, modules)
+    const userId = await t.run(async (ctx) => {
+      return await ctx.db.insert('users', { email: PREVIEW_MARTIN_EMAIL })
+    })
+
+    await t.run(async (ctx) => {
+      await upsertSharedMemberProfile(ctx, userId, 'Martin', true)
+      await upsertSharedMemberProfile(ctx, userId, 'Martin', true)
+    })
+
+    const first = await t.run(async (ctx) => ctx.db.query('profiles').collect())
+    expect(first).toHaveLength(1)
+    expect(first[0]).toMatchObject({ fullName: 'Martin', isAdmin: true })
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(first[0]!._id, {
+        fullName: 'Martin Jensen',
+        isAdmin: false,
+      })
+      await upsertSharedMemberProfile(ctx, userId, 'Martin', true)
+    })
+
+    const second = await t.run(async (ctx) =>
+      ctx.db.query('profiles').collect(),
+    )
+    expect(second).toHaveLength(1)
+    expect(second[0]).toMatchObject({
+      fullName: 'Martin Jensen',
+      isAdmin: true,
+    })
+  })
+
+  it('udfylder et tomt navn og sætter rollen fra listen', async () => {
+    const t = convexTest(schema, modules)
+    await t.run(async (ctx) => {
+      for (const guest of PREVIEW_GUEST_ALLOWLIST) {
+        const userId = await ctx.db.insert('users', { email: guest.email })
+        await upsertSharedMemberProfile(ctx, userId, guest.name, guest.isAdmin)
+        await upsertSharedMemberProfile(ctx, userId, guest.name, guest.isAdmin)
+      }
+    })
+
+    const profiles = await t.run(async (ctx) =>
+      ctx.db.query('profiles').collect(),
+    )
+    expect(profiles).toHaveLength(PREVIEW_GUEST_ALLOWLIST.length)
+    for (const guest of PREVIEW_GUEST_ALLOWLIST) {
+      expect(profiles).toContainEqual(
+        expect.objectContaining({
+          fullName: guest.name,
+          isAdmin: guest.isAdmin,
+        }),
+      )
+    }
+
+    const blank = profiles.find((profile) => profile.fullName === 'Grok Bot')
+    await t.run(async (ctx) => {
+      await ctx.db.patch(blank!._id, { fullName: '   ', isAdmin: false })
+      await upsertSharedMemberProfile(ctx, blank!.userId, 'Grok Bot', true)
+    })
+    const filled = await t.run(async (ctx) => ctx.db.get(blank!._id))
+    expect(filled).toMatchObject({ fullName: 'Grok Bot', isAdmin: true })
   })
 })
 

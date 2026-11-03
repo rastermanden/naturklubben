@@ -6,7 +6,7 @@ import {
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
-import type { MutationCtx } from './_generated/server'
+import type { ActionCtx, MutationCtx } from './_generated/server'
 import {
   env,
   internalAction,
@@ -24,7 +24,7 @@ import {
  *
  * Adgangskoden læses fra deploymentets miljø, ikke fra argumenterne: `convex
  * run` skriver returværdien i loggen, og argumenter kan havne samme sted.
- * Returværdien er derfor kun `{ ok: true }`.
+ * Returværdien er derfor kun tællere (`ok`, `sharedAccounts`, `sharedSkipped`).
  */
 
 /** Produktions-deploymentet. Preview må aldrig seede her. */
@@ -33,24 +33,28 @@ export const PROD_DEPLOYMENT_SLUG = 'quaint-parakeet-652'
 export const PREVIEW_MEMBER_NAME = 'Preview-tester'
 
 /**
- * Adresser, der selv må oprette sig i previewet.
- * Seedet lægger dem kun på adgangslisten. Der oprettes ingen bruger,
- * og der sendes ingen mail.
+ * Adresser på previewets adgangsliste. Når `PREVIEW_SHARED_PASSWORD` er sat,
+ * oprettes de som bekræftede konti med den adgangskode. Ellers lægges de kun
+ * på listen. Der sendes ingen mail.
  */
 export const PREVIEW_AGENTMAIL_ADDRESS = 'naturklubben-test@agentmail.to'
 
 /**
- * Samme admin-rolle som `profiles.is_admin` i den nuværende app.
- * `kaspermoller+test@gmail.com` og test-indbakken er ikke administratorer.
+ * Samme admin-rolle som i produktion.
+ * `kaspermoller+test@gmail.com` er ikke administrator. Grok Bot er det.
  */
 export const PREVIEW_GUEST_ALLOWLIST = [
-  { email: 'kaspermoller@gmail.com', isAdmin: true },
-  { email: 'kaspermoller+test@gmail.com', isAdmin: false },
-  { email: PREVIEW_AGENTMAIL_ADDRESS, isAdmin: false },
-  { email: 'martin.martinjensen@gmail.com', isAdmin: true },
-  { email: 'troelsranum@gmail.com', isAdmin: true },
-  { email: 'mikkellinnet@gmail.com', isAdmin: true },
-  { email: 'uffeschjoedt@gmail.com', isAdmin: true },
+  { email: 'kaspermoller@gmail.com', isAdmin: true, name: 'Kasper' },
+  {
+    email: 'kaspermoller+test@gmail.com',
+    isAdmin: false,
+    name: 'Kasper (test)',
+  },
+  { email: PREVIEW_AGENTMAIL_ADDRESS, isAdmin: true, name: 'Grok Bot' },
+  { email: 'martin.martinjensen@gmail.com', isAdmin: true, name: 'Martin' },
+  { email: 'troelsranum@gmail.com', isAdmin: true, name: 'Troels' },
+  { email: 'mikkellinnet@gmail.com', isAdmin: true, name: 'Mikkel' },
+  { email: 'uffeschjoedt@gmail.com', isAdmin: true, name: 'Uffe' },
 ] as const
 
 export const PREVIEW_MARTIN_EMAIL = 'martin.martinjensen@gmail.com'
@@ -140,6 +144,31 @@ export function normalizePreviewPassword(value: string | undefined): string {
   return (value ?? '').replace(/[\r\n]+$/g, '')
 }
 
+/** Samme minimum som login-siden. Kortere værdier er ikke en fælles adgangskode. */
+export const SHARED_PREVIEW_PASSWORD_MIN = 6
+
+/**
+ * Den fælles adgangskode, eller `null` når den mangler eller er for kort.
+ * Kaster ikke: en manglende hemmelighed må ikke vælte preview-deployet.
+ */
+export function acceptSharedPreviewPassword(
+  value: string | undefined,
+): string | null {
+  const password = normalizePreviewPassword(value)
+  if (password.length < SHARED_PREVIEW_PASSWORD_MIN) return null
+  return password
+}
+
+export function isExistingAccountError(error: unknown): boolean {
+  return errorText(error).includes('already exists')
+}
+
+/** Fejlteksten må ikke rumme adressen eller adgangskoden fra `error`. */
+export function safePreviewSeedError(error: unknown): Error {
+  void error
+  return new Error('PREVIEW_SEED_FAILED')
+}
+
 export function assertPreviewSeedAllowed(input: {
   previewSeed: string | undefined
   cloudUrl: string | undefined
@@ -197,6 +226,97 @@ async function syncExistingAdmin(
     .unique()
   if (profile === null || profile.isAdmin === isAdmin) return
   await ctx.db.patch(profile._id, { isAdmin })
+}
+
+/**
+ * Profil til en fælles preview-konto. Navnet sættes kun, når det mangler,
+ * så et medlem kan have rettet det. Rollen følger listen hver gang.
+ */
+export async function upsertSharedMemberProfile(
+  ctx: MutationCtx,
+  userId: Id<'users'>,
+  fullName: string,
+  isAdmin: boolean,
+): Promise<void> {
+  const existing = await ctx.db
+    .query('profiles')
+    .withIndex('by_user', (q) => q.eq('userId', userId))
+    .unique()
+  if (existing === null) {
+    await ctx.db.insert('profiles', {
+      userId,
+      fullName,
+      isAdmin,
+      chatColor: '#16a34a',
+      causes: [],
+      chatNotificationPreference: 'all',
+      featureNotificationsEnabled: true,
+      createdAt: Date.now(),
+    })
+    return
+  }
+  const missingName = (existing.fullName ?? '').trim().length === 0
+  if (existing.isAdmin === isAdmin && !missingName) return
+  await ctx.db.patch(existing._id, {
+    isAdmin,
+    ...(missingName ? { fullName } : {}),
+  })
+}
+
+async function provisionSharedAccount(
+  ctx: ActionCtx,
+  guest: (typeof PREVIEW_GUEST_ALLOWLIST)[number],
+  password: string,
+): Promise<void> {
+  const email = guest.email
+  let userId: Id<'users'>
+  try {
+    const created = await createAccount(ctx, {
+      provider: 'password',
+      account: { id: email, secret: password },
+      profile: { email, name: guest.name },
+      shouldLinkViaEmail: false,
+      shouldLinkViaPhone: false,
+    })
+    const createdId = created.user?._id
+    if (createdId === undefined) throw new Error('PREVIEW_SEED_FAILED')
+    userId = createdId
+  } catch (error) {
+    if (errorText(error) === 'PREVIEW_SEED_FAILED') throw error
+    if (!isExistingAccountError(error)) throw safePreviewSeedError(error)
+    try {
+      await modifyAccountCredentials(ctx, {
+        provider: 'password',
+        account: { id: email, secret: password },
+      })
+    } catch (modifyError) {
+      throw safePreviewSeedError(modifyError)
+    }
+    const found: Id<'users'> | null = await ctx.runQuery(
+      internal.previewSeed.userIdForAccount,
+      { accountId: email },
+    )
+    if (found === null) throw new Error('PREVIEW_SEED_FAILED')
+    userId = found
+  }
+
+  try {
+    const retrieved = await retrieveAccount(ctx, {
+      provider: 'password',
+      account: { id: email, secret: password },
+    })
+    if (retrieved.user._id !== userId) throw new Error('PREVIEW_SEED_FAILED')
+  } catch (error) {
+    if (errorText(error) === 'PREVIEW_SEED_FAILED') throw error
+    throw safePreviewSeedError(error)
+  }
+
+  await ctx.runMutation(internal.previewSeed.markAccountVerified, { email })
+  await ctx.runMutation(internal.previewSeed.ensureSharedProfile, {
+    userId,
+    fullName: guest.name,
+    isAdmin: guest.isAdmin,
+  })
 }
 
 function errorText(error: unknown): string {
@@ -519,6 +639,7 @@ export async function removePasswordSignup(
   return true
 }
 
+/** Står til en manuel oprydning. `ensure` kalder den ikke, så Grok Bot bliver. */
 export const forgetAgentmailSignup = internalMutation({
   args: {},
   returns: v.object({ removed: v.boolean() }),
@@ -597,14 +718,36 @@ export const guestAllowlistReady = internalQuery({
   },
 })
 
+export const ensureSharedProfile = internalMutation({
+  args: {
+    userId: v.id('users'),
+    fullName: v.string(),
+    isAdmin: v.boolean(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    assertAllowedOnThisDeployment()
+    await upsertSharedMemberProfile(
+      ctx,
+      args.userId,
+      args.fullName,
+      args.isAdmin,
+    )
+    return null
+  },
+})
+
 export const ensure = internalAction({
   args: {},
-  returns: v.object({ ok: v.literal(true) }),
-  handler: async (ctx): Promise<{ ok: true }> => {
+  returns: v.object({
+    ok: v.literal(true),
+    sharedAccounts: v.number(),
+    sharedSkipped: v.boolean(),
+  }),
+  handler: async (
+    ctx,
+  ): Promise<{ ok: true; sharedAccounts: number; sharedSkipped: boolean }> => {
     assertAllowedOnThisDeployment()
-    // En tidligere oprettelse med test-indbakken må ikke spærre en ny.
-    // Returværdien logges ikke her, og kaldet sender ingen mail.
-    await ctx.runMutation(internal.previewSeed.forgetAgentmailSignup, {})
 
     const email = normalizePreviewEmail(env.PREVIEW_TEST_EMAIL)
     const password = normalizePreviewPassword(env.PREVIEW_TEST_PASSWORD)
@@ -624,16 +767,14 @@ export const ensure = internalAction({
       userId = created.user._id
     } catch (error) {
       // "already exists" rummer adressen. Den må ikke videre ud i loggen.
-      if (!errorText(error).includes('already exists')) {
-        throw new Error('PREVIEW_SEED_FAILED')
-      }
+      if (!isExistingAccountError(error)) throw safePreviewSeedError(error)
       try {
         await modifyAccountCredentials(ctx, {
           provider: 'password',
           account: { id: email, secret: password },
         })
-      } catch {
-        throw new Error('PREVIEW_SEED_FAILED')
+      } catch (modifyError) {
+        throw safePreviewSeedError(modifyError)
       }
       const found: Id<'users'> | null = await ctx.runQuery(
         internal.previewSeed.userIdForAccount,
@@ -651,14 +792,30 @@ export const ensure = internalAction({
       if (retrieved.user._id !== userId) throw new Error('PREVIEW_SEED_FAILED')
     } catch (error) {
       if (errorText(error) === 'PREVIEW_SEED_FAILED') throw error
-      throw new Error('PREVIEW_SEED_FAILED')
+      throw safePreviewSeedError(error)
     }
 
     await ctx.runMutation(internal.previewSeed.applySample, { userId })
     // Bekræftelse er slået til. Testbrugeren skal kunne logge ind, selv om
     // previewet ikke sender mails.
     await ctx.runMutation(internal.previewSeed.markAccountVerified, { email })
-    return { ok: true }
+
+    // Mangler hemmeligheden, springes de fælles konti over. Testbrugeren
+    // ovenfor er allerede oprettet, og produktion afvises før dette punkt.
+    const sharedPassword = acceptSharedPreviewPassword(
+      env.PREVIEW_SHARED_PASSWORD,
+    )
+    if (sharedPassword === null) {
+      return { ok: true, sharedAccounts: 0, sharedSkipped: true }
+    }
+    for (const guest of PREVIEW_GUEST_ALLOWLIST) {
+      await provisionSharedAccount(ctx, guest, sharedPassword)
+    }
+    return {
+      ok: true,
+      sharedAccounts: PREVIEW_GUEST_ALLOWLIST.length,
+      sharedSkipped: false,
+    }
   },
 })
 

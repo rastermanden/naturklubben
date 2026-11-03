@@ -20,7 +20,10 @@ name: PR Preview V2 (Convex)
 #   væk, selv om PR'en stadig er åben.
 # - Deploymentet starter **tomt**. Der er ingen kopi af produktionsdata.
 #   Efter deploy kører `previewSeed:ensure`, som opretter testbrugeren fra
-#   repo-secrets (se AGENTS.md). Det kører aldrig mod produktion.
+#   repo-secrets (se AGENTS.md). Er `PREVIEW_SHARED_PASSWORD` sat, oprettes
+#   også klubbens medlemmer med den adgangskode. Mangler den, skrives en
+#   linje i loggen, og previewet fejler ikke af den grund. Det kører aldrig
+#   mod produktion.
 # - PR'er fra forks får ingen secrets og kan derfor ikke bygge et preview, og
 #   PR'er fra Copilot coding agent skal have deres workflows godkendt manuelt.
 #   Det er samme begrænsning som i `pr-preview.yml`.
@@ -69,10 +72,20 @@ jobs:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
           VITE_BASE_PATH: /pr-preview/pr-${{ github.event.number }}/
         run: |
-          npx convex deploy \
-            --preview-name "pr-${{ github.event.number }}" \
-            --cmd 'npm run build' \
-            --cmd-url-env-var-name VITE_CONVEX_URL
+          set -euo pipefail
+          # Det første push til et nyt preview kan fejle med InvalidModules,
+          # selv om koden er i orden. Et nyt forsøg mod samme deployment lykkes.
+          deploy() {
+            npx convex deploy \
+              --preview-name "pr-${{ github.event.number }}" \
+              --cmd 'npm run build' \
+              --cmd-url-env-var-name VITE_CONVEX_URL
+          }
+          if ! deploy; then
+            echo "Første push til previewet fejlede. Prøver igen."
+            sleep 15
+            deploy
+          fi
 
       # VITE_CONVEX_URL inlines i bundlen af deployet ovenfor. Den skal være
       # previewets vært, ikke produktion (quaint-parakeet-652 har intet skema).
@@ -101,7 +114,7 @@ jobs:
 
       # Hemmelighederne sættes via stdin. `env set` uden --secret skriver kun
       # navnet i loggen. `convex run` skriver funktionens returværdi, som er
-      # `{ ok: true }` og ikke indeholder adressen eller adgangskoden.
+      # tællere og ikke indeholder adressen eller adgangskoden.
       # --preview-run duer ikke her: den kører kun, første gang deploymentet
       # oprettes, og et eksisterende preview skal seede på hvert push.
       - if: github.event.action != 'closed'
@@ -111,6 +124,7 @@ jobs:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
           PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
           PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+          PREVIEW_SHARED_PASSWORD: ${{ secrets.PREVIEW_SHARED_PASSWORD }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           set -euo pipefail
@@ -138,11 +152,19 @@ jobs:
           # så et senere push ikke falder tilbage til at logge mailen.
           # Uden --secret skriver loggen kun navnet.
           printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY --preview-name "$preview"
+          shared_required=0
+          if [ -z "${PREVIEW_SHARED_PASSWORD:-}" ]; then
+            echo "PREVIEW_SHARED_PASSWORD mangler -- fælles preview-login springes over."
+          else
+            printf '%s' "$PREVIEW_SHARED_PASSWORD" | npx convex env set PREVIEW_SHARED_PASSWORD --preview-name "$preview"
+            shared_required=1
+          fi
           npx convex run previewSeed:ensure '{}' --preview-name "$preview"
           ready=$(npx convex run previewSeed:guestAllowlistReady '{}' --preview-name "$preview")
           printf '%s\n' "$ready"
           node --input-type=module -e '
             const raw = process.argv[1]
+            const requireShared = process.argv[2] === "1"
             const data = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1))
             if (
               data.listed !== data.expected ||
@@ -153,7 +175,17 @@ jobs:
               console.error("Adgangslisten eller admin-rollen mangler")
               process.exit(1)
             }
-          ' "$ready"
+            if (
+              requireShared &&
+              (data.accounts !== data.expected || data.martinAdmin !== true)
+            ) {
+              console.error("Fælles preview-konti mangler")
+              process.exit(1)
+            }
+            console.log(
+              `Adgangsliste: listed=${data.listed} accounts=${data.accounts} admins=${data.allowlistAdmins} martinAdmin=${data.martinAdmin}`,
+            )
+          ' "$ready" "$shared_required"
           # Login kan først udstede en session, når Convex Auth har et
           # nøglepar på selve previewet. Prod-nøglerne følger ikke med.
           node scripts/ensurePreviewAuthKeys.mjs "$preview"
@@ -212,6 +244,25 @@ jobs:
           done
           echo "Previewet peger ikke på $host."
           exit 1
+
+      # Samme adgangskode for medlemmerne på listen. Springer over, når
+      # hemmeligheden mangler, og skriver hverken adressen eller koden ud.
+      - if: github.event.action != 'closed'
+        name: Log ind med fælles adgangskode
+        env:
+          PREVIEW_SHARED_PASSWORD: ${{ secrets.PREVIEW_SHARED_PASSWORD }}
+          PREVIEW_PATH: /pr-preview/pr-${{ github.event.number }}/
+          PUPPETEER_REQUIRE_FROM: /tmp/preview-smoke/package.json
+        run: |
+          set -euo pipefail
+          if [ -z "${PREVIEW_SHARED_PASSWORD:-}" ]; then
+            echo "PREVIEW_SHARED_PASSWORD mangler -- fælles preview-login springes over."
+            exit 0
+          fi
+          mkdir -p /tmp/preview-smoke
+          npm init -y --prefix /tmp/preview-smoke >/dev/null
+          npm install --prefix /tmp/preview-smoke --silent puppeteer@24.15.0
+          node V2/scripts/previewSharedLogin.mjs
 
       # Bekræfter, at det udgivne preview kan logge ind med den seedede bruger
       # og viser prøvedata. Puppeteer hentes kun til dette trin.
