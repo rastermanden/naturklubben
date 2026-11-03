@@ -34,6 +34,23 @@ export default function GamesPage() {
             </Link>
           </li>
         ))}
+        <li>
+          <Link
+            to="/spil/bobler"
+            className="flex items-center gap-4 rounded-xl border border-line-soft bg-surface p-4 hover:bg-surface-sunken"
+          >
+            <span aria-hidden="true" className="text-3xl">
+              🫧
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="font-medium text-ink-body">Boble-spillet</span>
+              <span className="text-sm text-ink-subtle">
+                Hop mellem platforme, fang modstanderne i bobler og punkter dem.
+                Inspireret af et klassisk arkadespil.
+              </span>
+            </span>
+          </Link>
+        </li>
       </ul>
 
       {games.map((game) => (

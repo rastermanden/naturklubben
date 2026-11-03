@@ -124,6 +124,11 @@ export const routeMetadata = [
     announcement: 'Fugletræk indlæst',
   },
   {
+    path: '/spil/bobler',
+    documentTitle: 'Boble-spillet | Naturklubben',
+    announcement: 'Boble-spillet indlæst',
+  },
+  {
     path: '/spil/kabale',
     documentTitle: '7-kabale | Naturklubben',
     announcement: '7-kabale indlæst',

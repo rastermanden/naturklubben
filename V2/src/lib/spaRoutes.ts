@@ -28,6 +28,7 @@ export const spaIndexPaths = [
   'proevemedlemskab',
   'spil',
   'spil/2048',
+  'spil/bobler',
   'spil/fugletraek',
   'spil/kabale',
   'spil/kaper',
