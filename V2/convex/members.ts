@@ -1,5 +1,5 @@
 import { ConvexError, v } from 'convex/values'
-import { mutation, query } from './_generated/server'
+import { internalMutation, mutation, query } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import {
@@ -526,6 +526,53 @@ export const addAllowedEmail = mutation({
       isAdmin: false,
     })
     return null
+  },
+})
+
+/** Skal sendes med, så et almindeligt kald ikke giver admin-adgang. */
+export const ALLOW_ASSISTANT_CONFIRM = 'ALLOW_GROK_BOT'
+
+/**
+ * Lægger assistentens adresse på adgangslisten med admin-flaget.
+ *
+ * Samme flag som de fem administratorer fra V1: `claimProfile` kopierer
+ * `allowedEmails.isAdmin` over på profilen, når personen selv opretter sig.
+ * Kaldet opretter ingen auth-bruger og ingen profil.
+ */
+export const allowAssistantAdmin = internalMutation({
+  args: { confirm: v.string() },
+  returns: v.object({
+    listed: v.boolean(),
+    isAdmin: v.boolean(),
+    accountExists: v.boolean(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ listed: boolean; isAdmin: boolean; accountExists: boolean }> => {
+    if (args.confirm !== ALLOW_ASSISTANT_CONFIRM) {
+      throw new ConvexError('NOT_CONFIRMED')
+    }
+    const email = normalizeEmail('naturklubben-test@agentmail.to')
+    const rows = await ctx.db
+      .query('allowedEmails')
+      .withIndex('by_email', (q) => q.eq('email', email))
+      .collect()
+    const [existing, ...extra] = rows
+    for (const dup of extra) await ctx.db.delete(dup._id)
+    if (existing === undefined) {
+      await ctx.db.insert('allowedEmails', { email, isAdmin: true })
+    } else if (existing.isAdmin !== true) {
+      await ctx.db.patch(existing._id, { isAdmin: true })
+    }
+
+    const account = await ctx.db
+      .query('authAccounts')
+      .withIndex('providerAndAccountId', (q) =>
+        q.eq('provider', 'password').eq('providerAccountId', email),
+      )
+      .unique()
+    return { listed: true, isAdmin: true, accountExists: account !== null }
   },
 })
 
