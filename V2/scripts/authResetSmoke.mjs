@@ -6,8 +6,10 @@
 import { spawn } from 'node:child_process'
 import { hashSync } from 'bcryptjs'
 
-const action = process.env.AUTH_SMOKE_ACTION
-const email = (process.env.AUTH_SMOKE_EMAIL ?? '').trim().toLowerCase()
+const action = process.argv[2] || process.env.AUTH_SMOKE_ACTION
+const email = (process.argv[3] || process.env.AUTH_SMOKE_EMAIL || '')
+  .trim()
+  .toLowerCase()
 if (process.env.AUTH_SMOKE_CONFIRM !== 'RESET_SMOKE') {
   console.error('Mangler bekræftelse.')
   process.exit(1)
