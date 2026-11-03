@@ -28,8 +28,8 @@ const app = defineApp({
     /** Adressen i links fra mails, uden afsluttende skråstreg. */
     SITE_URL: v.optional(v.string()),
     /**
-     * Den eneste adresse, der får mail, når nogen nævner assistenten i chatten.
-     * Uden den bruges naturklubben-test@agentmail.to.
+     * Modtageren, når nogen nævner assistenten. Profilen slås stadig op på
+     * naturklubben-test@agentmail.to. Uden denne variabel sendes mailen dertil.
      */
     ASSISTANT_MENTION_EMAIL: v.optional(v.string()),
   },

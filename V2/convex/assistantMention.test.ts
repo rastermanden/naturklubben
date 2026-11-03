@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assistantMentionEmail,
   assistantMentionMail,
+  assistantProfileEmail,
   mentionsAssistantText,
   messageMentionsAssistant,
 } from './assistantMention'
@@ -69,6 +70,7 @@ describe('messageMentionsAssistant', () => {
 
 describe('assistantMentionMail', () => {
   it('bruger kun den konfigurerede adresse', () => {
+    expect(assistantProfileEmail()).toBe('naturklubben-test@agentmail.to')
     expect(assistantMentionEmail(undefined)).toBe(
       'naturklubben-test@agentmail.to',
     )

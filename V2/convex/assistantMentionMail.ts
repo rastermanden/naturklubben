@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import {
@@ -12,6 +12,7 @@ import { authFromAddress, postResendEmail } from './authEmail'
 import {
   assistantMentionEmail,
   assistantMentionMail,
+  assistantProfileEmail,
   messageMentionsAssistant,
 } from './assistantMention'
 
@@ -21,7 +22,7 @@ type DbCtx = QueryCtx | MutationCtx
 export async function findAssistantProfileId(
   ctx: DbCtx,
 ): Promise<Id<'profiles'> | null> {
-  const email = assistantMentionEmail(env.ASSISTANT_MENTION_EMAIL)
+  const email = assistantProfileEmail()
   const account = await ctx.db
     .query('authAccounts')
     .withIndex('providerAndAccountId', (q) =>
@@ -43,7 +44,7 @@ export const detail = internalQuery({
     if (message === null || message.deletedAt !== undefined) return null
     const authorId = message.authorId
     if (authorId === undefined) return null
-    const email = assistantMentionEmail(env.ASSISTANT_MENTION_EMAIL)
+    const to = assistantMentionEmail(env.ASSISTANT_MENTION_EMAIL)
     const assistantProfileId = await findAssistantProfileId(ctx)
     if (
       !messageMentionsAssistant({
@@ -62,7 +63,7 @@ export const detail = internalQuery({
       authorName: author?.fullName?.trim() || 'Et medlem',
       createdAt: message.createdAt,
       content: message.content,
-      to: email,
+      to,
     }
   },
 })
@@ -151,5 +152,31 @@ export const notify = internalAction({
       })
     }
     return null
+  },
+})
+
+export const PROBE_CONFIRM = 'PROBE_MENTION_MAIL'
+
+/**
+ * Sender én prøvemail til den konfigurerede modtager uden at skrive i chatten.
+ * Bekræftelsen gør, at et almindeligt kald ikke vækker indbakken.
+ */
+export const probe = internalAction({
+  args: { confirm: v.string() },
+  returns: v.object({ accepted: v.boolean() }),
+  handler: async (_ctx, args): Promise<{ accepted: boolean }> => {
+    if (args.confirm !== PROBE_CONFIRM) throw new ConvexError('NOT_CONFIRMED')
+    const apiKey = env.RESEND_API_KEY?.trim()
+    if (!apiKey) return { accepted: false }
+    const result = await postResendEmail({
+      apiKey,
+      from: authFromAddress(env.AUTH_EMAIL_FROM),
+      to: assistantMentionEmail(env.ASSISTANT_MENTION_EMAIL),
+      subject: 'Naturklubben: omtale-mail virker',
+      text: 'Dette er en prøve på omtale-mailen. Der er ikke skrevet i chatten.',
+      html: '<!doctype html><html lang="da"><body><p>Dette er en prøve på omtale-mailen. Der er ikke skrevet i chatten.</p></body></html>',
+      fetchImpl: fetch,
+    })
+    return { accepted: result.accepted }
   },
 })

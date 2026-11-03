@@ -1,16 +1,23 @@
 /**
  * Om en chatbesked skal give assistenten en mail.
  *
- * Kun den konfigurerede adresse får mail. Et medlem nævner assistenten
- * enten ved at vælge profilen (id'et gemmes på beskeden) eller ved at skrive
- * "Grok", "Grok Bot" eller "@Grok" som hele ord. Assistentens egne beskeder
- * giver ingen mail.
+ * Profilen er altid kontoen `naturklubben-test@agentmail.to`. Modtageren af
+ * mailen er en anden indstilling (`ASSISTANT_MENTION_EMAIL`) og kan pege på
+ * en anden indbakke. Et medlem nævner assistenten enten ved at vælge profilen
+ * eller ved at skrive "Grok", "Grok Bot" eller "@Grok" som hele ord.
+ * Assistentens egne beskeder giver ingen mail.
  */
 
+/** Kontoen, hvis profil der genkendes. Ikke nødvendigvis mailens modtager. */
 export const DEFAULT_ASSISTANT_EMAIL = 'naturklubben-test@agentmail.to'
 
 const ASSISTANT_WORD = /(?<![\p{L}\p{N}_])@?grok(?:\s+bot)?(?![\p{L}\p{N}_])/iu
 
+export function assistantProfileEmail(): string {
+  return DEFAULT_ASSISTANT_EMAIL
+}
+
+/** Modtageren. Uden en gyldig overstyring bruges assistentens egen adresse. */
 export function assistantMentionEmail(override: string | undefined): string {
   const trimmed = override?.trim().toLowerCase()
   if (trimmed && /^[^\s@]+@[^\s@]+$/.test(trimmed)) return trimmed
