@@ -25,6 +25,13 @@ const app = defineApp({
     RESEND_API_KEY: v.optional(v.string()),
     /** Afsender, fx `Naturklubben <noreply@naturklubben.dk>`. */
     AUTH_EMAIL_FROM: v.optional(v.string()),
+    /** Adressen i links fra mails, uden afsluttende skråstreg. */
+    SITE_URL: v.optional(v.string()),
+    /**
+     * Den eneste adresse, der får mail, når nogen nævner assistenten i chatten.
+     * Uden den bruges naturklubben-test@agentmail.to.
+     */
+    ASSISTANT_MENTION_EMAIL: v.optional(v.string()),
   },
 })
 

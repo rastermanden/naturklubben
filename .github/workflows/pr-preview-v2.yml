@@ -131,6 +131,7 @@ jobs:
           preview="pr-${{ github.event.number }}"
           npx convex env set PREVIEW_SEED 1 --preview-name "$preview"
           npx convex env set SITE_URL https://naturklubben.dk --preview-name "$preview"
+          npx convex env set ASSISTANT_MENTION_EMAIL naturklubben-test@agentmail.to --preview-name "$preview"
           printf '%s' "$PREVIEW_TEST_EMAIL" | npx convex env set PREVIEW_TEST_EMAIL --preview-name "$preview"
           printf '%s' "$PREVIEW_TEST_PASSWORD" | npx convex env set PREVIEW_TEST_PASSWORD --preview-name "$preview"
           # Nøglen bliver liggende. Hvert preview-deploy sætter den igen,

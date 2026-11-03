@@ -48,6 +48,7 @@ jobs:
             --cmd-url-env-var-name VITE_CONVEX_URL
           printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY
           npx convex env set SITE_URL https://naturklubben.dk
+          npx convex env set ASSISTANT_MENTION_EMAIL naturklubben-test@agentmail.to
           # Uden nøgleparret kan en gyldig nulstillingskode ikke udstede en
           # session. Klienten bliver så hængende på "Et øjeblik…". Preview
           # sætter nøglerne selv; prod arver dem ikke.

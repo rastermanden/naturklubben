@@ -40,6 +40,8 @@ type Env = {
   readonly PREVIEW_TEST_PASSWORD: string | undefined;
   readonly RESEND_API_KEY: string | undefined;
   readonly AUTH_EMAIL_FROM: string | undefined;
+  readonly SITE_URL: string | undefined;
+  readonly ASSISTANT_MENTION_EMAIL: string | undefined;
 };
 
 /**

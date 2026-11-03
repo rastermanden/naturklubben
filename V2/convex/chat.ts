@@ -2,12 +2,15 @@ import { paginationOptsValidator } from 'convex/server'
 import { ConvexError, v } from 'convex/values'
 import type { Infer } from 'convex/values'
 import { mutation, query } from './_generated/server'
+import { internal } from './_generated/api'
 import type { QueryCtx } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { requireProfile, requireWritableProfile } from './authz'
 import { chatRooms, reactionEmojis } from './tables/chat'
 import { pollViewForMessage } from './chatPolls'
+import { messageMentionsAssistant } from './assistantMention'
+import { findAssistantProfileId } from './assistantMentionMail'
 
 /**
  * Chatten: beskeder, svar, reaktioner, mentions, søgning, tilstedeværelse og
@@ -713,6 +716,21 @@ export const sendMessage = mutation({
     // Søgeindekset skrives i samme mutation som beskeden, så de to ikke kan
     // komme ud af trit.
     await indexMessageContent(ctx, messageId, args.room, args.content, now)
+
+    const assistantProfileId = await findAssistantProfileId(ctx)
+    if (
+      messageMentionsAssistant({
+        content: args.content,
+        mentionIds: mentions.map((id) => String(id)),
+        assistantProfileId:
+          assistantProfileId === null ? null : String(assistantProfileId),
+        authorProfileId: String(profile._id),
+      })
+    ) {
+      await ctx.scheduler.runAfter(0, internal.assistantMentionMail.notify, {
+        messageId,
+      })
+    }
 
     return { messageId, inserted: true }
   },
