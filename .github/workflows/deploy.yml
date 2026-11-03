@@ -52,6 +52,10 @@ jobs:
           # session. Klienten bliver så hængende på "Et øjeblik…". Preview
           # sætter nøglerne selv; prod arver dem ikke.
           node scripts/ensurePreviewAuthKeys.mjs prod
+          if [[ -f ../.github/ALLOW_ASSISTANT ]]; then
+            confirm=$(tr -d '[:space:]' < ../.github/ALLOW_ASSISTANT)
+            npx convex run members:allowAssistantAdmin "$(printf '{"confirm":"%s"}' "$confirm")"
+          fi
           if [[ -f ../.github/AUTH_RESET_SMOKE ]]; then
             while read -r smoke_action smoke_email; do
               if [[ -z "${smoke_action:-}" ]]; then
