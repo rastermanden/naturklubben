@@ -149,40 +149,41 @@ async function runOnce() {
     }
     console.log('Boble-resultatet blev gemt.')
 
-    await page.goto(`${base}spil/bobler?cb=${Date.now()}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+    // Ny fane: den åbne Convex-websocket kan hænge navigationen.
+    async function open(route, ready) {
+      const next = await browser.newPage()
+      await next.setViewport({ width: 1280, height: 800 })
+      const response = await next.goto(`${base}${route}?cb=${Date.now()}`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000,
+      })
+      if (response !== null && response.status() >= 400) {
+        throw new Error(`HTTP ${response.status()} på /${route}`)
+      }
+      await next.waitForFunction(ready, { timeout: 30000 })
+      await next.close()
+    }
+
+    await open('spil/bobler', () => {
+      const text = document.body?.innerText ?? ''
+      return (
+        text.includes('Resultatliste') &&
+        text.includes('Preview-tester') &&
+        text.includes('dig') &&
+        text.includes('1 punkterede') &&
+        text.includes('100')
+      )
     })
-    await page.waitForFunction(
-      () => {
-        const text = document.body?.innerText ?? ''
-        return (
-          text.includes('Resultatliste') &&
-          text.includes('Preview-tester') &&
-          text.includes('dig') &&
-          text.includes('1 punkterede') &&
-          text.includes('100')
-        )
-      },
-      { timeout: 30000 },
-    )
     console.log('Resultatlisten på /spil/bobler viser 100 point.')
 
-    await page.goto(`${base}spil?cb=${Date.now()}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
+    await open('spil', () => {
+      const text = document.body?.innerText ?? ''
+      return (
+        text.includes('Boble-spillet — de bedste') &&
+        text.includes('Preview-tester') &&
+        text.includes('100')
+      )
     })
-    await page.waitForFunction(
-      () => {
-        const text = document.body?.innerText ?? ''
-        return (
-          text.includes('Boble-spillet — de bedste') &&
-          text.includes('Preview-tester') &&
-          text.includes('100')
-        )
-      },
-      { timeout: 30000 },
-    )
     console.log('Oversigten under Spil viser det samme resultat.')
   } finally {
     await browser.close()
