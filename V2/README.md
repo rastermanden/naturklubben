@@ -178,16 +178,16 @@ og heller ikke til en adresse, der ikke står på listen. Siden siger
 stadig "Tjek din e-mail", så den ikke fortæller, hvem der findes.
 Oprettelse af en adresse uden for listen afvises, før der sendes mail.
 
-Seedet lægger kun disse adresser på adgangslisten og opretter ikke
-brugere for dem. Administratorer, som i den nuværende app:
-`martin.martinjensen@gmail.com`, `kaspermoller@gmail.com`,
-`troelsranum@gmail.com`, `mikkellinnet@gmail.com` og
-`uffeschjoedt@gmail.com`. `kaspermoller+test@gmail.com` og
-`naturklubben-test@agentmail.to` er ikke administratorer. En bruger, der
-allerede er oprettet, får rollen ved næste seed. En eksisterende
-auth-bruger med test-indbakken fjernes ved seed, så den adresse kan
-oprettes forfra. Der sendes ingen mail herfra. Medlemmerne opretter sig
-selv fra previewet.
+Seedet lægger disse adresser på adgangslisten. Administratorer, som i
+produktion: `martin.martinjensen@gmail.com`, `kaspermoller@gmail.com`,
+`troelsranum@gmail.com`, `mikkellinnet@gmail.com`,
+`uffeschjoedt@gmail.com` og `naturklubben-test@agentmail.to`.
+`kaspermoller+test@gmail.com` er ikke administrator. Er repo-secreten
+`PREVIEW_SHARED_PASSWORD` sat, oprettes de syv som bekræftede konti med
+den adgangskode, så man kan logge ind uden mail. Mangler den, springes
+kontiene over, og previewet fejler ikke. En bruger, der allerede er
+oprettet, får rollen ved næste seed; et udfyldt navn bliver stående.
+Der sendes ingen mail herfra.
 
 Prøvemedlemskab og gæsteansøgninger sender ikke mail i den nuværende app
 (push og en mailto-kladde). De er ikke flyttet til Resend.
