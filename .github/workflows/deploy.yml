@@ -53,8 +53,12 @@ jobs:
           # sætter nøglerne selv; prod arver dem ikke.
           node scripts/ensurePreviewAuthKeys.mjs prod
           if [[ -f ../.github/AUTH_RESET_SMOKE ]]; then
-            read -r smoke_action smoke_email < ../.github/AUTH_RESET_SMOKE
-            AUTH_SMOKE_CONFIRM=RESET_SMOKE node scripts/authResetSmoke.mjs "$smoke_action" "$smoke_email"
+            while read -r smoke_action smoke_email; do
+              if [[ -z "${smoke_action:-}" ]]; then
+                continue
+              fi
+              AUTH_SMOKE_CONFIRM=RESET_SMOKE node scripts/authResetSmoke.mjs "$smoke_action" "$smoke_email"
+            done < ../.github/AUTH_RESET_SMOKE
           fi
           host=$(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123')
           echo "Build peger på $host"
