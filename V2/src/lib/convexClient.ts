@@ -1,4 +1,5 @@
 import { ConvexReactClient } from 'convex/react'
+import { failedCodeRedemptionResult } from '../features/auth/authCodeRedeem'
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL
 
@@ -14,3 +15,16 @@ if (!convexUrl) {
  * et `useQuery` er abonnementet.
  */
 export const convex = new ConvexReactClient(convexUrl)
+
+const callAction = convex.action.bind(convex)
+convex.action = (async (reference: unknown, ...args: unknown[]) => {
+  try {
+    return await callAction(reference as never, ...(args as []))
+  } catch (error) {
+    const failed = failedCodeRedemptionResult(reference, args[0])
+    if (failed === null) throw error
+    // Koden logges ikke. Prod skjuler alligevel serverens tekst.
+    console.error('Nulstillingskoden kunne ikke indløses')
+    return failed
+  }
+}) as typeof convex.action

@@ -1,0 +1,44 @@
+name: Auth-reset smoke
+
+# Opretter eller fjerner én @agentmail.to-testkonto på prod, så nulstilling
+# kan prøves uden at røre et medlem. Kører kun ved manuel start.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: create eller delete
+        required: true
+        type: choice
+        options:
+          - create
+          - delete
+      email:
+        description: Kun en @agentmail.to-adresse
+        required: true
+        type: string
+        default: naturklubben-reset-smoke@agentmail.to
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: V2/package-lock.json
+      - name: Install
+        working-directory: V2
+        run: npm ci
+      - name: Opret eller fjern testkonto
+        working-directory: V2
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          AUTH_SMOKE_ACTION: ${{ inputs.action }}
+          AUTH_SMOKE_EMAIL: ${{ inputs.email }}
+          AUTH_SMOKE_CONFIRM: RESET_SMOKE
+        run: node scripts/authResetSmoke.mjs

@@ -8,6 +8,7 @@ import schema from './schema'
 import { isBcryptHash } from './passwordCrypto'
 import {
   PASSWORD_IMPORT_CONFIRM,
+  SMOKE_DELETE_CONFIRM,
   rehashImportedPassword,
   writeImportedPassword,
 } from './passwords'
@@ -117,5 +118,41 @@ describe('importerede adgangskoder', () => {
       accounts: [{ email: 'a@example.com', bcryptHash: BCRYPT_ABC }],
     })
     expect(count).toBe(1)
+  })
+
+  it('sletter kun en agentmail-testkonto', async () => {
+    const t = convexTest(schema, modules)
+    await t.mutation(internal.passwords.importHashes, {
+      confirm: PASSWORD_IMPORT_CONFIRM,
+      accounts: [
+        {
+          email: 'naturklubben-reset-smoke@agentmail.to',
+          bcryptHash: BCRYPT_ABC,
+        },
+      ],
+    })
+    const removed = await t.mutation(internal.passwords.deleteSmokeAuthUser, {
+      confirm: SMOKE_DELETE_CONFIRM,
+      email: 'Naturklubben-Reset-Smoke@agentmail.to',
+    })
+    expect(removed.deletedAccounts).toBe(1)
+    const left = await t.run(async (ctx) =>
+      ctx.db.query('authAccounts').collect(),
+    )
+    expect(left).toHaveLength(0)
+
+    const refused = await t
+      .mutation(internal.passwords.deleteSmokeAuthUser, {
+        confirm: SMOKE_DELETE_CONFIRM,
+        email: 'martin.martinjensen@gmail.com',
+      })
+      .then(
+        () => null,
+        (error: unknown) => error,
+      )
+    expect(refused).toBeInstanceOf(ConvexError)
+    expect(JSON.parse((refused as ConvexError<string>).data)).toBe(
+      'SMOKE_EMAIL_ONLY',
+    )
   })
 })

@@ -31,14 +31,17 @@ export default function WelcomePage() {
     typeof window === 'undefined' ? '' : window.location.search,
   )
 
+  const authSettling =
+    !isAuthenticated && (waitingForCode || authLoading || isLoading)
+
   useEffect(() => {
-    if (!waitingForCode || isAuthenticated) {
+    if (!authSettling) {
       if (isAuthenticated) clearAuthCodeWait()
       return
     }
     const timeout = window.setTimeout(() => setGaveUp(true), 20000)
     return () => window.clearTimeout(timeout)
-  }, [isAuthenticated, waitingForCode])
+  }, [authSettling, isAuthenticated])
 
   useEffect(() => {
     if (!isAuthenticated || profile !== null || attempted.current) return
@@ -55,10 +58,9 @@ export default function WelcomePage() {
   }, [claimProfile, isAuthenticated, profile])
 
   if (
-    (waitingForCode && !gaveUp && !isAuthenticated) ||
-    authLoading ||
-    isLoading ||
-    claiming
+    claiming ||
+    (isAuthenticated && (authLoading || isLoading)) ||
+    (authSettling && !gaveUp)
   ) {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
