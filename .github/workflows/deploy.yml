@@ -52,6 +52,10 @@ jobs:
           # session. Klienten bliver så hængende på "Et øjeblik…". Preview
           # sætter nøglerne selv; prod arver dem ikke.
           node scripts/ensurePreviewAuthKeys.mjs prod
+          if [[ -f ../.github/AUTH_RESET_SMOKE ]]; then
+            read -r smoke_action smoke_email < ../.github/AUTH_RESET_SMOKE
+            AUTH_SMOKE_CONFIRM=RESET_SMOKE node scripts/authResetSmoke.mjs "$smoke_action" "$smoke_email"
+          fi
           host=$(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123')
           echo "Build peger på $host"
           if [[ "$host" != *quaint-parakeet-652* ]]; then
