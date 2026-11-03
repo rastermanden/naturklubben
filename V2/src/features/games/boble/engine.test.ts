@@ -87,7 +87,8 @@ describe('boble-motor', () => {
       ],
     }
     state = stepBoble(state, idle)
-    expect(state.score).toBeGreaterThan(0)
+    expect(state.score).toBe(100)
+    expect(state.pops).toBe(1)
     expect(state.level).toBe(1)
   })
 

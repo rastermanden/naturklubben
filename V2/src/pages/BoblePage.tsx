@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
 import { BobleGame } from '../features/games/boble/BobleGame'
+import { Leaderboard } from '../features/games/Leaderboard'
+import { RecentScores } from '../features/games/RecentScores'
 
 export default function BoblePage() {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 sm:p-6">
+    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-4 sm:p-6">
       <div className="flex flex-col gap-1">
         <Link to="/spil" className="text-sm text-ink-muted underline">
           ← Spil
@@ -15,6 +17,8 @@ export default function BoblePage() {
         </p>
       </div>
       <BobleGame />
+      <Leaderboard game="boble" heading="Resultatliste" />
+      <RecentScores game="boble" />
     </main>
   )
 }

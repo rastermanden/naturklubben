@@ -225,6 +225,12 @@ export const ANNOUNCEMENTS = [
     path: 'spil/kabale',
   },
   {
+    slug: 'spil-boble',
+    title: 'Nyt spil: Boble-spillet',
+    body: 'Hop mellem platformene, fang modstanderne i bobler og punkter dem. Dit resultat ryger på klubbens liste, så de andre kan prøve at slå det. Find det under Spil.',
+    path: 'spil/bobler',
+  },
+  {
     slug: 'menu-naturlog-spil-log-ud',
     title: 'Naturlog og Spil ligger nu under Aktiviteter',
     body: 'Menuen er blevet kortere, så den kan ses på en telefon. Naturlog og Spil finder du nu under Aktiviteter, og "Log ud" ligger nederst på din profil.',

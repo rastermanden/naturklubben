@@ -61,6 +61,8 @@ export interface BobleState {
   status: BobleStatus
   level: number
   score: number
+  /** Punkterede modstandere. Det er `lines` på resultatlisten. */
+  pops: number
   lives: number
   player: Player
   enemies: Enemy[]
@@ -83,6 +85,7 @@ export function createBobleState(): BobleState {
       status: 'ready',
       level: 0,
       score: 0,
+      pops: 0,
       lives: START_LIVES,
       player: spawnPlayer(),
       enemies: [],
@@ -97,7 +100,14 @@ export function createBobleState(): BobleState {
 
 export function startBoble(state: BobleState): BobleState {
   return loadLevel(
-    { ...state, status: 'playing', score: 0, lives: START_LIVES, level: 0 },
+    {
+      ...state,
+      status: 'playing',
+      score: 0,
+      pops: 0,
+      lives: START_LIVES,
+      level: 0,
+    },
     0,
     'playing',
   )
@@ -304,6 +314,7 @@ function popBubbles(state: BobleState) {
     state.enemies = state.enemies.filter((enemy) => enemy.id !== bubble.enemyId)
     const loop = Math.floor(state.level / LEVELS.length)
     state.score += 100 + loop * 50
+    state.pops += 1
   }
   if (popped.size > 0) {
     state.bubbles = state.bubbles.filter((bubble) => !popped.has(bubble.id))

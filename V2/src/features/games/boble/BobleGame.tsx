@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
+import { formatScore } from '../leaderboard'
+import { usePersonalBest, usePlayerId, useSubmitScore } from '../useGameScores'
 import {
   createBobleState,
   startBoble,
@@ -10,25 +12,6 @@ import {
 import { BOBLE_WORLD } from './engine'
 import { drawBoble } from './draw'
 
-const BEST_KEY = 'naturklubben:boble-bedst'
-
-function readBest() {
-  try {
-    const value = Number(localStorage.getItem(BEST_KEY))
-    return Number.isFinite(value) ? value : 0
-  } catch {
-    return 0
-  }
-}
-
-function writeBest(score: number) {
-  try {
-    localStorage.setItem(BEST_KEY, String(score))
-  } catch {
-    // Privat tilstand kan afvise lageret. Spillet virker stadig.
-  }
-}
-
 const emptyInput = (): BobleInput => ({
   left: false,
   right: false,
@@ -38,7 +21,7 @@ const emptyInput = (): BobleInput => ({
 
 /**
  * Boble-spillet: hop, skyd bobler, fang og punkter.
- * Rekorden ligger kun i browseren.
+ * Et afsluttet parti med point lægges på klubbens resultatliste.
  */
 export function BobleGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -46,7 +29,14 @@ export function BobleGame() {
   const stateRef = useRef(snapshot)
   const inputRef = useRef(emptyInput())
   const edges = useRef({ jump: false, shoot: false })
-  const [best, setBest] = useState(readBest)
+  const userId = usePlayerId()
+  const personalBest = usePersonalBest('boble')
+  const submitScore = useSubmitScore('boble')
+  const submitted = useRef(false)
+  const bestBefore = useRef(0)
+  const startedAt = useRef(0)
+  const finishedSeconds = useRef(0)
+  const [record, setRecord] = useState(false)
 
   useEffect(() => {
     let frame = 0
@@ -72,13 +62,6 @@ export function BobleGame() {
       const canvas = canvasRef.current
       const ctx = canvas?.getContext('2d')
       if (ctx) drawBoble(ctx, stepped)
-      if (stepped.status === 'over') {
-        setBest((current) => {
-          if (stepped.score <= current) return current
-          writeBest(stepped.score)
-          return stepped.score
-        })
-      }
       frame = requestAnimationFrame(loop)
     }
     frame = requestAnimationFrame(loop)
@@ -132,10 +115,44 @@ export function BobleGame() {
   }, [])
 
   function begin() {
+    submitted.current = false
+    setRecord(false)
+    bestBefore.current = personalBest.data?.score ?? 0
+    startedAt.current = Date.now()
     const next = startBoble(stateRef.current)
     stateRef.current = next
     setSnapshot(next)
   }
+
+  function saveResult(seconds: number) {
+    if (!userId || snapshot.score <= 0) return
+    submitScore.mutate({
+      score: snapshot.score,
+      lines: snapshot.pops,
+      level: snapshot.level + 1,
+      durationSeconds: seconds,
+    })
+  }
+
+  // Resultatet sendes af sig selv, når spillet er slut. `submitted` sørger
+  // for, at det kun sker én gang. Mangler spilleren endnu, venter vi.
+  useEffect(() => {
+    if (snapshot.status !== 'over' || submitted.current) return
+    if (snapshot.score <= 0) {
+      submitted.current = true
+      return
+    }
+    if (!userId) return
+    submitted.current = true
+    finishedSeconds.current = Math.max(
+      0,
+      Math.round((Date.now() - startedAt.current) / 1000),
+    )
+    setRecord(snapshot.score > bestBefore.current)
+    saveResult(finishedSeconds.current)
+    // saveResult læser det parti, effekten allerede har set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot, userId])
 
   function hold(
     key: 'left' | 'right',
@@ -157,7 +174,10 @@ export function BobleGame() {
         <Tile label="Point" value={String(snapshot.score)} />
         <Tile label="Liv" value={String(snapshot.lives)} />
         <Tile label="Bane" value={String(snapshot.level + 1)} />
-        <Tile label="Bedst" value={String(best)} />
+        <Tile
+          label="Bedst"
+          value={formatScore(personalBest.data?.score ?? 0)}
+        />
       </div>
 
       <div className="relative overflow-hidden rounded-xl border border-line-soft bg-[#14343c]">
@@ -175,9 +195,29 @@ export function BobleGame() {
             </p>
             <p className="max-w-sm text-sm text-white/80">
               {snapshot.status === 'over'
-                ? `Du fik ${snapshot.score} point.`
+                ? `Du fik ${formatScore(snapshot.score)} point.`
                 : 'Hop mellem platformene, skyd en boble, og punkter den, når en modstander sidder fast.'}
             </p>
+            {snapshot.status === 'over' && record && snapshot.score > 0 && (
+              <p className="text-sm font-medium text-warn-ring">
+                Ny personlig rekord!
+              </p>
+            )}
+            {snapshot.status === 'over' && submitScore.isPending && (
+              <p className="text-sm text-white/80">Gemmer resultatet…</p>
+            )}
+            {snapshot.status === 'over' && submitScore.isError && (
+              <button
+                type="button"
+                onClick={() => saveResult(finishedSeconds.current)}
+                className="min-h-11 rounded border border-white/60 px-4 py-2 text-sm"
+              >
+                Resultatet blev ikke gemt. Prøv igen
+              </button>
+            )}
+            {snapshot.status === 'over' && submitScore.isSuccess && (
+              <p className="text-sm text-white/80">Resultatet er på listen.</p>
+            )}
             <button
               type="button"
               onClick={begin}

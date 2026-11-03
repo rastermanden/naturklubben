@@ -97,6 +97,16 @@ export const games: readonly GameDefinition[] = [
     describeScore: (score) =>
       `${score.lines} træk · ${drawName(score.level)} · ${formatDuration(score.durationSeconds)}`,
   },
+  {
+    id: 'boble',
+    title: 'Boble-spillet',
+    tagline:
+      'Hop mellem platformene, fang modstanderne i bobler og punkter dem. Inspireret af et klassisk arkadespil.',
+    path: '/spil/bobler',
+    symbol: '🫧',
+    describeScore: (score) =>
+      `${score.lines} punkterede · bane ${score.level} · ${formatDuration(score.durationSeconds)}`,
+  },
 ]
 
 export function gameById(id: GameId): GameDefinition {
