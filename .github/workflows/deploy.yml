@@ -52,6 +52,14 @@ jobs:
           # session. Klienten bliver så hængende på "Et øjeblik…". Preview
           # sætter nøglerne selv; prod arver dem ikke.
           node scripts/ensurePreviewAuthKeys.mjs prod
+          if [[ -f ../.github/REPAIR_ASSISTANT ]]; then
+            confirm=$(tr -d '[:space:]' < ../.github/REPAIR_ASSISTANT)
+            npx convex run members:repairAssistantSignup "$(printf '{"confirm":"%s"}' "$confirm")"
+            set +e
+            timeout 20 npx convex logs --history 80 > /tmp/convex-logs.txt
+            set -e
+            node scripts/scrubConvexLogs.mjs /tmp/convex-logs.txt
+          fi
           if [[ -f ../.github/ALLOW_ASSISTANT ]]; then
             confirm=$(tr -d '[:space:]' < ../.github/ALLOW_ASSISTANT)
             npx convex run members:allowAssistantAdmin "$(printf '{"confirm":"%s"}' "$confirm")"

@@ -34,6 +34,68 @@ describe('assistentens adgang', () => {
     expect(rows.profiles).toHaveLength(0)
   })
 
+  it('fjerner en auth-konto uden profil, så oprettelse kan prøves igen', async () => {
+    const t = convexTest(schema, modules)
+    await t.run(async (ctx) => {
+      const userId = await ctx.db.insert('users', {
+        email: 'naturklubben-test@agentmail.to',
+      })
+      await ctx.db.insert('authAccounts', {
+        userId,
+        provider: 'password',
+        providerAccountId: 'naturklubben-test@agentmail.to',
+        secret: 'not-a-real-secret',
+      })
+    })
+    const result = await t.mutation(internal.members.repairAssistantSignup, {
+      confirm: ALLOW_ASSISTANT_CONFIRM,
+    })
+    expect(result.removedLeftoverAccount).toBe(true)
+    expect(result).toMatchObject({
+      allowlist: true,
+      allowlistAdmin: true,
+      account: false,
+      profile: false,
+    })
+    const accounts = await t.run(async (ctx) =>
+      ctx.db.query('authAccounts').collect(),
+    )
+    expect(accounts).toHaveLength(0)
+  })
+
+  it('gør en eksisterende profil til admin uden at slette den', async () => {
+    const t = convexTest(schema, modules)
+    const profileId = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert('users', {
+        email: 'naturklubben-test@agentmail.to',
+      })
+      await ctx.db.insert('authAccounts', {
+        userId,
+        provider: 'password',
+        providerAccountId: 'naturklubben-test@agentmail.to',
+        secret: 'not-a-real-secret',
+      })
+      return await ctx.db.insert('profiles', {
+        userId,
+        fullName: 'Grok Bot',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+    })
+    const result = await t.mutation(internal.members.repairAssistantSignup, {
+      confirm: ALLOW_ASSISTANT_CONFIRM,
+    })
+    expect(result.removedLeftoverAccount).toBe(false)
+    expect(result.profileAdmin).toBe(true)
+    const profile = await t.run(async (ctx) => ctx.db.get(profileId))
+    expect(profile?.isAdmin).toBe(true)
+    expect(profile?.fullName).toBe('Grok Bot')
+  })
+
   it('nægter uden bekræftelse', async () => {
     const t = convexTest(schema, modules)
     const failure = await t
