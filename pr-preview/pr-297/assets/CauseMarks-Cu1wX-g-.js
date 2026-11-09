@@ -1,1 +1,0 @@
-import{r as e}from"./causes-BXJqTrKi.js";import{t}from"./jsx-runtime-BZi9cxqW.js";var n=t();function r({causes:t,className:r}){let i=e(t);if(i.length===0)return null;let a=i.map(e=>e.label).join(`, `);return(0,n.jsx)(`span`,{role:`img`,"aria-label":a,title:a,className:r??`shrink-0 text-sm`,children:i.map(e=>e.emoji).join(` `)})}export{r as t};
