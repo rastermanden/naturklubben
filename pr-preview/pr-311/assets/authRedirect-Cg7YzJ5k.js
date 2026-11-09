@@ -1,0 +1,1 @@
+function e(e){return new URL(e,`${window.location.origin}/pr-preview/pr-311/`).href}export{e as t};
