@@ -26,11 +26,14 @@ mere end den skærm, man kigger på. `/blast-radius` i skills-mappen går listen
 
 - Egen branch, aldrig direkte på `main`.
 - Ny adfærd får en test ved den kode, den dækker. Rører ændringen autorisationsmodellen,
-  får den en pgTAP-test i `supabase/tests/rls/`.
-- Migrationer er nye filer i `supabase/migrations/`. Ret aldrig i en fil, der er kørt i
-  produktion, og skriv selv grants med (se `AGENTS.md`). En migration, der fejler, rettes
-  med en ny migration.
-- Nye funktioner, medlemmerne kan mærke, tager deres nyhed med i samme migration.
+  får den en test, der kalder ind som den rigtige rolle og måler, hvad der faktisk sker. I
+  V2 er det en `convex-test` ved siden af funktionen, ikke en pgTAP-test: `convex-test`
+  erstatter `supabase/tests/rls/`, se `V2/README.md`.
+- Ændres V1's database, er det stadig migrationer: nye filer i `supabase/migrations/`. Ret
+  aldrig i en fil, der er kørt i produktion, og skriv selv grants med (se `AGENTS.md`). En
+  migration, der fejler, rettes med en ny migration. V1 er den app, der ligger i roden og
+  stadig deployes fra `main`; V2 ligger i `V2/` og har sin egen kæde.
+- Nye funktioner, medlemmerne kan mærke, tager deres nyhed med i samme ændring.
 - Brugertekst læses som medlem, ikke som udvikler. Kør `/unslop` på ny tekst.
 - Ændres frontend, så se den i et preview, ikke kun i test. Ændres design, så kom med et
   rigtigt skærmbillede.
@@ -38,13 +41,14 @@ mere end den skærm, man kigger på. `/blast-radius` i skills-mappen går listen
 ## 4. Verificér lokalt, før PR'en åbnes
 
 ```bash
-npm test && npm run lint && npm run format:check && npx tsc -b
+npm test && npm run lint && npm run format:check && npx tsc -b   # V1, i roden
+cd V2 && npm test && npm run lint && npx tsc -b                   # V2
 ```
 
 Er branch'en bagud for `main`, merges `main` ind først — en forældet branch giver
-misvisende resultater. CI kører det samme på PR'en, plus `database`-jobbet, der afspiller
-hele migrationskæden på en tom Postgres og kører pgTAP-testene. Det job er den eneste
-rigtige dom over SQL'en, før den når preview-databasen.
+misvisende resultater. CI kører det samme på PR'en. Rører PR'en `supabase/`, afspiller
+`database`-jobbet desuden hele migrationskæden på en tom Postgres sammen med V1's pgTAP-suite
+— den del holder op med at være relevant i samme takt som V1 udfases.
 
 ## 5. Pull request
 

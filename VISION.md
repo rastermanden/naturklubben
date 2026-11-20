@@ -31,10 +31,11 @@ at gætte.
 
 1. **Medlemmernes sprog.** Dansk, korte sætninger, ord folk faktisk bruger. Nyheder,
    knapper og fejlbeskeder skrives til medlemmer, ikke til udviklere.
-2. **Databasen bestemmer, hvem der må se hvad.** RLS-politikkerne og `security
-definer`-funktionerne i Postgres er sikkerhedsgrænsen. Klienten kan skjule og vise, men
-   aldrig autorisere. Rører en ændring autorisationsmodellen, har den en test der skifter
-   rolle og JWT-claim og måler, hvad der faktisk sker.
+2. **Databasen bestemmer, hvem der må se hvad.** Autorisationslaget i databasen — RLS og
+   `security definer`-funktioner i V1, `convex/authz.ts` i V2 — er sikkerhedsgrænsen.
+   Klienten kan skjule og vise, men aldrig autorisere. Rører en ændring
+   autorisationsmodellen, har den en test, der kalder ind som den rigtige rolle og måler,
+   hvad der faktisk sker.
 3. **Alt kan bygges og udgives fra en browser.** Ingen udvikling må kræve lokal Docker, en
    lokal database eller en deploy-kommando kørt af et menneske. Kode, SQL og workflows
    pushes, og integrationerne gør resten. Kun de to engangsopsætninger (Supabase-projektet
