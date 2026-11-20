@@ -59,6 +59,40 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+  # V2 er appen, der deployes (deploy.yml udgiver V2/dist). Dens test, lint og
+  # typecheck skal derfor køre her, så en PR ikke kan slippe igennem med en V2,
+  # der ikke bygger eller fejler sine tests. V1-jobbet ovenfor rører kun roden.
+  v2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          # V2 har sin egen package-lock.json; uden den peger npm-cachen på
+          # rodens lockfil og cache-nøglen rammer forbi.
+          cache-dependency-path: V2/package-lock.json
+
+      - name: Install
+        working-directory: V2
+        run: npm ci
+
+      # V2 har intet eget format-script; dets formatering tjekkes allerede af
+      # `format:check` i lint-and-typecheck (prettier --check . dækker V2/).
+      - name: Test
+        working-directory: V2
+        run: npm test
+
+      - name: Lint
+        working-directory: V2
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: V2
+        run: npx tsc -b
+
   database:
     runs-on: ubuntu-latest
     services:
