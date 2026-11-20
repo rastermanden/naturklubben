@@ -92,9 +92,7 @@ describe('createHistoryCacheStore uden IndexedDB', () => {
     expect(await store.read('member-1:general')).toBeNull()
 
     await store.write(entry('member-1:general'))
-    expect((await store.read('member-1:general'))?.key).toBe(
-      'member-1:general',
-    )
+    expect((await store.read('member-1:general'))?.key).toBe('member-1:general')
   })
 })
 
