@@ -75,6 +75,10 @@ af `.github/workflows/sync-auth-config.yml` -- se `supabase/README.md`.
 - [`docs/kodegennemgang-2026-08-23.md`](docs/kodegennemgang-2026-08-23.md) — gennemgang af
   hele appen: arkitektur, styrker, fund og roadmap. Fundene er oprettet som issues med
   labels `blocker`, `risiko`, `friktion` og `finish`.
+- `VISION.md` — hvorfor appen findes, og de principper hver ændring tjekkes imod.
+- `FLOW.md` — arbejdsgangen for hver ændring, fra observation til udgivelse.
+- `.agents/skills/` — skills til coding agents, delt af alle modeller (`.claude/skills` er
+  et symlink hertil). Se `AGENTS.md`.
 - `AGENTS.md` — projektets udviklingskonventioner. `CLAUDE.md` importerer samme fil.
 - `supabase/README.md` — backend-opsætning, nøgler og auth-URL'er.
 
