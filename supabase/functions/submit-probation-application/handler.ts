@@ -18,6 +18,37 @@ export interface SubmissionRpcResult {
   retry_after_seconds: number | null
 }
 
+/**
+ * En fejl fra RPC'en, båret med sin SQLSTATE. Koden er det eneste, der må
+ * følge med i loggen: den siger, hvad der gik galt, uden at sige hvem det gik
+ * galt for. Alt andet fra databasens fejlbesked kan indeholde ansøgerens
+ * oplysninger og bliver tabt med vilje.
+ */
+export class SubmissionBackendError extends Error {
+  readonly sqlstate?: string
+
+  constructor(sqlstate?: string) {
+    super('submission_rpc_failed')
+    this.name = 'SubmissionBackendError'
+    this.sqlstate = sqlstate
+  }
+}
+
+/**
+ * `submission_backend_failure` alene fortalte kun, at *noget* i databasen
+ * fejlede -- og ikke hvad. SQLSTATE'en gør forskel på fx `55000` (adressen
+ * kunne ikke udledes) og `23505` (en konflikt), og den er fem tegn fra et
+ * fast alfabet, så den kan ikke smugle andet med ind i loggen.
+ */
+export function backendFailureCategory(failure: unknown) {
+  const sqlstate =
+    failure instanceof SubmissionBackendError ? failure.sqlstate : undefined
+
+  return sqlstate && /^[0-9A-Za-z]{5}$/.test(sqlstate)
+    ? `submission_backend_failure:${sqlstate}`
+    : 'submission_backend_failure'
+}
+
 interface SubmissionDependencies {
   secret: string
   submit: (arguments_: SubmissionRpcArguments) => Promise<SubmissionRpcResult>
@@ -278,8 +309,8 @@ export function createSubmissionHandler({
       if (remaining > 0) await sleep(remaining)
 
       return jsonResponse({ accepted: true }, 202, requestId, corsHeaders)
-    } catch {
-      reportError(requestId, 'submission_backend_failure')
+    } catch (failure) {
+      reportError(requestId, backendFailureCategory(failure))
       return jsonResponse(
         { code: 'temporarily_unavailable' },
         503,

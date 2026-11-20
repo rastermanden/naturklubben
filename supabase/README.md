@@ -680,6 +680,14 @@ indsendelsen lukket med 503 i stedet for at køre uden rate limit. IPv4 normalis
 til eksakt adresse og `/24`, IPv6 til eksakt adresse og `/64`; IPv4-mappet IPv6
 normaliseres som IPv4.
 
+Svaret til klienten er med vilje det samme for enhver serverfejl:
+`temporarily_unavailable`. Årsagen står kun i functionens log, sammen med
+requestets id (som også sendes med som `X-Request-Id`):
+`trusted_network_signal_unavailable`, hvis den trusted header manglede, og
+`submission_backend_failure:<SQLSTATE>`, hvis RPC'en kastede. SQLSTATE'en er det
+eneste fra databasens fejl, der logges -- resten af beskeden kan indeholde
+ansøgerens oplysninger.
+
 IP, subnet og trimmet/lowercase e-mail HMAC-hashes i tre domæneadskilte inputs med
 den auto-injicerede Supabase Secret key. Hashene har fast SHA-256-format. Rå IP og
 subnet sendes aldrig til Postgres eller function-logs; body, e-mail, push-token,
@@ -742,6 +750,14 @@ Det er en holdbar outbox på selve ansøgningen:
 5. Fejl ændrer aldrig den egentlige ansøgningsstatus. Admin-panelet beholder afgjorte
    ansøgninger med uløste leveringer og viser en genforsøgsknap; ansøgerens
    kvitteringsside gør det samme for den første admin-notifikation.
+6. Ansøgningen afhænger ikke af, at outboxen overhovedet kan startes. Kan
+   funktionens adresse ikke udledes af requestets host-header, lånes den sidst
+   kendte fra en tidligere ansøgning; findes heller ikke den, gemmes ansøgningen
+   med `notification_function_url = null` og leveringen som `failed`, og
+   genforsøgsjobbet udfylder adressen, så snart en er kendt. Fejler
+   `pg_net`-kaldet, ender det samme sted. Før rev begge dele hele ansøgningen med
+   sig, så ansøgeren fik "Ansøgningen kan ikke sendes lige nu" på noget, der intet
+   havde med formularen at gøre (`20261120160000`).
 
 Admins slår push til direkte på `/admin`. Der kræves ingen ny nøgle eller udbyder:
 `probation-notifications` genbruger det selv-genererende VAPID-nøglepar fra
