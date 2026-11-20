@@ -35,10 +35,7 @@ export interface CachedHistory {
 
 /** Formen, `usePaginatedQuery` rapporterer sin side i. */
 export type HistoryStatus =
-  | 'LoadingFirstPage'
-  | 'LoadingMore'
-  | 'CanLoadMore'
-  | 'Exhausted'
+  'LoadingFirstPage' | 'LoadingMore' | 'CanLoadMore' | 'Exhausted'
 
 export interface ResolvedHistory {
   /** Ældste først. */

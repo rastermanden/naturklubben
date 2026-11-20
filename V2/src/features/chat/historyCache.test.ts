@@ -99,7 +99,10 @@ describe('resolveHistory med den live side', () => {
       status: 'CanLoadMore',
     })
 
-    expect(resolved.messages).toEqual([message('m2', 2000), message('m3', 3000)])
+    expect(resolved.messages).toEqual([
+      message('m2', 2000),
+      message('m3', 3000),
+    ])
   })
 
   it('rapporterer, når der ikke er mere at hente', () => {
@@ -119,7 +122,10 @@ describe('resolveHistory med den live side', () => {
       status: 'LoadingMore',
     })
 
-    expect(resolved.messages).toEqual([message('m1', 1000), message('m2', 2000)])
+    expect(resolved.messages).toEqual([
+      message('m1', 1000),
+      message('m2', 2000),
+    ])
     expect(resolved.isLoadingMore).toBe(true)
     expect(resolved.hasMore).toBe(false)
   })

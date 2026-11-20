@@ -89,7 +89,10 @@ export function useChatHistory(room: ChatRoom, profileId: Id<'profiles'>) {
   // undervejs (`LoadingFirstPage`/`LoadingMore`) gemmes der ikke -- det er det
   // færdige svar, der er "sidst kendte", ikke et halvt.
   useEffect(() => {
-    if (paginated.status !== 'CanLoadMore' && paginated.status !== 'Exhausted') {
+    if (
+      paginated.status !== 'CanLoadMore' &&
+      paginated.status !== 'Exhausted'
+    ) {
       return
     }
     void store.write({
