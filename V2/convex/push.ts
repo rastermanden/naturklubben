@@ -730,7 +730,12 @@ export const ADMIN_MENTION_TAG = 'naturklubben-chat-admin-mention'
 /** Smugkig af chatbeskeden -- holder payloaden kort og under push-grænsen. */
 export const CHAT_PREVIEW_MAX_LENGTH = 140
 
-/** En besked ældre end fem minutter udløser ikke en forsinket push. */
+/**
+ * Beholdes for V1-paritet (i V1 havde Edge Functionen en fem-minutters grænse;
+ * i V2 kan ingen klient selv udløse afsendelsen for en gammel besked, men
+ * grænsen undgår stadig en forsinket notifikation, hvis en planlagt kørsel
+ * skubbes langt ud).
+ */
 export const CHAT_PUSH_MAX_AGE_MS = 5 * 60 * 1000
 
 /** 12 timer -- samme TTL som V1's chat-push (godt ved svag mobildækning). */

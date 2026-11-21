@@ -568,4 +568,133 @@ describe('chat.sendMessage -> Web Push', () => {
     await t.finishAllScheduledFunctions(vi.runAllTimers)
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  it('sender ingen push til et medlem med præference mentions, når det ikke er nævnt', async () => {
+    vi.useFakeTimers()
+    const t = convexTest(schema, modules)
+    const sender = await seedMember(t, {
+      email: 'ada@example.com',
+      fullName: 'Ada',
+      preference: 'all',
+    })
+    const allMember = await seedMember(t, {
+      email: 'bo@example.com',
+      fullName: 'Bo',
+      preference: 'all',
+    })
+    const mentionOnly = await seedMember(t, {
+      email: 'carl@example.com',
+      fullName: 'Carl',
+      preference: 'mentions',
+    })
+
+    const boEndpoint = 'https://fcm.googleapis.com/fcm/send/bo-all'
+    const carlEndpoint = 'https://fcm.googleapis.com/fcm/send/carl-mentions'
+    await seedSubscription(
+      t,
+      allMember.profileId,
+      boEndpoint,
+      await createSubscriberKeys(),
+    )
+    await seedSubscription(
+      t,
+      mentionOnly.profileId,
+      carlEndpoint,
+      await createSubscriberKeys(),
+    )
+
+    const calledUrls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calledUrls.push(url)
+        return new Response(null, { status: 201 })
+      }),
+    )
+
+    await t
+      .withIdentity({ subject: sender.userId })
+      .mutation(api.chat.sendMessage, {
+        clientId: 'general-no-mention',
+        room: 'general',
+        content: 'God tur i morgen!',
+        mentions: [],
+      })
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    expect(calledUrls).toEqual([boEndpoint])
+  })
+
+  it('sender ikke til en nævnt ikke-admin i admin-rummet, men sender mention-push til en nævnt admin', async () => {
+    vi.useFakeTimers()
+    const t = convexTest(schema, modules)
+    const adminSender = await seedMember(t, {
+      email: 'admin1@example.com',
+      fullName: 'Admin 1',
+      isAdmin: true,
+      preference: 'all',
+    })
+    const adminMentioned = await seedMember(t, {
+      email: 'admin2@example.com',
+      fullName: 'Admin 2',
+      isAdmin: true,
+      preference: 'mentions',
+    })
+    const regularMember = await seedMember(t, {
+      email: 'member@example.com',
+      fullName: 'Medlem',
+      isAdmin: false,
+      preference: 'all',
+    })
+
+    const adminKeys = await createSubscriberKeys()
+    const adminEndpoint = 'https://fcm.googleapis.com/fcm/send/admin-mentioned'
+    const memberEndpoint =
+      'https://fcm.googleapis.com/fcm/send/member-mentioned'
+    await seedSubscription(
+      t,
+      adminMentioned.profileId,
+      adminEndpoint,
+      adminKeys,
+    )
+    await seedSubscription(
+      t,
+      regularMember.profileId,
+      memberEndpoint,
+      await createSubscriberKeys(),
+    )
+
+    const sentRequests: { url: string; body: Uint8Array }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const raw = init?.body
+        const bytes =
+          raw instanceof Uint8Array ? raw : new Uint8Array(raw as ArrayBuffer)
+        sentRequests.push({ url, body: bytes })
+        return new Response(null, { status: 201 })
+      }),
+    )
+
+    const sent = await t
+      .withIdentity({ subject: adminSender.userId })
+      .mutation(api.chat.sendMessage, {
+        clientId: 'admin-mention-privacy',
+        room: 'admin',
+        content: 'Hej @Admin 2 og @Medlem',
+        mentions: [adminMentioned.profileId, regularMember.profileId],
+      })
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers)
+
+    expect(sentRequests.map((req) => req.url)).toEqual([adminEndpoint])
+    expect(await decryptPushBody(sentRequests[0]!.body, adminKeys)).toEqual({
+      title: 'Admin 1 nævnte dig',
+      body: 'Hej @Admin 2 og @Medlem',
+      tag: ADMIN_MENTION_TAG,
+      path: 'admin/chat',
+      messageId: String(sent.messageId),
+    })
+  })
 })
