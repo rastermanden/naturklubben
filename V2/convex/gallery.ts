@@ -81,6 +81,9 @@ const MAX_BULK_MOVE = 100
  * 3. Hverken det ene eller det andet: turen er slettet, mens uploaden lå i
  *    køen, eller feltet er pillet ved. Så "Uden begivenhed", frem for at
  *    afvise billedet eller lave et album, ingen begivenhed svarer til.
+ *    Bemærk: et slettet V2-id (`normalizeId('events', ...) !== null`, men
+ *    `ctx.db.get(...) === null`) falder aldrig tilbage til `albumByKey` --
+ *    det ville ellers genåbne et gammelt tomt album på en slettet tur.
  *
  * `normalizeId` frem for et rent `ctx.db.get`, fordi feltet er en `v.string()`:
  * den giver `null` for alt, der ikke er et id i `events`, i stedet for at kaste.
@@ -92,9 +95,12 @@ async function albumTargetFor(ctx: MutationCtx, eventId: string | undefined) {
   }
 
   const normalized = ctx.db.normalizeId('events', trimmed)
-  const event = normalized === null ? null : await ctx.db.get(normalized)
-  if (event !== null) {
-    return { albumKey: event._id, eventId: event._id, event }
+  if (normalized !== null) {
+    const event = await ctx.db.get(normalized)
+    if (event !== null) {
+      return { albumKey: event._id, eventId: event._id, event }
+    }
+    return { albumKey: WITHOUT_EVENT_ALBUM, eventId: undefined, event: null }
   }
 
   const existing = await albumByKey(ctx, trimmed)
@@ -189,7 +195,10 @@ export const listAlbums = query({
   handler: async (ctx) => {
     await requireProfile(ctx)
 
-    const albums = await ctx.db.query('photoAlbums').collect()
+    // Tomme album (0 billeder) skjules på forsiden ligesom V1's GROUP BY over `photos`.
+    const albums = (await ctx.db.query('photoAlbums').collect()).filter(
+      (album) => album.photoCount > 0,
+    )
     const views = await Promise.all(
       albums.map(async (album) => {
         const cover = album.coverPhotoId
@@ -422,7 +431,11 @@ async function addPhotoToAlbum(
   })
 }
 
-async function removePhotoFromAlbum(
+/**
+ * Opdaterer albumtæller, `latestPhotoAt` og cover, når et billede fjernes fra
+ * et album (flytning, sletning eller kontosletning i `convex/account.ts`).
+ */
+export async function removePhotoFromAlbum(
   ctx: MutationCtx,
   photo: Pick<Doc<'photos'>, '_id' | 'albumKey' | 'createdAt'>,
 ) {

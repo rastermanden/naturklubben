@@ -683,4 +683,112 @@ describe('movePhotos og albumvedligehold (#345)', () => {
         }),
     ).rejects.toThrow('TOO_MANY_PHOTOS')
   })
+
+  it('afviser flytning til en slettet V2-begivenhed med PHOTO_EVENT_NOT_FOUND, men tillader rettelse af billedtekst på billede der allerede ligger der (#353)', async () => {
+    const t = setup()
+    const uploader = await seedUser(t, {
+      email: 'uploader@example.com',
+      fullName: 'Uploader',
+    })
+    const asUploader = t.withIdentity({ subject: uploader.userId })
+
+    const { eventId } = await asUploader.mutation(api.calendar.createEvent, {
+      title: 'Tur der slettes',
+      description: null,
+      location: null,
+      startAt: 50_000,
+      endAt: null,
+      isPublic: false,
+      maxParticipants: null,
+    })
+
+    // Et tomt album efter sletning af både billede og begivenhed.
+    const removed = await createReadyPhoto(t, uploader.userId, {
+      eventId,
+      tag: 'removed',
+    })
+    const stayingOnDeleted = await createReadyPhoto(t, uploader.userId, {
+      eventId,
+      caption: 'Før rettelse',
+      tag: 'staying',
+    })
+    const other = await createReadyPhoto(t, uploader.userId, {
+      caption: 'Uden begivenhed',
+      tag: 'other',
+    })
+
+    await asUploader.mutation(api.gallery.deletePhoto, {
+      photoId: removed.photoId,
+    })
+    await asUploader.mutation(api.calendar.deleteEvent, { eventId })
+
+    await expect(
+      asUploader.mutation(api.gallery.movePhotos, {
+        photoIds: [other.photoId],
+        eventId,
+      }),
+    ).rejects.toThrow('PHOTO_EVENT_NOT_FOUND')
+
+    await expect(
+      asUploader.mutation(api.gallery.updatePhoto, {
+        photoId: other.photoId,
+        eventId,
+      }),
+    ).rejects.toThrow('PHOTO_EVENT_NOT_FOUND')
+
+    // Et billede, der allerede ligger på den slettede begivenhed, kan stadig få rettet sin billedtekst.
+    const edited = await asUploader.mutation(api.gallery.updatePhoto, {
+      photoId: stayingOnDeleted.photoId,
+      caption: 'Rettet efter sletning',
+      eventId,
+    })
+    expect(edited).toMatchObject({
+      caption: 'Rettet efter sletning',
+      albumKey: eventId,
+      eventId,
+    })
+  })
+
+  it('skjuler tomme begivenhedsalbum (0 billeder) på albumforsiden og viser dem igen ved ny tilknytning (#354)', async () => {
+    const t = setup()
+    const uploader = await seedUser(t, {
+      email: 'uploader@example.com',
+      fullName: 'Uploader',
+    })
+    const asUploader = t.withIdentity({ subject: uploader.userId })
+
+    const eventA = await seedEvent(t, { title: 'Fugletur', startAt: 10_000 })
+    const eventB = await seedEvent(t, { title: 'Skovtur', startAt: 20_000 })
+    const photo = await createReadyPhoto(t, uploader.userId, {
+      eventId: eventA,
+      tag: 'move-empty',
+    })
+
+    // Flyt eneste billede væk fra eventA: eventA må ikke stå som "0 billeder" i listAlbums.
+    await asUploader.mutation(api.gallery.updatePhoto, {
+      photoId: photo.photoId,
+      eventId: eventB,
+    })
+    const albumsAfterMoveOut = await asUploader.query(
+      api.gallery.listAlbums,
+      {},
+    )
+    expect(albumsAfterMoveOut.map((album) => album.albumId)).toEqual([eventB])
+
+    // Flyt billedet tilbage til eventA: nu dukker eventA op igen med 1 billede og eventB forsvinder.
+    await asUploader.mutation(api.gallery.updatePhoto, {
+      photoId: photo.photoId,
+      eventId: eventA,
+    })
+    const albumsAfterMoveBack = await asUploader.query(
+      api.gallery.listAlbums,
+      {},
+    )
+    expect(albumsAfterMoveBack).toHaveLength(1)
+    expect(albumsAfterMoveBack[0]).toMatchObject({
+      albumId: eventA,
+      title: 'Fugletur',
+      photoCount: 1,
+    })
+  })
 })
