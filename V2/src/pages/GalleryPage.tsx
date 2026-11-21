@@ -515,6 +515,11 @@ function GalleryPage() {
               photoId: photo.id as Id<'photos'>,
               eventId: eventId ?? undefined,
             })
+              // Lysbordet lukkes: billedet ligger nu i et andet album end
+              // det, man står i, så bladringen og "Billede n af m" ville
+              // forsvinde uden forklaring -- og var det albummets sidste
+              // billede, stod der "Ingen billeder endnu" bagved.
+              .then(() => setGalleryParam('photo', null))
               .catch(() =>
                 setActionError('Billedet kunne ikke flyttes. Prøv igen.'),
               )

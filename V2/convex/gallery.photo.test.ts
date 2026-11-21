@@ -515,9 +515,17 @@ describe('movePhoto (#350)', () => {
   it('flytter til "Uden begivenhed", hvis begivenheden ikke findes', async () => {
     const t = convexTest(schema, modules)
     const member = await seedMember(t)
+    const eventId = await seedEvent(t, {
+      title: 'En rigtig tur',
+      startAt: 1000,
+    })
     const asMember = t.withIdentity({ subject: member.userId })
+    // Billedet skal ligge i et begivenhedsalbum, så flytningen faktisk kører:
+    // lå det i forvejen i "Uden begivenhed", ville genvejen returnere først,
+    // og testen ville bevise ingenting.
     const photoId = await asMember.mutation(api.gallery.createPhoto, {
       storageId: await storeImage(t, 'visning'),
+      eventId,
     })
 
     await asMember.mutation(api.gallery.movePhoto, {
@@ -527,5 +535,127 @@ describe('movePhoto (#350)', () => {
 
     const photo = await t.run(async (ctx) => ctx.db.get(photoId))
     expect(photo).toMatchObject({ albumKey: 'without-event' })
+    expect(photo?.eventId).toBeUndefined()
+  })
+
+  it('sætter ikke en begivenhed på "Uden begivenhed"-albummet', async () => {
+    const t = convexTest(schema, modules)
+    const member = await seedMember(t)
+    const eventId = await seedEvent(t, { title: 'En tur', startAt: 1000 })
+    const asMember = t.withIdentity({ subject: member.userId })
+
+    // "Uden begivenhed"-albummet skal findes i forvejen, ellers rammer
+    // opslaget i `albumTargetFor` ikke den gren, der skal prøves.
+    await asMember.mutation(api.gallery.createPhoto, {
+      storageId: await storeImage(t, 'bliver'),
+    })
+    const photoId = await asMember.mutation(api.gallery.createPhoto, {
+      storageId: await storeImage(t, 'flyttes'),
+      eventId,
+    })
+
+    // 'without-event' er albumnøglen, ikke et begivenheds-id. Uden guarden
+    // ville billedet få `eventId: 'without-event'`, og `addPhotoToAlbum`
+    // ville sætte et `eventId` på selve "Uden begivenhed"-albummet -- så blev
+    // det aldrig ryddet op og lagde sig blandt begivenhedsalbummene.
+    await asMember.mutation(api.gallery.movePhoto, {
+      photoId,
+      eventId: 'without-event',
+    })
+
+    const after = await t.run(async (ctx) => ({
+      photo: await ctx.db.get(photoId),
+      album: await ctx.db
+        .query('photoAlbums')
+        .withIndex('by_album_key', (q) => q.eq('albumKey', 'without-event'))
+        .unique(),
+    }))
+    expect(after.photo).toMatchObject({ albumKey: 'without-event' })
+    expect(after.photo?.eventId).toBeUndefined()
+    expect(after.album?.eventId).toBeUndefined()
+  })
+
+  it('lader ikke et tømt album påstå en dato, det ikke har', async () => {
+    const t = convexTest(schema, modules)
+    const member = await seedMember(t)
+    const tomt = await seedEvent(t, { title: 'Tømmes', startAt: 1000 })
+    const andet = await seedEvent(t, { title: 'Andet', startAt: 2000 })
+    const asMember = t.withIdentity({ subject: member.userId })
+    const photoId = await asMember.mutation(api.gallery.createPhoto, {
+      storageId: await storeImage(t, 'visning'),
+      eventId: tomt,
+    })
+
+    await asMember.mutation(api.gallery.movePhoto, { photoId, eventId: andet })
+
+    const albums = await t.run(async (ctx) =>
+      ctx.db.query('photoAlbums').collect(),
+    )
+    const tømt = albums.find((album) => album.albumKey === tomt)
+    // `latestPhotoAt` sorterer album-forsiden og skriver "senest <dato>". Blev
+    // den stående, stod det tomme album først med "0 billeder · senest i dag".
+    expect(tømt).toMatchObject({ photoCount: 0 })
+    expect(tømt?.latestPhotoAt).toBeUndefined()
+  })
+
+  it('retter datoen til det nyeste billede, der bliver tilbage', async () => {
+    const t = convexTest(schema, modules)
+    const member = await seedMember(t)
+    const eventId = await seedEvent(t, { title: 'To billeder', startAt: 1000 })
+    const asMember = t.withIdentity({ subject: member.userId })
+    const aeldre = await asMember.mutation(api.gallery.createPhoto, {
+      storageId: await storeImage(t, 'et'),
+      eventId,
+    })
+    const nyere = await asMember.mutation(api.gallery.createPhoto, {
+      storageId: await storeImage(t, 'to'),
+      eventId,
+    })
+
+    await asMember.mutation(api.gallery.movePhoto, { photoId: nyere })
+
+    const after = await t.run(async (ctx) => ({
+      album: await ctx.db
+        .query('photoAlbums')
+        .withIndex('by_album_key', (q) => q.eq('albumKey', eventId))
+        .unique(),
+      remaining: await ctx.db.get(aeldre),
+    }))
+    expect(after.album).toMatchObject({ photoCount: 1 })
+    expect(after.album?.latestPhotoAt).toBe(after.remaining?.createdAt)
+  })
+
+  it('bliver forside, når det flyttede billede er nyere end den nuværende', async () => {
+    const t = convexTest(schema, modules)
+    const member = await seedMember(t)
+    const fra = await seedEvent(t, { title: 'Fra', startAt: 1000 })
+    const til = await seedEvent(t, { title: 'Til', startAt: 2000 })
+    const asMember = t.withIdentity({ subject: member.userId })
+
+    const gammelForside = await asMember.mutation(api.gallery.createPhoto, {
+      storageId: await storeImage(t, 'gammel'),
+      thumbnailStorageId: await storeImage(t, 'gammel-mini'),
+      eventId: til,
+    })
+    const nyere = await asMember.mutation(api.gallery.createPhoto, {
+      storageId: await storeImage(t, 'ny'),
+      thumbnailStorageId: await storeImage(t, 'ny-mini'),
+      eventId: fra,
+    })
+
+    await asMember.mutation(api.gallery.movePhoto, {
+      photoId: nyere,
+      eventId: til,
+    })
+
+    const album = await t.run(async (ctx) =>
+      ctx.db
+        .query('photoAlbums')
+        .withIndex('by_album_key', (q) => q.eq('albumKey', til))
+        .unique(),
+    )
+    // Forsiden er "nyeste klare billede", som skemaet og `createPhoto` siger.
+    expect(album?.coverPhotoId).toBe(nyere)
+    expect(gammelForside).not.toBe(nyere)
   })
 })

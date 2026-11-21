@@ -95,7 +95,7 @@ describe('eventOptions (#332)', () => {
     expect(Object.keys(options[0]).sort()).toEqual(['id', 'startAt', 'title'])
   })
 
-  it('holder limit inden for 1-100', async () => {
+  it('holder limit inden for 1-500', async () => {
     const t = convexTest(schema, modules)
     const userId = await seedMember(t)
     await seedEvent(t, { title: 'En tur', startAt: 1 * DAY })
@@ -106,7 +106,7 @@ describe('eventOptions (#332)', () => {
       await asMember.query(api.calendar.eventOptions, { limit: 0 }),
     ).toHaveLength(1)
     expect(
-      await asMember.query(api.calendar.eventOptions, { limit: 1000 }),
+      await asMember.query(api.calendar.eventOptions, { limit: 5000 }),
     ).toHaveLength(2)
   })
 

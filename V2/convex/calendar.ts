@@ -455,7 +455,11 @@ export const eventOptions = query({
   handler: async (ctx, args) => {
     await requireProfile(ctx)
 
-    const limit = Math.min(Math.max(args.limit ?? 50, 1), 100)
+    // Grænsen er høj med vilje. Da feltet kun blev brugt, mens man uploadede
+    // (#332), var 50 rigeligt: man lægger billeder op fra en nylig tur. Men
+    // feltet flytter nu også gamle billeder (#350), og netop de billeder
+    // hører til gamle ture -- med 50 kunne de slet ikke vælges.
+    const limit = Math.min(Math.max(args.limit ?? 200, 1), 500)
     // Vinduet og rækkefølgen skal bruge samme nøgle. Hentes de nyeste gennem
     // `by_end` og sorteres der*efter* på `startAt`, kan en flerdagstur --
     // lav `startAt`, høj `endsAt` -- optage en plads i vinduet og skubbe en

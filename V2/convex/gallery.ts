@@ -411,8 +411,25 @@ async function removePhotoFromAlbum(ctx: MutationCtx, photo: Doc<'photos'>) {
         .first()
     : null
 
+  // `latestPhotoAt` er "seneste billede i albummet" og bruges til at sortere
+  // album-forsiden og til linjen "senest <dato>". Den skal regnes om her:
+  // `addPhotoToAlbum` bruger `Math.max`, så feltet aldrig kan falde af sig
+  // selv, og et album, der mister sit nyeste billede, ville ellers blive ved
+  // med at påstå den dato -- et tømt begivenhedsalbum stod så øverst på
+  // forsiden med "0 billeder · senest <dato>".
+  const newestRemaining =
+    photoCount === 0
+      ? null
+      : await ctx.db
+          .query('photos')
+          .withIndex('by_album', (q) => q.eq('albumKey', photo.albumKey))
+          .order('desc')
+          .filter((q) => q.neq(q.field('_id'), photo._id))
+          .first()
+
   await ctx.db.patch(album._id, {
     photoCount,
+    latestPhotoAt: newestRemaining?.createdAt,
     coverPhotoId: coverBelongsToPhoto ? nextCover?._id : album.coverPhotoId,
     coverThumbnailStorageId: coverBelongsToPhoto
       ? nextCover?.thumbnailStorageId
@@ -634,14 +651,19 @@ export const movePhoto = mutation({
       createdAt: photo.createdAt,
     })
 
-    // Et album, der lige er oprettet af flytningen, har ingen forside. Er
-    // billedet klart, bliver det den -- ellers stod albummet uden billede på
-    // forsiden, til nogen lagde et nyt op.
+    // Forsiden er "nyeste klare billede" (se `photoAlbums` i
+    // `tables/gallery.ts`). Samme regel som `finishOptimization` bruger: det
+    // flyttede billede bliver forside, hvis albummet ingen har -- fx fordi
+    // flytningen lige oprettede det -- eller hvis det er nyere end den, der
+    // er. Uden det sidste var flytningen den eneste vej, hvor en ældre forside
+    // fik lov at blive stående.
     const album = await albumByKey(ctx, target.albumKey)
     if (
       album !== null &&
-      album.coverPhotoId === undefined &&
-      photo.optimizationStatus === 'ready'
+      photo.optimizationStatus === 'ready' &&
+      (album.coverPhotoId === undefined ||
+        album.coverCreatedAt === undefined ||
+        album.coverCreatedAt <= photo.createdAt)
     ) {
       await ctx.db.patch(album._id, {
         coverPhotoId: photo._id,

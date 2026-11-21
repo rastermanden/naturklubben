@@ -221,7 +221,14 @@ export function PhotoLightbox({
 
       {photo.canDelete && onMove && (
         <div className="flex justify-center">
+          {/*
+            `key` på billedets id: ellers ville et valg truffet for ét billede
+            følge med, når man bladrer -- og så er næste billede ét tryk fra at
+            blive flyttet til en tur, der blev valgt for et andet. Det er lige
+            den fejl, kravet om et tryk skal forhindre.
+          */}
           <MovePhotoField
+            key={photo.id}
             photo={photo}
             currentTitle={currentEventTitle}
             moving={moving}

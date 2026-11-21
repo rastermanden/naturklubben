@@ -11,6 +11,12 @@ interface EventPickerProps {
    * og dermed vise "Ingen", mens uploaden knytter begivenheden alligevel.
    */
   valueTitle?: string
+  /**
+   * Feltets etiket. Standarden passer i upload-formularen; i lysbordet
+   * flytter man et billede, der allerede ligger et sted, og dér betyder
+   * "(valgfri)" ingenting.
+   */
+  label?: string
   onChange: (eventId: string) => void
 }
 
@@ -27,7 +33,12 @@ interface EventPickerProps {
  * som regel efter turen -- og datoen står ved titlen, så to ture med samme
  * navn kan skelnes.
  */
-export function EventPicker({ value, valueTitle, onChange }: EventPickerProps) {
+export function EventPicker({
+  value,
+  valueTitle,
+  label = 'Knyt til begivenhed (valgfri)',
+  onChange,
+}: EventPickerProps) {
   const events = useQuery(api.calendar.eventOptions, {})
 
   if (events !== undefined && events.length === 0 && value === '') return null
@@ -41,7 +52,7 @@ export function EventPicker({ value, valueTitle, onChange }: EventPickerProps) {
 
   return (
     <label className="flex flex-col gap-1 text-sm text-ink-body">
-      Knyt til begivenhed (valgfri)
+      {label}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
