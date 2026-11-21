@@ -138,8 +138,9 @@ function validateScore(
       break
     case 'bral':
       // `lines` er prægede mønter, `level` er altid 1. Hver mønt giver mellem
-      // En Bral (1) og Ti Bral (10), og partiet har et loft over antal mønter.
-      plausible = bralScoreIsPlausible(score, lines, level)
+      // En Bral (1) og Ti Bral (10), partiet varer præcis et minut, og det
+      // har et loft over antal mønter.
+      plausible = bralScoreIsPlausible(score, lines, level, durationSeconds)
       break
   }
 

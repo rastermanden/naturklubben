@@ -233,7 +233,14 @@ describe('bral-motor', () => {
       expect(run.coins).toBe(BRAL_MAX_COINS_PER_GAME)
       expect(run.score).toBe(BRAL_MAX_COINS_PER_GAME * BRAL_MAX_COIN_VALUE)
       expect(run.score).toBeGreaterThanOrEqual(run.coins * BRAL_MIN_COIN_VALUE)
-      expect(bralScoreIsPlausible(run.score, run.coins, 1)).toBe(true)
+      expect(
+        bralScoreIsPlausible(
+          run.score,
+          run.coins,
+          1,
+          Math.round(run.elapsedSeconds),
+        ),
+      ).toBe(true)
     }
   })
 
@@ -381,7 +388,9 @@ describe('bral-motor', () => {
     })
     expect(state.score).toBe(16)
     expect(state.coins).toBe(3)
-    expect(bralScoreIsPlausible(state.score, state.coins, 1)).toBe(true)
+    expect(
+      bralScoreIsPlausible(state.score, state.coins, 1, BRAL_DURATION_SECONDS),
+    ).toBe(true)
   })
 
   it('kniber diglen under dåsemangel uden ølstafet men holder ringtræk-prægning i gang under loftet', () => {
@@ -406,6 +415,13 @@ describe('bral-motor', () => {
     expect(state.tabsCaught).toBeGreaterThanOrEqual(BRAL_TABS_PER_COIN)
     expect(state.coins).toBeGreaterThan(15)
     expect(state.coins).toBeLessThan(BRAL_MAX_COINS_PER_GAME)
-    expect(bralScoreIsPlausible(state.score, state.coins, 1)).toBe(true)
+    expect(
+      bralScoreIsPlausible(
+        state.score,
+        state.coins,
+        1,
+        Math.round(state.elapsedSeconds),
+      ),
+    ).toBe(true)
   })
 })
