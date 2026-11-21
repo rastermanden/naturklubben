@@ -13,15 +13,21 @@ export function PhotoThumbnail({
 }: {
   photo: Photo
   onClick: () => void
-  selection?: { selected: boolean; disabled: boolean }
+  selection?: {
+    selected: boolean
+    disabled: boolean
+    disabledReason?: 'not-owner' | 'busy'
+  }
 }) {
   const caption = photo.caption?.trim()
   const statusLabel = optimizationStatusLabel(photo)
+  const notOwned =
+    selection?.disabled === true && selection.disabledReason !== 'busy'
   const accessibleName = selection
-    ? selection.disabled
+    ? notOwned
       ? caption
-        ? `Kan ikke vælges: ${caption}`
-        : 'Kan ikke vælges'
+        ? `Andet medlems billede, kan ikke vælges: ${caption}`
+        : 'Andet medlems billede uden billedtekst, kan ikke vælges'
       : selection.selected
         ? caption
           ? `Fravælg billede: ${caption}`
@@ -42,7 +48,13 @@ export function PhotoThumbnail({
       onClick={onClick}
       className={`relative aspect-square overflow-hidden rounded bg-surface-sunken ${
         selection?.selected ? 'ring-3 ring-accent ring-offset-2' : ''
-      } ${selection?.disabled ? 'cursor-not-allowed opacity-45' : ''}`}
+      } ${
+        notOwned
+          ? 'cursor-not-allowed opacity-45'
+          : selection?.disabled
+            ? 'cursor-not-allowed opacity-70'
+            : ''
+      }`}
     >
       {photo.thumbnailUrl === null && (
         <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-xs text-danger">
@@ -57,7 +69,7 @@ export function PhotoThumbnail({
           className="h-full w-full object-cover"
         />
       )}
-      {selection && !selection.disabled && (
+      {selection && !notOwned && (
         <span
           aria-hidden="true"
           className={`absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-bold ${

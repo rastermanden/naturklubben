@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 
@@ -16,6 +17,8 @@ interface EventPickerProps {
   emptyLabel?: string
   hideWhenEmpty?: boolean
   tone?: 'default' | 'inverse'
+  disabled?: boolean
+  emptyListHint?: string
 }
 
 /**
@@ -39,7 +42,11 @@ export function EventPicker({
   emptyLabel = 'Ingen',
   hideWhenEmpty = true,
   tone = 'default',
+  disabled = false,
+  emptyListHint,
 }: EventPickerProps) {
+  const selectId = useId()
+  const hintId = useId()
   const events = useQuery(api.calendar.eventOptions, {})
 
   if (
@@ -57,23 +64,28 @@ export function EventPicker({
   const options = events ?? []
   const valueIsListed =
     value === '' || options.some((event) => event.id === value)
+  const showEmptyHint =
+    events !== undefined && events.length === 0 && Boolean(emptyListHint)
 
   const labelClass =
-    tone === 'inverse'
-      ? 'flex flex-col gap-1 text-sm text-white'
-      : 'flex flex-col gap-1 text-sm text-ink-body'
+    tone === 'inverse' ? 'text-sm text-white' : 'text-sm text-ink-body'
   const selectClass =
     tone === 'inverse'
-      ? 'min-h-11 rounded border border-white/40 bg-surface px-3 py-2 text-base text-ink'
-      : 'min-h-11 rounded border border-line-strong bg-surface px-3 py-2 text-base'
+      ? 'min-h-11 rounded border border-white/40 bg-surface px-3 py-2 text-base text-ink disabled:opacity-60'
+      : 'min-h-11 rounded border border-line-strong bg-surface px-3 py-2 text-base disabled:opacity-60'
 
   return (
-    <label className={labelClass}>
-      {label}
+    <div className="flex flex-col gap-1">
+      <label htmlFor={selectId} className={labelClass}>
+        {label}
+      </label>
       <select
+        id={selectId}
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         aria-busy={events === undefined}
+        aria-describedby={showEmptyHint ? hintId : undefined}
         className={selectClass}
       >
         <option value="">{emptyLabel}</option>
@@ -86,7 +98,19 @@ export function EventPicker({
           </option>
         ))}
       </select>
-    </label>
+      {showEmptyHint && (
+        <p
+          id={hintId}
+          className={
+            tone === 'inverse'
+              ? 'text-xs text-white/75'
+              : 'text-xs text-ink-subtle'
+          }
+        >
+          {emptyListHint}
+        </p>
+      )}
+    </div>
   )
 }
 

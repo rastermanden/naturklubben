@@ -654,5 +654,33 @@ describe('movePhotos og albumvedligehold (#345)', () => {
         .unique(),
     )
     expect(album?.photoCount).toBe(2)
+
+    // Serveren afviser over 100 unikke billeder i ét kald (B1).
+    const tooManyPhotoIds = await t.run(async (ctx) => {
+      const storageId = await ctx.storage.store(
+        new Blob(['x'], { type: 'image/jpeg' }),
+      )
+      return await Promise.all(
+        Array.from({ length: 101 }, () =>
+          ctx.db.insert('photos', {
+            storageId,
+            albumKey: 'without-event',
+            uploaderId: admin.profileId,
+            createdAt: 1,
+            optimizationStatus: 'ready',
+            optimizationAttempts: 0,
+            commentCount: 0,
+          }),
+        ),
+      )
+    })
+    await expect(
+      t
+        .withIdentity({ subject: admin.userId })
+        .mutation(api.gallery.movePhotos, {
+          photoIds: tooManyPhotoIds,
+          eventId,
+        }),
+    ).rejects.toThrow('TOO_MANY_PHOTOS')
   })
 })

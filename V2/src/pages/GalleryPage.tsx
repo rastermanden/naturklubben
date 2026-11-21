@@ -44,6 +44,7 @@ import { AppErrorBoundary } from '../components/AppErrorBoundary'
  */
 
 const PHOTO_PAGE_SIZE = 40
+const BULK_MOVE_CHUNK_SIZE = 100
 
 function queueStatus(item: UploadQueueItem) {
   switch (item.status) {
@@ -119,6 +120,10 @@ function GalleryPage() {
   const mintedTokens = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+  const bulkToggleButtonRef = useRef<HTMLButtonElement>(null)
+  const bulkBarRef = useRef<HTMLDivElement>(null)
+  const bulkNoticeRef = useRef<HTMLParagraphElement>(null)
+  const prevSelectingAlbumRef = useRef<string | null>(null)
 
   const photos: Photo[] = photosQuery.results
   const editablePhotos = photos.filter((photo) => photo.canEdit)
@@ -144,9 +149,11 @@ function GalleryPage() {
     : -1
   const previousPhoto = activeIndex > 0 ? photos[activeIndex - 1] : undefined
   const nextPhoto = activeIndex >= 0 ? photos[activeIndex + 1] : undefined
-  const currentAlbum = albumParam
-    ? (albums?.find((album) => album.albumId === albumParam) ?? null)
-    : null
+  const currentAlbum = !albumParam
+    ? null
+    : albums === undefined
+      ? undefined
+      : (albums.find((album) => album.albumId === albumParam) ?? null)
   const activePhotoAlbumTitle = activePhoto
     ? (albums?.find((album) => album.albumId === activePhoto.albumKey)?.title ??
       null)
@@ -166,6 +173,28 @@ function GalleryPage() {
     setBulkError(null)
     setBulkNotice(null)
   }, [albumParam])
+
+  useEffect(() => {
+    if (selecting && albumParam === WITHOUT_EVENT_ALBUM) {
+      prevSelectingAlbumRef.current = albumParam
+      bulkBarRef.current?.focus()
+      return
+    }
+    if (
+      !selecting &&
+      prevSelectingAlbumRef.current !== null &&
+      prevSelectingAlbumRef.current === albumParam
+    ) {
+      prevSelectingAlbumRef.current = null
+      if (bulkToggleButtonRef.current) {
+        bulkToggleButtonRef.current.focus()
+      } else {
+        bulkNoticeRef.current?.focus()
+      }
+      return
+    }
+    prevSelectingAlbumRef.current = null
+  }, [selecting, albumParam])
 
   // Hent næste side, inden man bladrer ud til kanten af det indlæste galleri.
   useEffect(() => {
@@ -264,7 +293,7 @@ function GalleryPage() {
   }
 
   function togglePhotoSelection(photo: Photo) {
-    if (!photo.canEdit) return
+    if (!photo.canEdit || movingPhotos) return
     setBulkError(null)
     setSelectedPhotoIds((current) =>
       current.includes(photo.id)
@@ -280,22 +309,47 @@ function GalleryPage() {
     setBulkError(null)
     setBulkNotice(null)
     setMovingPhotos(true)
+    let totalMoved = 0
+    const movedIds = new Set<string>()
     try {
-      const result = await movePhotos({
-        photoIds: activeSelectedIds as Id<'photos'>[],
-        eventId: bulkEventId,
-      })
+      for (
+        let offset = 0;
+        offset < activeSelectedIds.length;
+        offset += BULK_MOVE_CHUNK_SIZE
+      ) {
+        const chunk = activeSelectedIds.slice(
+          offset,
+          offset + BULK_MOVE_CHUNK_SIZE,
+        )
+        const result = await movePhotos({
+          photoIds: chunk as Id<'photos'>[],
+          eventId: bulkEventId,
+        })
+        totalMoved += result.movedCount
+        for (const id of chunk) movedIds.add(id)
+      }
       setSelecting(false)
       setSelectedPhotoIds([])
       setBulkEventId('')
       setBulkNotice(
-        result.movedCount === 1
+        totalMoved === 1
           ? '1 billede blev flyttet.'
-          : `${result.movedCount} billeder blev flyttet.`,
+          : `${totalMoved} billeder blev flyttet.`,
       )
     } catch (error) {
+      if (movedIds.size > 0) {
+        setSelectedPhotoIds((current) =>
+          current.filter((id) => !movedIds.has(id)),
+        )
+      }
+      const baseError = galleryErrorMessage(
+        error,
+        'Billederne kunne ikke flyttes. Prøv igen.',
+      )
       setBulkError(
-        galleryErrorMessage(error, 'Billederne kunne ikke flyttes. Prøv igen.'),
+        totalMoved > 0
+          ? `${totalMoved} billeder blev flyttet, før fejlen opstod. ${baseError}`
+          : baseError,
       )
     } finally {
       setMovingPhotos(false)
@@ -507,23 +561,23 @@ function GalleryPage() {
                     ? 'Uden begivenhed'
                     : 'Album')}
               </h2>
-              {(currentAlbum !== null || photos.length > 0) && (
-                <p className="text-sm text-ink-subtle">
-                  {currentAlbum === null
-                    ? 'Albummet findes ikke længere. Viser det, der ligger i det.'
-                    : currentAlbum === undefined
-                      ? ''
+              {currentAlbum !== undefined &&
+                (currentAlbum !== null || photos.length > 0) && (
+                  <p className="text-sm text-ink-subtle">
+                    {currentAlbum === null
+                      ? 'Albummet findes ikke længere. Viser det, der ligger i det.'
                       : `${currentAlbum.photoCount === 1 ? '1 billede' : `${currentAlbum.photoCount} billeder`}${
                           albumDateLabel(currentAlbum)
                             ? ` · senest ${albumDateLabel(currentAlbum)}`
                             : ''
                         }`}
-                </p>
-              )}
+                  </p>
+                )}
             </div>
 
             {canBulkMove && !selecting && (
               <button
+                ref={bulkToggleButtonRef}
                 type="button"
                 onClick={() => {
                   setBulkNotice(null)
@@ -541,6 +595,8 @@ function GalleryPage() {
 
           {bulkNotice && (
             <p
+              ref={bulkNoticeRef}
+              tabIndex={-1}
               role="status"
               aria-live="polite"
               className="mb-4 rounded bg-surface-raised px-4 py-3 text-sm text-ink-body"
@@ -551,8 +607,12 @@ function GalleryPage() {
 
           {selecting && albumParam === WITHOUT_EVENT_ALBUM && (
             <BulkMoveBar
+              containerRef={bulkBarRef}
               selectedCount={activeSelectedIds.length}
               totalSelectableCount={editablePhotos.length}
+              hasMore={photosQuery.status === 'CanLoadMore'}
+              loadedCount={photos.length}
+              totalAlbumCount={currentAlbum?.photoCount ?? null}
               eventId={bulkEventId}
               moving={movingPhotos}
               error={bulkError}
@@ -585,7 +645,8 @@ function GalleryPage() {
                     selecting && albumParam === WITHOUT_EVENT_ALBUM
                       ? {
                           selected: activeSelectedIds.includes(photo.id),
-                          disabled: !photo.canEdit,
+                          disabled: !photo.canEdit || movingPhotos,
+                          disabledReason: !photo.canEdit ? 'not-owner' : 'busy',
                         }
                       : undefined
                   }

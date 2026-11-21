@@ -11,12 +11,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GalleryAlbum, Photo } from '../features/gallery/types'
 
 const mockState: {
-  albums: GalleryAlbum[]
+  albums: GalleryAlbum[] | undefined
   photos: Photo[]
+  paginationStatus: 'Exhausted' | 'CanLoadMore'
   eventOptions: { id: string; title: string; startAt: number }[]
 } = {
   albums: [],
   photos: [],
+  paginationStatus: 'Exhausted',
   eventOptions: [],
 }
 
@@ -38,7 +40,7 @@ vi.mock('convex/react', () => ({
   },
   usePaginatedQuery: () => ({
     results: mockState.photos,
-    status: 'Exhausted',
+    status: mockState.paginationStatus,
     loadMore: vi.fn(),
     isLoading: false,
   }),
@@ -139,6 +141,7 @@ beforeEach(() => {
     makePhoto('p2', { canEdit: true }),
     makePhoto('p3', { canEdit: false, canDelete: false, isUploader: false }),
   ]
+  mockState.paginationStatus = 'Exhausted'
   mockState.eventOptions = [
     {
       id: 'event1',
@@ -158,7 +161,7 @@ describe('GalleryPage: flyt flere billeder og redigér (#345)', () => {
 
     // Andet medlems billede (canEdit=false) kan ikke vælges.
     const foreignButton = screen.getByRole('button', {
-      name: 'Kan ikke vælges: Billede p3',
+      name: 'Andet medlems billede, kan ikke vælges: Billede p3',
     }) as HTMLButtonElement
     expect(foreignButton.disabled).toBe(true)
 
@@ -170,12 +173,12 @@ describe('GalleryPage: flyt flere billeder og redigér (#345)', () => {
     )
     expect(screen.getByText('2 billeder valgt')).toBeTruthy()
 
-    const select = screen.getByLabelText(
-      'Flyt til begivenhed',
-    ) as HTMLSelectElement
+    const select = screen.getByRole('combobox', {
+      name: 'Begivenhed',
+    }) as HTMLSelectElement
     fireEvent.change(select, { target: { value: 'event1' } })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Flyt til begivenhed' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Flyt 2 billeder' }))
 
     await waitFor(() =>
       expect(movePhotosSpy).toHaveBeenCalledWith({
@@ -190,7 +193,95 @@ describe('GalleryPage: flyt flere billeder og redigér (#345)', () => {
     ).toBeNull()
   })
 
-  it('"Vælg alle" vælger kun de billeder, brugeren må flytte', () => {
+  it('flytter over 100 valgte billeder i klumper på maks. 100 og advarer når flere sider findes (B1)', async () => {
+    const many = Array.from({ length: 105 }, (_, index) =>
+      makePhoto(`p${index + 1}`, { canEdit: true }),
+    )
+    mockState.photos = many
+    mockState.albums = [
+      {
+        albumId: 'without-event',
+        eventId: null,
+        title: 'Uden begivenhed',
+        photoCount: 140,
+        latestPhotoAt: 3,
+        coverPhotoId: 'p1',
+        coverUrl: null,
+      },
+    ]
+    mockState.paginationStatus = 'CanLoadMore'
+    movePhotosSpy
+      .mockResolvedValueOnce({
+        movedCount: 100,
+        albumKey: 'event1',
+        eventId: 'event1',
+      })
+      .mockResolvedValueOnce({
+        movedCount: 5,
+        albumKey: 'event1',
+        eventId: 'event1',
+      })
+
+    renderGallery()
+    fireEvent.click(screen.getByRole('button', { name: 'Flyt flere billeder' }))
+
+    expect(
+      screen.getByText(
+        'Viser 105 af 140 billeder. Hent flere nederst for at vælge resten.',
+      ),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Vælg viste' }))
+    expect(screen.getByText('105 billeder valgt')).toBeTruthy()
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Begivenhed' }), {
+      target: { value: 'event1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Flyt 105 billeder' }))
+
+    await waitFor(() => expect(movePhotosSpy).toHaveBeenCalledTimes(2))
+    expect(movePhotosSpy.mock.calls[0]?.[0].photoIds).toHaveLength(100)
+    expect(movePhotosSpy.mock.calls[1]?.[0].photoIds).toHaveLength(5)
+    expect(await screen.findByText('105 billeder blev flyttet.')).toBeTruthy()
+  })
+
+  it('beholder uflyttede billeder valgt ved fejl på anden klump (B1)', async () => {
+    mockState.photos = Array.from({ length: 105 }, (_, index) =>
+      makePhoto(`p${index + 1}`, { canEdit: true }),
+    )
+    movePhotosSpy
+      .mockResolvedValueOnce({
+        movedCount: 100,
+        albumKey: 'event1',
+        eventId: 'event1',
+      })
+      .mockRejectedValueOnce({ data: 'PHOTO_EVENT_NOT_FOUND' })
+
+    renderGallery()
+    fireEvent.click(screen.getByRole('button', { name: 'Flyt flere billeder' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Vælg alle' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Begivenhed' }), {
+      target: { value: 'event1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Flyt 105 billeder' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain(
+      '100 billeder blev flyttet, før fejlen opstod.',
+    )
+    expect(screen.getByText('5 billeder valgt')).toBeTruthy()
+  })
+
+  it('"Vælg alle" vælger kun de billeder, brugeren må flytte, og uden-billedtekst-label forklarer hvorfor andres er låst (B8)', () => {
+    mockState.photos = [
+      makePhoto('p1', { canEdit: true }),
+      makePhoto('p2', { canEdit: true }),
+      makePhoto('p3', {
+        caption: null,
+        canEdit: false,
+        canDelete: false,
+        isUploader: false,
+      }),
+    ]
     renderGallery()
 
     fireEvent.click(screen.getByRole('button', { name: 'Flyt flere billeder' }))
@@ -204,9 +295,113 @@ describe('GalleryPage: flyt flere billeder og redigér (#345)', () => {
     ).toBe('true')
     expect(
       screen
-        .getByRole('button', { name: 'Kan ikke vælges: Billede p3' })
+        .getByRole('button', {
+          name: 'Andet medlems billede uden billedtekst, kan ikke vælges',
+        })
         .getAttribute('aria-pressed'),
     ).toBe('false')
+  })
+
+  it('flytter tastaturfokus ind i værktøjslinjen ved åbning og tilbage til knap eller status ved lukning (B3)', async () => {
+    renderGallery()
+
+    const openBtn = screen.getByRole('button', { name: 'Flyt flere billeder' })
+    fireEvent.click(openBtn)
+
+    const region = screen.getByRole('region', {
+      name: 'Flyt billeder til en begivenhed',
+    })
+    expect(document.activeElement).toBe(region)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Annullér' }))
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Flyt flere billeder' }),
+    )
+
+    // Når det sidste redigérbare billede flyttes ud, flyttes fokus til statusbeskeden i stedet for body.
+    mockState.photos = [makePhoto('p1', { canEdit: true })]
+    movePhotosSpy.mockImplementationOnce(async () => {
+      mockState.photos = []
+      mockState.albums = []
+      return { movedCount: 1, albumKey: 'event1', eventId: 'event1' }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Flyt flere billeder' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Vælg alle' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Begivenhed' }), {
+      target: { value: 'event1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Flyt 1 billede' }))
+
+    const notice = await screen.findByText('1 billede blev flyttet.')
+    expect(document.activeElement).toBe(notice)
+  })
+
+  it('viser ikke "Albummet findes ikke længere", mens albumlisten stadig indlæses (B5)', () => {
+    mockState.albums = undefined
+    mockState.photos = [
+      makePhoto('p1', { eventId: 'event1', albumKey: 'event1', canEdit: true }),
+    ]
+    renderGallery('/billeder?album=event1')
+
+    expect(screen.queryByText(/Albummet findes ikke længere/)).toBeNull()
+  })
+
+  it('har adskilte navne for vælger og knap og viser hjælpetekst når ingen begivenheder findes (B6)', () => {
+    mockState.eventOptions = []
+    renderGallery()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Flyt flere billeder' }))
+
+    expect(screen.getByRole('combobox', { name: 'Begivenhed' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Flyt valgte' })).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Der er ingen begivenheder endnu. Opret en begivenhed i kalenderen først.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('låser markering og begivenhedsvælger mens flytning er i gang (B7)', async () => {
+    let resolveMove: (value: {
+      movedCount: number
+      albumKey: string
+      eventId: string | null
+    }) => void = () => {}
+    movePhotosSpy.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveMove = resolve
+        }),
+    )
+
+    renderGallery()
+    fireEvent.click(screen.getByRole('button', { name: 'Flyt flere billeder' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Vælg billede: Billede p1' }),
+    )
+    fireEvent.change(screen.getByRole('combobox', { name: 'Begivenhed' }), {
+      target: { value: 'event1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Flyt 1 billede' }))
+
+    const secondThumb = screen.getByRole('button', {
+      name: 'Vælg billede: Billede p2',
+    }) as HTMLButtonElement
+    expect(secondThumb.disabled).toBe(true)
+    expect(
+      (
+        screen.getByRole('combobox', {
+          name: 'Begivenhed',
+        }) as HTMLSelectElement
+      ).disabled,
+    ).toBe(true)
+
+    fireEvent.click(secondThumb)
+    expect(screen.getByText('1 billede valgt')).toBeTruthy()
+
+    resolveMove({ movedCount: 1, albumKey: 'event1', eventId: 'event1' })
+    expect(await screen.findByText('1 billede blev flyttet.')).toBeTruthy()
   })
 
   it('viser ikke "Flyt flere billeder" uden redigérbare billeder eller i et begivenhedsalbum', () => {

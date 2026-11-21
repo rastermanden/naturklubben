@@ -110,11 +110,12 @@ describe('PhotoLightbox: redigér billede (#345)', () => {
     expect(screen.getByRole('button', { name: 'Redigér' })).toBeTruthy()
   })
 
-  it('lader brugeren rette eller fjerne billedtekst og vælge begivenhed med dato eller "Ingen begivenhed"', async () => {
+  it('lader brugeren rette eller fjerne billedtekst og vælge begivenhed med dato eller "Ingen begivenhed" og annoncerer gemning (B4)', async () => {
     const onEdit = vi.fn().mockResolvedValue(undefined)
     render(
       <PhotoLightbox
         photo={makePhoto({ caption: 'Gammel tekst', eventId: null })}
+        albumTitle="Hornfisketur"
         onClose={vi.fn()}
         onEdit={onEdit}
         onDelete={vi.fn()}
@@ -125,6 +126,7 @@ describe('PhotoLightbox: redigér billede (#345)', () => {
       />,
     )
 
+    expect(screen.getByText('I albummet Hornfisketur')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Redigér' }))
 
     const captionInput = screen.getByLabelText(
@@ -155,6 +157,8 @@ describe('PhotoLightbox: redigér billede (#345)', () => {
       ),
     )
     expect(screen.queryByRole('form', { name: 'Redigér billede' })).toBeNull()
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe('Ændringerne er gemt.')
   })
 
   it('sender null for tom billedtekst og "Ingen begivenhed"', async () => {
@@ -197,7 +201,7 @@ describe('PhotoLightbox: redigér billede (#345)', () => {
     )
   })
 
-  it('kan betjenes med tastatur: Escape annullerer redigering før den lukker lysboksen, og fokus flyttes pænt', () => {
+  it('kan betjenes med tastatur: Escape og baggrundsklik annullerer redigering før lysboksen lukkes', () => {
     const onClose = vi.fn()
     render(
       <PhotoLightbox
@@ -225,9 +229,62 @@ describe('PhotoLightbox: redigér billede (#345)', () => {
       screen.getByRole('button', { name: 'Redigér' }),
     )
 
+    // Baggrundsklik under redigering annullerer også kun redigeringen, ikke lysboksen (B2).
+    fireEvent.click(screen.getByRole('button', { name: 'Redigér' }))
+    fireEvent.click(screen.getByRole('dialog'))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.queryByRole('form', { name: 'Redigér billede' })).toBeNull()
+
     // Anden Escape lukker selve lysboksen.
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignorerer Escape og baggrundsklik og låser felter under gemning, så fejl stadig vises (B2, B7)', async () => {
+    let rejectEdit: (reason?: unknown) => void = () => {}
+    const onEdit = vi.fn(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectEdit = reject
+        }),
+    )
+    const onClose = vi.fn()
+
+    render(
+      <PhotoLightbox
+        photo={makePhoto()}
+        onClose={onClose}
+        onEdit={onEdit}
+        onDelete={vi.fn()}
+        onRetryOptimization={vi.fn()}
+        deleting={false}
+        retrying={false}
+        actionError={null}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Redigér' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Gem' }))
+
+    expect(
+      (screen.getByLabelText('Billedtekst') as HTMLInputElement).disabled,
+    ).toBe(true)
+    expect(
+      (screen.getByLabelText('Begivenhed') as HTMLSelectElement).disabled,
+    ).toBe(true)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(screen.getByRole('dialog'))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('form', { name: 'Redigér billede' })).toBeTruthy()
+
+    rejectEdit({ data: 'PHOTO_EVENT_NOT_FOUND', message: 'Server Error' })
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe(
+      'Begivenheden findes ikke længere. Vælg en anden.',
+    )
+    expect(screen.getByRole('form', { name: 'Redigér billede' })).toBeTruthy()
   })
 
   it('har berøringsvenlige trykflader på mobil og bladrer ikke ved swipe under redigering', () => {

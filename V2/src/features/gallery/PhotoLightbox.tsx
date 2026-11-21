@@ -63,6 +63,8 @@ export function PhotoLightbox({
   const editButtonRef = useRef<HTMLButtonElement>(null)
   const captionInputRef = useRef<HTMLInputElement>(null)
   const prevEditingPhotoRef = useRef<string | null>(null)
+  const mountedRef = useRef(true)
+  const saveRequestIdRef = useRef(0)
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const swipedRef = useRef(false)
 
@@ -71,11 +73,24 @@ export function PhotoLightbox({
   const [eventDraft, setEventDraft] = useState('')
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [saveNotice, setSaveNotice] = useState<{
+    photoId: string
+    message: string
+  } | null>(null)
 
   const editing =
     editingPhotoId === photo.id && photo.canEdit && onEdit !== undefined
+  const visibleSaveNotice =
+    !editing && saveNotice?.photoId === photo.id ? saveNotice.message : null
   const statusLabel = optimizationStatusLabel(photo)
   const canRetry = canRetryOptimization(photo)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     closeButtonRef.current?.focus()
@@ -99,6 +114,7 @@ export function PhotoLightbox({
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault()
+        if (savingEdit) return
         if (editing) {
           setEditingPhotoId(null)
           setEditError(null)
@@ -130,17 +146,19 @@ export function PhotoLightbox({
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [editing, onClose, onNext, onPrevious])
+  }, [editing, onClose, onNext, onPrevious, savingEdit])
 
   function openEdit() {
+    if (savingEdit) return
     setCaptionDraft(photo.caption ?? '')
     setEventDraft(photo.eventId ?? '')
     setEditError(null)
-    setSavingEdit(false)
+    setSaveNotice(null)
     setEditingPhotoId(photo.id)
   }
 
   function cancelEdit() {
+    if (savingEdit) return
     setEditingPhotoId(null)
     setEditError(null)
   }
@@ -148,20 +166,31 @@ export function PhotoLightbox({
   async function handleSaveEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!onEdit || savingEdit) return
+    const requestId = ++saveRequestIdRef.current
+    const targetPhotoId = photo.id
     setEditError(null)
+    setSaveNotice(null)
     setSavingEdit(true)
     try {
       await onEdit(photo, {
         caption: captionDraft.trim() || null,
         eventId: eventDraft.trim() || null,
       })
+      if (!mountedRef.current || saveRequestIdRef.current !== requestId) return
       setEditingPhotoId(null)
+      setSaveNotice({
+        photoId: targetPhotoId,
+        message: 'Ændringerne er gemt.',
+      })
     } catch (error) {
+      if (!mountedRef.current || saveRequestIdRef.current !== requestId) return
       setEditError(
         galleryErrorMessage(error, 'Billedet kunne ikke gemmes. Prøv igen.'),
       )
     } finally {
-      setSavingEdit(false)
+      if (mountedRef.current && saveRequestIdRef.current === requestId) {
+        setSavingEdit(false)
+      }
     }
   }
 
@@ -176,7 +205,14 @@ export function PhotoLightbox({
           swipedRef.current = false
           return
         }
-        if (event.target === event.currentTarget) onClose()
+        if (event.target === event.currentTarget) {
+          if (savingEdit) return
+          if (editing) {
+            cancelEdit()
+            return
+          }
+          onClose()
+        }
       }}
       onTouchStart={(event) => {
         swipedRef.current = false
@@ -265,6 +301,16 @@ export function PhotoLightbox({
         <p className="max-w-prose text-center text-white">{photo.caption}</p>
       )}
 
+      {!editing && albumTitle && (
+        <p className="text-sm text-white/75">I albummet {albumTitle}</p>
+      )}
+
+      {visibleSaveNotice && (
+        <p role="status" aria-live="polite" className="text-sm text-green-200">
+          {visibleSaveNotice}
+        </p>
+      )}
+
       {positionLabel && (
         <p role="status" aria-live="polite" className="text-sm text-white/70">
           {positionLabel}
@@ -298,9 +344,10 @@ export function PhotoLightbox({
               ref={captionInputRef}
               type="text"
               value={captionDraft}
+              disabled={savingEdit}
               maxLength={MAX_CAPTION_LENGTH}
               onChange={(event) => setCaptionDraft(event.target.value)}
-              className="min-h-11 rounded border border-white/40 bg-surface px-3 py-2 text-base text-ink"
+              className="min-h-11 rounded border border-white/40 bg-surface px-3 py-2 text-base text-ink disabled:opacity-60"
             />
           </label>
 
@@ -327,6 +374,7 @@ export function PhotoLightbox({
               emptyLabel="Ingen begivenhed"
               hideWhenEmpty={false}
               tone="inverse"
+              disabled={savingEdit}
             />
           </AppErrorBoundary>
 
