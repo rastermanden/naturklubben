@@ -76,7 +76,6 @@ vi.mock('../features/gallery/useUploadPhotos', () => ({
     enqueue,
     clearSaved: vi.fn(),
   }),
-  validateFiles: () => null,
 }))
 
 vi.mock('../features/gallery/useAutoOptimizePendingPhotos', () => ({

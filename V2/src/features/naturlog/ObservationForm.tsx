@@ -7,7 +7,7 @@ import {
   THUMB_MAX_EDGE,
   resizePhotoFile,
 } from '../gallery/resizePhoto'
-import { validateFiles } from '../gallery/useUploadPhotos'
+import { validateImageFile } from '../gallery/galleryMedia'
 import { PositionMapPicker } from './map'
 import {
   NOTES_MAX_LENGTH,
@@ -125,7 +125,7 @@ export function ObservationForm({
     const file = files?.[0] ?? null
     setPhotoError(null)
     if (!file) return
-    const problem = validateFiles([file])
+    const problem = validateImageFile(file)
     if (problem) {
       setPhotoError(problem)
       setPhotoFile(null)

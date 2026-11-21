@@ -22,9 +22,6 @@ import { captureVideoThumbnail } from './videoThumbnail'
  * starter ti parallelle uploads.
  */
 
-/** Matcher `MAX_FILE_SIZE` i `convex/gallery.ts` og den gamle bucket-grænse. */
-const MAX_FILE_SIZE = 15 * 1024 * 1024
-
 export interface UploadPhotoInput {
   files: File[]
   caption: string
@@ -43,18 +40,6 @@ export interface UploadQueueItem {
   eventId: string | null
   status: UploadQueueStatus
   error: string | null
-}
-
-export function validateFiles(files: File[]): string | null {
-  for (const file of files) {
-    if (!file.type.startsWith('image/')) {
-      return `${file.name} er ikke et billede.`
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      return `${file.name} er for stor (maks. 15 MB).`
-    }
-  }
-  return null
 }
 
 export function createUploadQueueItems({

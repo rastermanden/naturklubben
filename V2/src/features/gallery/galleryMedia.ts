@@ -102,6 +102,25 @@ export function validateGalleryFile(
   return null
 }
 
+export function isOversizeGalleryVideo(
+  file: Pick<File, 'name' | 'type' | 'size'>,
+): boolean {
+  const detected = detectGalleryMediaKind(file)
+  return detected?.kind === 'video' && file.size > MAX_VIDEO_BYTES
+}
+
+export function validateImageFile(
+  file: Pick<File, 'name' | 'type' | 'size'>,
+): string | null {
+  if (!file.type.startsWith('image/')) {
+    return `${file.name} er ikke et billede.`
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    return `${file.name} er for stor (maks. 15 MB).`
+  }
+  return null
+}
+
 export function validateGalleryFiles(
   files: ReadonlyArray<Pick<File, 'name' | 'type' | 'size'>>,
 ): string | null {

@@ -3,8 +3,10 @@ import {
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
   detectGalleryMediaKind,
+  isOversizeGalleryVideo,
   validateGalleryFile,
   validateGalleryFiles,
+  validateImageFile,
 } from './galleryMedia'
 
 function makeFile(name: string, type: string, size: number): File {
@@ -83,5 +85,53 @@ describe('galleryMedia', () => {
     ).toBe(
       'nej.mp3 kan ikke lægges op. Brug et billede eller en video (mp4, webm eller mov).',
     )
+  })
+
+  it('genkender kun understøttede videoer over 50 MB til klient-komprimering', () => {
+    expect(
+      isOversizeGalleryVideo(
+        makeFile('stor.mp4', 'video/mp4', MAX_VIDEO_BYTES + 1),
+      ),
+    ).toBe(true)
+    expect(
+      isOversizeGalleryVideo(
+        makeFile('stor.webm', 'video/webm', MAX_VIDEO_BYTES + 1),
+      ),
+    ).toBe(true)
+    expect(
+      isOversizeGalleryVideo(
+        makeFile('iphone.mov', '', MAX_VIDEO_BYTES + 1024),
+      ),
+    ).toBe(true)
+
+    expect(
+      isOversizeGalleryVideo(
+        makeFile('grænse.mp4', 'video/mp4', MAX_VIDEO_BYTES),
+      ),
+    ).toBe(false)
+    expect(
+      isOversizeGalleryVideo(
+        makeFile('billede.jpg', 'image/jpeg', MAX_VIDEO_BYTES + 1),
+      ),
+    ).toBe(false)
+    expect(
+      isOversizeGalleryVideo(
+        makeFile('gammel.avi', 'video/x-msvideo', MAX_VIDEO_BYTES + 1),
+      ),
+    ).toBe(false)
+  })
+
+  it('validerer enkeltbilleder til Naturlog-formularen', () => {
+    expect(
+      validateImageFile(makeFile('blomst.jpg', 'image/jpeg', MAX_IMAGE_BYTES)),
+    ).toBeNull()
+    expect(validateImageFile(makeFile('klip.mp4', 'video/mp4', 1024))).toBe(
+      'klip.mp4 er ikke et billede.',
+    )
+    expect(
+      validateImageFile(
+        makeFile('kæmpe.png', 'image/png', MAX_IMAGE_BYTES + 1),
+      ),
+    ).toBe('kæmpe.png er for stor (maks. 15 MB).')
   })
 })

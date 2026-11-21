@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type DragEvent,
+} from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   useAction,
@@ -14,7 +21,12 @@ import {
   type UploadQueueItem,
 } from '../features/gallery/useUploadPhotos'
 import {
+  useVideoCompression,
+  type VideoCompressionJob,
+} from '../features/gallery/useVideoCompression'
+import {
   GALLERY_ACCEPT,
+  isOversizeGalleryVideo,
   validateGalleryFile,
 } from '../features/gallery/galleryMedia'
 import { EventPicker } from '../features/gallery/EventPicker'
@@ -59,6 +71,21 @@ function queueStatus(item: UploadQueueItem) {
       return 'Gemt'
     case 'failed':
       return item.error ?? 'Upload fejlede'
+  }
+}
+
+function compressionStatus(job: VideoCompressionJob) {
+  switch (job.status) {
+    case 'queued':
+      return 'Venter på komprimering'
+    case 'preparing':
+      return 'Gør klar til komprimering…'
+    case 'paused':
+      return 'Sat på pause — hold skærmen tændt'
+    case 'compressing':
+      return job.progress !== null
+        ? `Komprimerer video… ${Math.round(job.progress * 100)} %`
+        : 'Komprimerer video…'
   }
 }
 
@@ -109,6 +136,17 @@ function GalleryPage() {
    */
   const [eventChoice, setEventChoice] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [compressionErrors, setCompressionErrors] = useState<
+    Array<{ id: string; message: string }>
+  >([])
+  const [compressionNotices, setCompressionNotices] = useState<
+    Array<{ id: string; message: string }>
+  >([])
+  const [alertScrollState, setAlertScrollState] = useState<{
+    seq: number
+    shouldFocus: boolean
+  }>({ seq: 0, shouldFocus: false })
+  const [noticeScrollSeq, setNoticeScrollSeq] = useState(0)
   const [actionError, setActionError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [busyPhotoId, setBusyPhotoId] = useState<string | null>(null)
@@ -124,10 +162,100 @@ function GalleryPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
+  const formErrorRef = useRef<HTMLDivElement>(null)
+  const compressionNoticeRef = useRef<HTMLDivElement>(null)
+  const uploadQueueRef = useRef<HTMLUListElement>(null)
+  const seenFailedUploadIdsRef = useRef<Set<string>>(new Set())
   const bulkToggleButtonRef = useRef<HTMLButtonElement>(null)
   const bulkBarRef = useRef<HTMLDivElement>(null)
   const bulkNoticeRef = useRef<HTMLParagraphElement>(null)
   const prevSelectingAlbumRef = useRef<string | null>(null)
+
+  const reportPickerError = useCallback((message: string) => {
+    setFormError(message)
+    setAlertScrollState((current) => ({
+      seq: current.seq + 1,
+      shouldFocus: true,
+    }))
+  }, [])
+
+  const reportCompressionError = useCallback((message: string) => {
+    setCompressionErrors((current) => [
+      ...current,
+      { id: crypto.randomUUID(), message },
+    ])
+    setAlertScrollState((current) => ({
+      seq: current.seq + 1,
+      shouldFocus: false,
+    }))
+  }, [])
+
+  const enqueueUpload = upload.enqueue
+  const videoCompression = useVideoCompression({
+    onCompressed: useCallback(
+      ({
+        file,
+        caption: jobCaption,
+        eventId,
+        audioIncluded,
+        originalFileName,
+      }) => {
+        enqueueUpload({
+          files: [file],
+          caption: jobCaption,
+          eventId,
+        })
+        if (!audioIncluded) {
+          setCompressionNotices((current) => [
+            ...current,
+            {
+              id: crypto.randomUUID(),
+              message: `${originalFileName}: Videoen blev lagt op uden lyd.`,
+            },
+          ])
+          setNoticeScrollSeq((seq) => seq + 1)
+        }
+      },
+      [enqueueUpload],
+    ),
+    onError: reportCompressionError,
+  })
+
+  useLayoutEffect(() => {
+    if (alertScrollState.seq === 0) return
+    formErrorRef.current?.scrollIntoView?.({
+      behavior: 'smooth',
+      block: 'center',
+    })
+    if (alertScrollState.shouldFocus) {
+      formErrorRef.current?.focus?.({ preventScroll: true })
+    }
+  }, [alertScrollState])
+
+  useLayoutEffect(() => {
+    if (noticeScrollSeq === 0) return
+    compressionNoticeRef.current?.scrollIntoView?.({
+      behavior: 'smooth',
+      block: 'center',
+    })
+  }, [noticeScrollSeq])
+
+  useEffect(() => {
+    const seen = seenFailedUploadIdsRef.current
+    let hasNewFailure = false
+    for (const item of upload.items) {
+      if (item.status === 'failed' && !seen.has(item.id)) {
+        seen.add(item.id)
+        hasNewFailure = true
+      }
+    }
+    if (hasNewFailure) {
+      uploadQueueRef.current?.scrollIntoView?.({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }
+  }, [upload.items])
 
   const photos: Photo[] = photosQuery.results
   const editablePhotos = photos.filter((photo) => photo.canEdit)
@@ -238,20 +366,47 @@ function GalleryPage() {
   function handleFilesSelected(files: FileList | null) {
     if (!files || files.length === 0) return
     const fileArray = Array.from(files)
-    const errors = fileArray
-      .map((file) => validateGalleryFile(file))
-      .filter((message): message is string => message !== null)
-    setFormError(errors.length > 0 ? errors.join(' ') : null)
+    const oversizeVideos: File[] = []
+    const directFiles: File[] = []
+    const errors: string[] = []
 
-    const validFiles = fileArray.filter(
-      (file) => validateGalleryFile(file) === null,
-    )
-    if (validFiles.length > 0) {
+    for (const file of fileArray) {
+      if (isOversizeGalleryVideo(file)) {
+        oversizeVideos.push(file)
+        continue
+      }
+      const error = validateGalleryFile(file)
+      if (error !== null) {
+        errors.push(error)
+      } else {
+        directFiles.push(file)
+      }
+    }
+
+    if (errors.length > 0) {
+      reportPickerError(errors.join(' '))
+    } else {
+      setFormError(null)
+    }
+
+    const currentEventId = selectedEventId === '' ? null : selectedEventId
+    if (directFiles.length > 0) {
       upload.enqueue({
-        files: validFiles,
+        files: directFiles,
         caption,
-        eventId: selectedEventId === '' ? null : selectedEventId,
+        eventId: currentEventId,
       })
+    }
+    if (oversizeVideos.length > 0) {
+      videoCompression.enqueueVideos({
+        files: oversizeVideos,
+        caption,
+        eventId: currentEventId,
+      })
+    } else {
+      videoCompression.releasePreparedAudioContext()
+    }
+    if (directFiles.length > 0 || oversizeVideos.length > 0) {
       setCaption('')
     }
 
@@ -464,7 +619,10 @@ function GalleryPage() {
         <div className="grid gap-2 sm:flex sm:flex-wrap">
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              videoCompression.prepareAudioContext()
+              fileInputRef.current?.click()
+            }}
             className="min-h-11 rounded-lg bg-accent px-5 py-2 text-white"
           >
             Vælg billeder eller video
@@ -478,7 +636,10 @@ function GalleryPage() {
           </button>
           <button
             type="button"
-            onClick={() => videoInputRef.current?.click()}
+            onClick={() => {
+              videoCompression.prepareAudioContext()
+              videoInputRef.current?.click()
+            }}
             className="min-h-11 rounded-lg border border-accent px-5 py-2 text-ink-body"
           >
             Optag video
@@ -486,14 +647,123 @@ function GalleryPage() {
         </div>
 
         <p className="text-xs text-ink-subtle">
-          Billeder må højst være 15 MB. Videoer i mp4, webm eller mov må højst
-          være 50 MB. Du kan også trække filer herind.
+          Billeder må højst være 15 MB. Videoer i mp4, webm eller mov over 50 MB
+          forsøges komprimeret før upload, hvis din browser kan — hold skærmen
+          tændt undervejs. Du kan også trække filer herind.
         </p>
 
-        {formError && (
-          <p role="alert" className="text-sm text-danger">
-            {formError}
-          </p>
+        {(formError || compressionErrors.length > 0) && (
+          <div
+            ref={formErrorRef}
+            tabIndex={-1}
+            role="alert"
+            aria-live="assertive"
+            className="space-y-2 rounded-lg border border-danger-line bg-danger-surface px-4 py-3 text-sm text-danger-strong"
+          >
+            {formError && <p>{formError}</p>}
+            {compressionErrors.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex flex-wrap items-center justify-between gap-2"
+              >
+                <p className="min-w-0 flex-1">{entry.message}</p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCompressionErrors((current) =>
+                      current.filter((item) => item.id !== entry.id),
+                    )
+                  }
+                  className="min-h-11 rounded border border-danger-line-strong px-3 py-2 text-xs font-medium text-danger-strong"
+                >
+                  Luk
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {compressionNotices.length > 0 && (
+          <div
+            ref={compressionNoticeRef}
+            role="status"
+            aria-live="polite"
+            className="space-y-2 rounded-lg border border-warn-line bg-warn-surface px-4 py-3 text-sm text-warn-strong"
+          >
+            {compressionNotices.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex flex-wrap items-center justify-between gap-2"
+              >
+                <p className="min-w-0 flex-1">{entry.message}</p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCompressionNotices((current) =>
+                      current.filter((item) => item.id !== entry.id),
+                    )
+                  }
+                  className="min-h-11 rounded border border-warn-line px-3 py-2 text-xs font-medium text-warn-strong"
+                >
+                  Luk
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {videoCompression.jobs.length > 0 && (
+          <div className="border-t border-line-soft pt-3">
+            <h3 className="mb-1 font-medium text-ink-body">
+              Komprimerer video
+            </h3>
+            <p className="mb-2 text-xs text-ink-subtle">
+              Hold skærmen tændt mens videoen komprimeres. Det tager cirka lige
+              så lang tid som selve videoen.
+            </p>
+            <ul className="grid gap-2" aria-live="polite">
+              {videoCompression.jobs.map((job) => {
+                const percent =
+                  job.progress !== null ? Math.round(job.progress * 100) : null
+                return (
+                  <li
+                    key={job.id}
+                    className="flex min-h-14 flex-wrap items-center justify-between gap-3 rounded bg-surface-sunken px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <span className="block truncate font-medium text-ink">
+                        {job.file.name}
+                      </span>
+                      <span className="block text-ink-subtle">
+                        {compressionStatus(job)}
+                      </span>
+                      <div
+                        role="progressbar"
+                        aria-label={`Komprimering af ${job.file.name}`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={percent ?? undefined}
+                        className="h-2 w-full overflow-hidden rounded-full bg-line-soft"
+                      >
+                        <div
+                          className="h-full rounded-full bg-accent transition-[width] duration-200"
+                          style={{ width: `${percent ?? 15}%` }}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={`Annullér komprimering af ${job.file.name}`}
+                      onClick={() => videoCompression.cancelJob(job.id)}
+                      className="min-h-11 rounded border border-line-strong px-3 py-2 text-ink-body"
+                    >
+                      Annullér
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
         )}
 
         {upload.items.length > 0 && (
@@ -510,7 +780,7 @@ function GalleryPage() {
                 </button>
               )}
             </div>
-            <ul className="grid gap-2" aria-live="polite">
+            <ul ref={uploadQueueRef} className="grid gap-2" aria-live="polite">
               {upload.items.map((item) => (
                 <li
                   key={item.id}
@@ -521,6 +791,7 @@ function GalleryPage() {
                       {item.file.name}
                     </span>
                     <span
+                      role={item.status === 'failed' ? 'alert' : undefined}
                       className={
                         item.status === 'failed'
                           ? 'text-danger'
