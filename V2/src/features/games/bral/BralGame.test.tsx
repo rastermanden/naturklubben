@@ -103,4 +103,51 @@ describe('BralGame', () => {
       durationSeconds: expect.any(Number),
     })
   })
+
+  it('fyrer kun én handling ved langt tryk (> 500 ms) på Blæsebælg og Slå mønt', () => {
+    vi.useFakeTimers()
+    opening.override = {
+      molten: 8,
+      markerPos: 0.5,
+      ovenTemp: 650,
+    }
+
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    const bellows = screen.getByRole('button', { name: 'Blæsebælg' })
+    fireEvent.pointerDown(bellows)
+    expect(bellows.textContent).toContain('718 °C')
+
+    act(() => {
+      vi.advanceTimersByTime(650)
+    })
+
+    const tempBeforeClick = bellows.textContent
+    fireEvent.pointerUp(bellows)
+    fireEvent.click(bellows)
+    expect(bellows.textContent).toBe(tempBeforeClick)
+
+    const strike = screen.getByRole('button', { name: 'Slå mønt' })
+    fireEvent.pointerDown(strike)
+    const pointAfterPointerDown = screen
+      .getByText('Point')
+      .parentElement?.textContent?.replace('Point', '')
+    act(() => {
+      vi.advanceTimersByTime(650)
+    })
+    fireEvent.pointerUp(strike)
+    fireEvent.click(strike)
+
+    expect(
+      screen
+        .getByText('Mønter')
+        .parentElement?.textContent?.replace('Mønter', ''),
+    ).toBe('1')
+    expect(
+      screen
+        .getByText('Point')
+        .parentElement?.textContent?.replace('Point', ''),
+    ).toBe(pointAfterPointerDown)
+  })
 })

@@ -38,8 +38,8 @@ export function BralGame() {
   const bestBefore = useRef(0)
   const startedAt = useRef(0)
   const finishedSeconds = useRef(0)
-  const lastBellowsPointerAt = useRef<number | null>(null)
-  const lastStrikePointerAt = useRef<number | null>(null)
+  const suppressBellowsClick = useRef(false)
+  const suppressStrikeClick = useRef(false)
   const [record, setRecord] = useState(false)
 
   function syncSnapshot(next: BralState) {
@@ -262,14 +262,20 @@ export function BralGame() {
           onPointerDown={(event) => {
             if (!playing) return
             event.preventDefault()
-            lastBellowsPointerAt.current = performance.now()
+            suppressBellowsClick.current = true
             handleBellows()
           }}
+          onPointerCancel={() => {
+            suppressBellowsClick.current = false
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              suppressBellowsClick.current = false
+            }
+          }}
           onClick={() => {
-            if (
-              lastBellowsPointerAt.current !== null &&
-              performance.now() - lastBellowsPointerAt.current < 500
-            ) {
+            if (suppressBellowsClick.current) {
+              suppressBellowsClick.current = false
               return
             }
             handleBellows()
@@ -289,14 +295,20 @@ export function BralGame() {
           onPointerDown={(event) => {
             if (!strikeReady) return
             event.preventDefault()
-            lastStrikePointerAt.current = performance.now()
+            suppressStrikeClick.current = true
             handleStrike()
           }}
+          onPointerCancel={() => {
+            suppressStrikeClick.current = false
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              suppressStrikeClick.current = false
+            }
+          }}
           onClick={() => {
-            if (
-              lastStrikePointerAt.current !== null &&
-              performance.now() - lastStrikePointerAt.current < 500
-            ) {
+            if (suppressStrikeClick.current) {
+              suppressStrikeClick.current = false
               return
             }
             handleStrike()
