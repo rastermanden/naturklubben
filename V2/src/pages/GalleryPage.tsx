@@ -123,6 +123,7 @@ function GalleryPage() {
   const mintedTokens = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
   const bulkToggleButtonRef = useRef<HTMLButtonElement>(null)
   const bulkBarRef = useRef<HTMLDivElement>(null)
   const bulkNoticeRef = useRef<HTMLParagraphElement>(null)
@@ -256,6 +257,7 @@ function GalleryPage() {
 
     if (fileInputRef.current) fileInputRef.current.value = ''
     if (cameraInputRef.current) cameraInputRef.current.value = ''
+    if (videoInputRef.current) videoInputRef.current.value = ''
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
@@ -449,6 +451,15 @@ function GalleryPage() {
           onChange={(event) => handleFilesSelected(event.target.files)}
           className="sr-only"
         />
+        <input
+          ref={videoInputRef}
+          type="file"
+          aria-label="Optag en video med kameraet"
+          accept="video/*"
+          capture="environment"
+          onChange={(event) => handleFilesSelected(event.target.files)}
+          className="sr-only"
+        />
 
         <div className="grid gap-2 sm:flex sm:flex-wrap">
           <button
@@ -465,11 +476,18 @@ function GalleryPage() {
           >
             Tag billede
           </button>
+          <button
+            type="button"
+            onClick={() => videoInputRef.current?.click()}
+            className="min-h-11 rounded-lg border border-accent px-5 py-2 text-ink-body"
+          >
+            Optag video
+          </button>
         </div>
 
         <p className="text-xs text-ink-subtle">
-          Vælg fra kamerarullen eller dine filer, eller træk filer herind.
-          Billeder op til 15 MB. Videoer i mp4, webm eller mov op til 50 MB.
+          Billeder må højst være 15 MB. Videoer i mp4, webm eller mov må højst
+          være 50 MB. Du kan også trække filer herind.
         </p>
 
         {formError && (
