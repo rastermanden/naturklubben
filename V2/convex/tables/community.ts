@@ -38,6 +38,7 @@ export const gameIdValidator = v.union(
   v.literal('fugletraek'),
   v.literal('kabale'),
   v.literal('boble'),
+  v.literal('bral'),
 )
 
 export const communityTables = {
