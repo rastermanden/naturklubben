@@ -12,6 +12,7 @@ import {
   type AdminTabId,
 } from '../features/admin/adminTabs'
 import { BadgeAdminSection } from '../features/badges/BadgeAdminSection'
+import { BadgeCatalogSection } from '../features/badges/BadgeCatalogSection'
 import { useCurrentProfile } from '../features/auth/useCurrentProfile'
 import { AdminSection } from '../features/members/AdminSection'
 import { AdminRolesSection } from '../features/members/AdminRolesSection'
@@ -135,6 +136,7 @@ export default function AdminPage() {
       </AdminTabPanel>
       <AdminTabPanel tab="badges" activeTab={activeTab}>
         <BadgeAdminSection />
+        <BadgeCatalogSection />
       </AdminTabPanel>
       <AdminTabPanel tab="aktiviteter" activeTab={activeTab}>
         <ActivitiesSection />

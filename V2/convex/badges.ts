@@ -1,6 +1,12 @@
 import { ConvexError, v } from 'convex/values'
-import { internalMutation, mutation, query } from './_generated/server'
-import type { Doc } from './_generated/dataModel'
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from './_generated/server'
+import type { Doc, Id } from './_generated/dataModel'
 import { requireAdmin, requireProfile, requireWritableProfile } from './authz'
 
 /**
@@ -38,6 +44,14 @@ const NOMINATIONS_PER_DAY = 20
 
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/
 
+const MAX_BADGE_IMAGE_BYTES = 10 * 1024 * 1024
+
+const ALLOWED_BADGE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+])
+
 const imageMimeType = v.union(
   v.literal('image/png'),
   v.literal('image/jpeg'),
@@ -73,10 +87,22 @@ function validateCrop(
   cropY: number,
   cropSize: number,
 ) {
-  if (imageWidth <= 0 || imageHeight <= 0) {
+  if (
+    !Number.isFinite(imageWidth) ||
+    !Number.isFinite(imageHeight) ||
+    imageWidth <= 0 ||
+    imageHeight <= 0
+  ) {
     throw new ConvexError('BADGE_IMAGE_SIZE_INVALID')
   }
-  if (cropSize <= 0 || cropX < 0 || cropY < 0) {
+  if (
+    !Number.isFinite(cropSize) ||
+    !Number.isFinite(cropX) ||
+    !Number.isFinite(cropY) ||
+    cropSize <= 0 ||
+    cropX < 0 ||
+    cropY < 0
+  ) {
     throw new ConvexError('BADGE_CROP_INVALID')
   }
   // Udsnittet skal ligge inden for originalen. Ellers ville trykfilen mangle
@@ -87,11 +113,30 @@ function validateCrop(
 }
 
 function validatePhysical(diameterMm: number, bleedMm: number) {
-  if (diameterMm < 10 || diameterMm > 200) {
+  if (!Number.isFinite(diameterMm) || diameterMm < 10 || diameterMm > 200) {
     throw new ConvexError('BADGE_DIAMETER_INVALID')
   }
-  if (bleedMm < 0 || bleedMm > 20) {
+  if (!Number.isFinite(bleedMm) || bleedMm < 0 || bleedMm > 20) {
     throw new ConvexError('BADGE_BLEED_INVALID')
+  }
+}
+
+async function validateStoredBadgeImage(
+  ctx: MutationCtx,
+  storageId: Id<'_storage'>,
+) {
+  const metadata = await ctx.db.system.get(storageId)
+  if (metadata === null) {
+    throw new ConvexError('BADGE_IMAGE_NOT_FOUND')
+  }
+  if (
+    metadata.contentType !== undefined &&
+    !ALLOWED_BADGE_MIME_TYPES.has(metadata.contentType)
+  ) {
+    throw new ConvexError('BADGE_IMAGE_TYPE_INVALID')
+  }
+  if (metadata.size > MAX_BADGE_IMAGE_BYTES) {
+    throw new ConvexError('BADGE_IMAGE_TOO_LARGE')
   }
 }
 
@@ -166,6 +211,46 @@ export const nomineeCandidates = query({
   },
 })
 
+async function enrichMemberBadges(
+  ctx: QueryCtx,
+  awarded: Doc<'memberBadges'>[],
+) {
+  const badgeCache = new Map<Id<'badges'>, Doc<'badges'> | null>()
+  const imageUrlCache = new Map<Id<'_storage'>, string | null>()
+
+  return await Promise.all(
+    awarded.map(async (row) => {
+      let badge = badgeCache.get(row.badgeId)
+      if (badge === undefined) {
+        badge = await ctx.db.get(row.badgeId)
+        badgeCache.set(row.badgeId, badge)
+      }
+
+      let imageUrl: string | null = null
+      if (badge !== null) {
+        const cachedUrl = imageUrlCache.get(badge.imageStorageId)
+        if (cachedUrl !== undefined) {
+          imageUrl = cachedUrl
+        } else {
+          imageUrl = await ctx.storage.getUrl(badge.imageStorageId)
+          imageUrlCache.set(badge.imageStorageId, imageUrl)
+        }
+      }
+
+      return {
+        ...row,
+        badgeDescription: badge?.description,
+        imageUrl,
+        imageWidth: badge?.imageWidth ?? 1,
+        imageHeight: badge?.imageHeight ?? 1,
+        cropX: badge?.cropX ?? 0,
+        cropY: badge?.cropY ?? 0,
+        cropSize: badge?.cropSize ?? 1,
+      }
+    }),
+  )
+}
+
 /**
  * En medlems badgevitrine: de tildelte badges med billede og udsnit, nyeste
  * først. Badge-dokumentet slås op pr. række -- det er et opslag på id, ikke en
@@ -182,20 +267,19 @@ export const memberBadgesFor = query({
       .order('desc')
       .take(50)
 
-    return await Promise.all(
-      awarded.map(async (row) => {
-        const badge = await ctx.db.get(row.badgeId)
-        return {
-          ...row,
-          imageUrl: badge
-            ? await ctx.storage.getUrl(badge.imageStorageId)
-            : null,
-          cropX: badge?.cropX ?? 0,
-          cropY: badge?.cropY ?? 0,
-          cropSize: badge?.cropSize ?? 1,
-        }
-      }),
-    )
+    return await enrichMemberBadges(ctx, awarded)
+  },
+})
+
+/** Alle tildelte badges til medlemslisten, nyeste først. */
+export const allMemberBadges = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireProfile(ctx)
+
+    const awarded = await ctx.db.query('memberBadges').take(500)
+    awarded.sort((a, b) => b.awardedAt - a.awardedAt)
+    return await enrichMemberBadges(ctx, awarded)
   },
 })
 
@@ -211,20 +295,7 @@ export const myBadges = query({
       .order('desc')
       .take(50)
 
-    return await Promise.all(
-      awarded.map(async (row) => {
-        const badge = await ctx.db.get(row.badgeId)
-        return {
-          ...row,
-          imageUrl: badge
-            ? await ctx.storage.getUrl(badge.imageStorageId)
-            : null,
-          cropX: badge?.cropX ?? 0,
-          cropY: badge?.cropY ?? 0,
-          cropSize: badge?.cropSize ?? 1,
-        }
-      }),
-    )
+    return await enrichMemberBadges(ctx, awarded)
   },
 })
 
@@ -311,6 +382,15 @@ export const openProductions = query({
   },
 })
 
+/** Upload-URL til et badgebillede. Kun admins, fordi kataloget er admins' redskab. */
+export const generateImageUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx)
+    return { uploadUrl: await ctx.storage.generateUploadUrl() }
+  },
+})
+
 /** Opretter en badge. Kun admins; kataloget er admins' redskab. */
 export const createBadge = mutation({
   args: {
@@ -326,6 +406,7 @@ export const createBadge = mutation({
     cropSize: v.number(),
     diameterMm: v.number(),
     bleedMm: v.number(),
+    isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx)
@@ -335,6 +416,7 @@ export const createBadge = mutation({
     if (args.description !== undefined && args.description.length > 2000) {
       throw new ConvexError('BADGE_DESCRIPTION_TOO_LONG')
     }
+    await validateStoredBadgeImage(ctx, args.imageStorageId)
     validateCrop(
       args.imageWidth,
       args.imageHeight,
@@ -366,7 +448,7 @@ export const createBadge = mutation({
       bleedMm: args.bleedMm,
       printStatus: 'pending',
       printAttempts: 0,
-      isActive: true,
+      isActive: args.isActive ?? true,
       createdByProfileId: admin._id,
       createdAt: now,
       updatedAt: now,
@@ -433,6 +515,9 @@ export const updateBadge = mutation({
       if (args.imageMimeType === undefined) {
         throw new ConvexError('BADGE_IMAGE_INCOMPLETE')
       }
+      if (args.imageStorageId !== badge.imageStorageId) {
+        await validateStoredBadgeImage(ctx, args.imageStorageId)
+      }
     }
 
     const imageStorageId = args.imageStorageId ?? badge.imageStorageId
@@ -476,10 +561,21 @@ export const updateBadge = mutation({
             printStatus: 'pending' as const,
             printStorageId: undefined,
             printError: undefined,
+            printStartedAt: undefined,
             printCompletedAt: undefined,
           }
         : {}),
     })
+
+    if (
+      args.imageStorageId !== undefined &&
+      args.imageStorageId !== badge.imageStorageId
+    ) {
+      await ctx.storage.delete(badge.imageStorageId)
+    }
+    if (resetsPrint && badge.printStorageId !== undefined) {
+      await ctx.storage.delete(badge.printStorageId)
+    }
   },
 })
 
@@ -793,6 +889,217 @@ export const completeProduction = mutation({
   },
 })
 
+async function claimPrintForBadge(ctx: MutationCtx, badge: Doc<'badges'>) {
+  const now = Date.now()
+  const claimable =
+    badge.printStatus === 'pending' ||
+    badge.printStatus === 'failed' ||
+    badge.printStatus === 'ready' ||
+    (badge.printStatus === 'rendering' &&
+      (badge.printStartedAt === undefined ||
+        badge.printStartedAt <= now - PRINT_CLAIM_STALE_MS))
+  if (!claimable) return null
+
+  const attempt = badge.printAttempts + 1
+  await ctx.db.patch(badge._id, {
+    printStatus: 'rendering',
+    printAttempts: attempt,
+    printStartedAt: now,
+    printCompletedAt: undefined,
+    printError: undefined,
+  })
+
+  return {
+    badgeId: badge._id,
+    attempt,
+    imageStorageId: badge.imageStorageId,
+    imageWidth: badge.imageWidth,
+    imageHeight: badge.imageHeight,
+    cropX: badge.cropX,
+    cropY: badge.cropY,
+    cropSize: badge.cropSize,
+    diameterMm: badge.diameterMm,
+    bleedMm: badge.bleedMm,
+  }
+}
+
+async function completePrintForBadge(
+  ctx: MutationCtx,
+  args: {
+    badgeId: Id<'badges'>
+    expectedAttempt: number
+    succeeded: boolean
+    printStorageId?: Id<'_storage'>
+    error?: string
+  },
+) {
+  if (args.succeeded && args.printStorageId === undefined) {
+    throw new ConvexError('BADGE_PRINT_FILE_REQUIRED')
+  }
+
+  const badge = await ctx.db.get(args.badgeId)
+  if (badge === null) return false
+  if (
+    badge.printAttempts !== args.expectedAttempt ||
+    badge.printStatus !== 'rendering'
+  ) {
+    return false
+  }
+
+  await ctx.db.patch(badge._id, {
+    printStatus: args.succeeded ? 'ready' : 'failed',
+    // En fejl beholder den trykfil, der måtte findes i forvejen -- den er
+    // ikke blevet dårligere af, at et nyt forsøg fejlede.
+    printStorageId: args.succeeded ? args.printStorageId : badge.printStorageId,
+    printError: args.succeeded ? undefined : (args.error ?? 'Ukendt fejl'),
+    printCompletedAt: Date.now(),
+  })
+  return true
+}
+
+/**
+ * Starter en rendering af trykfilen fra admin-panelet. Kun admins.
+ *
+ * Bruger samme claim- og stale-lås som `claimPrint`, og udleverer original-URL
+ * samt en engangs upload-URL, så browseren kan tegne og gemme trykfilen.
+ */
+export const startPrintRender = mutation({
+  args: { badgeId: v.id('badges') },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx)
+
+    const badge = await ctx.db.get(args.badgeId)
+    if (badge === null) throw new ConvexError('BADGE_NOT_FOUND')
+
+    const claimed = await claimPrintForBadge(ctx, badge)
+    if (claimed === null) {
+      return {
+        status: 'rendering' as const,
+        printUrl: badge.printStorageId
+          ? await ctx.storage.getUrl(badge.printStorageId)
+          : null,
+      }
+    }
+
+    const imageUrl = await ctx.storage.getUrl(claimed.imageStorageId)
+    if (imageUrl === null) {
+      const error =
+        'Billedfilen mangler eller kunne ikke læses. Upload billedet igen.'
+      await completePrintForBadge(ctx, {
+        badgeId: badge._id,
+        expectedAttempt: claimed.attempt,
+        succeeded: false,
+        error,
+      })
+      return {
+        status: 'failed' as const,
+        error,
+        printUrl: null,
+      }
+    }
+
+    const uploadUrl = await ctx.storage.generateUploadUrl()
+    return {
+      status: 'claimed' as const,
+      ...claimed,
+      imageUrl,
+      uploadUrl,
+    }
+  },
+})
+
+/**
+ * Afslutter en rendering af trykfilen startet fra admin-panelet. Kun admins.
+ *
+ * Håndhæver PNG-format, rydder overhalede eller forrige trykfiler op og
+ * gemmer fejl uden at kaste, så fejltilstanden bliver stående på badgen.
+ */
+export const finishPrintRender = mutation({
+  args: {
+    badgeId: v.id('badges'),
+    expectedAttempt: v.number(),
+    succeeded: v.boolean(),
+    printStorageId: v.optional(v.id('_storage')),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx)
+
+    const badge = await ctx.db.get(args.badgeId)
+    if (badge === null) throw new ConvexError('BADGE_NOT_FOUND')
+
+    if (args.succeeded) {
+      if (args.printStorageId === undefined) {
+        throw new ConvexError('BADGE_PRINT_FILE_REQUIRED')
+      }
+      const metadata = await ctx.db.system.get(args.printStorageId)
+      if (metadata === null) {
+        const error = 'Trykfilen kunne ikke gemmes. Prøv igen.'
+        await completePrintForBadge(ctx, {
+          badgeId: args.badgeId,
+          expectedAttempt: args.expectedAttempt,
+          succeeded: false,
+          error,
+        })
+        return { status: 'failed' as const, error, printUrl: null }
+      }
+      if (
+        metadata.contentType !== undefined &&
+        metadata.contentType !== 'image/png'
+      ) {
+        if (
+          args.printStorageId !== badge.imageStorageId &&
+          args.printStorageId !== badge.printStorageId
+        ) {
+          await ctx.storage.delete(args.printStorageId)
+        }
+        const error = 'Trykfilen skal være en PNG-fil.'
+        await completePrintForBadge(ctx, {
+          badgeId: args.badgeId,
+          expectedAttempt: args.expectedAttempt,
+          succeeded: false,
+          error,
+        })
+        return { status: 'failed' as const, error, printUrl: null }
+      }
+    }
+
+    const previousPrintStorageId = badge.printStorageId
+    const completed = await completePrintForBadge(ctx, args)
+
+    if (!completed) {
+      if (
+        args.printStorageId !== undefined &&
+        args.printStorageId !== previousPrintStorageId &&
+        args.printStorageId !== badge.imageStorageId
+      ) {
+        await ctx.storage.delete(args.printStorageId)
+      }
+      return { status: 'superseded' as const, printUrl: null }
+    }
+
+    if (args.succeeded) {
+      if (
+        previousPrintStorageId !== undefined &&
+        previousPrintStorageId !== args.printStorageId &&
+        previousPrintStorageId !== badge.imageStorageId
+      ) {
+        await ctx.storage.delete(previousPrintStorageId)
+      }
+      return {
+        status: 'ready' as const,
+        printUrl: await ctx.storage.getUrl(args.printStorageId!),
+      }
+    }
+
+    return {
+      status: 'failed' as const,
+      error: args.error ?? 'Trykfilen kunne ikke laves. Prøv igen.',
+      printUrl: null,
+    }
+  },
+})
+
 /**
  * Starter en rendering af trykfilen og returnerer de mål, der skal tegnes
  * efter. Erstatter RPC'en `claim_badge_print`.
@@ -817,37 +1124,7 @@ export const claimPrint = internalMutation({
     const badge = await ctx.db.get(args.badgeId)
     if (badge === null) return null
 
-    const now = Date.now()
-    const claimable =
-      badge.printStatus === 'pending' ||
-      badge.printStatus === 'failed' ||
-      badge.printStatus === 'ready' ||
-      (badge.printStatus === 'rendering' &&
-        (badge.printStartedAt === undefined ||
-          badge.printStartedAt <= now - PRINT_CLAIM_STALE_MS))
-    if (!claimable) return null
-
-    const attempt = badge.printAttempts + 1
-    await ctx.db.patch(badge._id, {
-      printStatus: 'rendering',
-      printAttempts: attempt,
-      printStartedAt: now,
-      printCompletedAt: undefined,
-      printError: undefined,
-    })
-
-    return {
-      badgeId: badge._id,
-      attempt,
-      imageStorageId: badge.imageStorageId,
-      imageWidth: badge.imageWidth,
-      imageHeight: badge.imageHeight,
-      cropX: badge.cropX,
-      cropY: badge.cropY,
-      cropSize: badge.cropSize,
-      diameterMm: badge.diameterMm,
-      bleedMm: badge.bleedMm,
-    }
+    return await claimPrintForBadge(ctx, badge)
   },
 })
 
@@ -868,29 +1145,6 @@ export const completePrint = internalMutation({
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    if (args.succeeded && args.printStorageId === undefined) {
-      throw new ConvexError('BADGE_PRINT_FILE_REQUIRED')
-    }
-
-    const badge = await ctx.db.get(args.badgeId)
-    if (badge === null) return false
-    if (
-      badge.printAttempts !== args.expectedAttempt ||
-      badge.printStatus !== 'rendering'
-    ) {
-      return false
-    }
-
-    await ctx.db.patch(badge._id, {
-      printStatus: args.succeeded ? 'ready' : 'failed',
-      // En fejl beholder den trykfil, der måtte findes i forvejen -- den er
-      // ikke blevet dårligere af, at et nyt forsøg fejlede.
-      printStorageId: args.succeeded
-        ? args.printStorageId
-        : badge.printStorageId,
-      printError: args.succeeded ? undefined : (args.error ?? 'Ukendt fejl'),
-      printCompletedAt: Date.now(),
-    })
-    return true
+    return await completePrintForBadge(ctx, args)
   },
 })
