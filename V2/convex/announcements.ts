@@ -242,6 +242,12 @@ export const ANNOUNCEMENTS = [
     body: 'Under beskederne i chatten står nu små billeder af dem, der har læst så langt. Tryk på dem for at se navnene. Det gælder også dig: de andre kan se, hvor langt du har læst.',
     path: 'chat',
   },
+  {
+    slug: 'galleri-knyt-til-begivenhed',
+    title: 'Vælg turen, når du lægger billeder op',
+    body: 'I upload-formularen under Billeder kan du nu vælge, hvilken tur billederne hører til. Så lander de i turens album med det samme -- også selv om der ikke er lagt billeder op fra den før. Lader du feltet stå på "Ingen", havner de som før under "Uden begivenhed".',
+    path: 'billeder',
+  },
 ] as const
 
 /** Hvor længe en nyhed kan nå at blive sendt, efter den er udgivet. */

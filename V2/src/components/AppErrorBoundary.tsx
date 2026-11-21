@@ -2,6 +2,12 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 interface AppErrorBoundaryProps {
   children: ReactNode
+  /**
+   * Vises i stedet for hele-siden-beskeden. Bruges, når grænsen kun ligger om
+   * en enkelt del af en side -- fx et felt i en formular, hvor resten af
+   * formularen godt kan bruges uden det.
+   */
+  fallback?: ReactNode
 }
 
 interface AppErrorBoundaryState {
@@ -32,6 +38,7 @@ export class AppErrorBoundary extends Component<
 
   render() {
     if (this.state.error === null) return this.props.children
+    if (this.props.fallback !== undefined) return this.props.fallback
 
     return (
       <div

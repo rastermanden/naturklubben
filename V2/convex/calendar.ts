@@ -437,6 +437,43 @@ export const upcomingEvents = query({
   },
 })
 
+/**
+ * Begivenhederne til et "knyt til begivenhed"-felt: id, titel og startdato,
+ * nyeste først, både afholdte og kommende.
+ *
+ * Både afholdte og kommende, fordi billeder som regel uploades *efter* turen;
+ * den gamle app hentede på samme måde `events` sorteret på `start_at` uden at
+ * skelne (`src/features/gallery/useEventsForSelect.ts`). Startdatoen er med,
+ * så to ture med samme titel kan skelnes i listen.
+ *
+ * Felterne er med vilje kun de tre: et felt i en upload-formular har intet
+ * brug for tilmeldinger, pladsloft eller beskrivelse, og `toEventSummary`
+ * ville sende dem alle med.
+ */
+export const eventOptions = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireProfile(ctx)
+
+    const limit = Math.min(Math.max(args.limit ?? 50, 1), 100)
+    // `by_end` i faldende rækkefølge giver de begivenheder, der sluttede --
+    // eller slutter -- senest. Det er dem, man står og skal uploade fra.
+    const rows = await ctx.db
+      .query('events')
+      .withIndex('by_end')
+      .order('desc')
+      .take(limit)
+
+    return rows
+      .sort((a, b) => b.startAt - a.startAt || a._id.localeCompare(b._id))
+      .map((event) => ({
+        id: event._id,
+        title: event.title,
+        startAt: event.startAt,
+      }))
+  },
+})
+
 /** Afholdte begivenheder, nyeste først. */
 export const pastEvents = query({
   args: { dayStart: v.number(), limit: v.optional(v.number()) },

@@ -68,6 +68,22 @@ function albumKeyFor(eventId: string | undefined) {
   return eventId ?? WITHOUT_EVENT_ALBUM
 }
 
+/**
+ * Begivenheden bag et `eventId` fra en klient, eller `null`.
+ *
+ * `normalizeId` frem for et rent `ctx.db.get`: feltet er en `v.string()` (de
+ * migrerede billeder fra V1 bragte deres id'er med som tekst), så en klient
+ * kan sende hvad som helst. `normalizeId` giver `null` for alt, der ikke er et
+ * id i `events`, i stedet for at kaste.
+ */
+async function eventForAlbum(ctx: MutationCtx, eventId: string | undefined) {
+  const trimmed = trimmedOrUndefined(eventId)
+  if (trimmed === undefined) return null
+  const normalized = ctx.db.normalizeId('events', trimmed)
+  if (normalized === null) return null
+  return await ctx.db.get(normalized)
+}
+
 function trimmedOrUndefined(value: string | undefined) {
   const trimmed = value?.trim()
   return trimmed ? trimmed : undefined
@@ -421,6 +437,11 @@ export const createPhoto = mutation({
     clientUploadId: v.optional(v.string()),
     caption: v.optional(v.string()),
     eventId: v.optional(v.string()),
+    /**
+     * Ignoreret. Albummets titel læses af begivenheden, så et album ikke kan
+     * få et navn, ingen begivenhed har. Feltet bliver stadig accepteret, fordi
+     * en upload, der allerede ligger i køen, sender det med.
+     */
     eventTitle: v.optional(v.string()),
     /**
      * Miniaturen, skaleret i browseren. Når den er med, er billedet klar med
@@ -469,7 +490,13 @@ export const createPhoto = mutation({
       }
     }
 
-    const eventId = trimmedOrUndefined(args.eventId)
+    // Begivenheden slås op, så albummet får begivenhedens egen titel i stedet
+    // for klientens ord. Peger id'et ingen steder -- turen er slettet, mens
+    // uploaden lå i køen, eller feltet er pillet ved -- lander billedet i
+    // "Uden begivenhed". Et billede skal ikke gå tabt, fordi en tur blev
+    // slettet, og et album skal ikke kunne hedde "Ukendt begivenhed".
+    const event = await eventForAlbum(ctx, args.eventId)
+    const eventId = event?._id
     const now = Date.now()
     const thumbnailStorageId = args.thumbnailStorageId
     if (thumbnailStorageId !== undefined) {
@@ -516,7 +543,7 @@ export const createPhoto = mutation({
     await addPhotoToAlbum(ctx, {
       albumKey,
       eventId,
-      eventTitle: trimmedOrUndefined(args.eventTitle),
+      eventTitle: event?.title,
       createdAt: now,
     })
 

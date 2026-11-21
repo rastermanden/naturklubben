@@ -25,9 +25,8 @@ const MAX_FILE_SIZE = 15 * 1024 * 1024
 export interface UploadPhotoInput {
   files: File[]
   caption: string
-  /** Begivenheden billedet hører til, hvis kalenderen har sendt et id med. */
+  /** Begivenheden billedet hører til, eller `null` for "Uden begivenhed". */
   eventId: string | null
-  eventTitle?: string
 }
 
 export type UploadQueueStatus = 'queued' | 'uploading' | 'saved' | 'failed'
@@ -39,7 +38,6 @@ export interface UploadQueueItem {
   file: File
   caption: string
   eventId: string | null
-  eventTitle?: string
   status: UploadQueueStatus
   error: string | null
 }
@@ -60,7 +58,6 @@ export function createUploadQueueItems({
   files,
   caption,
   eventId,
-  eventTitle,
 }: UploadPhotoInput): UploadQueueItem[] {
   return files.map((file) => {
     const clientUploadId = crypto.randomUUID()
@@ -70,7 +67,6 @@ export function createUploadQueueItems({
       file,
       caption,
       eventId,
-      eventTitle,
       status: 'queued',
       error: null,
     }
@@ -130,7 +126,6 @@ export function useUploadPhotos() {
           clientUploadId: item.clientUploadId,
           caption: item.caption || undefined,
           eventId: item.eventId ?? undefined,
-          eventTitle: item.eventTitle,
         })
         updateItem(item.id, { status: 'saved' })
       } catch (caught) {
