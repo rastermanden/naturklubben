@@ -254,6 +254,12 @@ export const ANNOUNCEMENTS = [
     body: 'Når du lægger billeder op under Billeder, kan du nu vælge, hvilken tur de hører til. Så lander de i turens album med det samme -- også hvis der ikke er lagt billeder op fra turen før. Vælger du ingen tur, havner de som før under "Uden begivenhed".',
     path: 'billeder',
   },
+  {
+    slug: 'galleri-ret-billeder',
+    title: 'Ret billedtekst og flyt billeder til en tur',
+    body: 'Åbn et billede, du selv har lagt op, og tryk på "Redigér" for at rette billedteksten eller flytte billedet til en tur. I albummet "Uden begivenhed" kan du også vælge flere billeder og flytte dem samlet.',
+    path: 'billeder',
+  },
 ] as const
 
 /** Hvor længe en nyhed kan nå at blive sendt, efter den er udgivet. */

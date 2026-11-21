@@ -15,10 +15,13 @@ import {
   type UploadQueueItem,
 } from '../features/gallery/useUploadPhotos'
 import { EventPicker } from '../features/gallery/EventPicker'
+import { BulkMoveBar } from '../features/gallery/BulkMoveBar'
 import { GalleryAlbumGrid } from '../features/gallery/GalleryAlbumGrid'
 import { PhotoThumbnail } from '../features/gallery/PhotoThumbnail'
 import { PhotoLightbox } from '../features/gallery/PhotoLightbox'
+import { galleryErrorMessage } from '../features/gallery/galleryErrors'
 import {
+  WITHOUT_EVENT_ALBUM,
   clearAlbumSearchParams,
   updateGallerySearchParam,
 } from '../features/gallery/gallerySearchParams'
@@ -80,6 +83,8 @@ function GalleryPage() {
     photoParam ? { photoId: photoParam as Id<'photos'> } : 'skip',
   )
 
+  const updatePhoto = useMutation(api.gallery.updatePhoto)
+  const movePhotos = useMutation(api.gallery.movePhotos)
   const deletePhoto = useMutation(api.gallery.deletePhoto)
   const revokePhotoLink = useMutation(api.gallery.revokePhotoLink)
   const mintPhotoTokens = useMutation(api.gallery.mintPhotoTokens)
@@ -105,11 +110,25 @@ function GalleryPage() {
   const [busyPhotoId, setBusyPhotoId] = useState<string | null>(null)
   const [retryingPhotoId, setRetryingPhotoId] = useState<string | null>(null)
   const [revokingPhotoId, setRevokingPhotoId] = useState<string | null>(null)
+  const [selecting, setSelecting] = useState(false)
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([])
+  const [bulkEventId, setBulkEventId] = useState('')
+  const [movingPhotos, setMovingPhotos] = useState(false)
+  const [bulkError, setBulkError] = useState<string | null>(null)
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null)
   const mintedTokens = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const photos: Photo[] = photosQuery.results
+  const editablePhotos = photos.filter((photo) => photo.canEdit)
+  const editableIdSet = new Set(editablePhotos.map((photo) => photo.id))
+  const activeSelectedIds = selectedPhotoIds.filter((id) =>
+    editableIdSet.has(id),
+  )
+  const canBulkMove =
+    albumParam === WITHOUT_EVENT_ALBUM && editablePhotos.length > 0
+
   useEffect(() => {
     if (mintedTokens.current) return
     if (!photos.some((photo) => photo.displayUrl === null)) return
@@ -128,15 +147,24 @@ function GalleryPage() {
   const currentAlbum = albumParam
     ? (albums?.find((album) => album.albumId === albumParam) ?? null)
     : null
+  const activePhotoAlbumTitle = activePhoto
+    ? (albums?.find((album) => album.albumId === activePhoto.albumKey)?.title ??
+      null)
+    : null
 
   // Står man inde i et begivenhedsalbum, er den begivenhed forvalgt -- det var
   // uploadens opførsel, før feltet fandtes, og den skal ikke blive dårligere.
   const selectedEventId = eventChoice ?? currentAlbum?.eventId ?? ''
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- albumParam er
-  // hele pointen: valget hører til det album, det blev truffet i.
+  // hele pointen: valget og masseflytning hører til det album, de blev brugt i.
   useEffect(() => {
     setEventChoice(null)
+    setSelecting(false)
+    setSelectedPhotoIds([])
+    setBulkEventId('')
+    setBulkError(null)
+    setBulkNotice(null)
   }, [albumParam])
 
   // Hent næste side, inden man bladrer ud til kanten af det indlæste galleri.
@@ -221,6 +249,57 @@ function GalleryPage() {
         setActionError('Optimeringen kunne ikke startes. Prøv igen.'),
       )
       .finally(() => setRetryingPhotoId(null))
+  }
+
+  async function editPhoto(
+    photo: Photo,
+    changes: { caption: string | null; eventId: string | null },
+  ) {
+    setActionError(null)
+    await updatePhoto({
+      photoId: photo.id as Id<'photos'>,
+      caption: changes.caption,
+      eventId: changes.eventId,
+    })
+  }
+
+  function togglePhotoSelection(photo: Photo) {
+    if (!photo.canEdit) return
+    setBulkError(null)
+    setSelectedPhotoIds((current) =>
+      current.includes(photo.id)
+        ? current.filter((id) => id !== photo.id)
+        : [...current, photo.id],
+    )
+  }
+
+  async function handleBulkMove() {
+    if (activeSelectedIds.length === 0 || bulkEventId === '' || movingPhotos) {
+      return
+    }
+    setBulkError(null)
+    setBulkNotice(null)
+    setMovingPhotos(true)
+    try {
+      const result = await movePhotos({
+        photoIds: activeSelectedIds as Id<'photos'>[],
+        eventId: bulkEventId,
+      })
+      setSelecting(false)
+      setSelectedPhotoIds([])
+      setBulkEventId('')
+      setBulkNotice(
+        result.movedCount === 1
+          ? '1 billede blev flyttet.'
+          : `${result.movedCount} billeder blev flyttet.`,
+      )
+    } catch (error) {
+      setBulkError(
+        galleryErrorMessage(error, 'Billederne kunne ikke flyttes. Prøv igen.'),
+      )
+    } finally {
+      setMovingPhotos(false)
+    }
   }
 
   const positionLabel =
@@ -389,11 +468,13 @@ function GalleryPage() {
         </p>
       )}
 
-      {photosQuery.status !== 'LoadingFirstPage' && photos.length === 0 && (
-        <p className="rounded bg-surface-sunken p-5 text-ink-muted">
-          Ingen billeder endnu — vær den første til at uploade et.
-        </p>
-      )}
+      {!albumParam &&
+        photosQuery.status !== 'LoadingFirstPage' &&
+        photos.length === 0 && (
+          <p className="rounded bg-surface-sunken p-5 text-ink-muted">
+            Ingen billeder endnu — vær den første til at uploade et.
+          </p>
+        )}
 
       {photos.length > 0 && !albumParam && (
         <div>
@@ -409,42 +490,117 @@ function GalleryPage() {
         </div>
       )}
 
-      {photos.length > 0 && albumParam && (
+      {albumParam && (
         <div>
-          <div className="mb-4 flex flex-col gap-1">
-            <button
-              type="button"
-              onClick={backToAlbums}
-              className="min-h-11 self-start text-sm text-ink-muted underline underline-offset-2"
-            >
-              ← Alle album
-            </button>
-            <h2 className="text-xl font-semibold text-ink">
-              {currentAlbum?.title ?? 'Album'}
-            </h2>
-            <p className="text-sm text-ink-subtle">
-              {currentAlbum === null
-                ? 'Albummet findes ikke længere. Viser det, der ligger i det.'
-                : `${currentAlbum.photoCount === 1 ? '1 billede' : `${currentAlbum.photoCount} billeder`}${
-                    albumDateLabel(currentAlbum)
-                      ? ` · senest ${albumDateLabel(currentAlbum)}`
-                      : ''
-                  }`}
-            </p>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={backToAlbums}
+                className="min-h-11 self-start text-sm text-ink-muted underline underline-offset-2"
+              >
+                ← Alle album
+              </button>
+              <h2 className="text-xl font-semibold text-ink">
+                {currentAlbum?.title ??
+                  (albumParam === WITHOUT_EVENT_ALBUM
+                    ? 'Uden begivenhed'
+                    : 'Album')}
+              </h2>
+              {(currentAlbum !== null || photos.length > 0) && (
+                <p className="text-sm text-ink-subtle">
+                  {currentAlbum === null
+                    ? 'Albummet findes ikke længere. Viser det, der ligger i det.'
+                    : currentAlbum === undefined
+                      ? ''
+                      : `${currentAlbum.photoCount === 1 ? '1 billede' : `${currentAlbum.photoCount} billeder`}${
+                          albumDateLabel(currentAlbum)
+                            ? ` · senest ${albumDateLabel(currentAlbum)}`
+                            : ''
+                        }`}
+                </p>
+              )}
+            </div>
+
+            {canBulkMove && !selecting && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkNotice(null)
+                  setBulkError(null)
+                  setSelectedPhotoIds([])
+                  setBulkEventId('')
+                  setSelecting(true)
+                }}
+                className="min-h-11 rounded-lg border border-accent px-4 py-2 text-sm font-medium text-ink-body"
+              >
+                Flyt flere billeder
+              </button>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-            {photos.map((photo) => (
-              <PhotoThumbnail
-                key={photo.id}
-                photo={photo}
-                onClick={() => {
-                  setActionError(null)
-                  setGalleryParam('photo', photo.id)
-                }}
-              />
-            ))}
-          </div>
+          {bulkNotice && (
+            <p
+              role="status"
+              aria-live="polite"
+              className="mb-4 rounded bg-surface-raised px-4 py-3 text-sm text-ink-body"
+            >
+              {bulkNotice}
+            </p>
+          )}
+
+          {selecting && albumParam === WITHOUT_EVENT_ALBUM && (
+            <BulkMoveBar
+              selectedCount={activeSelectedIds.length}
+              totalSelectableCount={editablePhotos.length}
+              eventId={bulkEventId}
+              moving={movingPhotos}
+              error={bulkError}
+              onEventChange={setBulkEventId}
+              onSelectAll={() =>
+                setSelectedPhotoIds(editablePhotos.map((photo) => photo.id))
+              }
+              onClearSelection={() => setSelectedPhotoIds([])}
+              onCancel={() => {
+                setSelecting(false)
+                setSelectedPhotoIds([])
+                setBulkEventId('')
+                setBulkError(null)
+              }}
+              onSubmit={() => void handleBulkMove()}
+            />
+          )}
+
+          {photosQuery.status !== 'LoadingFirstPage' && photos.length === 0 ? (
+            <p className="rounded bg-surface-sunken p-5 text-ink-muted">
+              Ingen billeder i dette album.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              {photos.map((photo) => (
+                <PhotoThumbnail
+                  key={photo.id}
+                  photo={photo}
+                  selection={
+                    selecting && albumParam === WITHOUT_EVENT_ALBUM
+                      ? {
+                          selected: activeSelectedIds.includes(photo.id),
+                          disabled: !photo.canEdit,
+                        }
+                      : undefined
+                  }
+                  onClick={() => {
+                    if (selecting && albumParam === WITHOUT_EVENT_ALBUM) {
+                      togglePhotoSelection(photo)
+                      return
+                    }
+                    setActionError(null)
+                    setGalleryParam('photo', photo.id)
+                  }}
+                />
+              ))}
+            </div>
+          )}
 
           {photosQuery.status === 'CanLoadMore' && (
             <div className="mt-5 text-center">
@@ -484,7 +640,9 @@ function GalleryPage() {
       {activePhoto !== null && (
         <PhotoLightbox
           photo={activePhoto}
+          albumTitle={activePhotoAlbumTitle}
           onClose={() => setGalleryParam('photo', null)}
+          onEdit={editPhoto}
           onPrevious={previousPhoto ? () => showPhoto(previousPhoto) : null}
           onNext={nextPhoto ? () => showPhoto(nextPhoto) : null}
           positionLabel={positionLabel}

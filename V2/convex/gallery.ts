@@ -63,6 +63,7 @@ const STALE_OPTIMIZATION_MS = 10 * 60 * 1000
 const MAX_CAPTION_LENGTH = 500
 const MAX_COMMENT_LENGTH = 1000
 const MAX_OPTIMIZATION_ERROR_LENGTH = 500
+const MAX_BULK_MOVE = 100
 
 /**
  * Hvor et billede med et `eventId` fra en klient skal ligge: albummets nøgle,
@@ -151,6 +152,7 @@ async function photoView(
   photo: Doc<'photos'>,
   viewer: Doc<'profiles'>,
 ) {
+  const canManage = viewer.isAdmin || photo.uploaderId === viewer._id
   return {
     id: photo._id,
     caption: photo.caption ?? null,
@@ -165,10 +167,11 @@ async function photoView(
     optimizationStartedAt: photo.optimizationStartedAt ?? null,
     optimizationError: photo.optimizationError ?? null,
     commentCount: photo.commentCount,
-    // Slettetilladelsen afgøres her og ikke i klienten: reglen er ejer eller
-    // admin, og klienten skal ikke selv gætte den. Mutationen kontrollerer den
-    // igen -- denne kopi er kun til at vise knappen.
-    canDelete: viewer.isAdmin || photo.uploaderId === viewer._id,
+    // Slette- og redigeringstilladelsen afgøres her og ikke i klienten: reglen
+    // er ejer eller admin, og klienten skal ikke selv gætte den. Mutationerne
+    // kontrollerer den igen -- disse kopier er kun til at vise knapperne.
+    canDelete: canManage,
+    canEdit: canManage,
     isUploader: photo.uploaderId === viewer._id,
     displayUrl: photoFileUrl(photo.displayToken),
     thumbnailUrl: photoFileUrl(photo.thumbnailToken ?? photo.displayToken),
@@ -352,12 +355,17 @@ export const listMyOptimizationQueue = query({
 async function addPhotoToAlbum(
   ctx: MutationCtx,
   photo: {
+    photoId?: Id<'photos'>
     albumKey: string
     eventId: string | undefined
     eventTitle: string | undefined
     createdAt: number
+    ready?: boolean
+    thumbnailStorageId?: Id<'_storage'>
+    optimizedStorageId?: Id<'_storage'>
   },
 ) {
+  const canBeCover = photo.ready === true && photo.photoId !== undefined
   const album = await albumByKey(ctx, photo.albumKey)
   if (album === null) {
     await ctx.db.insert('photoAlbums', {
@@ -366,8 +374,31 @@ async function addPhotoToAlbum(
       title: photo.eventTitle,
       photoCount: 1,
       latestPhotoAt: photo.createdAt,
+      ...(canBeCover
+        ? {
+            coverPhotoId: photo.photoId,
+            coverThumbnailStorageId: photo.thumbnailStorageId,
+            coverOptimizedStorageId: photo.optimizedStorageId,
+            coverCreatedAt: photo.createdAt,
+          }
+        : {}),
     })
     return
+  }
+
+  let shouldUpdateCover = false
+  if (canBeCover) {
+    if (album.coverPhotoId === undefined) {
+      shouldUpdateCover = true
+    } else {
+      // V1-migrerede album fra `migrateV1.ts` kan have `coverPhotoId` uden `coverCreatedAt`.
+      const existingCoverCreatedAt =
+        album.coverCreatedAt ??
+        (await ctx.db.get(album.coverPhotoId))?.createdAt
+      shouldUpdateCover =
+        existingCoverCreatedAt === undefined ||
+        existingCoverCreatedAt <= photo.createdAt
+    }
   }
 
   await ctx.db.patch(album._id, {
@@ -380,10 +411,21 @@ async function addPhotoToAlbum(
     // værn. Er der ingen begivenhed at læse den af, bliver titlen stående.
     title: photo.eventTitle ?? album.title,
     eventId: album.eventId ?? photo.eventId,
+    ...(shouldUpdateCover
+      ? {
+          coverPhotoId: photo.photoId,
+          coverThumbnailStorageId: photo.thumbnailStorageId,
+          coverOptimizedStorageId: photo.optimizedStorageId,
+          coverCreatedAt: photo.createdAt,
+        }
+      : {}),
   })
 }
 
-async function removePhotoFromAlbum(ctx: MutationCtx, photo: Doc<'photos'>) {
+async function removePhotoFromAlbum(
+  ctx: MutationCtx,
+  photo: Pick<Doc<'photos'>, '_id' | 'albumKey' | 'createdAt'>,
+) {
   const album = await albumByKey(ctx, photo.albumKey)
   if (album === null) return
 
@@ -397,22 +439,43 @@ async function removePhotoFromAlbum(ctx: MutationCtx, photo: Doc<'photos'>) {
   }
 
   const coverBelongsToPhoto = album.coverPhotoId === photo._id
-  const nextCover = coverBelongsToPhoto
-    ? await ctx.db
-        .query('photos')
-        .withIndex('by_album', (q) => q.eq('albumKey', photo.albumKey))
-        .order('desc')
-        .filter((q) =>
-          q.and(
-            q.eq(q.field('optimizationStatus'), 'ready'),
-            q.neq(q.field('_id'), photo._id),
-          ),
-        )
-        .first()
-    : null
+  const nextCover =
+    coverBelongsToPhoto && photoCount > 0
+      ? await ctx.db
+          .query('photos')
+          .withIndex('by_album', (q) => q.eq('albumKey', photo.albumKey))
+          .order('desc')
+          .filter((q) =>
+            q.and(
+              q.eq(q.field('optimizationStatus'), 'ready'),
+              q.neq(q.field('_id'), photo._id),
+            ),
+          )
+          .first()
+      : null
+
+  const latestNeedsRefresh =
+    photoCount === 0 ||
+    album.latestPhotoAt === undefined ||
+    album.latestPhotoAt <= photo.createdAt
+  const nextLatest =
+    photoCount > 0 && latestNeedsRefresh
+      ? await ctx.db
+          .query('photos')
+          .withIndex('by_album', (q) => q.eq('albumKey', photo.albumKey))
+          .order('desc')
+          .filter((q) => q.neq(q.field('_id'), photo._id))
+          .first()
+      : null
 
   await ctx.db.patch(album._id, {
     photoCount,
+    latestPhotoAt:
+      photoCount === 0
+        ? undefined
+        : latestNeedsRefresh
+          ? nextLatest?.createdAt
+          : album.latestPhotoAt,
     coverPhotoId: coverBelongsToPhoto ? nextCover?._id : album.coverPhotoId,
     coverThumbnailStorageId: coverBelongsToPhoto
       ? nextCover?.thumbnailStorageId
@@ -424,6 +487,42 @@ async function removePhotoFromAlbum(ctx: MutationCtx, photo: Doc<'photos'>) {
       ? nextCover?.createdAt
       : album.coverCreatedAt,
   })
+}
+
+type AlbumTarget = Awaited<ReturnType<typeof albumTargetFor>>
+
+async function movePhotoToAlbumTarget(
+  ctx: MutationCtx,
+  photo: Doc<'photos'>,
+  target: AlbumTarget,
+  extraPatch?: { caption?: string | undefined },
+) {
+  if (target.albumKey === photo.albumKey) {
+    if (extraPatch !== undefined) {
+      await ctx.db.patch(photo._id, extraPatch)
+    }
+    return false
+  }
+
+  // Opdater billedet før albummerne, så `by_album`-opslag i
+  // `removePhotoFromAlbum` straks ser den nye tilhørighed.
+  await ctx.db.patch(photo._id, {
+    albumKey: target.albumKey,
+    eventId: target.eventId,
+    ...extraPatch,
+  })
+  await removePhotoFromAlbum(ctx, photo)
+  await addPhotoToAlbum(ctx, {
+    photoId: photo._id,
+    albumKey: target.albumKey,
+    eventId: target.eventId,
+    eventTitle: target.event?.title,
+    createdAt: photo.createdAt,
+    ready: photo.optimizationStatus === 'ready',
+    thumbnailStorageId: photo.thumbnailStorageId,
+    optimizedStorageId: photo.optimizedStorageId,
+  })
+  return true
 }
 
 /**
@@ -563,25 +662,132 @@ export const createPhoto = mutation({
     })
 
     await addPhotoToAlbum(ctx, {
+      photoId,
       albumKey,
       eventId,
       eventTitle: target.event?.title,
       createdAt: now,
+      ready,
+      thumbnailStorageId,
+      optimizedStorageId: ready ? args.storageId : undefined,
     })
 
-    if (ready) {
-      const album = await albumByKey(ctx, albumKey)
-      if (album !== null) {
-        await ctx.db.patch(album._id, {
-          coverPhotoId: photoId,
-          coverThumbnailStorageId: thumbnailStorageId,
-          coverOptimizedStorageId: args.storageId,
-          coverCreatedAt: now,
-        })
+    return photoId
+  },
+})
+
+/**
+ * Retter billedtekst og/eller knytter et billede til en anden begivenhed.
+ * Ejeren selv eller en admin må rette.
+ */
+export const updatePhoto = mutation({
+  args: {
+    photoId: v.id('photos'),
+    caption: v.optional(v.union(v.string(), v.null())),
+    eventId: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireWritableProfile(ctx)
+
+    const photo = await ctx.db.get(args.photoId)
+    if (photo === null) {
+      throw new ConvexError('PHOTO_NOT_FOUND')
+    }
+    if (photo.uploaderId !== profile._id && !profile.isAdmin) {
+      throw new ConvexError('NOT_PHOTO_OWNER')
+    }
+
+    let nextCaption = photo.caption
+    const hasCaptionUpdate = args.caption !== undefined
+    if (args.caption !== undefined) {
+      nextCaption =
+        args.caption === null ? undefined : trimmedOrUndefined(args.caption)
+      if (
+        nextCaption !== undefined &&
+        nextCaption.length > MAX_CAPTION_LENGTH
+      ) {
+        throw new ConvexError('PHOTO_CAPTION_TOO_LONG')
       }
     }
 
-    return photoId
+    const extraPatch = hasCaptionUpdate ? { caption: nextCaption } : undefined
+    let finalAlbumKey = photo.albumKey
+    let finalEventId = photo.eventId
+
+    if (args.eventId !== undefined) {
+      const requestedEventId =
+        args.eventId === null ? undefined : trimmedOrUndefined(args.eventId)
+      if (requestedEventId !== photo.eventId) {
+        const target = await albumTargetFor(ctx, requestedEventId)
+        if (requestedEventId !== undefined && target.eventId === undefined) {
+          throw new ConvexError('PHOTO_EVENT_NOT_FOUND')
+        }
+        await movePhotoToAlbumTarget(ctx, photo, target, extraPatch)
+        finalAlbumKey = target.albumKey
+        finalEventId = target.eventId
+      } else if (extraPatch !== undefined) {
+        await ctx.db.patch(photo._id, extraPatch)
+      }
+    } else if (extraPatch !== undefined) {
+      await ctx.db.patch(photo._id, extraPatch)
+    }
+
+    return {
+      id: photo._id,
+      caption: nextCaption ?? null,
+      albumKey: finalAlbumKey,
+      eventId: finalEventId ?? null,
+    }
+  },
+})
+
+/**
+ * Flytter flere billeder til én begivenhed (eller til "Uden begivenhed" med
+ * `eventId: null`) i én atomisk mutation. Kun uploaderen eller en admin.
+ */
+export const movePhotos = mutation({
+  args: {
+    photoIds: v.array(v.id('photos')),
+    eventId: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireWritableProfile(ctx)
+
+    const uniqueIds = [...new Set(args.photoIds)]
+    if (uniqueIds.length > MAX_BULK_MOVE) {
+      throw new ConvexError('TOO_MANY_PHOTOS')
+    }
+
+    const requestedEventId =
+      args.eventId === null ? undefined : trimmedOrUndefined(args.eventId)
+    const target = await albumTargetFor(ctx, requestedEventId)
+    if (requestedEventId !== undefined && target.eventId === undefined) {
+      throw new ConvexError('PHOTO_EVENT_NOT_FOUND')
+    }
+
+    const photos: Doc<'photos'>[] = []
+    for (const photoId of uniqueIds) {
+      const photo = await ctx.db.get(photoId)
+      if (photo === null) {
+        throw new ConvexError('PHOTO_NOT_FOUND')
+      }
+      if (photo.uploaderId !== profile._id && !profile.isAdmin) {
+        throw new ConvexError('NOT_PHOTO_OWNER')
+      }
+      photos.push(photo)
+    }
+
+    let movedCount = 0
+    for (const photo of photos) {
+      const moved = await movePhotoToAlbumTarget(ctx, photo, target)
+      if (moved) movedCount += 1
+    }
+
+    return {
+      movedCount,
+      albumKey: target.albumKey,
+      eventId: target.eventId ?? null,
+    }
   },
 })
 

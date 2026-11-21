@@ -12,10 +12,14 @@ interface EventPickerProps {
    */
   valueTitle?: string
   onChange: (eventId: string) => void
+  label?: string
+  emptyLabel?: string
+  hideWhenEmpty?: boolean
+  tone?: 'default' | 'inverse'
 }
 
 /**
- * Det valgfrie "Knyt til begivenhed"-felt i upload-formularen.
+ * Det valgfrie "Knyt til begivenhed"-felt i upload-, redigerings- og flyt-formularer.
  *
  * Feltet ligger i sin egen komponent, fordi Convex' `useQuery` kaster, når
  * funktionen fejler: står kaldet i `GalleryPage`, river en fejl hele siden med
@@ -27,10 +31,25 @@ interface EventPickerProps {
  * som regel efter turen -- og datoen står ved titlen, så to ture med samme
  * navn kan skelnes.
  */
-export function EventPicker({ value, valueTitle, onChange }: EventPickerProps) {
+export function EventPicker({
+  value,
+  valueTitle,
+  onChange,
+  label = 'Knyt til begivenhed (valgfri)',
+  emptyLabel = 'Ingen',
+  hideWhenEmpty = true,
+  tone = 'default',
+}: EventPickerProps) {
   const events = useQuery(api.calendar.eventOptions, {})
 
-  if (events !== undefined && events.length === 0 && value === '') return null
+  if (
+    hideWhenEmpty &&
+    events !== undefined &&
+    events.length === 0 &&
+    value === ''
+  ) {
+    return null
+  }
 
   // Feltet er brugbart, mens listen hentes: en `disabled` select er ude af
   // tab-rækkefølgen, så en skærmlæser møder den slet ikke -- og der kommer
@@ -39,16 +58,25 @@ export function EventPicker({ value, valueTitle, onChange }: EventPickerProps) {
   const valueIsListed =
     value === '' || options.some((event) => event.id === value)
 
+  const labelClass =
+    tone === 'inverse'
+      ? 'flex flex-col gap-1 text-sm text-white'
+      : 'flex flex-col gap-1 text-sm text-ink-body'
+  const selectClass =
+    tone === 'inverse'
+      ? 'min-h-11 rounded border border-white/40 bg-surface px-3 py-2 text-base text-ink'
+      : 'min-h-11 rounded border border-line-strong bg-surface px-3 py-2 text-base'
+
   return (
-    <label className="flex flex-col gap-1 text-sm text-ink-body">
-      Knyt til begivenhed (valgfri)
+    <label className={labelClass}>
+      {label}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
         aria-busy={events === undefined}
-        className="min-h-11 rounded border border-line-strong bg-surface px-3 py-2 text-base"
+        className={selectClass}
       >
-        <option value="">Ingen</option>
+        <option value="">{emptyLabel}</option>
         {!valueIsListed && (
           <option value={value}>{valueTitle ?? 'Denne begivenhed'}</option>
         )}

@@ -24,6 +24,8 @@ export interface Photo {
   commentCount: number
   /** Sat af serveren: ejer eller admin. */
   canDelete: boolean
+  /** Sat af serveren: ejer eller admin. */
+  canEdit: boolean
   /** Sat af serveren: er den indloggede bruger uploader. */
   isUploader: boolean
   displayUrl: string | null

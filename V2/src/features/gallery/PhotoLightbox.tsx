@@ -1,4 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { AppErrorBoundary } from '../../components/AppErrorBoundary'
+import { EventPicker } from './EventPicker'
+import { galleryErrorMessage } from './galleryErrors'
 import {
   canRetryOptimization,
   optimizationStatusLabel,
@@ -7,21 +10,27 @@ import { PhotoComments } from './PhotoComments'
 import type { Photo } from './types'
 
 /**
- * Lysbordet: ét billede i fuld størrelse, bladring, status, sletning og
- * kommentarer. Porteret fra `src/features/gallery/PhotoLightbox.tsx`.
+ * Lysbordet: ét billede i fuld størrelse, bladring, redigering, status,
+ * sletning og kommentarer. Porteret fra `src/features/gallery/PhotoLightbox.tsx`.
  *
  * Lysbordet bruger med vilje ikke tema-variablerne: det ligger på en mørk
  * baggrund, fordi et billede skal ses mod noget neutralt. Hvide knapper og lys
  * tekst er derfor rigtige i begge temaer.
  *
- * Slet- og "prøv igen"-knapperne styres af felter, serveren har sat
- * (`canDelete`, `isUploader`), ikke af klientens eget gæt.
+ * Rediger-, slet- og "prøv igen"-knapperne styres af felter, serveren har sat
+ * (`canEdit`, `canDelete`, `isUploader`), ikke af klientens eget gæt.
  */
 const SWIPE_THRESHOLD_PX = 50
+const MAX_CAPTION_LENGTH = 500
 
 interface PhotoLightboxProps {
   photo: Photo
+  albumTitle?: string | null
   onClose: () => void
+  onEdit?: (
+    photo: Photo,
+    changes: { caption: string | null; eventId: string | null },
+  ) => Promise<void>
   onDelete: (photo: Photo) => void
   onRevoke?: (photo: Photo) => void
   onRetryOptimization: (photo: Photo) => void
@@ -36,7 +45,9 @@ interface PhotoLightboxProps {
 
 export function PhotoLightbox({
   photo,
+  albumTitle = null,
   onClose,
+  onEdit,
   onDelete,
   onRevoke,
   onRetryOptimization,
@@ -49,8 +60,20 @@ export function PhotoLightbox({
   positionLabel = null,
 }: PhotoLightboxProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const editButtonRef = useRef<HTMLButtonElement>(null)
+  const captionInputRef = useRef<HTMLInputElement>(null)
+  const prevEditingPhotoRef = useRef<string | null>(null)
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const swipedRef = useRef(false)
+
+  const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null)
+  const [captionDraft, setCaptionDraft] = useState('')
+  const [eventDraft, setEventDraft] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+
+  const editing =
+    editingPhotoId === photo.id && photo.canEdit && onEdit !== undefined
   const statusLabel = optimizationStatusLabel(photo)
   const canRetry = canRetryOptimization(photo)
 
@@ -59,12 +82,32 @@ export function PhotoLightbox({
   }, [])
 
   useEffect(() => {
+    if (editing) {
+      prevEditingPhotoRef.current = photo.id
+      captionInputRef.current?.focus()
+      return
+    }
+    if (prevEditingPhotoRef.current === photo.id) {
+      prevEditingPhotoRef.current = null
+      editButtonRef.current?.focus()
+    } else {
+      prevEditingPhotoRef.current = null
+    }
+  }, [editing, photo.id])
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault()
-        onClose()
+        if (editing) {
+          setEditingPhotoId(null)
+          setEditError(null)
+        } else {
+          onClose()
+        }
         return
       }
+      if (editing) return
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
         return
@@ -87,7 +130,40 @@ export function PhotoLightbox({
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, onNext, onPrevious])
+  }, [editing, onClose, onNext, onPrevious])
+
+  function openEdit() {
+    setCaptionDraft(photo.caption ?? '')
+    setEventDraft(photo.eventId ?? '')
+    setEditError(null)
+    setSavingEdit(false)
+    setEditingPhotoId(photo.id)
+  }
+
+  function cancelEdit() {
+    setEditingPhotoId(null)
+    setEditError(null)
+  }
+
+  async function handleSaveEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!onEdit || savingEdit) return
+    setEditError(null)
+    setSavingEdit(true)
+    try {
+      await onEdit(photo, {
+        caption: captionDraft.trim() || null,
+        eventId: eventDraft.trim() || null,
+      })
+      setEditingPhotoId(null)
+    } catch (error) {
+      setEditError(
+        galleryErrorMessage(error, 'Billedet kunne ikke gemmes. Prøv igen.'),
+      )
+    } finally {
+      setSavingEdit(false)
+    }
+  }
 
   return (
     <div
@@ -112,6 +188,7 @@ export function PhotoLightbox({
       onTouchEnd={(event) => {
         const start = touchStartRef.current
         touchStartRef.current = null
+        if (editing) return
         const touch = event.changedTouches[0]
         if (!start || !touch) return
         const deltaX = touch.clientX - start.x
@@ -125,7 +202,7 @@ export function PhotoLightbox({
         swipedRef.current = true
         browse()
       }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 overflow-y-auto bg-black/90 p-4"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-start gap-4 overflow-y-auto bg-black/90 px-4 pt-14 pb-8 sm:justify-center sm:pt-4"
     >
       <div className="absolute top-4 right-4 z-10 flex items-center gap-1">
         <button
@@ -139,7 +216,7 @@ export function PhotoLightbox({
         </button>
       </div>
 
-      {(onPrevious || onNext) && (
+      {(onPrevious || onNext) && !editing && (
         <>
           <button
             type="button"
@@ -178,11 +255,13 @@ export function PhotoLightbox({
           src={photo.displayUrl}
           alt={photo.caption ?? ''}
           onClick={(event) => event.stopPropagation()}
-          className="max-h-[70vh] max-w-full rounded object-contain"
+          className={`${
+            editing ? 'max-h-[40vh]' : 'max-h-[70vh]'
+          } max-w-full rounded object-contain`}
         />
       )}
 
-      {photo.caption && (
+      {!editing && photo.caption && (
         <p className="max-w-prose text-center text-white">{photo.caption}</p>
       )}
 
@@ -200,53 +279,139 @@ export function PhotoLightbox({
             : ''}
         </p>
       )}
-      {actionError && (
+      {actionError && !editing && (
         <p role="alert" className="text-sm text-red-200">
           {actionError}
         </p>
       )}
 
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        {canRetry && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              onRetryOptimization(photo)
-            }}
-            disabled={retrying}
-            className="min-h-11 rounded bg-white px-4 py-2 text-green-900 disabled:opacity-60"
+      {editing && (
+        <form
+          onSubmit={(event) => void handleSaveEdit(event)}
+          onClick={(event) => event.stopPropagation()}
+          aria-label="Redigér billede"
+          className="flex w-full max-w-prose flex-col gap-3 rounded-lg border border-white/25 bg-black/70 p-4 text-left text-white"
+        >
+          <label className="flex flex-col gap-1 text-sm text-white">
+            Billedtekst
+            <input
+              ref={captionInputRef}
+              type="text"
+              value={captionDraft}
+              maxLength={MAX_CAPTION_LENGTH}
+              onChange={(event) => setCaptionDraft(event.target.value)}
+              className="min-h-11 rounded border border-white/40 bg-surface px-3 py-2 text-base text-ink"
+            />
+          </label>
+
+          <AppErrorBoundary
+            fallback={(retry) => (
+              <p role="alert" className="text-sm text-red-200">
+                Listen over begivenheder kunne ikke hentes. Du kan stadig rette
+                billedteksten.{' '}
+                <button
+                  type="button"
+                  onClick={retry}
+                  className="min-h-11 underline"
+                >
+                  Prøv igen
+                </button>
+              </p>
+            )}
           >
-            {retrying ? 'Starter igen…' : 'Prøv optimering igen'}
-          </button>
-        )}
-        {photo.canDelete && onRevoke && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              onRevoke(photo)
-            }}
-            disabled={revoking}
-            className="min-h-11 rounded bg-white px-4 py-2 text-ink disabled:opacity-60"
-          >
-            {revoking ? 'Trækker tilbage…' : 'Træk link tilbage'}
-          </button>
-        )}
-        {photo.canDelete && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              onDelete(photo)
-            }}
-            disabled={deleting}
-            className="min-h-11 rounded bg-red-700 px-4 py-2 text-white disabled:opacity-60"
-          >
-            {deleting ? 'Sletter…' : 'Slet billede'}
-          </button>
-        )}
-      </div>
+            <EventPicker
+              value={eventDraft}
+              valueTitle={albumTitle ?? undefined}
+              onChange={setEventDraft}
+              label="Begivenhed"
+              emptyLabel="Ingen begivenhed"
+              hideWhenEmpty={false}
+              tone="inverse"
+            />
+          </AppErrorBoundary>
+
+          {editError && (
+            <p role="alert" className="text-sm text-red-200">
+              {editError}
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={savingEdit}
+              className="min-h-11 rounded bg-white px-4 py-2 font-medium text-green-900 disabled:opacity-60"
+            >
+              {savingEdit ? 'Gemmer…' : 'Gem'}
+            </button>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={savingEdit}
+              className="min-h-11 rounded border border-white/50 px-4 py-2 text-white disabled:opacity-60"
+            >
+              Annullér
+            </button>
+          </div>
+        </form>
+      )}
+
+      {!editing && (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {photo.canEdit && onEdit && (
+            <button
+              ref={editButtonRef}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                openEdit()
+              }}
+              className="min-h-11 rounded bg-white px-4 py-2 text-green-900"
+            >
+              Redigér
+            </button>
+          )}
+          {canRetry && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onRetryOptimization(photo)
+              }}
+              disabled={retrying}
+              className="min-h-11 rounded bg-white px-4 py-2 text-green-900 disabled:opacity-60"
+            >
+              {retrying ? 'Starter igen…' : 'Prøv optimering igen'}
+            </button>
+          )}
+          {photo.canDelete && onRevoke && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onRevoke(photo)
+              }}
+              disabled={revoking}
+              className="min-h-11 rounded bg-white px-4 py-2 text-ink disabled:opacity-60"
+            >
+              {revoking ? 'Trækker tilbage…' : 'Træk link tilbage'}
+            </button>
+          )}
+          {photo.canDelete && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onDelete(photo)
+              }}
+              disabled={deleting}
+              className="min-h-11 rounded bg-red-700 px-4 py-2 text-white disabled:opacity-60"
+            >
+              {deleting ? 'Sletter…' : 'Slet billede'}
+            </button>
+          )}
+        </div>
+      )}
 
       <PhotoComments photoId={photo.id} />
     </div>
