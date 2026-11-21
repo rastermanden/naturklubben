@@ -1,3 +1,4 @@
+import { BadgeUserFacingError } from './badgeErrors'
 import { badgePrintGeometry } from './badgePrint'
 
 type Drawable = {
@@ -34,7 +35,7 @@ async function encodePng(
     canvas.toBlob((result) => resolve(result), 'image/png')
   })
   if (blob === null) {
-    throw new Error('Trykfilen kunne ikke gemmes som PNG.')
+    throw new BadgeUserFacingError('Trykfilen kunne ikke gemmes som PNG.')
   }
   return blob
 }
@@ -61,7 +62,7 @@ export async function renderBadgePrintFile(
     })
 
     if (geometry.regionWidth < 1 || geometry.regionHeight < 1) {
-      throw new Error(
+      throw new BadgeUserFacingError(
         'Beskæringen ligger uden for billedet. Vælg udsnittet igen.',
       )
     }
@@ -70,7 +71,7 @@ export async function renderBadgePrintFile(
     const context = canvas.getContext('2d') as
       CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
     if (context === null) {
-      throw new Error('Trykfilen kunne ikke tegnes i browseren.')
+      throw new BadgeUserFacingError('Trykfilen kunne ikke tegnes i browseren.')
     }
 
     context.fillStyle = '#ffffff'

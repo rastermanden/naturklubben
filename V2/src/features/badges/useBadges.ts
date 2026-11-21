@@ -3,6 +3,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
 import { errorCode } from '../auth/authErrors'
+import { BadgeUserFacingError } from './badgeErrors'
 import { renderBadgePrintFile } from './renderBadgePrint'
 import type {
   AdminBadge,
@@ -11,6 +12,8 @@ import type {
   CatalogBadge,
 } from './types'
 
+export { BadgeUserFacingError }
+
 export const MAX_BADGE_IMAGE_SIZE = 10 * 1024 * 1024
 
 export const BADGE_IMAGE_MIME_TYPES = [
@@ -18,18 +21,6 @@ export const BADGE_IMAGE_MIME_TYPES = [
   'image/jpeg',
   'image/webp',
 ] as const
-
-/**
- * En fejl, hvis besked allerede er skrevet til et menneske -- så
- * `badgeErrorMessage` lader den gå igennem uændret i stedet for at pakke den
- * ind i en generisk fejltekst.
- */
-export class BadgeUserFacingError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'BadgeUserFacingError'
-  }
-}
 
 export interface BadgeImageUpload {
   file: File

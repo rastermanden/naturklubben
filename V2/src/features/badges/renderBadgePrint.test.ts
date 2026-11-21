@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('convex/react', () => ({
+  useMutation: () => vi.fn(),
+  useQuery: () => undefined,
+}))
+
 import { badgePrintGeometry } from './badgePrint'
+import { BadgeUserFacingError } from './badgeErrors'
 import { renderBadgePrintFile } from './renderBadgePrint'
+import { badgeErrorMessage } from './useBadges'
 
 describe('badgePrintGeometry', () => {
   it('beregner trykfilens mål og skæreradius for 58 mm + 5 mm bleed', () => {
@@ -99,6 +107,72 @@ describe('renderBadgePrintFile', () => {
       expect(drawCalls).toHaveLength(2)
       expect(arcCalls).toBe(2)
       expect(closed).toBe(true)
+    } finally {
+      globalThis.OffscreenCanvas = original
+    }
+  })
+
+  it('kaster BadgeUserFacingError når beskæringen ligger uden for billedet så badgeErrorMessage bevarer teksten', async () => {
+    let caught: unknown
+    try {
+      await renderBadgePrintFile(
+        new Blob(['src'], { type: 'image/png' }),
+        {
+          cropX: 2000,
+          cropY: 0,
+          cropSize: 200,
+          diameterMm: 58,
+          bleedMm: 5,
+        },
+        async () => ({
+          width: 1000,
+          height: 1000,
+        }),
+      )
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(BadgeUserFacingError)
+    expect(badgeErrorMessage(caught)).toBe(
+      'Beskæringen ligger uden for billedet. Vælg udsnittet igen.',
+    )
+  })
+
+  it('kaster BadgeUserFacingError når 2D-kontekst mangler', async () => {
+    const original = globalThis.OffscreenCanvas
+    class BrokenCanvas {
+      getContext() {
+        return null
+      }
+    }
+    globalThis.OffscreenCanvas =
+      BrokenCanvas as unknown as typeof OffscreenCanvas
+    try {
+      let caught: unknown
+      try {
+        await renderBadgePrintFile(
+          new Blob(['src'], { type: 'image/png' }),
+          {
+            cropX: 0,
+            cropY: 0,
+            cropSize: 1000,
+            diameterMm: 58,
+            bleedMm: 5,
+          },
+          async () => ({
+            width: 1000,
+            height: 1000,
+          }),
+        )
+      } catch (error) {
+        caught = error
+      }
+
+      expect(caught).toBeInstanceOf(BadgeUserFacingError)
+      expect(badgeErrorMessage(caught)).toBe(
+        'Trykfilen kunne ikke tegnes i browseren.',
+      )
     } finally {
       globalThis.OffscreenCanvas = original
     }

@@ -124,14 +124,16 @@ function validatePhysical(diameterMm: number, bleedMm: number) {
 async function validateStoredBadgeImage(
   ctx: MutationCtx,
   storageId: Id<'_storage'>,
+  expectedMimeType: 'image/png' | 'image/jpeg' | 'image/webp',
 ) {
   const metadata = await ctx.db.system.get(storageId)
   if (metadata === null) {
     throw new ConvexError('BADGE_IMAGE_NOT_FOUND')
   }
   if (
-    metadata.contentType !== undefined &&
-    !ALLOWED_BADGE_MIME_TYPES.has(metadata.contentType)
+    metadata.contentType === undefined ||
+    !ALLOWED_BADGE_MIME_TYPES.has(metadata.contentType) ||
+    metadata.contentType !== expectedMimeType
   ) {
     throw new ConvexError('BADGE_IMAGE_TYPE_INVALID')
   }
@@ -239,6 +241,8 @@ async function enrichMemberBadges(
 
       return {
         ...row,
+        badgeName: badge?.name ?? row.badgeName,
+        badgeSlug: badge?.slug ?? row.badgeSlug,
         badgeDescription: badge?.description,
         imageUrl,
         imageWidth: badge?.imageWidth ?? 1,
@@ -277,7 +281,7 @@ export const allMemberBadges = query({
   handler: async (ctx) => {
     await requireProfile(ctx)
 
-    const awarded = await ctx.db.query('memberBadges').take(500)
+    const awarded = await ctx.db.query('memberBadges').order('desc').take(500)
     awarded.sort((a, b) => b.awardedAt - a.awardedAt)
     return await enrichMemberBadges(ctx, awarded)
   },
@@ -416,7 +420,7 @@ export const createBadge = mutation({
     if (args.description !== undefined && args.description.length > 2000) {
       throw new ConvexError('BADGE_DESCRIPTION_TOO_LONG')
     }
-    await validateStoredBadgeImage(ctx, args.imageStorageId)
+    await validateStoredBadgeImage(ctx, args.imageStorageId, args.imageMimeType)
     validateCrop(
       args.imageWidth,
       args.imageHeight,
@@ -516,8 +520,24 @@ export const updateBadge = mutation({
         throw new ConvexError('BADGE_IMAGE_INCOMPLETE')
       }
       if (args.imageStorageId !== badge.imageStorageId) {
-        await validateStoredBadgeImage(ctx, args.imageStorageId)
+        await validateStoredBadgeImage(
+          ctx,
+          args.imageStorageId,
+          args.imageMimeType,
+        )
       }
+    }
+    if (
+      args.imageMimeType !== undefined &&
+      args.imageMimeType !== badge.imageMimeType &&
+      (args.imageStorageId === undefined ||
+        args.imageStorageId === badge.imageStorageId)
+    ) {
+      await validateStoredBadgeImage(
+        ctx,
+        badge.imageStorageId,
+        args.imageMimeType,
+      )
     }
 
     const imageStorageId = args.imageStorageId ?? badge.imageStorageId
@@ -1043,10 +1063,7 @@ export const finishPrintRender = mutation({
         })
         return { status: 'failed' as const, error, printUrl: null }
       }
-      if (
-        metadata.contentType !== undefined &&
-        metadata.contentType !== 'image/png'
-      ) {
+      if (metadata.contentType !== 'image/png') {
         if (
           args.printStorageId !== badge.imageStorageId &&
           args.printStorageId !== badge.printStorageId

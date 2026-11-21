@@ -168,6 +168,45 @@ describe('badges.createBadge og updateBadge', () => {
         }),
     ).rejects.toThrow('BADGE_IMAGE_TOO_LARGE')
 
+    const missingType = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(['png'], { type: 'image/png' })),
+    )
+    await expect(
+      t
+        .withIdentity({ subject: users.admin.userId })
+        .mutation(api.badges.createBadge, {
+          slug: 'skovmaerke',
+          name: 'Skovmærke',
+          imageStorageId: missingType,
+          imageWidth: 1200,
+          imageHeight: 1200,
+          imageMimeType: 'image/png',
+          cropX: 0,
+          cropY: 0,
+          cropSize: 1200,
+          diameterMm: 58,
+          bleedMm: 5,
+        }),
+    ).rejects.toThrow('BADGE_IMAGE_TYPE_INVALID')
+
+    await expect(
+      t
+        .withIdentity({ subject: users.admin.userId })
+        .mutation(api.badges.createBadge, {
+          slug: 'skovmaerke',
+          name: 'Skovmærke',
+          imageStorageId: validImage,
+          imageWidth: 1200,
+          imageHeight: 1200,
+          imageMimeType: 'image/jpeg',
+          cropX: 0,
+          cropY: 0,
+          cropSize: 1200,
+          diameterMm: 58,
+          bleedMm: 5,
+        }),
+    ).rejects.toThrow('BADGE_IMAGE_TYPE_INVALID')
+
     const asAdmin = t.withIdentity({ subject: users.admin.userId })
     const badgeId = await asAdmin.mutation(api.badges.createBadge, {
       slug: 'skovmaerke',
@@ -223,6 +262,32 @@ describe('badges.createBadge og updateBadge', () => {
     expect(afterToggle.badge?.isActive).toBe(true)
     expect(afterToggle.badge?.printStatus).toBe('ready')
     expect(afterToggle.printUrl).not.toBeNull()
+
+    // Udskiftning af billede med manglende eller uens contentType afvises.
+    await expect(
+      asAdmin.mutation(api.badges.updateBadge, {
+        badgeId,
+        imageStorageId: missingType,
+        imageWidth: 1500,
+        imageHeight: 1500,
+        imageMimeType: 'image/png',
+      }),
+    ).rejects.toThrow('BADGE_IMAGE_TYPE_INVALID')
+
+    const replacementPng = await storeTyped(
+      t,
+      new Blob(['png'], { type: 'image/png' }),
+      'image/png',
+    )
+    await expect(
+      asAdmin.mutation(api.badges.updateBadge, {
+        badgeId,
+        imageStorageId: replacementPng,
+        imageWidth: 1500,
+        imageHeight: 1500,
+        imageMimeType: 'image/webp',
+      }),
+    ).rejects.toThrow('BADGE_IMAGE_TYPE_INVALID')
 
     // Udskiftning af billede nulstiller trykfil og sletter både gammelt billede og gammel trykfil.
     const nextImage = await storeTyped(
@@ -351,6 +416,35 @@ describe('badges.startPrintRender og finishPrintRender', () => {
       expect(badPrintUrl).toBeNull()
       const failedBadge = await t.run(async (ctx) => ctx.db.get(badgeId))
       expect(failedBadge?.printStatus).toBe('failed')
+
+      // Manglende contentType afvises også i finishPrintRender, slettes og sætter failed.
+      const reClaim = await asAdmin.mutation(api.badges.startPrintRender, {
+        badgeId,
+      })
+      if (reClaim.status !== 'claimed') throw new Error('Forventede re-claim')
+      const untypedPrint = await t.run(async (ctx) =>
+        ctx.storage.store(new Blob(['png'], { type: 'image/png' })),
+      )
+      const missingPrintType = await asAdmin.mutation(
+        api.badges.finishPrintRender,
+        {
+          badgeId,
+          expectedAttempt: reClaim.attempt,
+          succeeded: true,
+          printStorageId: untypedPrint,
+        },
+      )
+      expect(missingPrintType).toEqual({
+        status: 'failed',
+        error: 'Trykfilen skal være en PNG-fil.',
+        printUrl: null,
+      })
+      const deletedUntyped = await t.run(async (ctx) =>
+        ctx.storage.getUrl(untypedPrint),
+      )
+      expect(deletedUntyped).toBeNull()
+      const failedAfterMissing = await t.run(async (ctx) => ctx.db.get(badgeId))
+      expect(failedAfterMissing?.printStatus).toBe('failed')
     } finally {
       vi.useRealTimers()
     }
@@ -473,5 +567,102 @@ describe('badges.nominate og allMemberBadges', () => {
       cropSize: 1200,
     })
     expect(awarded[0]?.imageUrl).toBeTruthy()
+
+    // Omdøbning i kataloget slår igennem i allMemberBadges, memberBadgesFor og myBadges.
+    await asAdmin.mutation(api.badges.updateBadge, {
+      badgeId,
+      name: 'Nyt Turmærke',
+      slug: 'nyt-turmaerke',
+    })
+
+    const [allAfterRename, forAdminAfterRename, myAfterRename] =
+      await Promise.all([
+        asMember.query(api.badges.allMemberBadges, {}),
+        asMember.query(api.badges.memberBadgesFor, {
+          profileId: users.admin.profileId,
+        }),
+        asAdmin.query(api.badges.myBadges, {}),
+      ])
+    expect(allAfterRename[0]).toMatchObject({
+      badgeName: 'Nyt Turmærke',
+      badgeSlug: 'nyt-turmaerke',
+    })
+    expect(forAdminAfterRename[0]).toMatchObject({
+      badgeName: 'Nyt Turmærke',
+      badgeSlug: 'nyt-turmaerke',
+    })
+    expect(myAfterRename[0]).toMatchObject({
+      badgeName: 'Nyt Turmærke',
+      badgeSlug: 'nyt-turmaerke',
+    })
+  })
+
+  it('returnerer nyeste tildelinger først i allMemberBadges', async () => {
+    const t = convexTest(schema, modules)
+    const users = await seedUsers(t)
+    const image = await storeTyped(
+      t,
+      new Blob(['png'], { type: 'image/png' }),
+      'image/png',
+    )
+    const asAdmin = t.withIdentity({ subject: users.admin.userId })
+    const firstBadge = await asAdmin.mutation(api.badges.createBadge, {
+      slug: 'foerste-maerke',
+      name: 'Første mærke',
+      imageStorageId: image,
+      imageWidth: 1000,
+      imageHeight: 1000,
+      imageMimeType: 'image/png',
+      cropX: 0,
+      cropY: 0,
+      cropSize: 1000,
+      diameterMm: 58,
+      bleedMm: 5,
+    })
+    const secondImage = await storeTyped(
+      t,
+      new Blob(['png'], { type: 'image/png' }),
+      'image/png',
+    )
+    const secondBadge = await asAdmin.mutation(api.badges.createBadge, {
+      slug: 'andet-maerke',
+      name: 'Andet mærke',
+      imageStorageId: secondImage,
+      imageWidth: 1000,
+      imageHeight: 1000,
+      imageMimeType: 'image/png',
+      cropX: 0,
+      cropY: 0,
+      cropSize: 1000,
+      diameterMm: 58,
+      bleedMm: 5,
+    })
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert('memberBadges', {
+        badgeId: firstBadge,
+        badgeName: 'Første mærke',
+        badgeSlug: 'foerste-maerke',
+        profileId: users.member.profileId,
+        profileName: 'Almindeligt Medlem',
+        awardedAt: 1000,
+      })
+      await ctx.db.insert('memberBadges', {
+        badgeId: secondBadge,
+        badgeName: 'Andet mærke',
+        badgeSlug: 'andet-maerke',
+        profileId: users.admin.profileId,
+        profileName: 'Admin Medlem',
+        awardedAt: 2000,
+      })
+    })
+
+    const awarded = await t
+      .withIdentity({ subject: users.member.userId })
+      .query(api.badges.allMemberBadges, {})
+    expect(awarded.map((row) => row.badgeSlug)).toEqual([
+      'andet-maerke',
+      'foerste-maerke',
+    ])
   })
 })
