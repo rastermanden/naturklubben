@@ -416,4 +416,67 @@ describe('BralGame', () => {
       screen.getAllByText('SHORTAGE CLEARED · RESERVE RESTORED').length,
     ).toBeGreaterThanOrEqual(1)
   })
+
+  it('flytter ikke canvas eller knapper i layoutet under dåsemangel, ølstafet eller notitser', () => {
+    opening.override = {
+      shortage: 'pending',
+      shortageTriggerAt: 0.05,
+      pullTabs: 4,
+      cans: [{ id: 903, kind: 'tab', x: 180, y: 120, speed: 0, tilt: 0 }],
+    }
+
+    render(<BralGame />)
+    const container = screen.getByTestId('bral-container')
+    const initialChildren = Array.from(container.children)
+    expect(initialChildren).toHaveLength(5)
+    const canvasWrapper = initialChildren[1]
+    const buttonsGrid = initialChildren[2]
+    const canvas = screen.getByLabelText('Bral-støberiet')
+    const strike = screen.getByRole('button', { name: 'Slå mønt' })
+    expect(canvasWrapper.contains(canvas)).toBe(true)
+    expect(buttonsGrid.contains(strike)).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(Array.from(container.children)).toEqual(initialChildren)
+
+    // Fang ringtræk nummer 5 -> notitsen lægger sig som overlay inde i canvas-boksen.
+    fireEvent.keyDown(window, { key: 'd' })
+    expect(Array.from(container.children)).toEqual(initialChildren)
+    const strikeNotice = screen.getAllByText('PULL-TAB STRIKE · METAL READY')[0]
+    expect(canvasWrapper.contains(strikeNotice)).toBe(true)
+    expect(strikeNotice.className).toContain('absolute')
+    expect(strikeNotice.className).toContain('pointer-events-none')
+
+    // Dåsemangel-panelet lægger sig inde i canvas-boksen og rykker ikke knapperne.
+    const activeChildren = Array.from(container.children)
+    expect(activeChildren).toEqual(initialChildren)
+    expect(container.querySelector('[aria-label="Dåsemangel"]')).toBeNull()
+
+    // Genskab aktiv dåsemangel direkte via Spil igen / ny instans.
+    cleanup()
+    opening.override = {
+      shortage: 'active',
+      pullTabs: 4,
+      cans: [{ id: 904, kind: 'tab', x: 180, y: 120, speed: 0, tilt: 0 }],
+    }
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    const nextContainer = screen.getByTestId('bral-container')
+    const nextChildren = Array.from(nextContainer.children)
+    expect(nextChildren).toHaveLength(5)
+    const nextWrapper = nextChildren[1]
+    const shortageRegion = screen.getByRole('region', { name: 'Dåsemangel' })
+    expect(nextWrapper.contains(shortageRegion)).toBe(true)
+    expect(shortageRegion.className).toContain('absolute')
+
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(Array.from(nextContainer.children)).toEqual(nextChildren)
+    expect(
+      nextWrapper.contains(
+        screen.getByRole('button', { name: 'Venstre hånd' }),
+      ),
+    ).toBe(true)
+    expect(nextContainer.children[2]).toBe(nextChildren[2])
+  })
 })

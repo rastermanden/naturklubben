@@ -300,72 +300,6 @@ export function BralGame() {
         />
       </div>
 
-      {playing && snapshot.shortage === 'active' && (
-        <div
-          role="region"
-          aria-label="Dåsemangel"
-          className="flex flex-col gap-2 rounded-xl border border-warn-line bg-warn-surface px-3 py-2.5 text-warn-strong"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="font-mono text-xs font-semibold tracking-wider">
-                {snapshot.relay.active
-                  ? `FORCED RELAY · ${snapshot.relay.steps}/${RELAY_TARGET_STEPS}`
-                  : 'CAN SHORTAGE · RESERVE BELOW PEG'}
-              </p>
-              <p className="font-mono text-xs opacity-90">
-                {snapshot.relay.active
-                  ? 'Skift venstre og højre for at fylde lageret.'
-                  : `Ringtræk ${snapshot.pullTabs}/${BRAL_TABS_PER_COIN} eller start alkoholfri ølstafet`}
-              </p>
-            </div>
-            {!snapshot.relay.active && (
-              <PressButton
-                onAction={handleStartRelay}
-                ariaLabel="Start ølstafet"
-                className="min-h-11 shrink-0 touch-none rounded-lg border border-warn-line bg-surface px-3 py-2 font-mono text-xs font-semibold text-ink-body select-none active:bg-surface-raised"
-              >
-                Start ølstafet
-              </PressButton>
-            )}
-          </div>
-          {snapshot.relay.active && (
-            <div className="grid grid-cols-2 gap-2">
-              <PressButton
-                onAction={() => handleRelayPass('left')}
-                disabled={snapshot.relay.nextHand !== 'left'}
-                ariaLabel="Venstre hånd"
-                className={`flex min-h-11 touch-none items-center justify-center rounded-lg border px-3 py-2 font-mono text-xs font-semibold select-none disabled:opacity-40 ${
-                  snapshot.relay.nextHand === 'left'
-                    ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
-                    : 'border-warn-line bg-surface text-ink-body'
-                }`}
-              >
-                Venstre hånd
-              </PressButton>
-              <PressButton
-                onAction={() => handleRelayPass('right')}
-                disabled={snapshot.relay.nextHand !== 'right'}
-                ariaLabel="Højre hånd"
-                className={`flex min-h-11 touch-none items-center justify-center rounded-lg border px-3 py-2 font-mono text-xs font-semibold select-none disabled:opacity-40 ${
-                  snapshot.relay.nextHand === 'right'
-                    ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
-                    : 'border-warn-line bg-surface text-ink-body'
-                }`}
-              >
-                Højre hånd
-              </PressButton>
-            </div>
-          )}
-        </div>
-      )}
-
-      {playing && snapshot.shortageNotice && (
-        <p className="rounded-lg border border-line-strong bg-surface-raised px-3 py-1.5 font-mono text-xs text-ink-body">
-          {snapshot.shortageNotice.text}
-        </p>
-      )}
-
       <div className="relative overflow-hidden rounded-xl border border-line-soft bg-[#132329]">
         <canvas
           ref={canvasRef}
@@ -375,6 +309,72 @@ export function BralGame() {
           className="block h-auto w-full touch-none select-none"
           aria-label="Bral-støberiet"
         />
+        {playing && snapshot.shortage === 'active' && (
+          <div
+            role="region"
+            aria-label="Dåsemangel"
+            className="pointer-events-auto absolute inset-x-1.5 top-1.5 z-10 flex flex-col gap-1.5 rounded-lg border border-warn-line bg-warn-surface/95 px-2.5 py-2 text-warn-strong shadow-sm backdrop-blur-[2px]"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-mono text-xs font-semibold tracking-wider">
+                  {snapshot.relay.active
+                    ? `FORCED RELAY · ${snapshot.relay.steps}/${RELAY_TARGET_STEPS}`
+                    : 'CAN SHORTAGE · RESERVE BELOW PEG'}
+                </p>
+                <p className="font-mono text-xs opacity-90">
+                  {snapshot.relay.active
+                    ? 'Skift venstre og højre for at fylde lageret.'
+                    : `Ringtræk ${snapshot.pullTabs}/${BRAL_TABS_PER_COIN} eller start alkoholfri ølstafet`}
+                </p>
+              </div>
+              {!snapshot.relay.active && (
+                <PressButton
+                  onAction={handleStartRelay}
+                  ariaLabel="Start ølstafet"
+                  className="min-h-11 shrink-0 touch-none rounded-lg border border-warn-line bg-surface px-3 py-2 font-mono text-xs font-semibold text-ink-body select-none active:bg-surface-raised"
+                >
+                  Start ølstafet
+                </PressButton>
+              )}
+            </div>
+            {snapshot.relay.active && (
+              <div className="grid grid-cols-2 gap-2">
+                <PressButton
+                  onAction={() => handleRelayPass('left')}
+                  disabled={snapshot.relay.nextHand !== 'left'}
+                  ariaLabel="Venstre hånd"
+                  className={`flex min-h-11 touch-none items-center justify-center rounded-lg border px-3 py-2 font-mono text-xs font-semibold select-none disabled:opacity-40 ${
+                    snapshot.relay.nextHand === 'left'
+                      ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
+                      : 'border-warn-line bg-surface text-ink-body'
+                  }`}
+                >
+                  Venstre hånd
+                </PressButton>
+                <PressButton
+                  onAction={() => handleRelayPass('right')}
+                  disabled={snapshot.relay.nextHand !== 'right'}
+                  ariaLabel="Højre hånd"
+                  className={`flex min-h-11 touch-none items-center justify-center rounded-lg border px-3 py-2 font-mono text-xs font-semibold select-none disabled:opacity-40 ${
+                    snapshot.relay.nextHand === 'right'
+                      ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
+                      : 'border-warn-line bg-surface text-ink-body'
+                  }`}
+                >
+                  Højre hånd
+                </PressButton>
+              </div>
+            )}
+          </div>
+        )}
+
+        {playing && snapshot.shortageNotice && (
+          <p className="pointer-events-none absolute inset-x-2 bottom-[47%] z-10 rounded-md border border-line-strong bg-surface-raised/95 px-2.5 py-1 text-center font-mono text-xs text-ink-body shadow-sm">
+            {snapshot.shortageNotice.text}
+          </p>
+        )}
+
         {snapshot.status !== 'playing' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#132329]/85 p-4 text-center text-white">
             <p className="text-lg font-semibold">

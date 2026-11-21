@@ -306,7 +306,7 @@ function drawLastCoinBanner(ctx: CanvasRenderingContext2D, state: BralState) {
   const badgeW = 148
   const badgeH = 32
   const badgeX = (BRAL_WORLD.w - badgeW) / 2
-  const badgeY = 14
+  const badgeY = state.shortage === 'active' ? 112 : 14
 
   traceRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 16)
   ctx.fillStyle =
@@ -336,7 +336,7 @@ function drawShortageHud(ctx: CanvasRenderingContext2D, state: BralState) {
   const pillW = 94
   const pillH = 22
   const pillX = BRAL_WORLD.w - pillW - 10
-  const pillY = 10
+  const pillY = 144
 
   traceRoundedRect(ctx, pillX, pillY, pillW, pillH, 6)
   ctx.fillStyle = 'rgba(28, 25, 23, 0.88)'

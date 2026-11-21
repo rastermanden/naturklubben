@@ -5,7 +5,7 @@ import { RecentScores } from '../features/games/RecentScores'
 
 export default function BralPage() {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-4 sm:p-6">
+    <main className="mx-auto flex w-full max-w-3xl flex-col gap-5 p-4 sm:gap-8 sm:p-6">
       <div className="flex flex-col gap-1">
         <Link to="/spil" className="text-sm text-ink-muted underline">
           ← Spil
