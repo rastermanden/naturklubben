@@ -717,6 +717,12 @@ export const sendMessage = mutation({
     // komme ud af trit.
     await indexMessageContent(ctx, messageId, args.room, args.content, now)
 
+    // Web Push planlægges kun ved første indsættelse: idempotente gentagelser
+    // fra offline-køen returnerede ovenfor med `inserted: false`.
+    await ctx.scheduler.runAfter(0, internal.pushSend.deliverChatPush, {
+      messageId,
+    })
+
     const assistantProfileId = await findAssistantProfileId(ctx)
     if (
       messageMentionsAssistant({

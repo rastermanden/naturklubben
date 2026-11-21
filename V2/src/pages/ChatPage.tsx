@@ -37,6 +37,8 @@ import type { MentionMember } from '../features/chat/mentions'
 import { REACTION_EMOJI } from '../features/chat/constants'
 import { useReadReceipts } from '../features/chat/useReadReceipts'
 import { readersByMessage } from '../features/chat/readReceipts'
+import { NotificationToggle } from '../features/notifications/NotificationToggle'
+import { ChatNotificationPreference } from '../features/notifications/ChatNotificationPreference'
 
 /**
  * Chatten (#14), og det samme for admin-rummet (#212).
@@ -94,6 +96,7 @@ function ChatRoomView({
   const unreadHere = unread?.find((entry) => entry.room === room)
 
   const [draft, setDraft] = useState('')
+  const [toolsOpen, setToolsOpen] = useState(false)
   // Markørens position i skrivefeltet: en mention kan skrives midt i teksten,
   // så det er den, og ikke slutningen af feltet, der afgør, hvad der søges på.
   const [caret, setCaret] = useState(0)
@@ -540,18 +543,31 @@ function ChatRoomView({
                 : ''}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            aria-pressed={isFullscreen}
-            aria-label={
-              isFullscreen ? 'Afslut fuldskærm' : 'Vis chatten i fuldskærm'
-            }
-            title={isFullscreen ? 'Afslut fuldskærm' : 'Fuldskærm'}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-line-strong text-lg text-ink-body"
-          >
-            <span aria-hidden="true">{isFullscreen ? '⤡' : '⤢'}</span>
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setToolsOpen((open) => !open)}
+              aria-expanded={toolsOpen}
+              aria-controls="chat-tools"
+              aria-label="Søgning og notifikationer"
+              title="Søgning og notifikationer"
+              className="flex h-11 w-11 items-center justify-center rounded-lg border border-line-strong text-ink-body sm:hidden"
+            >
+              <span aria-hidden="true">⚙️</span>
+            </button>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              aria-pressed={isFullscreen}
+              aria-label={
+                isFullscreen ? 'Afslut fuldskærm' : 'Vis chatten i fuldskærm'
+              }
+              title={isFullscreen ? 'Afslut fuldskærm' : 'Fuldskærm'}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-line-strong text-lg text-ink-body"
+            >
+              <span aria-hidden="true">{isFullscreen ? '⤡' : '⤢'}</span>
+            </button>
+          </div>
         </div>
 
         {onlineMembers.length > 0 && (
@@ -560,64 +576,76 @@ function ChatRoomView({
           </div>
         )}
 
-        <div className="relative shrink-0">
-          <label htmlFor="chat-search" className="sr-only">
-            Søg i beskeder
-          </label>
-          <input
-            id="chat-search"
-            type="search"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Søg i hele historikken…"
-            className="min-h-11 w-full rounded-lg border border-line-strong px-4 py-2 text-ink"
-          />
-          {searchTerm.trim() && (
-            <div className="absolute z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-line bg-surface p-2 shadow-lg">
-              {search.isSearching && (
-                <p role="status" className="p-3 text-ink-subtle">
-                  Søger…
-                </p>
-              )}
-              {!search.isSearching && search.results.length === 0 && (
-                <p className="p-3 text-ink-subtle">Ingen beskeder fundet.</p>
-              )}
-              {search.results.length > 0 && (
-                <ul aria-label="Søgeresultater">
-                  {search.results.map((message) => (
-                    <li key={message.messageId}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenMessageId(message.messageId)
-                          setHighlightedMessageId(message.messageId)
-                          setSearchTerm('')
-                        }}
-                        className="min-h-11 w-full rounded px-3 py-2 text-left hover:bg-surface-sunken"
-                      >
-                        <span className="block text-xs font-medium text-ink-muted">
-                          {message.authorName ?? 'Tidligere medlem'} ·{' '}
-                          {new Date(message.createdAt).toLocaleString('da-DK')}
-                        </span>
-                        <span className="line-clamp-2 text-sm text-ink">
-                          {message.content}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {search.hasMore && (
-                <button
-                  type="button"
-                  onClick={search.loadMore}
-                  className="min-h-11 w-full rounded px-3 text-sm font-medium text-ink-muted hover:bg-surface-sunken"
-                >
-                  Vis flere resultater
-                </button>
-              )}
-            </div>
-          )}
+        <div
+          id="chat-tools"
+          className={`${toolsOpen ? 'flex' : 'hidden'} shrink-0 flex-col gap-3 sm:flex`}
+        >
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <NotificationToggle />
+            <ChatNotificationPreference />
+          </div>
+
+          <div className="relative">
+            <label htmlFor="chat-search" className="sr-only">
+              Søg i beskeder
+            </label>
+            <input
+              id="chat-search"
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Søg i hele historikken…"
+              className="min-h-11 w-full rounded-lg border border-line-strong px-4 py-2 text-ink"
+            />
+            {searchTerm.trim() && (
+              <div className="absolute z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-line bg-surface p-2 shadow-lg">
+                {search.isSearching && (
+                  <p role="status" className="p-3 text-ink-subtle">
+                    Søger…
+                  </p>
+                )}
+                {!search.isSearching && search.results.length === 0 && (
+                  <p className="p-3 text-ink-subtle">Ingen beskeder fundet.</p>
+                )}
+                {search.results.length > 0 && (
+                  <ul aria-label="Søgeresultater">
+                    {search.results.map((message) => (
+                      <li key={message.messageId}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenMessageId(message.messageId)
+                            setHighlightedMessageId(message.messageId)
+                            setSearchTerm('')
+                          }}
+                          className="min-h-11 w-full rounded px-3 py-2 text-left hover:bg-surface-sunken"
+                        >
+                          <span className="block text-xs font-medium text-ink-muted">
+                            {message.authorName ?? 'Tidligere medlem'} ·{' '}
+                            {new Date(message.createdAt).toLocaleString(
+                              'da-DK',
+                            )}
+                          </span>
+                          <span className="line-clamp-2 text-sm text-ink">
+                            {message.content}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {search.hasMore && (
+                  <button
+                    type="button"
+                    onClick={search.loadMore}
+                    className="min-h-11 w-full rounded px-3 text-sm font-medium text-ink-muted hover:bg-surface-sunken"
+                  >
+                    Vis flere resultater
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {openMessageId && (
