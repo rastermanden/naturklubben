@@ -243,6 +243,12 @@ export const ANNOUNCEMENTS = [
     path: 'chat',
   },
   {
+    slug: 'spil-bral-smeltning',
+    title: 'Nyt spil: Bral smeltning',
+    body: 'Grib tomme øldåser, hold ovnen ved 660 °C, og slå En, Fem og Ti Bral på et minut. Dit bedste resultat lander på klubbens liste under Spil.',
+    path: 'spil/bral',
+  },
+  {
     slug: 'galleri-knyt-til-begivenhed',
     title: 'Vælg turen, når du lægger billeder op',
     body: 'Når du lægger billeder op under Billeder, kan du nu vælge, hvilken tur de hører til. Så lander de i turens album med det samme -- også hvis der ikke er lagt billeder op fra turen før. Vælger du ingen tur, havner de som før under "Uden begivenhed".',

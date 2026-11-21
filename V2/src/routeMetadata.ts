@@ -129,6 +129,11 @@ export const routeMetadata = [
     announcement: 'Boble-spillet indlæst',
   },
   {
+    path: '/spil/bral',
+    documentTitle: 'Bral smeltning | Naturklubben',
+    announcement: 'Bral smeltning indlæst',
+  },
+  {
     path: '/spil/kabale',
     documentTitle: '7-kabale | Naturklubben',
     announcement: '7-kabale indlæst',
