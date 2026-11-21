@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { formatCanCount } from './draw'
 import {
   BELLOWS_BOOST,
   BRAL_CANS_PER_COIN,
@@ -207,5 +208,12 @@ describe('bral-motor', () => {
     const stepped = stepBral(started, 90, () => 0.5)
     expect(stepped.elapsedSeconds).toBeCloseTo(0.1)
     expect(stepped.timeLeft).toBeCloseTo(BRAL_DURATION_SECONDS - 0.1)
+  })
+
+  it('formaterer antal dåser i diglen uden at runde brøkdele op', () => {
+    expect(formatCanCount(0)).toBe('0')
+    expect(formatCanCount(4)).toBe('4')
+    expect(formatCanCount(0.32)).toBe('0,3')
+    expect(formatCanCount(2.01)).toBe('2')
   })
 })

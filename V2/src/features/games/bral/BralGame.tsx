@@ -4,7 +4,9 @@ import { formatScore } from '../leaderboard'
 import { usePersonalBest, usePlayerId, useSubmitScore } from '../useGameScores'
 import { drawBral } from './draw'
 import {
+  BRAL_CANS_PER_COIN,
   BRAL_DURATION_SECONDS,
+  BRAL_MAX_COINS_PER_GAME,
   BRAL_WORLD,
   canStrike,
   catchCanAt,
@@ -77,8 +79,17 @@ export function BralGame() {
       const stepped = stepBral(stateRef.current, dt)
       syncSnapshot(stepped)
       const canvas = canvasRef.current
-      const ctx = canvas?.getContext('2d')
-      if (ctx) drawBral(ctx, stepped)
+      if (canvas) {
+        const dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1))
+        const targetWidth = Math.round(BRAL_WORLD.w * dpr)
+        const targetHeight = Math.round(BRAL_WORLD.h * dpr)
+        if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+          canvas.width = targetWidth
+          canvas.height = targetHeight
+        }
+        const ctx = canvas.getContext('2d')
+        if (ctx) drawBral(ctx, stepped, dpr)
+      }
       frame = requestAnimationFrame(loop)
     }
     frame = requestAnimationFrame(loop)
@@ -191,6 +202,16 @@ export function BralGame() {
 
   const playing = snapshot.status === 'playing'
   const strikeReady = canStrike(snapshot)
+  const strikeSublabel =
+    snapshot.coins >= BRAL_MAX_COINS_PER_GAME
+      ? 'Loft nået'
+      : strikeReady
+        ? 'Klar til prægning'
+        : playing &&
+            snapshot.molten >= BRAL_CANS_PER_COIN &&
+            snapshot.strikeCooldown > 0
+          ? 'Klar om lidt'
+          : 'Mangler metal'
   const zone = ovenZone(snapshot.ovenTemp)
   const zoneLabel = ZONE_LABELS[zone]
   const secondsLeft = Math.max(0, Math.ceil(snapshot.timeLeft))
@@ -203,7 +224,12 @@ export function BralGame() {
         : ''
 
   return (
-    <div className="flex flex-col gap-3 select-none">
+    <div
+      data-testid="bral-container"
+      className={`flex flex-col gap-3 select-none ${
+        playing ? 'touch-none' : 'touch-manipulation'
+      }`}
+    >
       <div className="flex gap-2">
         <Tile label="Point" value={formatScore(snapshot.score)} />
         <Tile label="Mønter" value={String(snapshot.coins)} />
@@ -335,7 +361,7 @@ export function BralGame() {
               strikeReady ? 'text-on-accent/90' : 'text-ink-subtle'
             }`}
           >
-            {strikeReady ? 'Klar til prægning' : 'Mangler metal'}
+            {strikeSublabel}
           </span>
         </button>
       </div>

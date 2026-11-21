@@ -137,6 +137,13 @@ function drawFurnaceCard(ctx: CanvasRenderingContext2D, state: BralState) {
   ctx.fillText('660 °C', targetX, barY + barH + 5)
 }
 
+export function formatCanCount(cans: number): string {
+  if (cans < 1e-6) return '0'
+  const rounded = Math.round(cans)
+  if (Math.abs(cans - rounded) < 0.05) return String(rounded)
+  return cans.toFixed(1).replace('.', ',')
+}
+
 function drawCrucibleCard(ctx: CanvasRenderingContext2D, state: BralState) {
   const x = 184
   const y = 178
@@ -161,8 +168,11 @@ function drawCrucibleCard(ctx: CanvasRenderingContext2D, state: BralState) {
 
   ctx.textAlign = 'right'
   ctx.fillStyle = '#e2e8f0'
-  const waiting = Math.ceil(state.crucibleCans - 1e-6)
-  ctx.fillText(`I kø: ${Math.max(0, waiting)}`, x + w - 10, y + 8)
+  ctx.fillText(
+    `I kø: ${formatCanCount(Math.max(0, state.crucibleCans))}`,
+    x + w - 10,
+    y + 8,
+  )
 
   const barX = x + 10
   const barY = y + 32
@@ -292,8 +302,12 @@ function drawLastCoinBanner(ctx: CanvasRenderingContext2D, state: BralState) {
 }
 
 /** Tegner støberiet: faldende øldåser, ovn, digle og prægebjælke. */
-export function drawBral(ctx: CanvasRenderingContext2D, state: BralState) {
-  ctx.setTransform(2, 0, 0, 2, 0, 0)
+export function drawBral(
+  ctx: CanvasRenderingContext2D,
+  state: BralState,
+  scale = 2,
+) {
+  ctx.setTransform(scale, 0, 0, scale, 0, 0)
   const { w, h } = BRAL_WORLD
 
   const sky = ctx.createLinearGradient(0, 0, 0, 176)

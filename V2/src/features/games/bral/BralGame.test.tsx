@@ -254,4 +254,67 @@ describe('BralGame', () => {
     fireEvent.keyDown(window, { key: ' ' })
     expect(screen.getByRole('status').textContent).toContain('Ti Bral')
   })
+
+  it('viser præcis knaptekst, skalerer canvas efter DPR og sætter touch-none på container under spil', () => {
+    const originalDpr = window.devicePixelRatio
+    Object.defineProperty(window, 'devicePixelRatio', {
+      configurable: true,
+      value: 3,
+    })
+
+    try {
+      let frames: FrameRequestCallback[] = []
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+        frames.push(cb)
+        return frames.length
+      })
+      vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {})
+
+      opening.override = {
+        molten: 8,
+        markerPos: 0.5,
+      }
+
+      render(<BralGame />)
+      const container = screen.getByTestId('bral-container')
+      expect(container.className).toContain('touch-manipulation')
+
+      const canvas = screen.getByLabelText(
+        'Bral-støberiet',
+      ) as HTMLCanvasElement
+      act(() => {
+        const pending = frames
+        frames = []
+        for (const cb of pending) cb(performance.now())
+      })
+      expect(canvas.width).toBe(1080)
+      expect(canvas.height).toBe(960)
+
+      const strike = screen.getByRole('button', { name: 'Slå mønt' })
+      expect(strike.textContent).toContain('Mangler metal')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+      expect(container.className).toContain('touch-none')
+      expect(strike.textContent).toContain('Klar til prægning')
+
+      fireEvent.click(strike)
+      expect(strike.textContent).toContain('Klar om lidt')
+    } finally {
+      Object.defineProperty(window, 'devicePixelRatio', {
+        configurable: true,
+        value: originalDpr,
+      })
+    }
+
+    cleanup()
+    opening.override = {
+      molten: 8,
+      coins: 23,
+    }
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(
+      screen.getByRole('button', { name: 'Slå mønt' }).textContent,
+    ).toContain('Loft nået')
+  })
 })
