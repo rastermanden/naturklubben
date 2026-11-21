@@ -107,6 +107,18 @@ async function photoView(ctx: QueryCtx, photoId: string | undefined) {
   if (photoId === undefined) return null
   const photo = await ctx.db.get(photoId as Id<'photos'>)
   if (photo === null || !('storageId' in photo)) return null
+  if (photo.mediaKind === 'video') {
+    const thumbUrl =
+      photo.thumbnailStorageId !== undefined
+        ? await ctx.storage.getUrl(photo.thumbnailStorageId)
+        : null
+    return {
+      id: photo._id,
+      caption: photo.caption ?? null,
+      thumbnailUrl: thumbUrl,
+      displayUrl: thumbUrl,
+    }
+  }
   const fileId = photo.thumbnailStorageId ?? photo.storageId
   const url = await ctx.storage.getUrl(fileId)
   return {

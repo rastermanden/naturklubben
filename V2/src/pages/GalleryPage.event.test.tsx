@@ -35,6 +35,7 @@ const albums = [
 /** Ét billede er nok til, at albumvisningen og dens "← Alle album" renderes. */
 const photo = {
   id: 'photo1',
+  mediaKind: 'image' as const,
   caption: null,
   eventId: 'event1',
   albumKey: 'event1',
@@ -118,9 +119,12 @@ function renderGallery(path = '/billeder') {
 
 function chooseFile() {
   const file = new File(['billede'], 'tur.jpg', { type: 'image/jpeg' })
-  fireEvent.change(screen.getByLabelText('Vælg billeder fra enheden'), {
-    target: { files: [file] },
-  })
+  fireEvent.change(
+    screen.getByLabelText('Vælg billeder og videoer fra enheden'),
+    {
+      target: { files: [file] },
+    },
+  )
 }
 
 function picker() {

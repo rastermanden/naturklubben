@@ -11,9 +11,12 @@ import type { Id } from '../../convex/_generated/dataModel'
 import { useAutoOptimizePendingPhotos } from '../features/gallery/useAutoOptimizePendingPhotos'
 import {
   useUploadPhotos,
-  validateFiles,
   type UploadQueueItem,
 } from '../features/gallery/useUploadPhotos'
+import {
+  GALLERY_ACCEPT,
+  validateGalleryFile,
+} from '../features/gallery/galleryMedia'
 import { EventPicker } from '../features/gallery/EventPicker'
 import { BulkMoveBar } from '../features/gallery/BulkMoveBar'
 import { GalleryAlbumGrid } from '../features/gallery/GalleryAlbumGrid'
@@ -235,12 +238,12 @@ function GalleryPage() {
     if (!files || files.length === 0) return
     const fileArray = Array.from(files)
     const errors = fileArray
-      .map((file) => validateFiles([file]))
+      .map((file) => validateGalleryFile(file))
       .filter((message): message is string => message !== null)
     setFormError(errors.length > 0 ? errors.join(' ') : null)
 
     const validFiles = fileArray.filter(
-      (file) => validateFiles([file]) === null,
+      (file) => validateGalleryFile(file) === null,
     )
     if (validFiles.length > 0) {
       upload.enqueue({
@@ -266,7 +269,13 @@ function GalleryPage() {
     setBusyPhotoId(photo.id)
     void deletePhoto({ photoId: photo.id as Id<'photos'> })
       .then(() => setGalleryParam('photo', null))
-      .catch(() => setActionError('Billedet kunne ikke slettes. Prøv igen.'))
+      .catch(() =>
+        setActionError(
+          photo.mediaKind === 'video'
+            ? 'Videoen kunne ikke slettes. Prøv igen.'
+            : 'Billedet kunne ikke slettes. Prøv igen.',
+        ),
+      )
       .finally(() => setBusyPhotoId(null))
   }
 
@@ -358,9 +367,9 @@ function GalleryPage() {
 
   const positionLabel =
     activeIndex >= 0
-      ? `Billede ${activeIndex + 1} af ${photos.length}${
-          photosQuery.status === 'CanLoadMore' ? '+' : ''
-        }`
+      ? `${activePhoto?.mediaKind === 'video' ? 'Video' : 'Billede'} ${
+          activeIndex + 1
+        } af ${photos.length}${photosQuery.status === 'CanLoadMore' ? '+' : ''}`
       : null
 
   return (
@@ -368,7 +377,7 @@ function GalleryPage() {
       <div>
         <h1 className="text-2xl font-semibold text-ink">Billeder</h1>
         <p className="mt-1 text-ink-muted">
-          Billeder fra klubbens ture og begivenheder, samlet i album.
+          Billeder og videoer fra klubbens ture og begivenheder, samlet i album.
         </p>
       </div>
 
@@ -385,7 +394,9 @@ function GalleryPage() {
             : 'border-line bg-surface'
         }`}
       >
-        <h2 className="text-lg font-semibold text-ink">Upload billeder</h2>
+        <h2 className="text-lg font-semibold text-ink">
+          Upload billeder og videoer
+        </h2>
 
         <label className="flex flex-col gap-1 text-sm text-ink-body">
           Billedtekst (valgfri)
@@ -401,7 +412,7 @@ function GalleryPage() {
           fallback={(retry) => (
             <p role="alert" className="text-sm text-danger">
               {currentAlbum?.eventId
-                ? `Listen over begivenheder kunne ikke hentes. Du kan stadig uploade — billederne lander i ”${currentAlbum.title}”.`
+                ? `Listen over begivenheder kunne ikke hentes. Du kan stadig uploade — filerne lander i ”${currentAlbum.title}”.`
                 : 'Listen over begivenheder kunne ikke hentes. Du kan stadig uploade uden at vælge en begivenhed.'}{' '}
               <button
                 type="button"
@@ -423,8 +434,8 @@ function GalleryPage() {
         <input
           ref={fileInputRef}
           type="file"
-          aria-label="Vælg billeder fra enheden"
-          accept="image/*"
+          aria-label="Vælg billeder og videoer fra enheden"
+          accept={GALLERY_ACCEPT}
           multiple
           onChange={(event) => handleFilesSelected(event.target.files)}
           className="sr-only"
@@ -445,7 +456,7 @@ function GalleryPage() {
             onClick={() => fileInputRef.current?.click()}
             className="min-h-11 rounded-lg bg-accent px-5 py-2 text-white"
           >
-            Vælg billeder
+            Vælg billeder eller video
           </button>
           <button
             type="button"
@@ -457,8 +468,8 @@ function GalleryPage() {
         </div>
 
         <p className="text-xs text-ink-subtle">
-          Vælg fra kamerarullen eller dine filer — eller træk billeder herind.
-          Maks. 15 MB pr. billede.
+          Vælg fra kamerarullen eller dine filer, eller træk filer herind.
+          Billeder op til 15 MB. Videoer i mp4, webm eller mov op til 50 MB.
         </p>
 
         {formError && (

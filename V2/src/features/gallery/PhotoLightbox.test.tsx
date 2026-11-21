@@ -38,6 +38,7 @@ import { PhotoLightbox } from './PhotoLightbox'
 function makePhoto(overrides: Partial<Photo> = {}): Photo {
   return {
     id: 'photo1',
+    mediaKind: 'image',
     caption: 'Morgenlys ved søen',
     eventId: null,
     albumKey: 'without-event',
@@ -358,5 +359,125 @@ describe('PhotoLightbox: redigér billede (#345)', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe('Du kan kun ændre dine egne billeder.')
     expect(screen.getByRole('form', { name: 'Redigér billede' })).toBeTruthy()
+  })
+})
+
+describe('PhotoLightbox: videoafspilning og redigering (#365)', () => {
+  it('viser HTML5-video med controls, playsInline, poster og lader spolning/piletaster blive i afspilleren', async () => {
+    const onNext = vi.fn()
+    const onPrevious = vi.fn()
+    const onEdit = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <PhotoLightbox
+        photo={makePhoto({
+          id: 'vid1',
+          mediaKind: 'video',
+          mimeType: 'video/mp4',
+          caption: 'Kano på søen',
+          displayUrl: 'https://example.convex.site/video?token=tok1',
+          thumbnailUrl: 'https://example.convex.site/photo?token=thumb1',
+        })}
+        onClose={vi.fn()}
+        onEdit={onEdit}
+        onDelete={vi.fn()}
+        onRetryOptimization={vi.fn()}
+        deleting={false}
+        retrying={false}
+        actionError={null}
+        onPrevious={onPrevious}
+        onNext={onNext}
+      />,
+    )
+
+    const video = document.querySelector('video') as HTMLVideoElement | null
+    expect(video).not.toBeNull()
+    expect(video?.hasAttribute('controls')).toBe(true)
+    expect(video?.hasAttribute('playsinline')).toBe(true)
+    expect(video?.getAttribute('src')).toBe(
+      'https://example.convex.site/video?token=tok1',
+    )
+    expect(video?.getAttribute('poster')).toBe(
+      'https://example.convex.site/photo?token=thumb1',
+    )
+
+    // Touch-spolning i videoens tidslinje må ikke bladre til næste/forrige.
+    fireEvent.touchStart(video!, { touches: [{ clientX: 250, clientY: 120 }] })
+    fireEvent.touchEnd(video!, {
+      changedTouches: [{ clientX: 50, clientY: 120 }],
+    })
+    expect(onNext).not.toHaveBeenCalled()
+    expect(onPrevious).not.toHaveBeenCalled()
+
+    // Piletaster i fokuseret <video> må heller ikke bladre lysbordet.
+    fireEvent.keyDown(video!, { key: 'ArrowRight' })
+    expect(onNext).not.toHaveBeenCalled()
+
+    // Redigér virker på videoer med samme billedtekst og begivenhedsvælger.
+    fireEvent.click(screen.getByRole('button', { name: 'Redigér' }))
+    expect(screen.getByRole('form', { name: 'Redigér video' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Billedtekst'), {
+      target: { value: 'Ny videotekst' },
+    })
+    fireEvent.change(screen.getByLabelText('Begivenhed'), {
+      target: { value: 'event1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Gem' }))
+
+    await waitFor(() =>
+      expect(onEdit).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'vid1' }),
+        { caption: 'Ny videotekst', eventId: 'event1' },
+      ),
+    )
+  })
+
+  it('viser forståelig dansk besked ved afspilningsfejl på mov/HEVC og andre videoer', () => {
+    const { rerender } = render(
+      <PhotoLightbox
+        photo={makePhoto({
+          id: 'vid-mov',
+          mediaKind: 'video',
+          mimeType: 'video/quicktime',
+          displayUrl: 'https://example.convex.site/video?token=movtok',
+          thumbnailUrl: null,
+        })}
+        onClose={vi.fn()}
+        onDelete={vi.fn()}
+        onRetryOptimization={vi.fn()}
+        deleting={false}
+        retrying={false}
+        actionError={null}
+      />,
+    )
+
+    const movVideo = document.querySelector('video')!
+    expect(movVideo.hasAttribute('poster')).toBe(false)
+    fireEvent.error(movVideo)
+    expect(screen.getByRole('alert').textContent).toContain('mov')
+    expect(screen.getByRole('alert').textContent).toContain('Safari')
+
+    rerender(
+      <PhotoLightbox
+        photo={makePhoto({
+          id: 'vid-mp4',
+          mediaKind: 'video',
+          mimeType: 'video/mp4',
+          displayUrl: 'https://example.convex.site/video?token=mp4tok',
+          thumbnailUrl: null,
+        })}
+        onClose={vi.fn()}
+        onDelete={vi.fn()}
+        onRetryOptimization={vi.fn()}
+        deleting={false}
+        retrying={false}
+        actionError={null}
+      />,
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.error(document.querySelector('video')!)
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Videoen kan ikke afspilles i denne browser. Formatet understøttes måske ikke på denne enhed.',
+    )
   })
 })
