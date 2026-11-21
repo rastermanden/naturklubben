@@ -107,4 +107,27 @@ describe('EventPicker', () => {
 
     expect(field().value).toBe('event1')
   })
+
+  it('kan vises med brugerdefineret label og tomtekst, når hideWhenEmpty er false', () => {
+    state.events = []
+    render(
+      <EventPicker
+        value=""
+        onChange={vi.fn()}
+        label="Begivenhed"
+        emptyLabel="Ingen begivenhed"
+        hideWhenEmpty={false}
+        disabled
+        emptyListHint="Opret en begivenhed først."
+      />,
+    )
+
+    const select = screen.getByLabelText('Begivenhed') as HTMLSelectElement
+    expect(select.value).toBe('')
+    expect(select.disabled).toBe(true)
+    expect(
+      screen.getByRole('option', { name: 'Ingen begivenhed' }),
+    ).toBeTruthy()
+    expect(screen.getByText('Opret en begivenhed først.')).toBeTruthy()
+  })
 })

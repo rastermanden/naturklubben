@@ -3,6 +3,7 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
 import { currentUserId, requireProfile } from './authz'
+import { removePhotoFromAlbum } from './gallery'
 import type { Doc, Id } from './_generated/dataModel'
 
 /**
@@ -505,66 +506,6 @@ async function deleteAccount(ctx: MutationCtx, profileId: Id<'profiles'>) {
 
 /** Navnet, der står i et snapshot i stedet for et slettet medlem. */
 const FORMER_MEMBER_NAME = 'Tidligere medlem'
-
-async function albumByKey(ctx: MutationCtx, albumKey: string) {
-  return await ctx.db
-    .query('photoAlbums')
-    .withIndex('by_album_key', (q) => q.eq('albumKey', albumKey))
-    .unique()
-}
-
-/**
- * Albumtallene efter et slettet billede.
- *
- * **Skal følges ad med `removePhotoFromAlbum` i `convex/gallery.ts`.** Den
- * ligger her som en kopi, fordi den ikke er eksporteret, og fordi en eksport
- * ville gøre galleriet tilgængeligt fra kontosletningen -- men reglerne er de
- * samme: tællingen falder med én, et tomt "Uden begivenhed"-album slettes, og
- * et cover, der pegede på det slettede billede, flyttes til det nyeste `ready`
- * billede i albummet, så albumforsiden aldrig viser en fil, der er væk.
- */
-async function removePhotoFromAlbum(ctx: MutationCtx, photo: Doc<'photos'>) {
-  const album = await albumByKey(ctx, photo.albumKey)
-  if (album === null) return
-
-  const photoCount = Math.max(0, album.photoCount - 1)
-  if (photoCount === 0 && album.eventId === undefined) {
-    // Et tomt "Uden begivenhed"-album er støj; det oprettes igen ved næste
-    // upload. Album med en begivenhed bliver stående som tomt, så det stadig
-    // kan findes fra kalenderen.
-    await ctx.db.delete(album._id)
-    return
-  }
-
-  const coverBelongsToPhoto = album.coverPhotoId === photo._id
-  const nextCover = coverBelongsToPhoto
-    ? await ctx.db
-        .query('photos')
-        .withIndex('by_album', (q) => q.eq('albumKey', photo.albumKey))
-        .order('desc')
-        .filter((q) =>
-          q.and(
-            q.eq(q.field('optimizationStatus'), 'ready'),
-            q.neq(q.field('_id'), photo._id),
-          ),
-        )
-        .first()
-    : null
-
-  await ctx.db.patch(album._id, {
-    photoCount,
-    coverPhotoId: coverBelongsToPhoto ? nextCover?._id : album.coverPhotoId,
-    coverThumbnailStorageId: coverBelongsToPhoto
-      ? nextCover?.thumbnailStorageId
-      : album.coverThumbnailStorageId,
-    coverOptimizedStorageId: coverBelongsToPhoto
-      ? nextCover?.optimizedStorageId
-      : album.coverOptimizedStorageId,
-    coverCreatedAt: coverBelongsToPhoto
-      ? nextCover?.createdAt
-      : album.coverCreatedAt,
-  })
-}
 
 /**
  * Galleriet: medlemmets billeder, filerne bag dem, kommentarerne og

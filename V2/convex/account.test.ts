@@ -644,4 +644,71 @@ describe('requestDeletion', () => {
       vi.useRealTimers()
     }
   })
+
+  it('opdaterer albumtæller, cover og latestPhotoAt når det slettede medlem ejede det nyeste billede (#355)', async () => {
+    const t = setup()
+    const member = await seedMember(t, 'slettes@example.com')
+    const other = await seedMember(t, 'bliver@example.com')
+
+    const ids = await t.run(async (ctx) => {
+      const eventId = await ctx.db.insert('events', {
+        title: 'Forårstur',
+        startAt: 1000,
+        endsAt: 2000,
+        isPublic: false,
+        attendingCount: 0,
+        waitlistedCount: 0,
+        approvedGuestCount: 0,
+        createdAt: 1000,
+      })
+      const olderStorage = await ctx.storage.store(new Blob(['older']))
+      const newerStorage = await ctx.storage.store(new Blob(['newer']))
+      const olderPhotoId = await ctx.db.insert('photos', {
+        storageId: olderStorage,
+        optimizedStorageId: olderStorage,
+        uploaderId: other.profileId,
+        albumKey: eventId,
+        eventId,
+        createdAt: 1000,
+        optimizationStatus: 'ready',
+        optimizationAttempts: 0,
+        commentCount: 0,
+      })
+      const newerPhotoId = await ctx.db.insert('photos', {
+        storageId: newerStorage,
+        optimizedStorageId: newerStorage,
+        uploaderId: member.profileId,
+        albumKey: eventId,
+        eventId,
+        createdAt: 3000,
+        optimizationStatus: 'ready',
+        optimizationAttempts: 0,
+        commentCount: 0,
+      })
+      const albumId = await ctx.db.insert('photoAlbums', {
+        albumKey: eventId,
+        eventId,
+        title: 'Forårstur',
+        photoCount: 2,
+        latestPhotoAt: 3000,
+        coverPhotoId: newerPhotoId,
+        coverOptimizedStorageId: newerStorage,
+        coverCreatedAt: 3000,
+      })
+      await ctx.db.patch(member.profileId, { deletionReservedAt: Date.now() })
+      return { albumId, olderPhotoId }
+    })
+
+    await t.mutation(internal.account.completeDeletion, {
+      profileId: member.profileId,
+    })
+
+    const albumAfter = await t.run(async (ctx) => ctx.db.get(ids.albumId))
+    expect(albumAfter).toMatchObject({
+      photoCount: 1,
+      coverPhotoId: ids.olderPhotoId,
+      coverCreatedAt: 1000,
+      latestPhotoAt: 1000,
+    })
+  })
 })

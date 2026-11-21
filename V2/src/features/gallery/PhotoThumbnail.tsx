@@ -9,22 +9,52 @@ import type { Photo } from './types'
 export function PhotoThumbnail({
   photo,
   onClick,
+  selection,
 }: {
   photo: Photo
   onClick: () => void
+  selection?: {
+    selected: boolean
+    disabled: boolean
+    disabledReason?: 'not-owner' | 'busy'
+  }
 }) {
   const caption = photo.caption?.trim()
   const statusLabel = optimizationStatusLabel(photo)
-  const accessibleName = caption
-    ? `Åbn billede: ${caption}`
-    : 'Åbn billede uden billedtekst'
+  const notOwned =
+    selection?.disabled === true && selection.disabledReason !== 'busy'
+  const accessibleName = selection
+    ? notOwned
+      ? caption
+        ? `Andet medlems billede, kan ikke vælges: ${caption}`
+        : 'Andet medlems billede uden billedtekst, kan ikke vælges'
+      : selection.selected
+        ? caption
+          ? `Fravælg billede: ${caption}`
+          : 'Fravælg billede uden billedtekst'
+        : caption
+          ? `Vælg billede: ${caption}`
+          : 'Vælg billede uden billedtekst'
+    : caption
+      ? `Åbn billede: ${caption}`
+      : 'Åbn billede uden billedtekst'
 
   return (
     <button
       type="button"
       aria-label={accessibleName}
+      aria-pressed={selection ? selection.selected : undefined}
+      disabled={selection?.disabled}
       onClick={onClick}
-      className="relative aspect-square overflow-hidden rounded bg-surface-sunken"
+      className={`relative aspect-square overflow-hidden rounded bg-surface-sunken ${
+        selection?.selected ? 'ring-3 ring-accent ring-offset-2' : ''
+      } ${
+        notOwned
+          ? 'cursor-not-allowed opacity-45'
+          : selection?.disabled
+            ? 'cursor-not-allowed opacity-70'
+            : ''
+      }`}
     >
       {photo.thumbnailUrl === null && (
         <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-xs text-danger">
@@ -38,6 +68,18 @@ export function PhotoThumbnail({
           loading="lazy"
           className="h-full w-full object-cover"
         />
+      )}
+      {selection && !notOwned && (
+        <span
+          aria-hidden="true"
+          className={`absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-bold ${
+            selection.selected
+              ? 'border-white bg-accent text-white'
+              : 'border-white bg-black/50 text-transparent'
+          }`}
+        >
+          ✓
+        </span>
       )}
       {statusLabel && (
         <span

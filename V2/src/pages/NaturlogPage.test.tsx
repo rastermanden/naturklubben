@@ -16,6 +16,7 @@ const photo = {
   optimizationError: null,
   commentCount: 0,
   canDelete: false,
+  canEdit: false,
   isUploader: false,
   displayUrl: 'https://example.convex.cloud/api/storage/fox',
   thumbnailUrl: 'https://example.convex.cloud/api/storage/fox',
