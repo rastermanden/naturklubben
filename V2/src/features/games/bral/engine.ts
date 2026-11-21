@@ -154,12 +154,15 @@ export function evaluateStrike(markerPos: number): {
   }
 }
 
-export function canStrike(state: BralState): boolean {
+export function canStrike(
+  state: BralState,
+  options?: { ignoreCoinCap?: boolean },
+): boolean {
   return (
     state.status === 'playing' &&
     state.molten >= BRAL_CANS_PER_COIN &&
     state.strikeCooldown <= 0 &&
-    state.coins < BRAL_MAX_COINS_PER_GAME
+    (options?.ignoreCoinCap === true || state.coins < BRAL_MAX_COINS_PER_GAME)
   )
 }
 
@@ -406,8 +409,11 @@ export function passRelay(
   }
 }
 
-export function strikeCoin(state: BralState): BralState {
-  if (!canStrike(state)) return state
+export function strikeCoin(
+  state: BralState,
+  options?: { ignoreCoinCap?: boolean },
+): BralState {
+  if (!canStrike(state, options)) return state
   const result = evaluateStrike(state.markerPos)
   const rawMolten = Math.max(0, state.molten - BRAL_CANS_PER_COIN)
   const molten = rawMolten < 1e-6 ? 0 : rawMolten
