@@ -82,6 +82,7 @@ function GalleryPage() {
 
   const deletePhoto = useMutation(api.gallery.deletePhoto)
   const revokePhotoLink = useMutation(api.gallery.revokePhotoLink)
+  const movePhoto = useMutation(api.gallery.movePhoto)
   const mintPhotoTokens = useMutation(api.gallery.mintPhotoTokens)
   const optimizePhoto = useAction(api.gallery.optimizePhoto)
   const upload = useUploadPhotos()
@@ -105,6 +106,7 @@ function GalleryPage() {
   const [busyPhotoId, setBusyPhotoId] = useState<string | null>(null)
   const [retryingPhotoId, setRetryingPhotoId] = useState<string | null>(null)
   const [revokingPhotoId, setRevokingPhotoId] = useState<string | null>(null)
+  const [movingPhotoId, setMovingPhotoId] = useState<string | null>(null)
   const mintedTokens = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -499,6 +501,29 @@ function GalleryPage() {
                 setActionError('Linket kunne ikke trækkes tilbage. Prøv igen.'),
               )
               .finally(() => setRevokingPhotoId(null))
+          }}
+          moving={movingPhotoId === activePhoto.id}
+          currentEventTitle={
+            albums?.find(
+              (album) => album.albumId === (activePhoto.eventId ?? undefined),
+            )?.title
+          }
+          onMove={(photo, eventId) => {
+            setActionError(null)
+            setMovingPhotoId(photo.id)
+            void movePhoto({
+              photoId: photo.id as Id<'photos'>,
+              eventId: eventId ?? undefined,
+            })
+              // Lysbordet lukkes: billedet ligger nu i et andet album end
+              // det, man står i, så bladringen og "Billede n af m" ville
+              // forsvinde uden forklaring -- og var det albummets sidste
+              // billede, stod der "Ingen billeder endnu" bagved.
+              .then(() => setGalleryParam('photo', null))
+              .catch(() =>
+                setActionError('Billedet kunne ikke flyttes. Prøv igen.'),
+              )
+              .finally(() => setMovingPhotoId(null))
           }}
           retrying={retryingPhotoId === activePhoto.id}
           onRetryOptimization={retryOptimization}

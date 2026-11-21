@@ -3,6 +3,7 @@ import {
   canRetryOptimization,
   optimizationStatusLabel,
 } from './optimizationStatus'
+import { MovePhotoField } from './MovePhotoField'
 import { PhotoComments } from './PhotoComments'
 import type { Photo } from './types'
 
@@ -25,8 +26,17 @@ interface PhotoLightboxProps {
   onDelete: (photo: Photo) => void
   onRevoke?: (photo: Photo) => void
   onRetryOptimization: (photo: Photo) => void
+  /**
+   * Flytter billedet til en anden begivenhed, eller til "Uden begivenhed" ved
+   * `null`. Udeladt vises vælgeren ikke -- fx i naturloggen, hvor lysbordet
+   * også bruges, men hvor et album ikke er noget, man står i.
+   */
+  onMove?: (photo: Photo, eventId: string | null) => void
+  /** Titlen på billedets nuværende begivenhed, til "Flyt til"-feltet. */
+  currentEventTitle?: string
   deleting: boolean
   revoking?: boolean
+  moving?: boolean
   retrying: boolean
   actionError: string | null
   onPrevious?: (() => void) | null
@@ -40,8 +50,11 @@ export function PhotoLightbox({
   onDelete,
   onRevoke,
   onRetryOptimization,
+  onMove,
+  currentEventTitle,
   deleting,
   revoking = false,
+  moving = false,
   retrying,
   actionError,
   onPrevious = null,
@@ -204,6 +217,24 @@ export function PhotoLightbox({
         <p role="alert" className="text-sm text-red-200">
           {actionError}
         </p>
+      )}
+
+      {photo.canDelete && onMove && (
+        <div className="flex justify-center">
+          {/*
+            `key` på billedets id: ellers ville et valg truffet for ét billede
+            følge med, når man bladrer -- og så er næste billede ét tryk fra at
+            blive flyttet til en tur, der blev valgt for et andet. Det er lige
+            den fejl, kravet om et tryk skal forhindre.
+          */}
+          <MovePhotoField
+            key={photo.id}
+            photo={photo}
+            currentTitle={currentEventTitle}
+            moving={moving}
+            onMove={onMove}
+          />
+        </div>
       )}
 
       <div className="flex flex-wrap items-center justify-center gap-2">

@@ -411,8 +411,25 @@ async function removePhotoFromAlbum(ctx: MutationCtx, photo: Doc<'photos'>) {
         .first()
     : null
 
+  // `latestPhotoAt` er "seneste billede i albummet" og bruges til at sortere
+  // album-forsiden og til linjen "senest <dato>". Den skal regnes om her:
+  // `addPhotoToAlbum` bruger `Math.max`, så feltet aldrig kan falde af sig
+  // selv, og et album, der mister sit nyeste billede, ville ellers blive ved
+  // med at påstå den dato -- et tømt begivenhedsalbum stod så øverst på
+  // forsiden med "0 billeder · senest <dato>".
+  const newestRemaining =
+    photoCount === 0
+      ? null
+      : await ctx.db
+          .query('photos')
+          .withIndex('by_album', (q) => q.eq('albumKey', photo.albumKey))
+          .order('desc')
+          .filter((q) => q.neq(q.field('_id'), photo._id))
+          .first()
+
   await ctx.db.patch(album._id, {
     photoCount,
+    latestPhotoAt: newestRemaining?.createdAt,
     coverPhotoId: coverBelongsToPhoto ? nextCover?._id : album.coverPhotoId,
     coverThumbnailStorageId: coverBelongsToPhoto
       ? nextCover?.thumbnailStorageId
@@ -582,6 +599,81 @@ export const createPhoto = mutation({
     }
 
     return photoId
+  },
+})
+
+/**
+ * Flytter et billede til en anden begivenhed -- eller væk fra den, til "Uden
+ * begivenhed". Ejeren selv eller en admin må flytte, samme regel som
+ * sletningen har.
+ *
+ * Før kunne et billede kun få sin begivenhed, mens det blev uploadet (#332):
+ * et billede lagt op uden en tur blev liggende under "Uden begivenhed" for
+ * evigt, og et billede på den forkerte tur skulle slettes og lægges op igen --
+ * og så fulgte kommentarerne med i faldet. Her flyttes kun albumnøglen, så
+ * billedtekst, kommentarer og filer bliver, hvor de er.
+ *
+ * Filerne røres ikke, så en optimering, der er i gang, er ikke i vejen:
+ * `finishOptimization` læser billedets albumnøgle, når den er færdig, og ser
+ * derfor den nye.
+ */
+export const movePhoto = mutation({
+  args: { photoId: v.id('photos'), eventId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const profile = await requireWritableProfile(ctx)
+
+    const photo = await ctx.db.get(args.photoId)
+    if (photo === null) {
+      throw new ConvexError('PHOTO_NOT_FOUND')
+    }
+    if (photo.uploaderId !== profile._id && !profile.isAdmin) {
+      throw new ConvexError('PHOTO_MOVE_NOT_AUTHORIZED')
+    }
+
+    // Samme tre udfald som ved en upload, så et album ikke kan få et navn,
+    // ingen begivenhed har -- og så et V1-album stadig kan rammes.
+    const target = await albumTargetFor(ctx, args.eventId)
+    if (target.albumKey === photo.albumKey) return null
+
+    // Rækkefølgen er vigtig: `removePhotoFromAlbum` læser billedets nuværende
+    // albumnøgle, så den skal kaldes før patchen.
+    await removePhotoFromAlbum(ctx, photo)
+    await ctx.db.patch(photo._id, {
+      albumKey: target.albumKey,
+      eventId: target.eventId,
+    })
+    await addPhotoToAlbum(ctx, {
+      albumKey: target.albumKey,
+      eventId: target.eventId,
+      eventTitle: target.event?.title,
+      // Billedets egen dato, ikke nu: `latestPhotoAt` er "seneste billede i
+      // albummet", og en flytning laver ikke et nyere billede.
+      createdAt: photo.createdAt,
+    })
+
+    // Forsiden er "nyeste klare billede" (se `photoAlbums` i
+    // `tables/gallery.ts`). Samme regel som `finishOptimization` bruger: det
+    // flyttede billede bliver forside, hvis albummet ingen har -- fx fordi
+    // flytningen lige oprettede det -- eller hvis det er nyere end den, der
+    // er. Uden det sidste var flytningen den eneste vej, hvor en ældre forside
+    // fik lov at blive stående.
+    const album = await albumByKey(ctx, target.albumKey)
+    if (
+      album !== null &&
+      photo.optimizationStatus === 'ready' &&
+      (album.coverPhotoId === undefined ||
+        album.coverCreatedAt === undefined ||
+        album.coverCreatedAt <= photo.createdAt)
+    ) {
+      await ctx.db.patch(album._id, {
+        coverPhotoId: photo._id,
+        coverThumbnailStorageId: photo.thumbnailStorageId,
+        coverOptimizedStorageId: photo.optimizedStorageId,
+        coverCreatedAt: photo.createdAt,
+      })
+    }
+
+    return null
   },
 })
 

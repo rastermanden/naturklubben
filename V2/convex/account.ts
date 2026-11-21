@@ -551,8 +551,25 @@ async function removePhotoFromAlbum(ctx: MutationCtx, photo: Doc<'photos'>) {
         .first()
     : null
 
+  // `latestPhotoAt` er "seneste billede i albummet" og bruges til at sortere
+  // album-forsiden og til linjen "senest <dato>". Den skal regnes om her:
+  // `addPhotoToAlbum` bruger `Math.max`, så feltet aldrig kan falde af sig
+  // selv, og et album, der mister sit nyeste billede, ville ellers blive ved
+  // med at påstå den dato -- et tømt begivenhedsalbum stod så øverst på
+  // forsiden med "0 billeder · senest <dato>".
+  const newestRemaining =
+    photoCount === 0
+      ? null
+      : await ctx.db
+          .query('photos')
+          .withIndex('by_album', (q) => q.eq('albumKey', photo.albumKey))
+          .order('desc')
+          .filter((q) => q.neq(q.field('_id'), photo._id))
+          .first()
+
   await ctx.db.patch(album._id, {
     photoCount,
+    latestPhotoAt: newestRemaining?.createdAt,
     coverPhotoId: coverBelongsToPhoto ? nextCover?._id : album.coverPhotoId,
     coverThumbnailStorageId: coverBelongsToPhoto
       ? nextCover?.thumbnailStorageId
