@@ -4,6 +4,7 @@ import { formatScore } from '../leaderboard'
 import { usePersonalBest, usePlayerId, useSubmitScore } from '../useGameScores'
 import { drawBral } from './draw'
 import {
+  BRAL_DURATION_SECONDS,
   BRAL_WORLD,
   canStrike,
   catchCanAt,
@@ -36,7 +37,6 @@ export function BralGame() {
   const submitScore = useSubmitScore('bral')
   const submitted = useRef(false)
   const bestBefore = useRef(0)
-  const startedAt = useRef(0)
   const finishedSeconds = useRef(0)
   const suppressBellowsClick = useRef(false)
   const suppressStrikeClick = useRef(false)
@@ -125,7 +125,6 @@ export function BralGame() {
     submitted.current = false
     setRecord(false)
     bestBefore.current = personalBest.data?.score ?? 0
-    startedAt.current = Date.now()
     const next = startBral()
     stateRef.current = next
     setSnapshot(next)
@@ -153,7 +152,7 @@ export function BralGame() {
     submitted.current = true
     finishedSeconds.current = Math.max(
       0,
-      Math.round((Date.now() - startedAt.current) / 1000),
+      Math.min(BRAL_DURATION_SECONDS, Math.round(snapshot.elapsedSeconds)),
     )
     setRecord(snapshot.score > bestBefore.current)
     saveResult(finishedSeconds.current)

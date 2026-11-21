@@ -150,4 +150,52 @@ describe('BralGame', () => {
         .parentElement?.textContent?.replace('Point', ''),
     ).toBe(pointAfterPointerDown)
   })
+
+  it('tæller ikke tid med mens fanen er skjult i durationSeconds', () => {
+    vi.useFakeTimers()
+    let frames: FrameRequestCallback[] = []
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      frames.push(cb)
+      return frames.length
+    })
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {})
+
+    const flushFrame = () => {
+      const pending = frames
+      frames = []
+      const now = performance.now()
+      for (const cb of pending) cb(now)
+    }
+
+    opening.override = {
+      timeLeft: 0.2,
+      elapsedSeconds: 59.8,
+      score: 25,
+      coins: 3,
+    }
+
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    act(() => {
+      vi.advanceTimersByTime(100)
+      flushFrame()
+    })
+    expect(submit.mutate).not.toHaveBeenCalled()
+
+    // Fanen skjules i 90 sekunder uden animation frames; væguret går, men spillet står stille.
+    act(() => {
+      vi.advanceTimersByTime(90_000)
+      flushFrame()
+    })
+
+    expect(screen.getByText('Tiden er gået')).toBeTruthy()
+    expect(submit.mutate).toHaveBeenCalledTimes(1)
+    expect(submit.mutate).toHaveBeenCalledWith({
+      score: 25,
+      lines: 3,
+      level: 1,
+      durationSeconds: 60,
+    })
+  })
 })

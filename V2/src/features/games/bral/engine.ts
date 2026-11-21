@@ -71,6 +71,7 @@ export interface LastCoin {
 export interface BralState {
   status: BralStatus
   timeLeft: number
+  elapsedSeconds: number
   score: number
   coins: number
   cansCaught: number
@@ -132,6 +133,7 @@ export function createBralState(): BralState {
   return {
     status: 'ready',
     timeLeft: BRAL_DURATION_SECONDS,
+    elapsedSeconds: 0,
     score: 0,
     coins: 0,
     cansCaught: 0,
@@ -288,12 +290,21 @@ export function stepBral(
   if (state.status !== 'playing') return state
 
   const dt = Math.min(Math.max(dtSeconds, 0), 0.1)
-  const rawTimeLeft = state.timeLeft - dt
+  const appliedDt = Math.min(dt, state.timeLeft)
+  const rawTimeLeft = state.timeLeft - appliedDt
   const timeLeft = rawTimeLeft < 1e-6 ? 0 : rawTimeLeft
+  const rawElapsed = Math.min(
+    BRAL_DURATION_SECONDS,
+    state.elapsedSeconds + appliedDt,
+  )
+  const elapsedSeconds =
+    BRAL_DURATION_SECONDS - rawElapsed < 1e-6
+      ? BRAL_DURATION_SECONDS
+      : rawElapsed
 
   const ovenTemp = Math.max(
     OVEN_MIN_TEMP,
-    state.ovenTemp - OVEN_COOL_PER_SEC * dt,
+    state.ovenTemp - OVEN_COOL_PER_SEC * appliedDt,
   )
   const zone = ovenZone(ovenTemp)
 
@@ -303,7 +314,7 @@ export function stepBral(
     const amount = Math.min(
       crucibleCans,
       MOLTEN_CAPACITY - molten,
-      BRAL_MELT_CANS_PER_SEC * dt,
+      BRAL_MELT_CANS_PER_SEC * appliedDt,
     )
     crucibleCans -= amount
     molten += amount
@@ -315,14 +326,14 @@ export function stepBral(
       molten = Math.min(MOLTEN_CAPACITY, Math.round(molten))
     }
   } else if (zone === 'hot') {
-    molten = Math.max(0, molten - OVERHEAT_LOSS_PER_SEC * dt)
+    molten = Math.max(0, molten - OVERHEAT_LOSS_PER_SEC * appliedDt)
   }
 
   const cans = state.cans
-    .map((can) => ({ ...can, y: can.y + can.speed * dt }))
+    .map((can) => ({ ...can, y: can.y + can.speed * appliedDt }))
     .filter((can) => can.y <= CAN_PLAY_BOTTOM_Y)
 
-  let spawnTimer = state.spawnTimer - dt
+  let spawnTimer = state.spawnTimer - appliedDt
   let nextId = state.nextId
   while (spawnTimer <= 0 && timeLeft > 0) {
     spawnTimer += BRAL_CAN_SPAWN_INTERVAL_S
@@ -334,7 +345,7 @@ export function stepBral(
   let markerPos = state.markerPos
   let markerDir = state.markerDir
   if (molten >= BRAL_CANS_PER_COIN) {
-    markerPos += markerDir * STRIKE_SPEED * dt
+    markerPos += markerDir * STRIKE_SPEED * appliedDt
     if (markerPos >= 1) {
       markerPos = Math.max(0, 2 - markerPos)
       markerDir = -1
@@ -344,10 +355,10 @@ export function stepBral(
     }
   }
 
-  const strikeCooldown = Math.max(0, state.strikeCooldown - dt)
+  const strikeCooldown = Math.max(0, state.strikeCooldown - appliedDt)
   let lastCoin = state.lastCoin
   if (lastCoin) {
-    const nextTtl = lastCoin.ttl - dt
+    const nextTtl = lastCoin.ttl - appliedDt
     lastCoin = nextTtl <= 0 ? null : { ...lastCoin, ttl: nextTtl }
   }
 
@@ -356,6 +367,7 @@ export function stepBral(
       ...state,
       status: 'over',
       timeLeft: 0,
+      elapsedSeconds,
       ovenTemp,
       crucibleCans,
       molten,
@@ -372,6 +384,7 @@ export function stepBral(
   return {
     ...state,
     timeLeft,
+    elapsedSeconds,
     ovenTemp,
     crucibleCans,
     molten,

@@ -192,6 +192,7 @@ describe('bral-motor', () => {
 
     expect(state.status).toBe('over')
     expect(state.timeLeft).toBe(0)
+    expect(state.elapsedSeconds).toBe(BRAL_DURATION_SECONDS)
     expect(state.cans).toEqual([])
     expect(state.coins).toBe(BRAL_MAX_COINS_PER_GAME)
     expect(state.score).toBe(BRAL_MAX_COINS_PER_GAME * BRAL_MAX_COIN_VALUE)
@@ -199,5 +200,12 @@ describe('bral-motor', () => {
       state.coins * BRAL_MIN_COIN_VALUE,
     )
     expect(bralScoreIsPlausible(state.score, state.coins, 1)).toBe(true)
+  })
+
+  it('begrænser akkumuleret spilletid pr. step ved langt spring mellem billeder', () => {
+    const started = startBral(() => 0.5)
+    const stepped = stepBral(started, 90, () => 0.5)
+    expect(stepped.elapsedSeconds).toBeCloseTo(0.1)
+    expect(stepped.timeLeft).toBeCloseTo(BRAL_DURATION_SECONDS - 0.1)
   })
 })
