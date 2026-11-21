@@ -5,8 +5,6 @@ import { gameIdValidator } from './tables/community'
 import { requireProfile, requireWritableProfile } from './authz'
 import { bralScoreIsPlausible } from './bralRules'
 
-export { bralScoreIsPlausible } from './bralRules'
-
 /**
  * Spillenes resultatliste. Convex-udgaven af `game_scores` fra den gamle app
  * (se migrationerne `20260906090000_game_scores.sql` og de fem udvidelser, der

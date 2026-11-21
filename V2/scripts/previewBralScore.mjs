@@ -112,6 +112,85 @@ async function runOnce() {
       throw new Error('Login ramte produktions-deploymentet')
     }
 
+    function isPlausibleBralScore(score, lines) {
+      if (lines < 0 || lines > 23) return false
+      for (let ti = 0; ti <= lines; ti += 1) {
+        const restCoins = lines - ti
+        const restScore = score - ti * 10
+        if (restScore < 0) break
+        const diff = restScore - restCoins
+        if (diff >= 0 && diff % 4 === 0 && diff / 4 <= restCoins) return true
+      }
+      return false
+    }
+
+    function minCoinsForScore(score) {
+      return Math.floor(score / 10) + Math.floor((score % 10) / 5) + (score % 5)
+    }
+
+    async function queryConvex(path, args) {
+      const queryRes = await fetch(`https://${host}/api/query`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ path, args, format: 'json' }),
+      })
+      if (!queryRes.ok) {
+        throw new Error(`${path} svarede ${queryRes.status}`)
+      }
+      const data = await queryRes.json()
+      if (data.status && data.status !== 'success') {
+        throw new Error(
+          `${path} fejlede: ${redact(JSON.stringify(data)).slice(0, 180)}`,
+        )
+      }
+      return data.value
+    }
+
+    const personalBest = await queryConvex('games:personalBest', {
+      game: 'bral',
+    })
+    const bestScore =
+      typeof personalBest?.score === 'number' ? personalBest.score : 0
+    const initialFloor = 26 + (Math.floor(Date.now() / 1000) % 30)
+
+    let target = null
+    for (
+      let candidate = Math.max(initialFloor, bestScore + 1);
+      candidate <= 230;
+      candidate += 1
+    ) {
+      const lines = minCoinsForScore(candidate)
+      if (isPlausibleBralScore(candidate, lines)) {
+        target = { score: candidate, lines }
+        break
+      }
+    }
+
+    let expectOnOverview = true
+    if (!target) {
+      expectOnOverview = false
+      const recent = await queryConvex('games:recent', { game: 'bral' })
+      const recentScores = new Set(
+        Array.isArray(recent) ? recent.map((row) => row.score) : [],
+      )
+      for (let candidate = 225; candidate >= 25; candidate -= 1) {
+        const lines = minCoinsForScore(candidate)
+        if (
+          !recentScores.has(candidate) &&
+          isPlausibleBralScore(candidate, lines)
+        ) {
+          target = { score: candidate, lines }
+          break
+        }
+      }
+      if (!target) {
+        target = { score: 225, lines: minCoinsForScore(225) }
+      }
+    }
+
     const response = await fetch(`https://${host}/api/mutation`, {
       method: 'POST',
       headers: {
@@ -122,8 +201,8 @@ async function runOnce() {
         path: 'games:submit',
         args: {
           game: 'bral',
-          score: 25,
-          lines: 3,
+          score: target.score,
+          lines: target.lines,
           level: 1,
           durationSeconds: 60,
         },
@@ -147,10 +226,10 @@ async function runOnce() {
         `games:submit afvist: ${redact(JSON.stringify(parsed)).slice(0, 180)}`,
       )
     }
-    console.log('Bral-resultatet blev gemt.')
+    console.log(`Bral-resultatet (${target.score}) blev gemt.`)
 
     // Ny fane: den åbne Convex-websocket kan hænge navigationen.
-    async function open(route, ready) {
+    async function open(route, ready, arg) {
       const next = await browser.newPage()
       await next.setViewport({ width: 1280, height: 800 })
       const response = await next.goto(`${base}${route}?cb=${Date.now()}`, {
@@ -160,31 +239,45 @@ async function runOnce() {
       if (response !== null && response.status() >= 400) {
         throw new Error(`HTTP ${response.status()} på /${route}`)
       }
-      await next.waitForFunction(ready, { timeout: 30000 })
+      await next.waitForFunction(ready, { timeout: 30000 }, arg)
       await next.close()
     }
 
-    await open('spil/bral', () => {
-      const text = document.body?.innerText ?? ''
-      return (
-        text.includes('Resultatliste') &&
-        text.includes('Seneste spil') &&
-        text.includes('Preview-tester') &&
-        text.includes('dig') &&
-        text.includes('3 mønter') &&
-        text.includes('25')
-      )
-    })
-    console.log('Resultatlisten på /spil/bral viser 25 point.')
+    const expectedCoins = `${target.lines} ${target.lines === 1 ? 'mønt' : 'mønter'}`
+    await open(
+      'spil/bral',
+      (expected) => {
+        const text = document.body?.innerText ?? ''
+        const hasScore = new RegExp(`\\b${expected.score}\\b`).test(text)
+        return (
+          text.includes('Resultatliste') &&
+          text.includes('Seneste spil') &&
+          text.includes('Preview-tester') &&
+          text.includes('dig') &&
+          text.includes(expected.coins) &&
+          hasScore
+        )
+      },
+      { score: target.score, coins: expectedCoins },
+    )
+    console.log(
+      `Resultatlisten på /spil/bral viser ${target.score} point (${expectedCoins}).`,
+    )
 
-    await open('spil', () => {
-      const text = document.body?.innerText ?? ''
-      return (
-        text.includes('Bral smeltning — de bedste') &&
-        text.includes('Preview-tester') &&
-        text.includes('25')
-      )
-    })
+    const overviewScore = expectOnOverview ? target.score : bestScore
+    await open(
+      'spil',
+      (expectedScore) => {
+        const text = document.body?.innerText ?? ''
+        const hasScore = new RegExp(`\\b${expectedScore}\\b`).test(text)
+        return (
+          text.includes('Bral smeltning — de bedste') &&
+          text.includes('Preview-tester') &&
+          hasScore
+        )
+      },
+      overviewScore,
+    )
     console.log('Oversigten under Spil viser det samme resultat.')
   } finally {
     await browser.close()

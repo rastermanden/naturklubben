@@ -349,7 +349,7 @@ export function BralGame() {
                 <p className="font-mono text-xs opacity-90">
                   {snapshot.relay.active
                     ? 'Skift venstre og højre for at fylde lageret.'
-                    : `Ringtræk ${snapshot.pullTabs}/${BRAL_TABS_PER_COIN} eller start alkoholfri ølstafet`}
+                    : `Ringtræk ${snapshot.pullTabs}/${BRAL_TABS_PER_COIN} · tvungen ølstafet`}
                 </p>
               </div>
               {!snapshot.relay.active && (
@@ -407,7 +407,7 @@ export function BralGame() {
             <p className="max-w-sm text-sm text-white/85">
               {snapshot.status === 'over'
                 ? `Du fik ${formatScore(snapshot.score)} point fra ${snapshot.coins} ${snapshot.coins === 1 ? 'mønt' : 'mønter'}.`
-                : 'Tryk på de faldende øldåser, hold ovnen omkring 660 °C med blæsebælgen, og slå En, Fem eller Ti Bral. Fire dåser giver én mønt på et minut. Rammer dåsemanglen, samler du ringtræk eller løser den med en alkoholfri ølstafet.'}
+                : 'Tryk på de faldende øldåser, hold ovnen omkring 660 °C med blæsebælgen, og slå En, Fem eller Ti Bral. Fire dåser giver én mønt på et minut. Rammer dåsemanglen, samler du ringtræk eller løser den med en tvungen, alkoholfri ølstafet.'}
             </p>
             {snapshot.status === 'over' && record && snapshot.score > 0 && (
               <p className="text-sm font-medium text-warn-ring">
@@ -481,9 +481,9 @@ export function BralGame() {
       </div>
 
       <p className="text-sm text-ink-subtle">
-        Tryk på dåserne og ringtræk på skærmen, eller brug D til at gribe, B
-        eller pil op til blæsebælgen og mellemrum til at slå mønten. Ved
-        dåsemangel starter R en alkoholfri ølstafet med pil venstre og højre.
+        Tryk på dåser og ringtræk på skærmen, eller brug D til at gribe, B eller
+        pil op til blæsebælgen og mellemrum til at slå mønten. Ved dåsemangel
+        starter R tvungen ølstafet med pil venstre og højre.
       </p>
 
       <p role="status" aria-live="polite" className="sr-only">

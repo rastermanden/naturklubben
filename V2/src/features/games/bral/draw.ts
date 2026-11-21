@@ -194,7 +194,7 @@ function drawCrucibleCard(ctx: CanvasRenderingContext2D, state: BralState) {
   ctx.textBaseline = 'top'
   ctx.textAlign = 'left'
   ctx.fillStyle = '#cbd5e1'
-  ctx.fillText('Digle', x + 10, y + 8)
+  ctx.fillText('Digel', x + 10, y + 8)
 
   ctx.textAlign = 'right'
   ctx.fillStyle = '#e2e8f0'
@@ -314,7 +314,7 @@ function drawLastCoinBanner(ctx: CanvasRenderingContext2D, state: BralState) {
       ? '#f59e0b'
       : state.lastCoin.denomination === 'fem'
         ? '#d97706'
-        : '#64748b'
+        : '#cbd5e1'
   ctx.fill()
   ctx.strokeStyle = '#fef3c7'
   ctx.lineWidth = 1.5
@@ -356,7 +356,7 @@ function drawShortageHud(ctx: CanvasRenderingContext2D, state: BralState) {
   )
 }
 
-/** Tegner støberiet: faldende øldåser, ringtræk, ovn, digle og prægebjælke. */
+/** Tegner støberiet: faldende øldåser, ringtræk, ovn, digel og prægebjælke. */
 export function drawBral(
   ctx: CanvasRenderingContext2D,
   state: BralState,
