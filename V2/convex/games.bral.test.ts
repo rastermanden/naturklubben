@@ -30,13 +30,19 @@ async function seedMember(
 }
 
 describe('bralScoreIsPlausible', () => {
-  it('godkender gyldige Bral-resultater og afviser umulige tal', () => {
+  it('godkender gyldige møntkombinationer og afviser umulige pointtal', () => {
     expect(bralScoreIsPlausible(0, 0, 1)).toBe(true)
     expect(bralScoreIsPlausible(1, 1, 1)).toBe(true)
+    expect(bralScoreIsPlausible(5, 1, 1)).toBe(true)
     expect(bralScoreIsPlausible(10, 1, 1)).toBe(true)
+    expect(bralScoreIsPlausible(16, 3, 1)).toBe(true)
     expect(bralScoreIsPlausible(25, 3, 1)).toBe(true)
     expect(bralScoreIsPlausible(240, 24, 1)).toBe(true)
 
+    expect(bralScoreIsPlausible(2, 1, 1)).toBe(false)
+    expect(bralScoreIsPlausible(6, 1, 1)).toBe(false)
+    expect(bralScoreIsPlausible(9, 2, 1)).toBe(false)
+    expect(bralScoreIsPlausible(26, 3, 1)).toBe(false)
     expect(bralScoreIsPlausible(11, 1, 1)).toBe(false)
     expect(bralScoreIsPlausible(0, 1, 1)).toBe(false)
     expect(bralScoreIsPlausible(2, 3, 1)).toBe(false)
@@ -55,7 +61,7 @@ describe('games.submit bral', () => {
       .withIdentity({ subject: spiller1.userId })
       .mutation(api.games.submit, {
         game: 'bral',
-        score: 25,
+        score: 16,
         lines: 3,
         level: 1,
         durationSeconds: 60,
@@ -86,7 +92,7 @@ describe('games.submit bral', () => {
         game: 'bral',
         playerId: spiller1.profileId,
         playerName: 'Spiller 1',
-        score: 25,
+        score: 16,
         lines: 3,
         level: 1,
       }),
@@ -104,7 +110,7 @@ describe('games.submit bral', () => {
       .withIdentity({ subject: spiller2.userId })
       .query(api.games.personalBest, { game: 'bral' })
     expect(spiller1Best).toMatchObject({
-      score: 25,
+      score: 16,
       playerId: spiller1.profileId,
     })
     expect(spiller2Best).toMatchObject({
@@ -118,6 +124,8 @@ describe('games.submit bral', () => {
     const spiller1 = await seedMember(t, 'spiller1@example.com', 'Spiller 1')
 
     for (const bad of [
+      { score: 2, lines: 1, level: 1 },
+      { score: 26, lines: 3, level: 1 },
       { score: 50, lines: 1, level: 1 },
       { score: 250, lines: BRAL_MAX_COINS_PER_GAME + 1, level: 1 },
       { score: 0, lines: 1, level: 1 },

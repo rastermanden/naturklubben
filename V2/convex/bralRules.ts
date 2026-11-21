@@ -34,9 +34,23 @@ export function bralScoreIsPlausible(
   lines: number,
   level: number,
 ): boolean {
-  if (level !== 1) return false
+  if (!Number.isInteger(score) || !Number.isInteger(lines) || level !== 1) {
+    return false
+  }
   if (lines < 0 || lines > BRAL_MAX_COINS_PER_GAME) return false
-  return (
-    score >= lines * BRAL_MIN_COIN_VALUE && score <= lines * BRAL_MAX_COIN_VALUE
-  )
+
+  const en = BRAL_COIN_VALUES.en
+  const fem = BRAL_COIN_VALUES.fem
+  const ti = BRAL_COIN_VALUES.ti
+  const femStep = fem - en
+  for (let tiCount = 0; tiCount <= lines; tiCount += 1) {
+    const remainingCoins = lines - tiCount
+    const remainingScore = score - tiCount * ti
+    if (remainingScore < 0) break
+    const diff = remainingScore - remainingCoins * en
+    if (diff >= 0 && diff % femStep === 0 && diff / femStep <= remainingCoins) {
+      return true
+    }
+  }
+  return false
 }
