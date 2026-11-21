@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { formatScore } from '../leaderboard'
 import { usePersonalBest, usePlayerId, useSubmitScore } from '../useGameScores'
@@ -52,6 +52,8 @@ function isButtonOrLinkTarget(target: EventTarget | null): boolean {
  */
 export function BralGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const bellowsDescId = useId()
+  const strikeDescId = useId()
   const [snapshot, setSnapshot] = useState<BralState>(createBralState)
   const stateRef = useRef(snapshot)
   const userId = usePlayerId()
@@ -443,10 +445,14 @@ export function BralGame() {
           disabled={!playing}
           onAction={handleBellows}
           ariaLabel="Blæsebælg"
+          ariaDescribedBy={bellowsDescId}
           className="flex h-16 touch-none flex-col items-center justify-center rounded-xl border border-line-strong bg-surface px-3 text-ink-body select-none active:bg-surface-raised disabled:opacity-40"
         >
           <span className="font-semibold">Blæsebælg</span>
-          <span className="text-xs text-ink-subtle tabular-nums">
+          <span
+            id={bellowsDescId}
+            className="text-xs text-ink-subtle tabular-nums"
+          >
             {Math.round(snapshot.ovenTemp)} °C · {zoneLabel}
           </span>
         </PressButton>
@@ -455,6 +461,7 @@ export function BralGame() {
           disabled={!strikeReady}
           onAction={handleStrike}
           ariaLabel="Slå mønt"
+          ariaDescribedBy={strikeDescId}
           className={`flex h-16 touch-none flex-col items-center justify-center rounded-xl border px-3 select-none disabled:opacity-40 ${
             strikeReady
               ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
@@ -463,6 +470,7 @@ export function BralGame() {
         >
           <span className="font-semibold">Slå mønt</span>
           <span
+            id={strikeDescId}
             className={`text-xs ${
               strikeReady ? 'text-on-accent/90' : 'text-ink-subtle'
             }`}
@@ -486,13 +494,15 @@ export function BralGame() {
 }
 
 function PressButton({
+  ariaDescribedBy,
   ariaLabel,
   children,
   className,
   disabled = false,
   onAction,
 }: {
-  ariaLabel: string
+  ariaDescribedBy?: string
+  ariaLabel?: string
   children: ReactNode
   className: string
   disabled?: boolean
@@ -601,6 +611,7 @@ function PressButton({
         onAction()
       }}
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       className={className}
     >
       {children}

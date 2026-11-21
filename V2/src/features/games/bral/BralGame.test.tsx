@@ -663,4 +663,38 @@ describe('BralGame', () => {
     fireEvent.keyDown(bellows, { key: 'ArrowLeft' })
     expect(screen.getByText('FORCED RELAY · 1/6')).toBeTruthy()
   })
+
+  it('giver Blæsebælg og Slå mønt stabilt navn og tilstand i aria-describedby', () => {
+    opening.override = {
+      molten: 8,
+      markerPos: 0.5,
+      ovenTemp: 650,
+    }
+
+    render(<BralGame />)
+    const bellows = screen.getByRole('button', { name: 'Blæsebælg' })
+    const strike = screen.getByRole('button', { name: 'Slå mønt' })
+
+    const bellowsDescId = bellows.getAttribute('aria-describedby')
+    const strikeDescId = strike.getAttribute('aria-describedby')
+    expect(bellowsDescId).toBeTruthy()
+    expect(strikeDescId).toBeTruthy()
+
+    const bellowsDesc = document.getElementById(bellowsDescId!)
+    const strikeDesc = document.getElementById(strikeDescId!)
+    expect(bellowsDesc?.textContent).toContain('Smelter')
+    expect(strikeDesc?.textContent).toBe('Mangler metal')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(screen.getByRole('button', { name: 'Blæsebælg' })).toBe(bellows)
+    expect(bellowsDesc?.textContent).toContain('650 °C · Smelter')
+    expect(strikeDesc?.textContent).toBe('Klar til prægning')
+
+    fireEvent.click(bellows)
+    fireEvent.click(bellows)
+    expect(bellowsDesc?.textContent).toContain('For varm!')
+
+    fireEvent.click(strike)
+    expect(strikeDesc?.textContent).toBe('Klar om lidt')
+  })
 })
