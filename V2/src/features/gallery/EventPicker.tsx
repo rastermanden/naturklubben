@@ -4,6 +4,13 @@ import { api } from '../../../convex/_generated/api'
 interface EventPickerProps {
   /** Begivenhedens id, eller `''` for "Ingen". */
   value: string
+  /**
+   * Titlen på den begivenhed, `value` peger på, hvis den ikke nødvendigvis er
+   * i listen -- fx albummets egen begivenhed. Uden den ville en `select` med
+   * en `value`, der ikke matcher nogen `option`, falde tilbage til den første
+   * og dermed vise "Ingen", mens uploaden knytter begivenheden alligevel.
+   */
+  valueTitle?: string
   onChange: (eventId: string) => void
 }
 
@@ -20,10 +27,17 @@ interface EventPickerProps {
  * som regel efter turen -- og datoen står ved titlen, så to ture med samme
  * navn kan skelnes.
  */
-export function EventPicker({ value, onChange }: EventPickerProps) {
+export function EventPicker({ value, valueTitle, onChange }: EventPickerProps) {
   const events = useQuery(api.calendar.eventOptions, {})
 
-  if (events !== undefined && events.length === 0) return null
+  if (events !== undefined && events.length === 0 && value === '') return null
+
+  // Feltet er brugbart, mens listen hentes: en `disabled` select er ude af
+  // tab-rækkefølgen, så en skærmlæser møder den slet ikke -- og der kommer
+  // ingen besked, når den bliver aktiv. `aria-busy` siger det i stedet.
+  const options = events ?? []
+  const valueIsListed =
+    value === '' || options.some((event) => event.id === value)
 
   return (
     <label className="flex flex-col gap-1 text-sm text-ink-body">
@@ -31,21 +45,18 @@ export function EventPicker({ value, onChange }: EventPickerProps) {
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        disabled={events === undefined}
-        className="min-h-11 rounded border border-line-strong bg-surface px-3 py-2 text-base disabled:text-ink-subtle"
+        aria-busy={events === undefined}
+        className="min-h-11 rounded border border-line-strong bg-surface px-3 py-2 text-base"
       >
-        {events === undefined ? (
-          <option value="">Henter begivenheder…</option>
-        ) : (
-          <>
-            <option value="">Ingen</option>
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {eventLabel(event)}
-              </option>
-            ))}
-          </>
+        <option value="">Ingen</option>
+        {!valueIsListed && (
+          <option value={value}>{valueTitle ?? 'Denne begivenhed'}</option>
         )}
+        {options.map((event) => (
+          <option key={event.id} value={event.id}>
+            {eventLabel(event)}
+          </option>
+        ))}
       </select>
     </label>
   )

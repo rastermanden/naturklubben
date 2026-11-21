@@ -456,21 +456,21 @@ export const eventOptions = query({
     await requireProfile(ctx)
 
     const limit = Math.min(Math.max(args.limit ?? 50, 1), 100)
-    // `by_end` i faldende rækkefølge giver de begivenheder, der sluttede --
-    // eller slutter -- senest. Det er dem, man står og skal uploade fra.
+    // Vinduet og rækkefølgen skal bruge samme nøgle. Hentes de nyeste gennem
+    // `by_end` og sorteres der*efter* på `startAt`, kan en flerdagstur --
+    // lav `startAt`, høj `endsAt` -- optage en plads i vinduet og skubbe en
+    // senere, kortere tur helt ud af listen, så den slet ikke kan vælges.
     const rows = await ctx.db
       .query('events')
-      .withIndex('by_end')
+      .withIndex('by_start')
       .order('desc')
       .take(limit)
 
-    return rows
-      .sort((a, b) => b.startAt - a.startAt || a._id.localeCompare(b._id))
-      .map((event) => ({
-        id: event._id,
-        title: event.title,
-        startAt: event.startAt,
-      }))
+    return rows.map((event) => ({
+      id: event._id,
+      title: event.title,
+      startAt: event.startAt,
+    }))
   },
 })
 

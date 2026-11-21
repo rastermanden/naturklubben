@@ -64,24 +64,44 @@ const MAX_CAPTION_LENGTH = 500
 const MAX_COMMENT_LENGTH = 1000
 const MAX_OPTIMIZATION_ERROR_LENGTH = 500
 
-function albumKeyFor(eventId: string | undefined) {
-  return eventId ?? WITHOUT_EVENT_ALBUM
-}
-
 /**
- * Begivenheden bag et `eventId` fra en klient, eller `null`.
+ * Hvor et billede med et `eventId` fra en klient skal ligge: albummets nøgle,
+ * og begivenheden bag den, hvis den kan findes.
  *
- * `normalizeId` frem for et rent `ctx.db.get`: feltet er en `v.string()` (de
- * migrerede billeder fra V1 bragte deres id'er med som tekst), så en klient
- * kan sende hvad som helst. `normalizeId` giver `null` for alt, der ikke er et
- * id i `events`, i stedet for at kaste.
+ * Tre udfald, fordi `eventId` ikke altid er et Convex-id:
+ *
+ * 1. Et levende `events`-id. Albummet er begivenhedens, og titlen kommer fra
+ *    rækken -- ikke fra klienten.
+ * 2. Ikke et `events`-id, men der findes et album med netop den nøgle. Det er
+ *    de album, V1-importen lagde ind: `migrateV1.ts` bruger V1's egen UUID som
+ *    både `albumKey` og `eventId` (begivenhederne fik nye Convex-id'er, og der
+ *    er ingen remapping). Billedet skal i det album, det blev uploadet fra, så
+ *    nøglen beholdes -- og albummets egen titel får stå.
+ * 3. Hverken det ene eller det andet: turen er slettet, mens uploaden lå i
+ *    køen, eller feltet er pillet ved. Så "Uden begivenhed", frem for at
+ *    afvise billedet eller lave et album, ingen begivenhed svarer til.
+ *
+ * `normalizeId` frem for et rent `ctx.db.get`, fordi feltet er en `v.string()`:
+ * den giver `null` for alt, der ikke er et id i `events`, i stedet for at kaste.
  */
-async function eventForAlbum(ctx: MutationCtx, eventId: string | undefined) {
+async function albumTargetFor(ctx: MutationCtx, eventId: string | undefined) {
   const trimmed = trimmedOrUndefined(eventId)
-  if (trimmed === undefined) return null
+  if (trimmed === undefined) {
+    return { albumKey: WITHOUT_EVENT_ALBUM, eventId: undefined, event: null }
+  }
+
   const normalized = ctx.db.normalizeId('events', trimmed)
-  if (normalized === null) return null
-  return await ctx.db.get(normalized)
+  const event = normalized === null ? null : await ctx.db.get(normalized)
+  if (event !== null) {
+    return { albumKey: event._id, eventId: event._id, event }
+  }
+
+  const existing = await albumByKey(ctx, trimmed)
+  if (existing !== null && existing.eventId !== undefined) {
+    return { albumKey: trimmed, eventId: trimmed, event: null }
+  }
+
+  return { albumKey: WITHOUT_EVENT_ALBUM, eventId: undefined, event: null }
 }
 
 function trimmedOrUndefined(value: string | undefined) {
@@ -353,9 +373,12 @@ async function addPhotoToAlbum(
   await ctx.db.patch(album._id, {
     photoCount: album.photoCount + 1,
     latestPhotoAt: Math.max(album.latestPhotoAt ?? 0, photo.createdAt),
-    // Titlen sættes kun, hvis albummet ikke har en endnu: en senere upload
-    // må ikke omdøbe et album, andre medlemmer allerede kender.
-    title: album.title ?? photo.eventTitle,
+    // Titlen kommer fra begivenhedens egen række, så den må gerne vinde over
+    // den, albummet har: er turen omdøbt, følger albummet med ved næste
+    // upload. Tidligere kunne den ikke det, fordi titlen var klientens ord --
+    // dengang var "en senere upload må ikke omdøbe albummet" det rigtige
+    // værn. Er der ingen begivenhed at læse den af, bliver titlen stående.
+    title: photo.eventTitle ?? album.title,
     eventId: album.eventId ?? photo.eventId,
   })
 }
@@ -428,8 +451,9 @@ export const generateUploadUrl = mutation({
  * fordi klienten selv valgte `photos.id`; Convex ids kan ikke oprettes i
  * klienten, så uploadkøen sender i stedet et id pr. forsøg. Findes rækken
  * allerede, beholdes dens fil (en ny fil slettes som forældreløs), og kun
- * billedtekst og begivenhed opdateres -- præcis det `on conflict ... do update`
- * gjorde før.
+ * billedteksten opdateres. Begivenheden gør *ikke* -- et genforsøg sender
+ * samme kø-post og dermed samme begivenhed, og et skifte her ville flytte
+ * billedet uden at rette albummenes tællere.
  */
 export const createPhoto = mutation({
   args: {
@@ -440,7 +464,8 @@ export const createPhoto = mutation({
     /**
      * Ignoreret. Albummets titel læses af begivenheden, så et album ikke kan
      * få et navn, ingen begivenhed har. Feltet bliver stadig accepteret, fordi
-     * en upload, der allerede ligger i køen, sender det med.
+     * Convex afviser ukendte argumenter: en gammel, cachet frontend i en åben
+     * fane sender det stadig, og dens uploads skal ikke fejle af det.
      */
     eventTitle: v.optional(v.string()),
     /**
@@ -490,13 +515,10 @@ export const createPhoto = mutation({
       }
     }
 
-    // Begivenheden slås op, så albummet får begivenhedens egen titel i stedet
-    // for klientens ord. Peger id'et ingen steder -- turen er slettet, mens
-    // uploaden lå i køen, eller feltet er pillet ved -- lander billedet i
-    // "Uden begivenhed". Et billede skal ikke gå tabt, fordi en tur blev
-    // slettet, og et album skal ikke kunne hedde "Ukendt begivenhed".
-    const event = await eventForAlbum(ctx, args.eventId)
-    const eventId = event?._id
+    // Albummet afgøres på serveren, så titlen kommer fra begivenheden og ikke
+    // fra klientens ord -- se `albumTargetFor` for de tre udfald.
+    const target = await albumTargetFor(ctx, args.eventId)
+    const eventId = target.eventId
     const now = Date.now()
     const thumbnailStorageId = args.thumbnailStorageId
     if (thumbnailStorageId !== undefined) {
@@ -519,7 +541,7 @@ export const createPhoto = mutation({
     }
 
     const ready = thumbnailStorageId !== undefined
-    const albumKey = albumKeyFor(eventId)
+    const albumKey = target.albumKey
     const photoId = await ctx.db.insert('photos', {
       storageId: args.storageId,
       optimizedStorageId: ready ? args.storageId : undefined,
@@ -543,7 +565,7 @@ export const createPhoto = mutation({
     await addPhotoToAlbum(ctx, {
       albumKey,
       eventId,
-      eventTitle: event?.title,
+      eventTitle: target.event?.title,
       createdAt: now,
     })
 

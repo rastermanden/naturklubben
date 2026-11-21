@@ -76,6 +76,11 @@ export const calendarTables = {
   })
     .index('by_end', ['endsAt'])
     .index('by_public_end', ['isPublic', 'endsAt'])
+    // Begivenhederne i startdato-rækkefølge, til lister der skal vise "de
+    // nyeste ture først". `by_end` kan ikke bruges til det: en flerdagstur
+    // slutter sent og ville så skubbe en senere, kortere tur ud af et
+    // afskåret vindue (`eventOptions`).
+    .index('by_start', ['startAt'])
     // Ikke brugt af kalenderens egne queries: den bruges, når en konto slettes
     // og medlemmets rækker skal findes (`convex/account.ts`).
     .index('by_creator', ['createdBy']),

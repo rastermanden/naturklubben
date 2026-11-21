@@ -245,7 +245,7 @@ export const ANNOUNCEMENTS = [
   {
     slug: 'galleri-knyt-til-begivenhed',
     title: 'Vælg turen, når du lægger billeder op',
-    body: 'I upload-formularen under Billeder kan du nu vælge, hvilken tur billederne hører til. Så lander de i turens album med det samme -- også selv om der ikke er lagt billeder op fra den før. Lader du feltet stå på "Ingen", havner de som før under "Uden begivenhed".',
+    body: 'Når du lægger billeder op under Billeder, kan du nu vælge, hvilken tur de hører til. Så lander de i turens album med det samme -- også hvis der ikke er lagt billeder op fra turen før. Vælger du ingen tur, havner de som før under "Uden begivenhed".',
     path: 'billeder',
   },
 ] as const

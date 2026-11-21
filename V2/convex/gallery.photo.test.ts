@@ -191,30 +191,67 @@ describe('createPhoto med en begivenhed (#332)', () => {
   })
 })
 
-describe('eventOptions (#332)', () => {
-  it('giver både afholdte og kommende begivenheder, nyeste først', async () => {
+describe('createPhoto og de migrerede album (#332)', () => {
+  it('holder billedet i et V1-album, hvis nøgle ikke er et begivenheds-id', async () => {
     const t = convexTest(schema, modules)
     const member = await seedMember(t)
-    await seedEvent(t, { title: 'Sidste år', startAt: 1_000_000 })
-    await seedEvent(t, { title: 'Kommende', startAt: 9_000_000 })
-    await seedEvent(t, { title: 'I går', startAt: 5_000_000 })
+    // V1-importen bruger V1's egen UUID som både albumKey og eventId
+    // (`migrateV1.ts`); begivenhederne fik nye Convex-id'er. Uploader man inde
+    // i et sådant album, skal billedet i albummet -- ikke i "Uden begivenhed".
+    const legacyKey = '7d3f2a10-9c4b-4e21-8f6a-1b2c3d4e5f60'
+    await t.run(async (ctx) => {
+      await ctx.db.insert('photoAlbums', {
+        albumKey: legacyKey,
+        eventId: legacyKey,
+        title: 'Hornfisketur 2024',
+        photoCount: 3,
+        latestPhotoAt: 10,
+      })
+    })
+    const storageId = await storeImage(t, 'visning')
 
-    const options = await t
+    const photoId = await t
       .withIdentity({ subject: member.userId })
-      .query(api.calendar.eventOptions, {})
+      .mutation(api.gallery.createPhoto, { storageId, eventId: legacyKey })
 
-    expect(options.map((option) => option.title)).toEqual([
-      'Kommende',
-      'I går',
-      'Sidste år',
-    ])
-    expect(options[0]).toMatchObject({ startAt: 9_000_000 })
+    const after = await t.run(async (ctx) => ({
+      photo: await ctx.db.get(photoId),
+      albums: await ctx.db.query('photoAlbums').collect(),
+    }))
+    expect(after.photo).toMatchObject({
+      albumKey: legacyKey,
+      eventId: legacyKey,
+    })
+    expect(after.albums).toHaveLength(1)
+    expect(after.albums[0]).toMatchObject({
+      albumKey: legacyKey,
+      // Albummets egen titel bliver stående: der er ingen begivenhed at læse
+      // en ny af, og klientens ord må ikke navngive den.
+      title: 'Hornfisketur 2024',
+      photoCount: 4,
+    })
   })
 
-  it('kræver et medlem', async () => {
+  it('lader albumtitlen følge en omdøbt begivenhed', async () => {
     const t = convexTest(schema, modules)
-    await seedEvent(t, { title: 'Hemmelig tur', startAt: 1000 })
+    const member = await seedMember(t)
+    const eventId = await seedEvent(t, { title: 'Gammelt navn', startAt: 1000 })
+    const asMember = t.withIdentity({ subject: member.userId })
 
-    await expect(t.query(api.calendar.eventOptions, {})).rejects.toThrow()
+    await asMember.mutation(api.gallery.createPhoto, {
+      storageId: await storeImage(t, 'et'),
+      eventId,
+    })
+    await t.run(async (ctx) => ctx.db.patch(eventId, { title: 'Nyt navn' }))
+    await asMember.mutation(api.gallery.createPhoto, {
+      storageId: await storeImage(t, 'to'),
+      eventId,
+    })
+
+    const albums = await t.run(async (ctx) =>
+      ctx.db.query('photoAlbums').collect(),
+    )
+    expect(albums).toHaveLength(1)
+    expect(albums[0]).toMatchObject({ title: 'Nyt navn', photoCount: 2 })
   })
 })

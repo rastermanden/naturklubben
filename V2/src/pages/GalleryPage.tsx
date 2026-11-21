@@ -93,15 +93,12 @@ function GalleryPage() {
    * ikke er rørt. `null` frem for `''`, så albummets egen begivenhed kan være
    * forvalgt, uden at et aktivt "Ingen" bliver overskrevet af den.
    *
-   * Valget husker, hvilket album man stod i, da det blev truffet. Ellers ville
-   * et billede uploadet inde i album B kunne havne i album A, fordi feltet
-   * blev rørt dér -- og at nulstille i en `useEffect` på `albumParam` er en
-   * ekstra render for noget, der kan læses direkte.
+   * Valget nulstilles, når man skifter album: ellers ville et billede uploadet
+   * inde i album B kunne havne i album A, fordi feltet blev rørt dér -- og et
+   * "Ingen" valgt i et album ville også gælde næste gang, man kom ind i det,
+   * hvor forvalget skal være albummets egen begivenhed igen.
    */
-  const [eventChoice, setEventChoice] = useState<{
-    album: string | null
-    eventId: string
-  } | null>(null)
+  const [eventChoice, setEventChoice] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
@@ -134,10 +131,13 @@ function GalleryPage() {
 
   // Står man inde i et begivenhedsalbum, er den begivenhed forvalgt -- det var
   // uploadens opførsel, før feltet fandtes, og den skal ikke blive dårligere.
-  const selectedEventId =
-    eventChoice !== null && eventChoice.album === albumParam
-      ? eventChoice.eventId
-      : (currentAlbum?.eventId ?? '')
+  const selectedEventId = eventChoice ?? currentAlbum?.eventId ?? ''
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- albumParam er
+  // hele pointen: valget hører til det album, det blev truffet i.
+  useEffect(() => {
+    setEventChoice(null)
+  }, [albumParam])
 
   // Hent næste side, inden man bladrer ud til kanten af det indlæste galleri.
   useEffect(() => {
@@ -265,18 +265,25 @@ function GalleryPage() {
         </label>
 
         <AppErrorBoundary
-          fallback={
+          fallback={(retry) => (
             <p role="alert" className="text-sm text-danger">
-              Begivenheder kunne ikke hentes. Du kan stadig uploade uden at
-              vælge en begivenhed.
+              {currentAlbum?.eventId
+                ? `Listen over begivenheder kunne ikke hentes. Du kan stadig uploade — billederne lander i ”${currentAlbum.title}”.`
+                : 'Listen over begivenheder kunne ikke hentes. Du kan stadig uploade uden at vælge en begivenhed.'}{' '}
+              <button
+                type="button"
+                onClick={retry}
+                className="min-h-11 underline"
+              >
+                Prøv igen
+              </button>
             </p>
-          }
+          )}
         >
           <EventPicker
             value={selectedEventId}
-            onChange={(eventId) =>
-              setEventChoice({ album: albumParam, eventId })
-            }
+            valueTitle={currentAlbum?.title}
+            onChange={setEventChoice}
           />
         </AppErrorBoundary>
 
