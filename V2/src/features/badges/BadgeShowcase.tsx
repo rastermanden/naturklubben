@@ -1,47 +1,104 @@
-import type { Id } from '../../../convex/_generated/dataModel'
-import { useBadgesFor, useMyBadges } from './useBadges'
+import { useRef, useState } from 'react'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
+import { BadgeMedal } from './BadgeMedal'
+import { useMyBadges } from './useBadges'
+import type { AwardedMemberBadge, BadgeArtwork } from './types'
 
-/**
- * Badgevitrinen: en rund række af de badges et medlem har fået, nyeste først.
- *
- * Udsnittet (`cropX`/`cropY`/`cropSize`) er de samme tal, trykfilen bruger.
- * Her vises det med `object-cover` i en rund ramme -- præcis nok til skærmen,
- * mens trykfilen regner det efter.
- */
+const awardedFormatter = new Intl.DateTimeFormat('da-DK', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+})
 
-interface BadgeRowProps {
-  imageUrl: string | null
-  badgeName: string
-  badgeSlug: string
+function artworkOf(memberBadge: AwardedMemberBadge): BadgeArtwork {
+  return {
+    name: memberBadge.badgeName,
+    imageUrl: memberBadge.imageUrl,
+    imageWidth: memberBadge.imageWidth,
+    imageHeight: memberBadge.imageHeight,
+    cropX: memberBadge.cropX,
+    cropY: memberBadge.cropY,
+    cropSize: memberBadge.cropSize,
+  }
 }
 
-function BadgeRow({ imageUrl, badgeName, badgeSlug }: BadgeRowProps) {
+function BadgeDetailsDialog({
+  memberBadge,
+  onClose,
+}: {
+  memberBadge: AwardedMemberBadge
+  onClose: () => void
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useDialogFocus<HTMLDivElement>({
+    onClose,
+    initialFocusRef: closeButtonRef,
+  })
+
   return (
-    <li className="flex w-20 shrink-0 flex-col items-center gap-1 text-center">
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={`Badgen ${badgeName}`}
-          className="h-16 w-16 rounded-full border border-line object-cover"
-        />
-      ) : (
-        <span
-          aria-hidden="true"
-          className="flex h-16 w-16 items-center justify-center rounded-full border border-line bg-surface-raised font-semibold text-ink-muted"
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={memberBadge.badgeName}
+      tabIndex={-1}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+    >
+      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl bg-surface p-6 text-center">
+        <BadgeMedal badge={artworkOf(memberBadge)} size="xl" decorative />
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold text-ink">
+            {memberBadge.badgeName}
+          </h2>
+          {memberBadge.badgeDescription && (
+            <p className="text-sm text-ink-muted">
+              {memberBadge.badgeDescription}
+            </p>
+          )}
+          <p className="text-sm text-ink-subtle">
+            Tildelt {awardedFormatter.format(new Date(memberBadge.awardedAt))}
+          </p>
+          {memberBadge.nominatedByName && (
+            <p className="text-sm text-ink-subtle">
+              Indstillet af {memberBadge.nominatedByName}
+            </p>
+          )}
+        </div>
+        {memberBadge.reason && (
+          <p className="w-full whitespace-pre-wrap rounded-lg bg-surface-sunken p-3 text-left text-sm text-ink-body">
+            {memberBadge.reason}
+          </p>
+        )}
+        <button
+          ref={closeButtonRef}
+          type="button"
+          onClick={onClose}
+          className="min-h-11 rounded-lg bg-accent px-6 py-2 text-white"
         >
-          {badgeSlug.slice(0, 2).toUpperCase()}
-        </span>
-      )}
-      <span className="text-xs text-ink-subtle">{badgeName}</span>
-    </li>
+          Luk
+        </button>
+      </div>
+    </div>
   )
 }
 
-/** Den indloggedes egne badges. */
-export function MyBadgeShowcase({ emptyText }: { emptyText?: string }) {
-  const badges = useMyBadges()
+interface BadgeShowcaseProps {
+  badges: AwardedMemberBadge[]
+  size?: 'sm' | 'md' | 'lg'
+  emptyText?: string | null
+}
 
-  if (badges === undefined) return null
+/** Vitrinen med et medlems tildelte badges. Klik giver detaljerne. */
+export function BadgeShowcase({
+  badges,
+  size = 'md',
+  emptyText = null,
+}: BadgeShowcaseProps) {
+  const [active, setActive] = useState<AwardedMemberBadge | null>(null)
+
   if (badges.length === 0) {
     return emptyText ? (
       <p className="text-sm text-ink-subtle">{emptyText}</p>
@@ -49,38 +106,42 @@ export function MyBadgeShowcase({ emptyText }: { emptyText?: string }) {
   }
 
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-lg font-semibold text-ink-body">Mine badges</h2>
-      <ul className="flex flex-wrap gap-3">
-        {badges.map((badge) => (
-          <BadgeRow
-            key={badge._id}
-            imageUrl={badge.imageUrl}
-            badgeName={badge.badgeName}
-            badgeSlug={badge.badgeSlug}
-          />
+    <>
+      <ul className="flex flex-wrap gap-2">
+        {badges.map((memberBadge) => (
+          <li key={memberBadge._id}>
+            <button
+              type="button"
+              onClick={() => setActive(memberBadge)}
+              title={memberBadge.badgeName}
+              aria-label={`Se detaljer om ${memberBadge.badgeName}`}
+              className="rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-soft"
+            >
+              <BadgeMedal
+                badge={artworkOf(memberBadge)}
+                size={size}
+                decorative
+              />
+            </button>
+          </li>
         ))}
       </ul>
-    </section>
+
+      {active && (
+        <BadgeDetailsDialog
+          memberBadge={active}
+          onClose={() => setActive(null)}
+        />
+      )}
+    </>
   )
 }
 
-/** En andens badges -- til profil- og medlemslisten. */
-export function BadgeShowcase({ profileId }: { profileId: Id<'profiles'> }) {
-  const badges = useBadgesFor(profileId)
+/** Den indloggedes egne badges -- brugt på profilsiden. */
+export function MyBadgeShowcase({ emptyText }: { emptyText?: string }) {
+  const badges = useMyBadges()
 
-  if (badges === undefined || badges.length === 0) return null
+  if (badges === undefined) return null
 
-  return (
-    <ul className="flex flex-wrap gap-3">
-      {badges.map((badge) => (
-        <BadgeRow
-          key={badge._id}
-          imageUrl={badge.imageUrl}
-          badgeName={badge.badgeName}
-          badgeSlug={badge.badgeSlug}
-        />
-      ))}
-    </ul>
-  )
+  return <BadgeShowcase badges={badges} emptyText={emptyText ?? null} />
 }
