@@ -420,7 +420,7 @@ describe('BralGame', () => {
     ).toBeGreaterThanOrEqual(1)
   })
 
-  it('flytter ikke canvas eller knapper i layoutet under dåsemangel, ølstafet eller notitser', () => {
+  it('flytter ikke canvas eller knapper og blokerer ikke skakten under dåsemangel, ølstafet eller notitser', () => {
     opening.override = {
       shortage: 'pending',
       shortageTriggerAt: 0.05,
@@ -431,9 +431,13 @@ describe('BralGame', () => {
     render(<BralGame />)
     const container = screen.getByTestId('bral-container')
     const initialChildren = Array.from(container.children)
-    expect(initialChildren).toHaveLength(5)
+    expect(initialChildren).toHaveLength(6)
     const canvasWrapper = initialChildren[1]
     const buttonsGrid = initialChildren[2]
+    const dock = screen.getByTestId('bral-shortage-dock')
+    expect(initialChildren[3]).toBe(dock)
+    expect(dock.className).toContain('h-[56px]')
+
     const canvas = screen.getByLabelText('Bral-støberiet')
     const strike = screen.getByRole('button', { name: 'Slå mønt' })
     expect(canvasWrapper.contains(canvas)).toBe(true)
@@ -441,8 +445,9 @@ describe('BralGame', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
     expect(Array.from(container.children)).toEqual(initialChildren)
+    expect(canvasWrapper.querySelectorAll('button')).toHaveLength(0)
 
-    // Fang ringtræk nummer 5 -> notitsen lægger sig som overlay inde i canvas-boksen.
+    // Fang ringtræk nummer 5 -> notitsen lægger sig med pointer-events-none inde i canvas-boksen.
     fireEvent.keyDown(window, { key: 'd' })
     expect(Array.from(container.children)).toEqual(initialChildren)
     const strikeNotice = screen.getAllByText('PULL-TAB STRIKE · METAL READY')[0]
@@ -450,12 +455,7 @@ describe('BralGame', () => {
     expect(strikeNotice.className).toContain('absolute')
     expect(strikeNotice.className).toContain('pointer-events-none')
 
-    // Dåsemangel-panelet lægger sig inde i canvas-boksen og rykker ikke knapperne.
-    const activeChildren = Array.from(container.children)
-    expect(activeChildren).toEqual(initialChildren)
-    expect(container.querySelector('[aria-label="Dåsemangel"]')).toBeNull()
-
-    // Genskab aktiv dåsemangel direkte via Spil igen / ny instans.
+    // Aktiv dåsemangel ligger i den faste dock under knapperne, ikke oven på canvas.
     cleanup()
     opening.override = {
       shortage: 'active',
@@ -467,16 +467,18 @@ describe('BralGame', () => {
 
     const nextContainer = screen.getByTestId('bral-container')
     const nextChildren = Array.from(nextContainer.children)
-    expect(nextChildren).toHaveLength(5)
+    expect(nextChildren).toHaveLength(6)
     const nextWrapper = nextChildren[1]
     const shortageRegion = screen.getByRole('region', { name: 'Dåsemangel' })
-    expect(nextWrapper.contains(shortageRegion)).toBe(true)
-    expect(shortageRegion.className).toContain('absolute')
+    expect(nextWrapper.contains(shortageRegion)).toBe(false)
+    expect(nextWrapper.querySelectorAll('button')).toHaveLength(0)
+    expect(nextChildren[3]).toBe(shortageRegion)
+    expect(shortageRegion.className).toContain('h-[56px]')
 
     fireEvent.keyDown(window, { key: 'r' })
     expect(Array.from(nextContainer.children)).toEqual(nextChildren)
     expect(
-      nextWrapper.contains(
+      shortageRegion.contains(
         screen.getByRole('button', { name: 'Venstre hånd' }),
       ),
     ).toBe(true)
@@ -597,12 +599,42 @@ describe('BralGame', () => {
         .parentElement?.textContent?.replace('Mønter', ''),
     ).toBe('2')
 
-    // Tabt pointer capture sluger heller ikke næste rene click.
+    // G1: touch-sekvens pointerDown -> lostPointerCapture -> click i samme tick giver én handling.
+    const parseTemp = () => {
+      const match = bellows.textContent?.match(/(\d+)\s*°C/)
+      return match ? Number(match[1]) : 0
+    }
+    const tempBeforeTap = parseTemp()
     fireEvent.pointerDown(bellows, { button: 0 })
-    const tempAfterDown = bellows.textContent
+    const tempAfterTap = parseTemp()
+    expect(tempAfterTap).toBe(tempBeforeTap + 68)
     fireEvent.lostPointerCapture(bellows)
     fireEvent.click(bellows)
-    expect(bellows.textContent).not.toBe(tempAfterDown)
+    expect(parseTemp()).toBe(tempAfterTap)
+
+    // Langt tryk (> 500 ms) med pointerUp -> lostPointerCapture -> click fyrer ikke igen ved slip.
+    fireEvent.pointerDown(bellows, { button: 0 })
+    act(() => {
+      vi.advanceTimersByTime(650)
+    })
+    const tempAfterHold = parseTemp()
+    fireEvent.pointerUp(bellows)
+    fireEvent.lostPointerCapture(bellows)
+    fireEvent.click(bellows)
+    expect(parseTemp()).toBe(tempAfterHold)
+
+    // Tabt pointer capture uden straks-click rydder flaget i næste tick, så rent click virker (#339).
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+    fireEvent.pointerDown(bellows, { button: 0 })
+    const tempBeforeNextTick = parseTemp()
+    fireEvent.lostPointerCapture(bellows)
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    fireEvent.click(bellows)
+    expect(parseTemp()).toBeGreaterThanOrEqual(tempBeforeNextTick + 60)
   })
 
   it('beholder D, R og piletaster ved knapfokus og ignorerer Ctrl, Meta og Alt', () => {
@@ -696,5 +728,32 @@ describe('BralGame', () => {
 
     fireEvent.click(strike)
     expect(strikeDesc?.textContent).toBe('Klar om lidt')
+  })
+
+  it('starter ølstafet på 0/6 uden at klikket fra samme tap rammer Venstre hånd', () => {
+    opening.override = {
+      shortage: 'active',
+      pullTabs: 2,
+    }
+
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    const startRelayBtn = screen.getByRole('button', { name: 'Start ølstafet' })
+    fireEvent.pointerDown(startRelayBtn, { button: 0 })
+    fireEvent.pointerUp(startRelayBtn)
+    fireEvent.lostPointerCapture(startRelayBtn)
+    fireEvent.click(startRelayBtn)
+
+    expect(screen.getByText('FORCED RELAY · 0/6')).toBeTruthy()
+    const leftBtn = screen.getByRole('button', { name: 'Venstre hånd' })
+    expect(leftBtn.hasAttribute('disabled')).toBe(false)
+
+    fireEvent.pointerDown(leftBtn, { button: 0 })
+    fireEvent.pointerUp(leftBtn)
+    fireEvent.lostPointerCapture(leftBtn)
+    fireEvent.click(leftBtn)
+
+    expect(screen.getByText('FORCED RELAY · 1/6')).toBeTruthy()
   })
 })

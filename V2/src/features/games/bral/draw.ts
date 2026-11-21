@@ -306,7 +306,7 @@ function drawLastCoinBanner(ctx: CanvasRenderingContext2D, state: BralState) {
   const badgeW = 148
   const badgeH = 32
   const badgeX = (BRAL_WORLD.w - badgeW) / 2
-  const badgeY = state.shortage === 'active' ? 112 : 14
+  const badgeY = state.shortage === 'active' ? 38 : 14
 
   traceRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 16)
   ctx.fillStyle =
@@ -333,12 +333,30 @@ function drawLastCoinBanner(ctx: CanvasRenderingContext2D, state: BralState) {
 
 function drawShortageHud(ctx: CanvasRenderingContext2D, state: BralState) {
   if (state.shortage !== 'active') return
-  const pillW = 94
-  const pillH = 22
-  const pillX = BRAL_WORLD.w - pillW - 10
-  const pillY = 144
 
-  traceRoundedRect(ctx, pillX, pillY, pillW, pillH, 6)
+  const leftText = state.relay.active
+    ? `FORCED RELAY ${state.relay.steps}/6`
+    : 'CAN SHORTAGE'
+  const leftW = state.relay.active ? 116 : 94
+  const pillH = 22
+  const pillY = 10
+
+  traceRoundedRect(ctx, 10, pillY, leftW, pillH, 6)
+  ctx.fillStyle = 'rgba(28, 25, 23, 0.88)'
+  ctx.fill()
+  ctx.strokeStyle = '#d97706'
+  ctx.lineWidth = 1.2
+  ctx.stroke()
+
+  ctx.font = '700 10px monospace'
+  ctx.fillStyle = '#fde68a'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(leftText, 10 + leftW / 2, pillY + pillH / 2)
+
+  const rightW = 94
+  const rightX = BRAL_WORLD.w - rightW - 10
+  traceRoundedRect(ctx, rightX, pillY, rightW, pillH, 6)
   ctx.fillStyle = 'rgba(28, 25, 23, 0.88)'
   ctx.fill()
   ctx.strokeStyle = '#d97706'
@@ -351,7 +369,7 @@ function drawShortageHud(ctx: CanvasRenderingContext2D, state: BralState) {
   ctx.textBaseline = 'middle'
   ctx.fillText(
     `RINGTRÆK ${state.pullTabs}/${BRAL_TABS_PER_COIN}`,
-    pillX + pillW / 2,
+    rightX + rightW / 2,
     pillY + pillH / 2,
   )
 }

@@ -310,7 +310,7 @@ export function BralGame() {
   return (
     <div
       data-testid="bral-container"
-      className={`flex flex-col gap-3 select-none ${
+      className={`flex flex-col gap-1.5 select-none sm:gap-3 ${
         playing ? 'touch-none' : 'touch-manipulation'
       }`}
     >
@@ -333,65 +333,6 @@ export function BralGame() {
           className="block h-auto w-full touch-none select-none"
           aria-label="Bral-støberiet"
         />
-        {playing && snapshot.shortage === 'active' && (
-          <div
-            role="region"
-            aria-label="Dåsemangel"
-            className="pointer-events-auto absolute inset-x-1.5 top-1.5 z-10 flex flex-col gap-1.5 rounded-lg border border-warn-line bg-warn-surface/95 px-2.5 py-2 text-warn-strong shadow-sm backdrop-blur-[2px]"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-mono text-xs font-semibold tracking-wider">
-                  {snapshot.relay.active
-                    ? `FORCED RELAY · ${snapshot.relay.steps}/${RELAY_TARGET_STEPS}`
-                    : 'CAN SHORTAGE · RESERVE BELOW PEG'}
-                </p>
-                <p className="font-mono text-xs opacity-90">
-                  {snapshot.relay.active
-                    ? 'Skift venstre og højre for at fylde lageret.'
-                    : `Ringtræk ${snapshot.pullTabs}/${BRAL_TABS_PER_COIN} · tvungen ølstafet`}
-                </p>
-              </div>
-              {!snapshot.relay.active && (
-                <PressButton
-                  onAction={handleStartRelay}
-                  ariaLabel="Start ølstafet"
-                  className="min-h-11 shrink-0 touch-none rounded-lg border border-warn-line bg-surface px-3 py-2 font-mono text-xs font-semibold text-ink-body select-none active:bg-surface-raised"
-                >
-                  Start ølstafet
-                </PressButton>
-              )}
-            </div>
-            {snapshot.relay.active && (
-              <div className="grid grid-cols-2 gap-2">
-                <PressButton
-                  onAction={() => handleRelayPass('left')}
-                  disabled={snapshot.relay.nextHand !== 'left'}
-                  ariaLabel="Venstre hånd"
-                  className={`flex min-h-11 touch-none items-center justify-center rounded-lg border px-3 py-2 font-mono text-xs font-semibold select-none disabled:opacity-40 ${
-                    snapshot.relay.nextHand === 'left'
-                      ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
-                      : 'border-warn-line bg-surface text-ink-body'
-                  }`}
-                >
-                  Venstre hånd
-                </PressButton>
-                <PressButton
-                  onAction={() => handleRelayPass('right')}
-                  disabled={snapshot.relay.nextHand !== 'right'}
-                  ariaLabel="Højre hånd"
-                  className={`flex min-h-11 touch-none items-center justify-center rounded-lg border px-3 py-2 font-mono text-xs font-semibold select-none disabled:opacity-40 ${
-                    snapshot.relay.nextHand === 'right'
-                      ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
-                      : 'border-warn-line bg-surface text-ink-body'
-                  }`}
-                >
-                  Højre hånd
-                </PressButton>
-              </div>
-            )}
-          </div>
-        )}
 
         {playing && snapshot.shortageNotice && (
           <p className="pointer-events-none absolute inset-x-2 bottom-[47%] z-10 rounded-md border border-line-strong bg-surface-raised/95 px-2.5 py-1 text-center font-mono text-xs text-ink-body shadow-sm">
@@ -440,13 +381,13 @@ export function BralGame() {
         )}
       </div>
 
-      <div className="grid touch-none grid-cols-2 gap-3 select-none">
+      <div className="grid touch-none grid-cols-2 gap-2 select-none sm:gap-3">
         <PressButton
           disabled={!playing}
           onAction={handleBellows}
           ariaLabel="Blæsebælg"
           ariaDescribedBy={bellowsDescId}
-          className="flex h-16 touch-none flex-col items-center justify-center rounded-xl border border-line-strong bg-surface px-3 text-ink-body select-none active:bg-surface-raised disabled:opacity-40"
+          className="flex h-[52px] touch-none flex-col items-center justify-center rounded-xl border border-line-strong bg-surface px-3 text-ink-body select-none active:bg-surface-raised disabled:opacity-40 sm:h-16"
         >
           <span className="font-semibold">Blæsebælg</span>
           <span
@@ -462,7 +403,7 @@ export function BralGame() {
           onAction={handleStrike}
           ariaLabel="Slå mønt"
           ariaDescribedBy={strikeDescId}
-          className={`flex h-16 touch-none flex-col items-center justify-center rounded-xl border px-3 select-none disabled:opacity-40 ${
+          className={`flex h-[52px] touch-none flex-col items-center justify-center rounded-xl border px-3 select-none disabled:opacity-40 sm:h-16 ${
             strikeReady
               ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
               : 'border-line-strong bg-surface text-ink-body'
@@ -478,6 +419,82 @@ export function BralGame() {
             {strikeSublabel}
           </span>
         </PressButton>
+      </div>
+
+      <div
+        data-testid="bral-shortage-dock"
+        role={playing && snapshot.shortage === 'active' ? 'region' : undefined}
+        aria-label={
+          playing && snapshot.shortage === 'active' ? 'Dåsemangel' : undefined
+        }
+        className={`flex h-[56px] touch-none items-center justify-between gap-2 rounded-xl border px-2.5 py-1 select-none ${
+          playing && snapshot.shortage === 'active'
+            ? 'border-warn-line bg-warn-surface text-warn-strong'
+            : 'border-line-soft bg-surface text-ink-subtle'
+        }`}
+      >
+        {playing && snapshot.shortage === 'active' ? (
+          snapshot.relay.active ? (
+            <>
+              <p className="min-w-0 shrink font-mono text-[11px] leading-tight font-semibold tracking-wider sm:text-xs">
+                FORCED RELAY · {snapshot.relay.steps}/{RELAY_TARGET_STEPS}
+              </p>
+              <div className="flex shrink-0 gap-1.5">
+                <PressButton
+                  onAction={() => handleRelayPass('left')}
+                  disabled={snapshot.relay.nextHand !== 'left'}
+                  ariaLabel="Venstre hånd"
+                  className={`flex min-h-11 touch-none items-center justify-center rounded-lg border px-2.5 py-1 font-mono text-xs font-semibold select-none disabled:opacity-40 ${
+                    snapshot.relay.nextHand === 'left'
+                      ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
+                      : 'border-warn-line bg-surface text-ink-body'
+                  }`}
+                >
+                  Venstre hånd
+                </PressButton>
+                <PressButton
+                  onAction={() => handleRelayPass('right')}
+                  disabled={snapshot.relay.nextHand !== 'right'}
+                  ariaLabel="Højre hånd"
+                  className={`flex min-h-11 touch-none items-center justify-center rounded-lg border px-2.5 py-1 font-mono text-xs font-semibold select-none disabled:opacity-40 ${
+                    snapshot.relay.nextHand === 'right'
+                      ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
+                      : 'border-warn-line bg-surface text-ink-body'
+                  }`}
+                >
+                  Højre hånd
+                </PressButton>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate font-mono text-[10px] font-semibold tracking-wider sm:text-xs">
+                  CAN SHORTAGE · RESERVE BELOW PEG
+                </p>
+                <p className="truncate font-mono text-[11px] opacity-90 sm:text-xs">
+                  Ringtræk {snapshot.pullTabs}/{BRAL_TABS_PER_COIN} · tvungen
+                  ølstafet
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleStartRelay}
+                aria-label="Start ølstafet"
+                className="min-h-11 shrink-0 touch-none rounded-lg border border-warn-line bg-surface px-2.5 py-1 font-mono text-xs font-semibold text-ink-body select-none active:bg-surface-raised"
+              >
+                Start ølstafet
+              </button>
+            </>
+          )
+        ) : (
+          <>
+            <span className="font-mono text-xs font-semibold tracking-wider text-ink-body">
+              {playing ? 'RESERVE · OK' : 'RESERVE · KLAR'}
+            </span>
+            <span className="font-mono text-xs">4 dåser pr. mønt</span>
+          </>
+        )}
       </div>
 
       <p className="text-sm text-ink-subtle">
@@ -595,7 +612,9 @@ function PressButton({
         resetSuppress()
       }}
       onLostPointerCapture={() => {
-        resetSuppress()
+        if (pointerDownActive.current) {
+          scheduleSuppressClear()
+        }
       }}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -621,9 +640,9 @@ function PressButton({
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col rounded-lg border border-line-soft bg-surface px-3 py-2">
+    <div className="flex min-w-0 flex-1 flex-col rounded-lg border border-line-soft bg-surface px-2.5 py-1 sm:px-3 sm:py-2">
       <span className="text-xs text-ink-subtle">{label}</span>
-      <span className="truncate text-lg font-semibold text-ink-body tabular-nums">
+      <span className="truncate text-base font-semibold text-ink-body tabular-nums sm:text-lg">
         {value}
       </span>
     </div>
