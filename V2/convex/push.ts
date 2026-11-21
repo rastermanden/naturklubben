@@ -717,3 +717,215 @@ export const enqueueEventReminders = internalMutation({
     return { enqueued: 0 }
   },
 })
+
+// ---------------------------------------------------------------------------
+// Chat-push (portet fra supabase/functions/chat-push/{index,recipients}.ts)
+// ---------------------------------------------------------------------------
+
+export const CHAT_TAG = 'naturklubben-chat'
+export const MENTION_TAG = 'naturklubben-chat-mention'
+export const ADMIN_CHAT_TAG = 'naturklubben-chat-admin'
+export const ADMIN_MENTION_TAG = 'naturklubben-chat-admin-mention'
+
+/** Smugkig af chatbeskeden -- holder payloaden kort og under push-grænsen. */
+export const CHAT_PREVIEW_MAX_LENGTH = 140
+
+/** En besked ældre end fem minutter udløser ikke en forsinket push. */
+export const CHAT_PUSH_MAX_AGE_MS = 5 * 60 * 1000
+
+/** 12 timer -- samme TTL som V1's chat-push (godt ved svag mobildækning). */
+export const CHAT_PUSH_TTL_SECONDS = 12 * 60 * 60
+
+export type ChatNotificationPreference =
+  Doc<'profiles'>['chatNotificationPreference']
+
+export type ChatRoom = 'general' | 'admin'
+
+export const chatPushPayloadValidator = v.object({
+  title: v.string(),
+  body: v.string(),
+  tag: v.string(),
+  path: v.string(),
+  messageId: v.string(),
+})
+
+export type ChatPushPayload = {
+  title: string
+  body: string
+  tag: string
+  path: string
+  messageId: string
+}
+
+export const chatPushDeliveryValidator = v.object({
+  target: pushTarget,
+  payload: chatPushPayloadValidator,
+})
+
+export type ChatPushDelivery = {
+  target: PushTarget
+  payload: ChatPushPayload
+}
+
+export function previewOfChatMessage(content: string): string {
+  const trimmed = content.trim().replace(/\s+/g, ' ')
+  return trimmed.length > CHAT_PREVIEW_MAX_LENGTH
+    ? `${trimmed.slice(0, CHAT_PREVIEW_MAX_LENGTH - 1)}…`
+    : trimmed
+}
+
+/**
+ * Abonnementerne, der skal have push for en ny chatbesked.
+ *
+ * Afsenderen får aldrig besked -- heller ikke på sine øvrige enheder.
+ * Admin-rummet går kun til administratorer. Præferencen på profilen afgør
+ * resten (`all`, `mentions`, `none`); manglende præference behandles som `all`.
+ */
+export function selectChatPushRecipients<
+  T extends { profileId: Id<'profiles'> },
+>({
+  subscriptions,
+  preferences,
+  mentionedIds,
+  senderId,
+  room = 'general',
+  adminIds,
+}: {
+  subscriptions: readonly T[]
+  preferences: ReadonlyMap<Id<'profiles'>, ChatNotificationPreference>
+  mentionedIds: readonly Id<'profiles'>[]
+  senderId: Id<'profiles'>
+  room?: ChatRoom
+  adminIds?: ReadonlySet<Id<'profiles'>>
+}): { subscription: T; isMentioned: boolean }[] {
+  const mentioned = new Set(mentionedIds)
+  const recipients: { subscription: T; isMentioned: boolean }[] = []
+
+  for (const subscription of subscriptions) {
+    if (subscription.profileId === senderId) continue
+    if (room === 'admin' && !adminIds?.has(subscription.profileId)) continue
+    const isMentioned = mentioned.has(subscription.profileId)
+    const preference = preferences.get(subscription.profileId) ?? 'all'
+    if (preference === 'none') continue
+    if (preference === 'mentions' && !isMentioned) continue
+    recipients.push({ subscription, isMentioned })
+  }
+
+  return recipients
+}
+
+export function buildChatPushPayload({
+  senderName,
+  preview,
+  messageId,
+  isMentioned,
+  room = 'general',
+}: {
+  senderName: string | null | undefined
+  preview: string
+  messageId: string
+  isMentioned: boolean
+  room?: ChatRoom
+}): ChatPushPayload {
+  const name = senderName?.trim()
+  const tag =
+    room === 'admin'
+      ? isMentioned
+        ? ADMIN_MENTION_TAG
+        : ADMIN_CHAT_TAG
+      : isMentioned
+        ? MENTION_TAG
+        : CHAT_TAG
+  return {
+    title: isMentioned
+      ? name
+        ? `${name} nævnte dig`
+        : 'Du er nævnt i Naturklubben'
+      : name || 'Ny besked i Naturklubben',
+    body: preview,
+    tag,
+    path: room === 'admin' ? 'admin/chat' : 'chat',
+    messageId,
+  }
+}
+
+/**
+ * Finder modtagere og bygger færdige payloads for en ny chatbesked.
+ *
+ * Kører som én intern forespørgsel før Web Push-kaldet i `pushSend.ts`. En
+ * slettet eller for gammel besked returnerer en tom liste, så afsenderen
+ * hopper uden om både VAPID-opslag og HTTP-kald.
+ */
+export const prepareChatPush = internalQuery({
+  args: { messageId: v.id('messages') },
+  returns: v.array(chatPushDeliveryValidator),
+  handler: async (ctx, args): Promise<ChatPushDelivery[]> => {
+    const message = await ctx.db.get(args.messageId)
+    if (
+      message === null ||
+      message.deletedAt !== undefined ||
+      message.authorId === undefined
+    ) {
+      return []
+    }
+    if (Date.now() - message.createdAt > CHAT_PUSH_MAX_AGE_MS) {
+      return []
+    }
+
+    const senderId = message.authorId
+    const allSubscriptions = await ctx.db.query('pushSubscriptions').collect()
+    const subscriptions = allSubscriptions.filter(
+      (row) => row.profileId !== senderId,
+    )
+    if (subscriptions.length === 0) return []
+
+    const uniqueProfileIds = [
+      ...new Set(subscriptions.map((row) => row.profileId)),
+    ]
+    const preferences = new Map<Id<'profiles'>, ChatNotificationPreference>()
+    const adminIds = new Set<Id<'profiles'>>()
+    const existingProfiles = new Set<Id<'profiles'>>()
+
+    for (const profileId of uniqueProfileIds) {
+      const profile = await ctx.db.get(profileId)
+      if (profile === null) continue
+      existingProfiles.add(profileId)
+      preferences.set(profileId, profile.chatNotificationPreference)
+      if (profile.isAdmin) adminIds.add(profileId)
+    }
+
+    const activeSubscriptions = subscriptions.filter((row) =>
+      existingProfiles.has(row.profileId),
+    )
+    const recipients = selectChatPushRecipients({
+      subscriptions: activeSubscriptions,
+      preferences,
+      mentionedIds: message.mentions,
+      senderId,
+      room: message.room,
+      adminIds: message.room === 'admin' ? adminIds : undefined,
+    })
+    if (recipients.length === 0) return []
+
+    const sender = await ctx.db.get(senderId)
+    const preview = previewOfChatMessage(message.content)
+    const messageId = String(message._id)
+
+    return recipients.map(({ subscription, isMentioned }) => ({
+      target: {
+        subscriptionId: subscription._id,
+        profileId: subscription.profileId,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.p256dh,
+        auth: subscription.auth,
+      },
+      payload: buildChatPushPayload({
+        senderName: sender?.fullName,
+        preview,
+        messageId,
+        isMentioned,
+        room: message.room,
+      }),
+    }))
+  },
+})
