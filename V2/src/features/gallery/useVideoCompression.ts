@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MAX_VIDEO_BYTES, validateGalleryFile } from './galleryMedia'
+import { isVideoCompressionError } from './videoCompressionError'
 import { loadVideoCompressor } from './videoCompressionLoader'
 
-export type VideoCompressionJobStatus = 'queued' | 'preparing' | 'compressing'
+export type VideoCompressionJobStatus =
+  'queued' | 'preparing' | 'compressing' | 'paused'
 
 export interface VideoCompressionJob {
   id: string
@@ -17,11 +19,26 @@ export interface CompressedVideoReady {
   file: File
   caption: string
   eventId: string | null
+  audioIncluded: boolean
+  originalFileName: string
 }
 
 interface UseVideoCompressionOptions {
   onCompressed: (ready: CompressedVideoReady) => void
   onError: (message: string) => void
+}
+
+type WindowWithWebkitAudio = typeof globalThis & {
+  webkitAudioContext?: typeof AudioContext
+}
+
+function closeAudioContextSafely(ctx: AudioContext | null | undefined) {
+  if (!ctx || ctx.state === 'closed') return
+  try {
+    void ctx.close?.().catch(() => undefined)
+  } catch {
+    // Ignorér oprydningsfejl.
+  }
 }
 
 /**
@@ -39,6 +56,9 @@ export function useVideoCompression({
   const unmountedRef = useRef(false)
   const controllersRef = useRef<Map<string, AbortController>>(new Map())
   const cancelledIdsRef = useRef<Set<string>>(new Set())
+  const unlockedAudioHolderRef = useRef<{ ctx: AudioContext | null }>({
+    ctx: null,
+  })
   const onCompressedRef = useRef(onCompressed)
   const onErrorRef = useRef(onError)
 
@@ -51,6 +71,7 @@ export function useVideoCompression({
     unmountedRef.current = false
     const controllers = controllersRef.current
     const cancelledIds = cancelledIdsRef.current
+    const audioHolder = unlockedAudioHolderRef.current
     return () => {
       unmountedRef.current = true
       for (const controller of controllers.values()) {
@@ -59,7 +80,43 @@ export function useVideoCompression({
       controllers.clear()
       cancelledIds.clear()
       pendingJobsRef.current = []
+      closeAudioContextSafely(audioHolder.ctx)
+      audioHolder.ctx = null
     }
+  }, [])
+
+  const prepareAudioContext = useCallback(() => {
+    const existing = unlockedAudioHolderRef.current.ctx
+    if (existing && existing.state !== 'closed') {
+      if (existing.state === 'suspended') {
+        try {
+          void existing.resume?.().catch(() => undefined)
+        } catch {
+          // Ignorér.
+        }
+      }
+      return
+    }
+    const AudioCtx =
+      typeof AudioContext !== 'undefined'
+        ? AudioContext
+        : (globalThis as WindowWithWebkitAudio).webkitAudioContext
+    if (!AudioCtx) return
+    try {
+      const ctx = new AudioCtx()
+      unlockedAudioHolderRef.current.ctx = ctx
+      if (ctx.state === 'suspended') {
+        void ctx.resume?.().catch(() => undefined)
+      }
+    } catch {
+      unlockedAudioHolderRef.current.ctx = null
+    }
+  }, [])
+
+  const releasePreparedAudioContext = useCallback(() => {
+    if (runningRef.current || pendingJobsRef.current.length > 0) return
+    closeAudioContextSafely(unlockedAudioHolderRef.current.ctx)
+    unlockedAudioHolderRef.current.ctx = null
   }, [])
 
   const processQueue = useCallback(async () => {
@@ -86,7 +143,20 @@ export function useVideoCompression({
         )
 
         try {
-          const { compressVideoFile } = await loadVideoCompressor()
+          let compressVideoFile: Awaited<
+            ReturnType<typeof loadVideoCompressor>
+          >['compressVideoFile']
+          try {
+            ;({ compressVideoFile } = await loadVideoCompressor())
+          } catch {
+            if (!unmountedRef.current) {
+              onErrorRef.current(
+                'Komprimeringen kunne ikke hentes. Tjek forbindelsen, genindlæs siden og prøv igen.',
+              )
+            }
+            continue
+          }
+
           if (
             unmountedRef.current ||
             cancelledIdsRef.current.has(nextJob.id) ||
@@ -100,8 +170,9 @@ export function useVideoCompression({
             continue
           }
 
-          const compressed = await compressVideoFile(nextJob.file, {
+          const result = await compressVideoFile(nextJob.file, {
             signal: controller.signal,
+            audioContext: unlockedAudioHolderRef.current.ctx,
             onProgress: ({ phase, progress }) => {
               if (unmountedRef.current) return
               setJobs((current) =>
@@ -123,30 +194,31 @@ export function useVideoCompression({
             continue
           }
 
-          if (compressed.size > MAX_VIDEO_BYTES) {
+          if (result.file.size > MAX_VIDEO_BYTES) {
             onErrorRef.current(
               `${nextJob.file.name} var stadig over 50 MB efter komprimering og blev ikke lagt op. Prøv et kortere klip.`,
             )
             continue
           }
 
-          const validationError = validateGalleryFile(compressed)
+          const validationError = validateGalleryFile(result.file)
           if (validationError !== null) {
             onErrorRef.current(validationError)
             continue
           }
 
           onCompressedRef.current({
-            file: compressed,
+            file: result.file,
             caption: nextJob.caption,
             eventId: nextJob.eventId,
+            audioIncluded: result.audioIncluded,
+            originalFileName: nextJob.file.name,
           })
         } catch (caught) {
           if (!unmountedRef.current) {
-            const message =
-              caught instanceof Error && caught.message.trim() !== ''
-                ? caught.message
-                : `${nextJob.file.name} kunne ikke komprimeres og blev ikke lagt op. Prøv igen eller vælg en kortere video.`
+            const message = isVideoCompressionError(caught)
+              ? caught.message
+              : `${nextJob.file.name} kunne ikke komprimeres og blev ikke lagt op. Prøv igen eller vælg en kortere video.`
             onErrorRef.current(message)
           }
         } finally {
@@ -159,6 +231,10 @@ export function useVideoCompression({
       }
     } finally {
       runningRef.current = false
+      if (pendingJobsRef.current.length === 0) {
+        closeAudioContextSafely(unlockedAudioHolderRef.current.ctx)
+        unlockedAudioHolderRef.current.ctx = null
+      }
     }
   }, [])
 
@@ -202,5 +278,11 @@ export function useVideoCompression({
     }
   }, [])
 
-  return { jobs, enqueueVideos, cancelJob }
+  return {
+    jobs,
+    enqueueVideos,
+    cancelJob,
+    prepareAudioContext,
+    releasePreparedAudioContext,
+  }
 }

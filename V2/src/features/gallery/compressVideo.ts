@@ -3,6 +3,13 @@ import {
   MAX_VIDEO_BYTES,
   normalizeMime,
 } from './galleryMedia'
+import {
+  VideoCompressionError,
+  createCompressionError,
+  type VideoCompressionErrorCode,
+} from './videoCompressionError'
+
+export { VideoCompressionError, type VideoCompressionErrorCode }
 
 /**
  * Mål-størrelse for komprimerede videoer: 42 MB giver plads til muxer-overhead
@@ -14,30 +21,18 @@ export const MIN_VIDEO_BITRATE = 150_000
 export const FALLBACK_VIDEO_BITRATE = 1_500_000
 
 const DEFAULT_METADATA_TIMEOUT_MS = 15_000
+const DEFAULT_STALL_TIMEOUT_MS = 10_000
 const AUDIO_RESUME_TIMEOUT_MS = 300
 const RECORDER_TIMESLICE_MS = 1000
 
-export type VideoCompressionErrorCode =
-  | 'UNSUPPORTED_BROWSER'
-  | 'CANCELLED'
-  | 'DECODE_FAILED'
-  | 'TOO_LONG'
-  | 'STILL_TOO_LARGE'
-  | 'ENCODE_FAILED'
-
-export class VideoCompressionError extends Error {
-  readonly code: VideoCompressionErrorCode
-
-  constructor(code: VideoCompressionErrorCode, message: string) {
-    super(message)
-    this.name = 'VideoCompressionError'
-    this.code = code
-  }
+export interface VideoCompressionProgress {
+  phase: 'preparing' | 'compressing' | 'paused'
+  progress: number | null
 }
 
-export interface VideoCompressionProgress {
-  phase: 'preparing' | 'compressing'
-  progress: number | null
+export interface CompressVideoResult {
+  file: File
+  audioIncluded: boolean
 }
 
 export interface CompressionPlan {
@@ -60,6 +55,16 @@ type WindowWithWebkitAudio = typeof globalThis & {
   webkitAudioContext?: typeof AudioContext
 }
 
+interface WakeLockSentinelLike {
+  release?: () => Promise<void> | void
+}
+
+type NavigatorWithWakeLock = Navigator & {
+  wakeLock?: {
+    request?: (type: 'screen') => Promise<WakeLockSentinelLike>
+  }
+}
+
 type VideoWithFrameCallback = HTMLVideoElement & {
   requestVideoFrameCallback?: (
     callback: (now: number, metadata: unknown) => void,
@@ -67,41 +72,15 @@ type VideoWithFrameCallback = HTMLVideoElement & {
   cancelVideoFrameCallback?: (handle: number) => void
 }
 
-function compressionError(
-  code: VideoCompressionErrorCode,
-  fileName: string,
-): VideoCompressionError {
-  switch (code) {
-    case 'UNSUPPORTED_BROWSER':
-      return new VideoCompressionError(
-        code,
-        `${fileName} er over 50 MB, og din browser kan ikke komprimere videoer. Vælg en video på højst 50 MB.`,
-      )
-    case 'CANCELLED':
-      return new VideoCompressionError(
-        code,
-        `Komprimeringen af ${fileName} blev annulleret. Videoen blev ikke lagt op.`,
-      )
-    case 'DECODE_FAILED':
-      return new VideoCompressionError(
-        code,
-        `${fileName} kunne ikke læses af browseren og blev ikke lagt op. Prøv en anden video eller optag som mp4.`,
-      )
-    case 'TOO_LONG':
-      return new VideoCompressionError(
-        code,
-        `${fileName} er for lang til at komme under 50 MB og blev ikke lagt op. Prøv et kortere klip.`,
-      )
-    case 'STILL_TOO_LARGE':
-      return new VideoCompressionError(
-        code,
-        `${fileName} var stadig over 50 MB efter komprimering og blev ikke lagt op. Prøv et kortere klip.`,
-      )
-    case 'ENCODE_FAILED':
-      return new VideoCompressionError(
-        code,
-        `${fileName} kunne ikke komprimeres og blev ikke lagt op. Prøv igen eller vælg en kortere video.`,
-      )
+class RecorderInitWithAudioError extends Error {
+  constructor() {
+    super('RECORDER_INIT_WITH_AUDIO')
+  }
+}
+
+class PlayWithAudioBlockedError extends Error {
+  constructor() {
+    super('PLAY_WITH_AUDIO_BLOCKED')
   }
 }
 
@@ -310,7 +289,7 @@ async function waitForVideoMetadata(
   signal?: AbortSignal,
 ): Promise<void> {
   if (signal?.aborted) {
-    throw compressionError('CANCELLED', fileName)
+    throw createCompressionError('CANCELLED', fileName)
   }
 
   return await new Promise<void>((resolve, reject) => {
@@ -340,7 +319,7 @@ async function waitForVideoMetadata(
       if (settled) return
       settled = true
       cleanup()
-      reject(compressionError(code, fileName))
+      reject(createCompressionError(code, fileName))
     }
 
     const onAbort = () => finishReject('CANCELLED')
@@ -380,28 +359,51 @@ async function waitForVideoMetadata(
   })
 }
 
-async function setupSilentAudioCapture(video: HTMLVideoElement): Promise<{
+async function setupSilentAudioCapture(
+  video: HTMLVideoElement,
+  providedAudioContext?: AudioContext | null,
+): Promise<{
   audioCtx: AudioContext | null
+  ownsAudioContext: boolean
   audioSource: MediaElementAudioSourceNode | null
   audioDestination: MediaStreamAudioDestinationNode | null
   audioTracks: MediaStreamTrack[]
 }> {
-  const AudioCtx =
-    typeof AudioContext !== 'undefined'
-      ? AudioContext
-      : (globalThis as WindowWithWebkitAudio).webkitAudioContext
-  if (!AudioCtx) {
-    return {
-      audioCtx: null,
-      audioSource: null,
-      audioDestination: null,
-      audioTracks: [],
+  let audioCtx: AudioContext | null = null
+  let ownsAudioContext = false
+
+  if (providedAudioContext && providedAudioContext.state !== 'closed') {
+    audioCtx = providedAudioContext
+    ownsAudioContext = false
+  } else {
+    const AudioCtx =
+      typeof AudioContext !== 'undefined'
+        ? AudioContext
+        : (globalThis as WindowWithWebkitAudio).webkitAudioContext
+    if (!AudioCtx) {
+      return {
+        audioCtx: null,
+        ownsAudioContext: false,
+        audioSource: null,
+        audioDestination: null,
+        audioTracks: [],
+      }
+    }
+    try {
+      audioCtx = new AudioCtx()
+      ownsAudioContext = true
+    } catch {
+      return {
+        audioCtx: null,
+        ownsAudioContext: false,
+        audioSource: null,
+        audioDestination: null,
+        audioTracks: [],
+      }
     }
   }
 
-  let audioCtx: AudioContext | null = null
   try {
-    audioCtx = new AudioCtx()
     if (
       audioCtx.state === 'suspended' &&
       typeof audioCtx.resume === 'function'
@@ -414,9 +416,12 @@ async function setupSilentAudioCapture(video: HTMLVideoElement): Promise<{
       ])
     }
     if (audioCtx.state !== 'running') {
-      void audioCtx.close().catch(() => undefined)
+      if (ownsAudioContext) {
+        void audioCtx.close?.().catch(() => undefined)
+      }
       return {
         audioCtx: null,
+        ownsAudioContext: false,
         audioSource: null,
         audioDestination: null,
         audioTracks: [],
@@ -431,21 +436,31 @@ async function setupSilentAudioCapture(video: HTMLVideoElement): Promise<{
     const audioTracks = audioDestination.stream.getAudioTracks()
     if (audioTracks.length === 0) {
       audioSource.disconnect()
-      void audioCtx.close().catch(() => undefined)
+      if (ownsAudioContext) {
+        void audioCtx.close?.().catch(() => undefined)
+      }
       return {
         audioCtx: null,
+        ownsAudioContext: false,
         audioSource: null,
         audioDestination: null,
         audioTracks: [],
       }
     }
-    return { audioCtx, audioSource, audioDestination, audioTracks }
+    return {
+      audioCtx,
+      ownsAudioContext,
+      audioSource,
+      audioDestination,
+      audioTracks,
+    }
   } catch {
-    if (audioCtx) {
-      void audioCtx.close().catch(() => undefined)
+    if (ownsAudioContext) {
+      void audioCtx.close?.().catch(() => undefined)
     }
     return {
       audioCtx: null,
+      ownsAudioContext: false,
       audioSource: null,
       audioDestination: null,
       audioTracks: [],
@@ -479,16 +494,18 @@ export async function compressVideoFile(
     signal?: AbortSignal
     onProgress?: (progress: VideoCompressionProgress) => void
     metadataTimeoutMs?: number
+    stallTimeoutMs?: number
+    audioContext?: AudioContext | null
   },
-): Promise<File> {
+): Promise<CompressVideoResult> {
   const signal = options?.signal
   const onProgress = options?.onProgress
 
   if (signal?.aborted) {
-    throw compressionError('CANCELLED', file.name)
+    throw createCompressionError('CANCELLED', file.name)
   }
   if (!canCompressVideoInBrowser()) {
-    throw compressionError('UNSUPPORTED_BROWSER', file.name)
+    throw createCompressionError('UNSUPPORTED_BROWSER', file.name)
   }
 
   onProgress?.({ phase: 'preparing', progress: null })
@@ -500,28 +517,82 @@ export async function compressVideoFile(
   video.setAttribute('webkit-playsinline', '')
   video.preload = 'auto'
   video.muted = true
+  // Hold videoen synligt inde i viewporten, så iOS Safari ikke pauser afkodning.
   video.style.position = 'fixed'
-  video.style.left = '-9999px'
-  video.style.top = '0'
-  video.style.width = '1px'
-  video.style.height = '1px'
+  video.style.right = '0'
+  video.style.bottom = '0'
+  video.style.width = '2px'
+  video.style.height = '2px'
   video.style.opacity = '0.001'
   video.style.pointerEvents = 'none'
   video.setAttribute('aria-hidden', 'true')
   document.body?.appendChild(video)
 
   let audioCtx: AudioContext | null = null
+  let ownsAudioContext = false
   let audioSource: MediaElementAudioSourceNode | null = null
   let audioDestination: MediaStreamAudioDestinationNode | null = null
   let audioTracks: MediaStreamTrack[] = []
   let canvasStream: MediaStream | null = null
   let combinedStream: MediaStream | null = null
+  let wakeLockReleased = false
+  let wakeLockSentinel: WakeLockSentinelLike | null = null
+
   const encodingState: {
     activeRecorder: MediaRecorder | null
     stopPump: (() => void) | null
+    internalPause: boolean
   } = {
     activeRecorder: null,
     stopPump: null,
+    internalPause: false,
+  }
+
+  const acquireWakeLock = () => {
+    if (wakeLockReleased || wakeLockSentinel !== null) return
+    const nav =
+      typeof navigator !== 'undefined'
+        ? (navigator as NavigatorWithWakeLock)
+        : undefined
+    const req = nav?.wakeLock?.request
+    if (typeof req !== 'function') return
+    try {
+      void Promise.resolve(req.call(nav!.wakeLock, 'screen'))
+        .then((sentinel) => {
+          if (!sentinel) return
+          if (wakeLockReleased) {
+            void Promise.resolve(sentinel.release?.()).catch(() => undefined)
+            return
+          }
+          wakeLockSentinel = sentinel
+        })
+        .catch(() => undefined)
+    } catch {
+      // Ignorér hvis skærmlås ikke understøttes eller afvises.
+    }
+  }
+
+  const releaseWakeLock = () => {
+    wakeLockReleased = true
+    const sentinel = wakeLockSentinel
+    wakeLockSentinel = null
+    if (!sentinel) return
+    try {
+      void Promise.resolve(sentinel.release?.()).catch(() => undefined)
+    } catch {
+      // Ignorér oprydningsfejl.
+    }
+  }
+
+  const pauseVideoInternally = () => {
+    encodingState.internalPause = true
+    try {
+      video.pause()
+    } catch {
+      // Ignorér.
+    } finally {
+      encodingState.internalPause = false
+    }
   }
 
   const teardownAudio = () => {
@@ -534,17 +605,20 @@ export async function compressVideoFile(
     }
     audioSource = null
     audioDestination = null
-    if (audioCtx) {
+    if (audioCtx && ownsAudioContext) {
       try {
-        void audioCtx.close()
+        void audioCtx.close?.()
       } catch {
         // Ignorér.
       }
-      audioCtx = null
     }
+    audioCtx = null
+    ownsAudioContext = false
   }
 
   try {
+    acquireWakeLock()
+
     await waitForVideoMetadata(
       video,
       objectUrl,
@@ -554,7 +628,7 @@ export async function compressVideoFile(
     )
 
     if (signal?.aborted) {
-      throw compressionError('CANCELLED', file.name)
+      throw createCompressionError('CANCELLED', file.name)
     }
 
     const durationSeconds =
@@ -562,8 +636,12 @@ export async function compressVideoFile(
         ? video.duration
         : null
 
-    const audioCapture = await setupSilentAudioCapture(video)
+    const audioCapture = await setupSilentAudioCapture(
+      video,
+      options?.audioContext,
+    )
     audioCtx = audioCapture.audioCtx
+    ownsAudioContext = audioCapture.ownsAudioContext
     audioSource = audioCapture.audioSource
     audioDestination = audioCapture.audioDestination
     audioTracks = audioCapture.audioTracks
@@ -578,7 +656,7 @@ export async function compressVideoFile(
       hasAudio,
     })
     if (plan === null) {
-      throw compressionError('TOO_LONG', file.name)
+      throw createCompressionError('TOO_LONG', file.name)
     }
 
     let chosenMime = selectRecorderMimeType(hasAudio)
@@ -593,13 +671,13 @@ export async function compressVideoFile(
         hasAudio: false,
       })
       if (plan === null) {
-        throw compressionError('TOO_LONG', file.name)
+        throw createCompressionError('TOO_LONG', file.name)
       }
       chosenMime = selectRecorderMimeType(false)
     }
 
     if (chosenMime === null) {
-      throw compressionError('UNSUPPORTED_BROWSER', file.name)
+      throw createCompressionError('UNSUPPORTED_BROWSER', file.name)
     }
 
     const canvas = document.createElement('canvas')
@@ -607,7 +685,7 @@ export async function compressVideoFile(
     canvas.height = plan.height
     const context = canvas.getContext('2d')
     if (context === null) {
-      throw compressionError('ENCODE_FAILED', file.name)
+      throw createCompressionError('ENCODE_FAILED', file.name)
     }
 
     const drawFrame = () => {
@@ -637,33 +715,59 @@ export async function compressVideoFile(
       return canvasStream!
     }
 
+    const stallTimeoutMs = options?.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT_MS
+
     const runEncodingPass = async (
       passPlan: CompressionPlan,
       passMime: string,
       includeAudio: boolean,
-    ): Promise<File> => {
+    ): Promise<CompressVideoResult> => {
       combinedStream = buildStreamForPass(includeAudio)
-      const recorder = createMediaRecorder(
-        combinedStream,
-        passMime,
-        passPlan.videoBitsPerSecond,
-        passPlan.audioBitsPerSecond,
-      )
+      let recorder: MediaRecorder
+      try {
+        recorder = createMediaRecorder(
+          combinedStream,
+          passMime,
+          passPlan.videoBitsPerSecond,
+          passPlan.audioBitsPerSecond,
+        )
+      } catch {
+        if (includeAudio) {
+          throw new RecorderInitWithAudioError()
+        }
+        throw createCompressionError('ENCODE_FAILED', file.name)
+      }
       encodingState.activeRecorder = recorder
 
-      return await new Promise<File>((resolve, reject) => {
+      return await new Promise<CompressVideoResult>((resolve, reject) => {
         const chunks: Blob[] = []
         let recordedBytes = 0
         let lastReportedPct = -1
+        let lastProgressRatio: number | null =
+          durationSeconds !== null ? 0 : null
         let settled = false
         let aborted = false
         let oversizeAborted = false
         let videoEnded = false
+        let pausedForHidden = false
+        let unexpectedPauseRetries = 0
+        let lastObservedTime = video.currentTime
+        let lastProgressAt = Date.now()
         let rafId: number | null = null
         let rvfcId: number | null = null
+        let watchdogTimer: ReturnType<typeof setInterval> | null = null
+
+        const noteTimeProgress = () => {
+          if (video.currentTime > lastObservedTime) {
+            lastObservedTime = video.currentTime
+            lastProgressAt = Date.now()
+          }
+        }
 
         const reportProgress = (ratio: number | null) => {
+          noteTimeProgress()
           if (ratio === null) {
+            lastProgressRatio = null
             if (lastReportedPct === -1) {
               lastReportedPct = -2
               onProgress?.({ phase: 'compressing', progress: null })
@@ -671,6 +775,7 @@ export async function compressVideoFile(
             return
           }
           const clamped = Math.max(0, Math.min(0.99, ratio))
+          lastProgressRatio = clamped
           const pct = Math.floor(clamped * 100)
           if (pct > lastReportedPct) {
             lastReportedPct = pct
@@ -706,7 +811,7 @@ export async function compressVideoFile(
         encodingState.stopPump = cancelFramePump
 
         const pumpWithRaf = () => {
-          if (settled || aborted || oversizeAborted) return
+          if (settled || aborted || oversizeAborted || pausedForHidden) return
           drawFrame()
           updateProgressFromVideo()
           if (typeof requestAnimationFrame === 'function') {
@@ -715,7 +820,7 @@ export async function compressVideoFile(
         }
 
         const pumpWithRvfc = () => {
-          if (settled || aborted || oversizeAborted) return
+          if (settled || aborted || oversizeAborted || pausedForHidden) return
           drawFrame()
           updateProgressFromVideo()
           if (typeof video.requestVideoFrameCallback === 'function') {
@@ -723,11 +828,25 @@ export async function compressVideoFile(
           }
         }
 
+        const startFramePump = () => {
+          if (typeof video.requestVideoFrameCallback === 'function') {
+            pumpWithRvfc()
+          } else {
+            pumpWithRaf()
+          }
+        }
+
         const cleanupListeners = () => {
           cancelFramePump()
+          if (watchdogTimer !== null) {
+            clearInterval(watchdogTimer)
+            watchdogTimer = null
+          }
           video.removeEventListener('ended', onEnded)
           video.removeEventListener('timeupdate', onTimeUpdate)
           video.removeEventListener('error', onVideoError)
+          video.removeEventListener('pause', onUnexpectedPause)
+          document.removeEventListener('visibilitychange', onVisibilityChange)
           signal?.removeEventListener('abort', onAbort)
         }
 
@@ -738,7 +857,7 @@ export async function compressVideoFile(
           reject(err)
         }
 
-        const settleResolve = (result: File) => {
+        const settleResolve = (result: CompressVideoResult) => {
           if (settled) return
           settled = true
           cleanupListeners()
@@ -758,23 +877,19 @@ export async function compressVideoFile(
         const onAbort = () => {
           aborted = true
           cancelFramePump()
-          try {
-            video.pause()
-          } catch {
-            // Ignorér.
-          }
+          pauseVideoInternally()
           stopRecorderSafely()
-          settleReject(compressionError('CANCELLED', file.name))
+          settleReject(createCompressionError('CANCELLED', file.name))
         }
 
         const onVideoError = () => {
           cancelFramePump()
           stopRecorderSafely()
-          settleReject(compressionError('DECODE_FAILED', file.name))
+          settleReject(createCompressionError('DECODE_FAILED', file.name))
         }
 
         const onTimeUpdate = () => {
-          if (settled || aborted || oversizeAborted) return
+          if (settled || aborted || oversizeAborted || pausedForHidden) return
           drawFrame()
           updateProgressFromVideo()
         }
@@ -786,6 +901,119 @@ export async function compressVideoFile(
           stopRecorderSafely()
         }
 
+        const onUnexpectedPause = () => {
+          if (
+            settled ||
+            aborted ||
+            oversizeAborted ||
+            videoEnded ||
+            video.ended ||
+            encodingState.internalPause ||
+            pausedForHidden
+          ) {
+            return
+          }
+          if (unexpectedPauseRetries > 0) {
+            cancelFramePump()
+            stopRecorderSafely()
+            settleReject(createCompressionError('ENCODE_FAILED', file.name))
+            return
+          }
+          unexpectedPauseRetries += 1
+          void Promise.resolve(video.play()).catch(() => {
+            cancelFramePump()
+            stopRecorderSafely()
+            settleReject(createCompressionError('ENCODE_FAILED', file.name))
+          })
+        }
+
+        const onVisibilityChange = () => {
+          const isHidden =
+            document.hidden || document.visibilityState === 'hidden'
+          if (isHidden) {
+            if (settled || aborted || oversizeAborted || pausedForHidden) {
+              return
+            }
+            const canPauseResume =
+              typeof recorder.pause === 'function' &&
+              typeof recorder.resume === 'function' &&
+              recorder.state === 'recording'
+            if (!canPauseResume) {
+              cancelFramePump()
+              pauseVideoInternally()
+              stopRecorderSafely()
+              settleReject(
+                createCompressionError('INTERRUPTED_HIDDEN', file.name),
+              )
+              return
+            }
+            pausedForHidden = true
+            cancelFramePump()
+            try {
+              recorder.pause()
+              pauseVideoInternally()
+            } catch {
+              pausedForHidden = false
+              stopRecorderSafely()
+              settleReject(
+                createCompressionError('INTERRUPTED_HIDDEN', file.name),
+              )
+              return
+            }
+            if (recorder.state !== 'paused') {
+              pausedForHidden = false
+              stopRecorderSafely()
+              settleReject(
+                createCompressionError('INTERRUPTED_HIDDEN', file.name),
+              )
+              return
+            }
+            onProgress?.({ phase: 'paused', progress: lastProgressRatio })
+            return
+          }
+
+          if (!pausedForHidden || settled || aborted || oversizeAborted) return
+          pausedForHidden = false
+          lastObservedTime = video.currentTime
+          lastProgressAt = Date.now()
+          try {
+            recorder.resume()
+          } catch {
+            pauseVideoInternally()
+            stopRecorderSafely()
+            settleReject(
+              createCompressionError('INTERRUPTED_HIDDEN', file.name),
+            )
+            return
+          }
+          if (recorder.state !== 'recording') {
+            pauseVideoInternally()
+            stopRecorderSafely()
+            settleReject(
+              createCompressionError('INTERRUPTED_HIDDEN', file.name),
+            )
+            return
+          }
+          acquireWakeLock()
+          void Promise.resolve(video.play())
+            .then(() => {
+              if (settled || aborted || oversizeAborted || pausedForHidden) {
+                return
+              }
+              onProgress?.({
+                phase: 'compressing',
+                progress: lastProgressRatio,
+              })
+              startFramePump()
+            })
+            .catch(() => {
+              stopRecorderSafely()
+              settleReject(
+                createCompressionError('INTERRUPTED_HIDDEN', file.name),
+              )
+            })
+        }
+
         recorder.ondataavailable = (event: BlobEvent) => {
           if (settled || aborted || oversizeAborted) return
           if (!event.data || event.data.size <= 0) return
@@ -793,13 +1021,9 @@ export async function compressVideoFile(
           if (recordedBytes > MAX_VIDEO_BYTES) {
             oversizeAborted = true
             cancelFramePump()
-            try {
-              video.pause()
-            } catch {
-              // Ignorér.
-            }
+            pauseVideoInternally()
             stopRecorderSafely()
-            settleReject(compressionError('STILL_TOO_LARGE', file.name))
+            settleReject(createCompressionError('STILL_TOO_LARGE', file.name))
             return
           }
           chunks.push(event.data)
@@ -807,26 +1031,22 @@ export async function compressVideoFile(
 
         recorder.onerror = () => {
           cancelFramePump()
-          try {
-            video.pause()
-          } catch {
-            // Ignorér.
-          }
-          settleReject(compressionError('ENCODE_FAILED', file.name))
+          pauseVideoInternally()
+          settleReject(createCompressionError('ENCODE_FAILED', file.name))
         }
 
         recorder.onstop = () => {
           if (settled) return
           if (aborted) {
-            settleReject(compressionError('CANCELLED', file.name))
+            settleReject(createCompressionError('CANCELLED', file.name))
             return
           }
           if (oversizeAborted) {
-            settleReject(compressionError('STILL_TOO_LARGE', file.name))
+            settleReject(createCompressionError('STILL_TOO_LARGE', file.name))
             return
           }
           if (!videoEnded && !video.ended) {
-            settleReject(compressionError('ENCODE_FAILED', file.name))
+            settleReject(createCompressionError('ENCODE_FAILED', file.name))
             return
           }
 
@@ -837,17 +1057,17 @@ export async function compressVideoFile(
             : normalizeMime(passMime)
 
           if (!ALLOWED_VIDEO_MIME_TYPES.has(outputMime)) {
-            settleReject(compressionError('ENCODE_FAILED', file.name))
+            settleReject(createCompressionError('ENCODE_FAILED', file.name))
             return
           }
 
           const outputBlob = new Blob(chunks, { type: outputMime })
           if (outputBlob.size <= 0) {
-            settleReject(compressionError('ENCODE_FAILED', file.name))
+            settleReject(createCompressionError('ENCODE_FAILED', file.name))
             return
           }
           if (outputBlob.size > MAX_VIDEO_BYTES) {
-            settleReject(compressionError('STILL_TOO_LARGE', file.name))
+            settleReject(createCompressionError('STILL_TOO_LARGE', file.name))
             return
           }
 
@@ -860,12 +1080,17 @@ export async function compressVideoFile(
               lastModified: file.lastModified,
             },
           )
-          settleResolve(compressedFile)
+          settleResolve({
+            file: compressedFile,
+            audioIncluded: includeAudio,
+          })
         }
 
         video.addEventListener('ended', onEnded)
         video.addEventListener('timeupdate', onTimeUpdate)
         video.addEventListener('error', onVideoError)
+        video.addEventListener('pause', onUnexpectedPause)
+        document.addEventListener('visibilitychange', onVisibilityChange)
         signal?.addEventListener('abort', onAbort, { once: true })
 
         if (signal?.aborted) {
@@ -876,18 +1101,39 @@ export async function compressVideoFile(
         try {
           recorder.start(RECORDER_TIMESLICE_MS)
         } catch {
-          settleReject(compressionError('ENCODE_FAILED', file.name))
+          settleReject(createCompressionError('ENCODE_FAILED', file.name))
           return
         }
 
-        updateProgressFromVideo()
-        if (typeof video.requestVideoFrameCallback === 'function') {
-          pumpWithRvfc()
-        } else {
-          pumpWithRaf()
-        }
+        const checkIntervalMs = Math.min(
+          1000,
+          Math.max(25, Math.floor(stallTimeoutMs / 4)),
+        )
+        watchdogTimer = setInterval(() => {
+          if (
+            settled ||
+            aborted ||
+            oversizeAborted ||
+            pausedForHidden ||
+            document.hidden ||
+            document.visibilityState === 'hidden'
+          ) {
+            lastProgressAt = Date.now()
+            return
+          }
+          noteTimeProgress()
+          if (Date.now() - lastProgressAt >= stallTimeoutMs) {
+            cancelFramePump()
+            pauseVideoInternally()
+            stopRecorderSafely()
+            settleReject(createCompressionError('ENCODE_FAILED', file.name))
+          }
+        }, checkIntervalMs)
 
-        void Promise.resolve(video.play()).catch((playError: unknown) => {
+        updateProgressFromVideo()
+        startFramePump()
+
+        void Promise.resolve(video.play()).catch(() => {
           cancelFramePump()
           try {
             recorder.ondataavailable = null
@@ -897,11 +1143,15 @@ export async function compressVideoFile(
           } catch {
             // Ignorér.
           }
-          settleReject(
-            playError instanceof Error
-              ? playError
-              : compressionError('DECODE_FAILED', file.name),
-          )
+          if (signal?.aborted) {
+            settleReject(createCompressionError('CANCELLED', file.name))
+            return
+          }
+          if (includeAudio) {
+            settleReject(new PlayWithAudioBlockedError())
+            return
+          }
+          settleReject(createCompressionError('DECODE_FAILED', file.name))
         })
       })
     }
@@ -912,10 +1162,15 @@ export async function compressVideoFile(
       if (caught instanceof VideoCompressionError) {
         throw caught
       }
-      if (!hasAudio || signal?.aborted) {
-        throw compressionError('DECODE_FAILED', file.name)
+      const canRetryMuted =
+        hasAudio &&
+        !signal?.aborted &&
+        (caught instanceof PlayWithAudioBlockedError ||
+          caught instanceof RecorderInitWithAudioError)
+      if (!canRetryMuted) {
+        throw createCompressionError('ENCODE_FAILED', file.name)
       }
-      // Hvis browseren blokerer afspilning med lyd, falder vi tilbage til video uden lyd.
+      // Hvis browseren blokerer afspilning eller optager med lyd, falder vi tilbage til video uden lyd.
       teardownAudio()
       video.muted = true
       try {
@@ -930,11 +1185,11 @@ export async function compressVideoFile(
         hasAudio: false,
       })
       if (fallbackPlan === null) {
-        throw compressionError('TOO_LONG', file.name)
+        throw createCompressionError('TOO_LONG', file.name)
       }
       const fallbackMime = selectRecorderMimeType(false)
       if (fallbackMime === null) {
-        throw compressionError('UNSUPPORTED_BROWSER', file.name)
+        throw createCompressionError('UNSUPPORTED_BROWSER', file.name)
       }
       try {
         return await runEncodingPass(fallbackPlan, fallbackMime, false)
@@ -942,10 +1197,11 @@ export async function compressVideoFile(
         if (retryError instanceof VideoCompressionError) {
           throw retryError
         }
-        throw compressionError('DECODE_FAILED', file.name)
+        throw createCompressionError('ENCODE_FAILED', file.name)
       }
     }
   } finally {
+    releaseWakeLock()
     encodingState.stopPump?.()
     const rec = encodingState.activeRecorder
     if (rec) {
@@ -962,11 +1218,7 @@ export async function compressVideoFile(
     }
     stopTracksFromStreams([combinedStream, canvasStream])
     teardownAudio()
-    try {
-      video.pause()
-    } catch {
-      // Ignorér.
-    }
+    pauseVideoInternally()
     video.removeAttribute('src')
     try {
       video.load?.()

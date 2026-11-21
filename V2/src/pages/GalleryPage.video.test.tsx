@@ -15,6 +15,7 @@ import {
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
 } from '../features/gallery/galleryMedia'
+import { VideoCompressionError } from '../features/gallery/videoCompressionError'
 
 const mockState: {
   albums: GalleryAlbum[] | undefined
@@ -169,6 +170,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllGlobals()
   if (originalScrollIntoView) {
     HTMLElement.prototype.scrollIntoView = originalScrollIntoView
   } else {
@@ -353,8 +355,10 @@ describe('GalleryPage: optag video med kameraet (#367)', () => {
     fireEvent.click(fileButton)
     expect(fileClickSpy).toHaveBeenCalledTimes(1)
 
-    // 50 MB-grænsen vises tæt ved knapperne, før man optager.
+    // 50 MB-grænsen og skærm-vejledningen vises tæt ved knapperne, før man optager.
     expect(screen.getByText(/Videoer.*50 MB/i)).toBeTruthy()
+    expect(screen.getByText(/hvis din browser kan/i)).toBeTruthy()
+    expect(screen.getByText(/hold skærmen tændt/i)).toBeTruthy()
   })
 
   it('sender en gyldig optaget video gennem den eksisterende upload-sti med billedtekst og begivenhed', () => {
@@ -386,10 +390,10 @@ describe('GalleryPage: optag video med kameraet (#367)', () => {
   })
 
   it('starter komprimering af en video over 50 MB fra video-inputtet og afviser stadig forkert videotype uden upload', async () => {
-    let resolveCompress!: (file: File) => void
+    let resolveCompress!: (res: { file: File; audioIncluded: boolean }) => void
     compressVideoFileMock.mockImplementationOnce(
       () =>
-        new Promise<File>((resolve) => {
+        new Promise<{ file: File; audioIncluded: boolean }>((resolve) => {
           resolveCompress = resolve
         }),
     )
@@ -413,6 +417,9 @@ describe('GalleryPage: optag video med kameraet (#367)', () => {
     })
     expect(screen.getByText('Komprimerer video')).toBeTruthy()
     expect(
+      screen.getByText(/Hold skærmen tændt mens videoen komprimeres/i),
+    ).toBeTruthy()
+    expect(
       screen.getByRole('button', {
         name: 'Annullér komprimering af lang_optagelse.mp4',
       }),
@@ -424,7 +431,7 @@ describe('GalleryPage: optag video med kameraet (#367)', () => {
     })
     Object.defineProperty(compressed, 'size', { value: 20 * 1024 * 1024 })
     await act(async () => {
-      resolveCompress(compressed)
+      resolveCompress({ file: compressed, audioIncluded: true })
     })
 
     await waitFor(() => {
@@ -471,10 +478,10 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
   })
 
   it('viser dansk fremskridt og Annullér-knap for video over 50 MB og uploader resultatet med billedtekst og begivenhed', async () => {
-    let resolveCompress!: (file: File) => void
+    let resolveCompress!: (res: { file: File; audioIncluded: boolean }) => void
     let capturedOnProgress:
       | ((p: {
-          phase: 'preparing' | 'compressing'
+          phase: 'preparing' | 'compressing' | 'paused'
           progress: number | null
         }) => void)
       | undefined
@@ -483,15 +490,17 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
         _file: File,
         opts?: {
           onProgress?: (p: {
-            phase: 'preparing' | 'compressing'
+            phase: 'preparing' | 'compressing' | 'paused'
             progress: number | null
           }) => void
         },
       ) => {
         capturedOnProgress = opts?.onProgress
-        return new Promise<File>((resolve) => {
-          resolveCompress = resolve
-        })
+        return new Promise<{ file: File; audioIncluded: boolean }>(
+          (resolve) => {
+            resolveCompress = resolve
+          },
+        )
       },
     )
 
@@ -530,7 +539,7 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     const compressed = new File(['mp4'], 'havorn.mp4', { type: 'video/mp4' })
     Object.defineProperty(compressed, 'size', { value: 25 * 1024 * 1024 })
     await act(async () => {
-      resolveCompress(compressed)
+      resolveCompress({ file: compressed, audioIncluded: true })
     })
 
     await waitFor(() => {
@@ -548,18 +557,21 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     compressVideoFileMock.mockImplementationOnce(
       (file: File, opts?: { signal?: AbortSignal }) => {
         capturedSignal = opts?.signal
-        return new Promise<File>((_resolve, reject) => {
-          opts?.signal?.addEventListener(
-            'abort',
-            () =>
-              reject(
-                new Error(
-                  `Komprimeringen af ${file.name} blev annulleret. Videoen blev ikke lagt op.`,
+        return new Promise<{ file: File; audioIncluded: boolean }>(
+          (_resolve, reject) => {
+            opts?.signal?.addEventListener(
+              'abort',
+              () =>
+                reject(
+                  new VideoCompressionError(
+                    'CANCELLED',
+                    `Komprimeringen af ${file.name} blev annulleret. Videoen blev ikke lagt op.`,
+                  ),
                 ),
-              ),
-            { once: true },
-          )
-        })
+              { once: true },
+            )
+          },
+        )
       },
     )
 
@@ -587,7 +599,8 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
 
   it('viser synlig dansk fejl og gemmer ikke hvis komprimering fejler eller resultatet stadig er over 50 MB', async () => {
     compressVideoFileMock.mockRejectedValueOnce(
-      new Error(
+      new VideoCompressionError(
+        'DECODE_FAILED',
         'hevc.mov kunne ikke læses af browseren og blev ikke lagt op. Prøv en anden video eller optag som mp4.',
       ),
     )
@@ -611,7 +624,10 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     // Resultat stadig over 50 MB
     const stillBig = new File(['raw'], 'stadig_stor.mp4', { type: 'video/mp4' })
     Object.defineProperty(stillBig, 'size', { value: MAX_VIDEO_BYTES + 10 })
-    compressVideoFileMock.mockResolvedValueOnce(stillBig)
+    compressVideoFileMock.mockResolvedValueOnce({
+      file: stillBig,
+      audioIncluded: true,
+    })
 
     const hugeInput = new File(['raw'], 'stadig_stor.mp4', {
       type: 'video/mp4',
@@ -629,7 +645,8 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
 
   it('viser synlig dansk fejl uden stille nederlag når browseren ikke kan komprimere', async () => {
     compressVideoFileMock.mockRejectedValueOnce(
-      new Error(
+      new VideoCompressionError(
+        'UNSUPPORTED_BROWSER',
         'mobil.mp4 er over 50 MB, og din browser kan ikke komprimere videoer. Vælg en video på højst 50 MB.',
       ),
     )
@@ -648,5 +665,111 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     )
     expect(scrollIntoViewMock).toHaveBeenCalled()
     expect(enqueueSpy).not.toHaveBeenCalled()
+  })
+
+  it('låser AudioContext synkront ved klik og viser tydelig dansk besked hvis videoen blev lagt op uden lyd', async () => {
+    const resumeSpy = vi.fn().mockResolvedValue(undefined)
+    const closeSpy = vi.fn().mockResolvedValue(undefined)
+    const fakeCtx = {
+      state: 'suspended' as AudioContextState,
+      resume: resumeSpy,
+      close: closeSpy,
+    } as unknown as AudioContext
+    const AudioContextMock = vi.fn(function MockAudioContext() {
+      return fakeCtx
+    })
+    vi.stubGlobal('AudioContext', AudioContextMock)
+
+    const compressed = new File(['mp4'], 'silent.mp4', { type: 'video/mp4' })
+    Object.defineProperty(compressed, 'size', { value: 12 * 1024 * 1024 })
+    compressVideoFileMock.mockResolvedValueOnce({
+      file: compressed,
+      audioIncluded: false,
+    })
+
+    renderGallery()
+
+    // Klik på Optag video åbner/genoptager AudioContext synkront i brugerhandlingen
+    fireEvent.click(screen.getByRole('button', { name: 'Optag video' }))
+    expect(AudioContextMock).toHaveBeenCalledTimes(1)
+    expect(resumeSpy).toHaveBeenCalledTimes(1)
+
+    const largeMov = new File(['raw'], 'udelyd.mov', {
+      type: 'video/quicktime',
+    })
+    Object.defineProperty(largeMov, 'size', { value: 75 * 1024 * 1024 })
+    fireEvent.change(screen.getByLabelText('Optag en video med kameraet'), {
+      target: { files: [largeMov] },
+    })
+
+    await waitFor(() => {
+      expect(enqueueSpy).toHaveBeenCalledWith({
+        files: [compressed],
+        caption: '',
+        eventId: null,
+      })
+    })
+    const notice = await screen.findByRole('status')
+    expect(notice.textContent).toContain(
+      'udelyd.mov: Videoen blev lagt op uden lyd.',
+    )
+  })
+
+  it('viser dansk fallback ved engelsk TypeError fra komprimering og stjæler ikke fokus fra billedtekst eller forsvinder ved næste filvalg', async () => {
+    let rejectCompress!: (err: Error) => void
+    compressVideoFileMock.mockImplementationOnce(
+      () =>
+        new Promise<{ file: File; audioIncluded: boolean }>(
+          (_resolve, reject) => {
+            rejectCompress = reject
+          },
+        ),
+    )
+
+    renderGallery()
+    const input = screen.getByLabelText(
+      'Vælg billeder og videoer fra enheden',
+    ) as HTMLInputElement
+    const captionInput = screen.getByLabelText(
+      'Billedtekst (valgfri)',
+    ) as HTMLInputElement
+
+    const bigMp4 = new File(['raw'], 'skov.mp4', { type: 'video/mp4' })
+    Object.defineProperty(bigMp4, 'size', { value: 90 * 1024 * 1024 })
+    fireEvent.change(input, { target: { files: [bigMp4] } })
+
+    await waitFor(() => {
+      expect(compressVideoFileMock).toHaveBeenCalledTimes(1)
+    })
+
+    // Medlemmet skriver i billedteksten mens komprimeringen fejler asynkront med engelsk TypeError.
+    captionInput.focus()
+    expect(document.activeElement).toBe(captionInput)
+
+    await act(async () => {
+      rejectCompress(new TypeError('Unexpected internal encoder error'))
+    })
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain(
+      'skov.mp4 kunne ikke komprimeres og blev ikke lagt op. Prøv igen eller vælg en kortere video.',
+    )
+    expect(alert.textContent).not.toContain('Unexpected internal encoder error')
+    expect(scrollIntoViewMock).toHaveBeenCalled()
+    expect(document.activeElement).toBe(captionInput)
+
+    // Et nyt gyldigt filvalg må ikke slette en ulæst komprimeringsfejl.
+    const smallVideo = new File(['ok'], 'lille.mp4', { type: 'video/mp4' })
+    Object.defineProperty(smallVideo, 'size', { value: 1024 })
+    fireEvent.change(input, { target: { files: [smallVideo] } })
+
+    expect(enqueueSpy).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('alert').textContent).toContain(
+      'skov.mp4 kunne ikke komprimeres og blev ikke lagt op.',
+    )
+
+    // Medlemmet kan selv lukke beskeden når den er læst.
+    fireEvent.click(screen.getByRole('button', { name: 'Luk' }))
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
