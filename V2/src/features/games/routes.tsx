@@ -1,5 +1,6 @@
 import type { AppRoute } from '../../routes'
 import BoblePage from '../../pages/BoblePage'
+import BralPage from '../../pages/BralPage'
 import FugletraekPage from '../../pages/FugletraekPage'
 import KabalePage from '../../pages/KabalePage'
 import GamesPage from '../../pages/GamesPage'
@@ -86,6 +87,14 @@ export const gameRoutes: AppRoute[] = [
     element: (
       <ProtectedRoute>
         <BoblePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/spil/bral',
+    element: (
+      <ProtectedRoute>
+        <BralPage />
       </ProtectedRoute>
     ),
   },

@@ -242,6 +242,12 @@ export const ANNOUNCEMENTS = [
     body: 'Under beskederne i chatten står nu små billeder af dem, der har læst så langt. Tryk på dem for at se navnene. Det gælder også dig: de andre kan se, hvor langt du har læst.',
     path: 'chat',
   },
+  {
+    slug: 'spil-bral-smeltning',
+    title: 'Nyt spil: Bral smeltning',
+    body: 'Grib tomme øldåser, hold ovnen ved 660 °C, og slå En, Fem og Ti Bral på et minut. Dit bedste resultat lander på klubbens liste under Spil.',
+    path: 'spil/bral',
+  },
 ] as const
 
 /** Hvor længe en nyhed kan nå at blive sendt, efter den er udgivet. */

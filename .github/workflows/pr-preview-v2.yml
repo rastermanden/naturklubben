@@ -290,3 +290,12 @@ jobs:
           PREVIEW_PATH: /pr-preview/pr-${{ github.event.number }}/
           PUPPETEER_REQUIRE_FROM: /tmp/preview-smoke/package.json
         run: node V2/scripts/previewBobleScore.mjs
+
+      - if: github.event.action != 'closed'
+        name: Gem et Bral-resultat og se det på listen
+        env:
+          PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
+          PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+          PREVIEW_PATH: /pr-preview/pr-${{ github.event.number }}/
+          PUPPETEER_REQUIRE_FROM: /tmp/preview-smoke/package.json
+        run: node V2/scripts/previewBralScore.mjs
