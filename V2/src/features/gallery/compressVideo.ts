@@ -56,7 +56,13 @@ type WindowWithWebkitAudio = typeof globalThis & {
 }
 
 interface WakeLockSentinelLike {
+  released?: boolean
   release?: () => Promise<void> | void
+  addEventListener?: (
+    type: 'release',
+    listener: () => void,
+    options?: { once?: boolean },
+  ) => void
 }
 
 type NavigatorWithWakeLock = Navigator & {
@@ -549,7 +555,13 @@ export async function compressVideoFile(
   }
 
   const acquireWakeLock = () => {
-    if (wakeLockReleased || wakeLockSentinel !== null) return
+    if (
+      wakeLockReleased ||
+      (wakeLockSentinel !== null && !wakeLockSentinel.released)
+    ) {
+      return
+    }
+    wakeLockSentinel = null
     const nav =
       typeof navigator !== 'undefined'
         ? (navigator as NavigatorWithWakeLock)
@@ -565,6 +577,15 @@ export async function compressVideoFile(
             return
           }
           wakeLockSentinel = sentinel
+          sentinel.addEventListener?.(
+            'release',
+            () => {
+              if (wakeLockSentinel === sentinel) {
+                wakeLockSentinel = null
+              }
+            },
+            { once: true },
+          )
         })
         .catch(() => undefined)
     } catch {
@@ -931,7 +952,14 @@ export async function compressVideoFile(
           const isHidden =
             document.hidden || document.visibilityState === 'hidden'
           if (isHidden) {
-            if (settled || aborted || oversizeAborted || pausedForHidden) {
+            if (
+              settled ||
+              aborted ||
+              oversizeAborted ||
+              pausedForHidden ||
+              videoEnded ||
+              video.ended
+            ) {
               return
             }
             const canPauseResume =
@@ -972,7 +1000,16 @@ export async function compressVideoFile(
             return
           }
 
-          if (!pausedForHidden || settled || aborted || oversizeAborted) return
+          if (
+            !pausedForHidden ||
+            settled ||
+            aborted ||
+            oversizeAborted ||
+            videoEnded ||
+            video.ended
+          ) {
+            return
+          }
           pausedForHidden = false
           lastObservedTime = video.currentTime
           lastProgressAt = Date.now()
@@ -994,10 +1031,28 @@ export async function compressVideoFile(
             )
             return
           }
+          if (wakeLockSentinel !== null) {
+            const stale = wakeLockSentinel
+            wakeLockSentinel = null
+            if (!stale.released) {
+              try {
+                void Promise.resolve(stale.release?.()).catch(() => undefined)
+              } catch {
+                // Ignorér.
+              }
+            }
+          }
           acquireWakeLock()
           void Promise.resolve(video.play())
             .then(() => {
-              if (settled || aborted || oversizeAborted || pausedForHidden) {
+              if (
+                settled ||
+                aborted ||
+                oversizeAborted ||
+                pausedForHidden ||
+                videoEnded ||
+                video.ended
+              ) {
                 return
               }
               onProgress?.({
@@ -1007,6 +1062,16 @@ export async function compressVideoFile(
               startFramePump()
             })
             .catch(() => {
+              if (
+                pausedForHidden ||
+                settled ||
+                aborted ||
+                oversizeAborted ||
+                videoEnded ||
+                video.ended
+              ) {
+                return
+              }
               stopRecorderSafely()
               settleReject(
                 createCompressionError('INTERRUPTED_HIDDEN', file.name),

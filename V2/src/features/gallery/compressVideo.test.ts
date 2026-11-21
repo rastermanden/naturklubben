@@ -20,6 +20,7 @@ afterEach(() => {
     .captureStream
   delete (document as { hidden?: unknown }).hidden
   delete (document as { visibilityState?: unknown }).visibilityState
+  delete (navigator as { wakeLock?: unknown }).wakeLock
   document.body.innerHTML = ''
 })
 
@@ -773,5 +774,150 @@ describe('compressVideoFile', () => {
       name: 'VideoCompressionError',
       code: 'ENCODE_FAILED',
     })
+  })
+
+  it('henter ny Wake Lock når siden bliver synlig igen efter at være blevet skjult (R11)', async () => {
+    let hidden = false
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => hidden,
+    })
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => (hidden ? 'hidden' : 'visible'),
+    })
+
+    const sentinels: Array<{
+      released: boolean
+      releaseSpy: ReturnType<typeof vi.fn>
+      triggerBrowserRelease: () => void
+    }> = []
+
+    const wakeRequestSpy = vi.fn(async () => {
+      const target = new EventTarget()
+      const releaseSpy = vi.fn(async () => {
+        entry.released = true
+      })
+      const entry = {
+        released: false,
+        releaseSpy,
+        triggerBrowserRelease: () => {
+          entry.released = true
+          target.dispatchEvent(new Event('release'))
+        },
+        sentinel: {
+          get released() {
+            return entry.released
+          },
+          release: releaseSpy,
+          addEventListener: target.addEventListener.bind(target),
+        },
+      }
+      sentinels.push(entry)
+      return entry.sentinel
+    })
+
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: wakeRequestSpy },
+    })
+
+    const env = setupCompressionMocks({ supportPauseResume: true })
+    const input = new File(['raw'], 'wakelockresume.mp4', { type: 'video/mp4' })
+
+    const promise = compressVideoFile(input)
+    await vi.waitFor(() => {
+      expect(env.startMock).toHaveBeenCalledTimes(1)
+      expect(sentinels).toHaveLength(1)
+    })
+
+    // Browseren frigiver skærmlåsen når siden skjules
+    hidden = true
+    sentinels[0]!.triggerBrowserRelease()
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    // Når siden bliver synlig igen, skal wakeLock.request('screen') kaldes igen
+    hidden = false
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    await vi.waitFor(() => {
+      expect(wakeRequestSpy).toHaveBeenCalledTimes(2)
+      expect(sentinels).toHaveLength(2)
+    })
+
+    env.emitChunksAndEnd()
+    await promise
+
+    expect(sentinels[1]!.releaseSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignorerer AbortError fra play() hvis siden skjules igen imens og afbryder ikke efter videoEnded (R12)', async () => {
+    let hidden = false
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => hidden,
+    })
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => (hidden ? 'hidden' : 'visible'),
+    })
+
+    let rejectPendingPlay: ((err: Error) => void) | null = null
+    let envRef: ReturnType<typeof setupCompressionMocks>
+    envRef = setupCompressionMocks({
+      supportPauseResume: true,
+      playMock: (_videoEl, attempt) => {
+        if (attempt === 2) {
+          return new Promise<void>((_resolve, reject) => {
+            rejectPendingPlay = reject
+          })
+        }
+        return Promise.resolve()
+      },
+    })
+
+    const input = new File(['raw'], 'r12.mp4', { type: 'video/mp4' })
+    const promise = compressVideoFile(input)
+    await vi.waitFor(() => {
+      expect(envRef.startMock).toHaveBeenCalledTimes(1)
+    })
+
+    // 1. Skjul -> pause
+    hidden = true
+    document.dispatchEvent(new Event('visibilitychange'))
+    // 2. Synlig -> resume kalder video.play(), som afventer
+    hidden = false
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => {
+      expect(rejectPendingPlay).not.toBeNull()
+    })
+
+    // 3. Skjul hurtigt igen, før resume's play() når at resolve -> pause() afviser play() med AbortError
+    hidden = true
+    document.dispatchEvent(new Event('visibilitychange'))
+    rejectPendingPlay!(
+      new DOMException('The play() request was interrupted', 'AbortError'),
+    )
+    await Promise.resolve()
+
+    // 4. Synlig igen -> genoptager og videoen slutter
+    hidden = false
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => {
+      expect(envRef.videoPlaySpy).toHaveBeenCalledTimes(3)
+    })
+
+    // 5. Videoen slutter, men skjules før recorder.onstop kører -> skal stadig gennemføre rent
+    const rec = envRef.getLatestRecorder()!
+    const origStop = rec.stop.bind(rec)
+    rec.stop = () => {
+      origStop()
+    }
+    envRef.emitChunksAndEnd()
+    hidden = true
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    const result = await promise
+    expect(result.file.size).toBe(1024)
   })
 })
