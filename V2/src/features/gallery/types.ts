@@ -7,9 +7,13 @@
  */
 export type OptimizationStatus = 'pending' | 'processing' | 'ready' | 'failed'
 
-/** Et billede som `gallery.listPhotos` og `gallery.getPhoto` giver det. */
+export type MediaKind = 'image' | 'video'
+
+/** Et billede eller en video som `gallery.listPhotos` og `gallery.getPhoto` giver det. */
 export interface Photo {
   id: string
+  mediaKind: MediaKind
+  mimeType?: string | null
   caption: string | null
   eventId: string | null
   albumKey: string
@@ -41,6 +45,7 @@ export interface GalleryAlbum {
   latestPhotoAt: number | null
   coverPhotoId: string | null
   coverUrl: string | null
+  coverIsVideo?: boolean
 }
 
 /** En kommentar som `gallery.listComments` giver den. */

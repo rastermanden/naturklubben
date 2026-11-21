@@ -266,6 +266,12 @@ export const ANNOUNCEMENTS = [
     body: 'Under Aktiviteter finder du nu Lyd. Her kan du lægge mp3-filer op på op til 15 MB og afspille dem direkte i appen.',
     path: 'lyd',
   },
+  {
+    slug: 'galleri-video',
+    title: 'Nu kan du lægge videoer i galleriet',
+    body: 'Under Billeder kan du nu lægge videoer op på op til 50 MB (mp4, webm og mov) ved siden af billederne og afspille dem direkte i albummet.',
+    path: 'billeder',
+  },
 ] as const
 
 /** Hvor længe en nyhed kan nå at blive sendt, efter den er udgivet. */

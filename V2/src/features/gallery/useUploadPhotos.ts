@@ -2,7 +2,10 @@ import { useCallback, useMemo, useState } from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
+import { galleryErrorMessage } from './galleryErrors'
+import { detectGalleryMediaKind, validateGalleryFile } from './galleryMedia'
 import { PHOTO_MAX_EDGE, THUMB_MAX_EDGE, resizePhotoFile } from './resizePhoto'
+import { captureVideoThumbnail } from './videoThumbnail'
 
 /**
  * Uploadkøen. Porteret fra `src/features/gallery/useUploadPhotos.ts`, men
@@ -73,14 +76,15 @@ export function createUploadQueueItems({
   })
 }
 
-async function postImage(
+async function postFile(
   generateUploadUrl: () => Promise<{ uploadUrl: string }>,
   blob: Blob,
+  contentType: string,
 ): Promise<Id<'_storage'>> {
   const { uploadUrl } = await generateUploadUrl()
   const response = await fetch(uploadUrl, {
     method: 'POST',
-    headers: { 'Content-Type': blob.type || 'image/jpeg' },
+    headers: { 'Content-Type': contentType },
     body: blob,
   })
   if (!response.ok) {
@@ -94,6 +98,7 @@ async function postImage(
 export function useUploadPhotos() {
   const generateUploadUrl = useMutation(api.gallery.generateUploadUrl)
   const createPhoto = useMutation(api.gallery.createPhoto)
+  const createVideo = useMutation(api.gallery.createVideo)
   const [items, setItems] = useState<UploadQueueItem[]>([])
 
   const updateItem = useCallback(
@@ -109,13 +114,65 @@ export function useUploadPhotos() {
     async (item: UploadQueueItem) => {
       updateItem(item.id, { status: 'uploading', error: null })
 
+      const detected = detectGalleryMediaKind(item.file)
+      const validationError = validateGalleryFile(item.file)
+      if (detected === null || validationError !== null) {
+        updateItem(item.id, {
+          status: 'failed',
+          error: validationError ?? 'Filen kan ikke lægges op.',
+        })
+        return
+      }
+
       try {
+        if (detected.kind === 'video') {
+          const thumb = await captureVideoThumbnail(item.file)
+          const storageId = await postFile(
+            generateUploadUrl,
+            item.file,
+            detected.mimeType,
+          )
+          const thumbnailStorageId = thumb
+            ? await postFile(
+                generateUploadUrl,
+                thumb.blob,
+                thumb.blob.type || 'image/jpeg',
+              )
+            : undefined
+          const result = await createVideo({
+            storageId,
+            thumbnailStorageId,
+            width: thumb?.width,
+            height: thumb?.height,
+            clientUploadId: item.clientUploadId,
+            caption: item.caption || undefined,
+            eventId: item.eventId ?? undefined,
+          })
+          if (!result.ok) {
+            updateItem(item.id, {
+              status: 'failed',
+              error: galleryErrorMessage(
+                result.error,
+                'Videoen kunne ikke gemmes. Prøv igen.',
+              ),
+            })
+            return
+          }
+          updateItem(item.id, { status: 'saved' })
+          return
+        }
+
         const display = await resizePhotoFile(item.file, PHOTO_MAX_EDGE)
         const thumb = await resizePhotoFile(item.file, THUMB_MAX_EDGE)
-        const storageId = await postImage(generateUploadUrl, display.blob)
-        const thumbnailStorageId = await postImage(
+        const storageId = await postFile(
+          generateUploadUrl,
+          display.blob,
+          display.blob.type || 'image/jpeg',
+        )
+        const thumbnailStorageId = await postFile(
           generateUploadUrl,
           thumb.blob,
+          thumb.blob.type || 'image/jpeg',
         )
 
         await createPhoto({
@@ -129,14 +186,14 @@ export function useUploadPhotos() {
         })
         updateItem(item.id, { status: 'saved' })
       } catch (caught) {
-        console.error('Billedupload fejlede', caught)
+        console.error('Upload fejlede', caught)
         updateItem(item.id, {
           status: 'failed',
-          error: 'Upload fejlede. Prøv igen.',
+          error: galleryErrorMessage(caught, 'Upload fejlede. Prøv igen.'),
         })
       }
     },
-    [createPhoto, generateUploadUrl, updateItem],
+    [createPhoto, createVideo, generateUploadUrl, updateItem],
   )
 
   const enqueue = useCallback(

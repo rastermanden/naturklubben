@@ -73,11 +73,16 @@ export function PhotoLightbox({
   const [eventDraft, setEventDraft] = useState('')
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [videoErrorPhotoId, setVideoErrorPhotoId] = useState<string | null>(
+    null,
+  )
   const [saveNotice, setSaveNotice] = useState<{
     photoId: string
     message: string
   } | null>(null)
 
+  const isVideo = photo.mediaKind === 'video'
+  const hasVideoPlaybackError = isVideo && videoErrorPhotoId === photo.id
   const editing =
     editingPhotoId === photo.id && photo.canEdit && onEdit !== undefined
   const visibleSaveNotice =
@@ -134,7 +139,8 @@ export function PhotoLightbox({
         (target.isContentEditable ||
           target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT')
+          target.tagName === 'SELECT' ||
+          target.tagName === 'VIDEO')
       ) {
         return
       }
@@ -185,7 +191,12 @@ export function PhotoLightbox({
     } catch (error) {
       if (!mountedRef.current || saveRequestIdRef.current !== requestId) return
       setEditError(
-        galleryErrorMessage(error, 'Billedet kunne ikke gemmes. Prøv igen.'),
+        galleryErrorMessage(
+          error,
+          isVideo
+            ? 'Videoen kunne ikke gemmes. Prøv igen.'
+            : 'Billedet kunne ikke gemmes. Prøv igen.',
+        ),
       )
     } finally {
       if (mountedRef.current && saveRequestIdRef.current === requestId) {
@@ -198,7 +209,7 @@ export function PhotoLightbox({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={photo.caption ?? 'Billede'}
+      aria-label={photo.caption ?? (isVideo ? 'Video' : 'Billede')}
       tabIndex={-1}
       onClick={(event) => {
         if (swipedRef.current) {
@@ -216,6 +227,13 @@ export function PhotoLightbox({
       }}
       onTouchStart={(event) => {
         swipedRef.current = false
+        if (
+          event.target instanceof Element &&
+          event.target.closest('video') !== null
+        ) {
+          touchStartRef.current = null
+          return
+        }
         const touch = event.touches[0]
         touchStartRef.current = touch
           ? { x: touch.clientX, y: touch.clientY }
@@ -283,10 +301,30 @@ export function PhotoLightbox({
 
       {photo.displayUrl === null && (
         <p role="alert" className="text-white">
-          Billedet kunne ikke hentes.
+          {isVideo
+            ? 'Videoen kunne ikke hentes.'
+            : 'Billedet kunne ikke hentes.'}
         </p>
       )}
-      {photo.displayUrl !== null && (
+      {photo.displayUrl !== null && isVideo && (
+        <video
+          key={photo.id}
+          src={photo.displayUrl}
+          poster={photo.thumbnailUrl ?? undefined}
+          controls
+          playsInline
+          preload="metadata"
+          aria-label={photo.caption ?? 'Video'}
+          onClick={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
+          onTouchEnd={(event) => event.stopPropagation()}
+          onError={() => setVideoErrorPhotoId(photo.id)}
+          className={`${
+            editing ? 'max-h-[40vh]' : 'max-h-[70vh]'
+          } w-full max-w-3xl rounded bg-black object-contain`}
+        />
+      )}
+      {photo.displayUrl !== null && !isVideo && (
         <img
           src={photo.displayUrl}
           alt={photo.caption ?? ''}
@@ -295,6 +333,16 @@ export function PhotoLightbox({
             editing ? 'max-h-[40vh]' : 'max-h-[70vh]'
           } max-w-full rounded object-contain`}
         />
+      )}
+      {hasVideoPlaybackError && (
+        <p
+          role="alert"
+          className="max-w-prose rounded bg-black/70 px-3 py-2 text-center text-sm text-red-200"
+        >
+          {photo.mimeType === 'video/quicktime'
+            ? 'Din browser kan ikke afspille denne mov-video. Videoer i mov-format fra iPhone virker bedst i Safari eller som mp4.'
+            : 'Videoen kan ikke afspilles i denne browser. Formatet understøttes måske ikke på denne enhed.'}
+        </p>
       )}
 
       {!editing && photo.caption && (
@@ -335,7 +383,7 @@ export function PhotoLightbox({
         <form
           onSubmit={(event) => void handleSaveEdit(event)}
           onClick={(event) => event.stopPropagation()}
-          aria-label="Redigér billede"
+          aria-label={isVideo ? 'Redigér video' : 'Redigér billede'}
           className="flex w-full max-w-prose flex-col gap-3 rounded-lg border border-white/25 bg-black/70 p-4 text-left text-white"
         >
           <label className="flex flex-col gap-1 text-sm text-white">
@@ -455,7 +503,7 @@ export function PhotoLightbox({
               disabled={deleting}
               className="min-h-11 rounded bg-red-700 px-4 py-2 text-white disabled:opacity-60"
             >
-              {deleting ? 'Sletter…' : 'Slet billede'}
+              {deleting ? 'Sletter…' : isVideo ? 'Slet video' : 'Slet billede'}
             </button>
           )}
         </div>
