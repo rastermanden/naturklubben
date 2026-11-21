@@ -20,24 +20,26 @@ export function PhotoThumbnail({
   }
 }) {
   const caption = photo.caption?.trim()
+  const isVideo = photo.mediaKind === 'video'
+  const mediaNoun = isVideo ? 'video' : 'billede'
   const statusLabel = optimizationStatusLabel(photo)
   const notOwned =
     selection?.disabled === true && selection.disabledReason !== 'busy'
   const accessibleName = selection
     ? notOwned
       ? caption
-        ? `Andet medlems billede, kan ikke vælges: ${caption}`
-        : 'Andet medlems billede uden billedtekst, kan ikke vælges'
+        ? `Andet medlems ${mediaNoun}, kan ikke vælges: ${caption}`
+        : `Andet medlems ${mediaNoun} uden billedtekst, kan ikke vælges`
       : selection.selected
         ? caption
-          ? `Fravælg billede: ${caption}`
-          : 'Fravælg billede uden billedtekst'
+          ? `Fravælg ${mediaNoun}: ${caption}`
+          : `Fravælg ${mediaNoun} uden billedtekst`
         : caption
-          ? `Vælg billede: ${caption}`
-          : 'Vælg billede uden billedtekst'
+          ? `Vælg ${mediaNoun}: ${caption}`
+          : `Vælg ${mediaNoun} uden billedtekst`
     : caption
-      ? `Åbn billede: ${caption}`
-      : 'Åbn billede uden billedtekst'
+      ? `Åbn ${mediaNoun}: ${caption}`
+      : `Åbn ${mediaNoun} uden billedtekst`
 
   return (
     <button
@@ -56,18 +58,58 @@ export function PhotoThumbnail({
             : ''
       }`}
     >
-      {photo.thumbnailUrl === null && (
+      {photo.thumbnailUrl === null && !isVideo && (
         <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-xs text-danger">
           Billedet kunne ikke hentes
         </span>
       )}
+      {photo.thumbnailUrl === null && isVideo && (
+        <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-surface-sunken p-2 text-ink-body">
+          <span
+            aria-hidden="true"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-raised text-ink shadow-sm"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </span>
+          <span className="text-xs font-medium text-ink-muted">Video</span>
+        </span>
+      )}
       {photo.thumbnailUrl !== null && (
-        <img
-          src={photo.thumbnailUrl}
-          alt={caption ?? ''}
-          loading="lazy"
-          className="h-full w-full object-cover"
-        />
+        <>
+          <img
+            src={photo.thumbnailUrl}
+            alt={caption ?? ''}
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+          {isVideo && (
+            <>
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center"
+              >
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white shadow">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </span>
+              </span>
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white"
+              >
+                Video
+              </span>
+            </>
+          )}
+        </>
       )}
       {selection && !notOwned && (
         <span

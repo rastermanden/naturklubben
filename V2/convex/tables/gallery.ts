@@ -51,6 +51,9 @@ export const galleryTables = {
      */
     width: v.optional(v.number()),
     height: v.optional(v.number()),
+    mediaKind: v.optional(v.union(v.literal('image'), v.literal('video'))),
+    mimeType: v.optional(v.string()),
+    sizeBytes: v.optional(v.number()),
     caption: v.optional(v.string()),
     /**
      * Album-nøglen: begivenhedens id, eller `without-event` (se
@@ -110,7 +113,10 @@ export const galleryTables = {
     .index('by_client_upload', ['uploaderId', 'clientUploadId'])
     .index('by_status', ['optimizationStatus', 'optimizationStartedAt'])
     .index('by_display_token', ['displayToken'])
-    .index('by_thumbnail_token', ['thumbnailToken']),
+    .index('by_thumbnail_token', ['thumbnailToken'])
+    .index('by_storage_id', ['storageId'])
+    .index('by_optimized_storage_id', ['optimizedStorageId'])
+    .index('by_thumbnail_storage_id', ['thumbnailStorageId']),
 
   /**
    * Ét album pr. begivenhed, plus "Uden begivenhed" -- det samme som viewet

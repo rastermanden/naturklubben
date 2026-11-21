@@ -12,6 +12,7 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import { ConvexError, v } from 'convex/values'
 import { requireAdmin, requireProfile, requireWritableProfile } from './authz'
+import { parseByteRange } from './audio'
 
 /**
  * Galleriet: billeder, uploads, optimeringsstatus, albums, kommentarer og
@@ -55,7 +56,33 @@ import { requireAdmin, requireProfile, requireWritableProfile } from './authz'
 const WITHOUT_EVENT_ALBUM = 'without-event'
 
 /** Matcher `MAX_FILE_SIZE` i den gamle uploadkø og bucket-grænsen på 15 MB. */
-const MAX_FILE_SIZE = 15 * 1024 * 1024
+export const MAX_FILE_SIZE = 15 * 1024 * 1024
+
+/** Loft for videoer i galleriet: 50 MB (under 2-min upload-timeout og 100 MiB svarloft). */
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024
+
+export const ALLOWED_VIDEO_MIME_TYPES = new Set([
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+])
+
+export type CreateVideoError =
+  | 'VIDEO_UPLOAD_NOT_FOUND'
+  | 'VIDEO_UNSUPPORTED_TYPE'
+  | 'VIDEO_EMPTY'
+  | 'VIDEO_TOO_LARGE'
+  | 'PHOTO_CAPTION_TOO_LONG'
+  | 'VIDEO_THUMBNAIL_INVALID'
+  | 'VIDEO_THUMBNAIL_TOO_LARGE'
+
+export function normalizeVideoMime(
+  contentType: string | undefined,
+): string | null {
+  if (!contentType) return null
+  const base = contentType.split(';', 1)[0]?.trim().toLowerCase() ?? ''
+  return ALLOWED_VIDEO_MIME_TYPES.has(base) ? base : null
+}
 
 /** Samme grænse som `claim_photo_optimization`s 10-minutters vindue. */
 const STALE_OPTIMIZATION_MS = 10 * 60 * 1000
@@ -125,13 +152,30 @@ function newFileToken() {
   return crypto.randomUUID().replaceAll('-', '')
 }
 
-function photoFileUrl(token: string | undefined): string | null {
+export function photoFileUrl(token: string | undefined): string | null {
   if (!token) return null
   const site = (
     globalThis as { process?: { env?: Record<string, string | undefined> } }
   ).process?.env?.CONVEX_SITE_URL
   if (!site) return null
-  return `${site}/photo?token=${encodeURIComponent(token)}`
+  const base = site.replace(/\/+$/, '')
+  return `${base}/photo?token=${encodeURIComponent(token)}`
+}
+
+export function videoFileUrl(token: string | undefined): string | null {
+  if (!token) return null
+  const site = (
+    globalThis as { process?: { env?: Record<string, string | undefined> } }
+  ).process?.env?.CONVEX_SITE_URL
+  if (!site) return null
+  const base = site.replace(/\/+$/, '')
+  return `${base}/video?token=${encodeURIComponent(token)}`
+}
+
+function photoMediaKind(
+  photo: Pick<Doc<'photos'>, 'mediaKind'>,
+): 'image' | 'video' {
+  return photo.mediaKind === 'video' ? 'video' : 'image'
 }
 
 function isStaleProcessing(photo: Doc<'photos'>, now: number) {
@@ -159,8 +203,11 @@ async function photoView(
   viewer: Doc<'profiles'>,
 ) {
   const canManage = viewer.isAdmin || photo.uploaderId === viewer._id
+  const mediaKind = photoMediaKind(photo)
   return {
     id: photo._id,
+    mediaKind,
+    mimeType: photo.mimeType ?? null,
     caption: photo.caption ?? null,
     eventId: photo.eventId ?? null,
     albumKey: photo.albumKey,
@@ -179,8 +226,16 @@ async function photoView(
     canDelete: canManage,
     canEdit: canManage,
     isUploader: photo.uploaderId === viewer._id,
-    displayUrl: photoFileUrl(photo.displayToken),
-    thumbnailUrl: photoFileUrl(photo.thumbnailToken ?? photo.displayToken),
+    displayUrl:
+      mediaKind === 'video'
+        ? videoFileUrl(photo.displayToken)
+        : photoFileUrl(photo.displayToken),
+    thumbnailUrl:
+      mediaKind === 'video'
+        ? photo.thumbnailStorageId !== undefined
+          ? photoFileUrl(photo.thumbnailToken)
+          : null
+        : photoFileUrl(photo.thumbnailToken ?? photo.displayToken),
   }
 }
 
@@ -204,6 +259,12 @@ export const listAlbums = query({
         const cover = album.coverPhotoId
           ? await ctx.db.get(album.coverPhotoId)
           : null
+        const coverIsVideo = cover?.mediaKind === 'video'
+        const coverUrl = coverIsVideo
+          ? cover?.thumbnailStorageId !== undefined
+            ? photoFileUrl(cover.thumbnailToken)
+            : null
+          : photoFileUrl(cover?.thumbnailToken ?? cover?.displayToken)
         return {
           albumId: album.albumKey,
           eventId: album.eventId ?? null,
@@ -215,7 +276,8 @@ export const listAlbums = query({
           photoCount: album.photoCount,
           latestPhotoAt: album.latestPhotoAt ?? null,
           coverPhotoId: album.coverPhotoId ?? null,
-          coverUrl: photoFileUrl(cover?.thumbnailToken ?? cover?.displayToken),
+          coverUrl,
+          coverIsVideo,
         }
       }),
     )
@@ -686,6 +748,240 @@ export const createPhoto = mutation({
     })
 
     return photoId
+  },
+})
+
+async function isStorageOwned(
+  ctx: MutationCtx,
+  storageId: Id<'_storage'>,
+): Promise<boolean> {
+  const byPhoto = await ctx.db
+    .query('photos')
+    .withIndex('by_storage_id', (q) => q.eq('storageId', storageId))
+    .first()
+  if (byPhoto !== null) return true
+  const byOptimized = await ctx.db
+    .query('photos')
+    .withIndex('by_optimized_storage_id', (q) =>
+      q.eq('optimizedStorageId', storageId),
+    )
+    .first()
+  if (byOptimized !== null) return true
+  const byThumb = await ctx.db
+    .query('photos')
+    .withIndex('by_thumbnail_storage_id', (q) =>
+      q.eq('thumbnailStorageId', storageId),
+    )
+    .first()
+  if (byThumb !== null) return true
+  const byAudio = await ctx.db
+    .query('audioClips')
+    .withIndex('by_storage_id', (q) => q.eq('storageId', storageId))
+    .first()
+  if (byAudio !== null) return true
+  const byAvatar = await ctx.db
+    .query('profiles')
+    .withIndex('by_avatar_storage_id', (q) =>
+      q.eq('avatarStorageId', storageId),
+    )
+    .first()
+  if (byAvatar !== null) return true
+  const byBadgeImage = await ctx.db
+    .query('badges')
+    .withIndex('by_image_storage_id', (q) => q.eq('imageStorageId', storageId))
+    .first()
+  if (byBadgeImage !== null) return true
+  const byBadgePrint = await ctx.db
+    .query('badges')
+    .withIndex('by_print_storage_id', (q) => q.eq('printStorageId', storageId))
+    .first()
+  return byBadgePrint !== null
+}
+
+async function deleteUnownedStorage(
+  ctx: MutationCtx,
+  ids: Array<Id<'_storage'> | undefined>,
+) {
+  const seen = new Set<Id<'_storage'>>()
+  for (const id of ids) {
+    if (id === undefined || seen.has(id)) continue
+    seen.add(id)
+    if (await isStorageOwned(ctx, id)) continue
+    const meta = await ctx.db.system.get(id)
+    if (meta !== null) {
+      await ctx.storage.delete(id)
+    }
+  }
+}
+
+/**
+ * Registrerer en uploadet video i galleriet.
+ *
+ * En kastet fejl i en Convex-mutation ruller også `ctx.storage.delete`
+ * tilbage. Derfor returneres valideringsfejl som `{ ok: false, error }`, så
+ * afviste videoer og overskydende filer faktisk slettes fra fillageret.
+ * Autorisationsfejl kaster stadig `ConvexError` via `requireWritableProfile`.
+ */
+export const createVideo = mutation({
+  args: {
+    storageId: v.id('_storage'),
+    thumbnailStorageId: v.optional(v.id('_storage')),
+    clientUploadId: v.optional(v.string()),
+    caption: v.optional(v.string()),
+    eventId: v.optional(v.string()),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    { ok: true; id: Id<'photos'> } | { ok: false; error: CreateVideoError }
+  > => {
+    const profile = await requireWritableProfile(ctx)
+
+    // Beskyt eksisterende filer mod sletning eller kapring.
+    const existingByStorage = await ctx.db
+      .query('photos')
+      .withIndex('by_storage_id', (q) => q.eq('storageId', args.storageId))
+      .first()
+    if (existingByStorage !== null) {
+      if (
+        existingByStorage.uploaderId === profile._id &&
+        existingByStorage.mediaKind === 'video'
+      ) {
+        if (
+          args.thumbnailStorageId !== undefined &&
+          args.thumbnailStorageId !== existingByStorage.thumbnailStorageId
+        ) {
+          await deleteUnownedStorage(ctx, [args.thumbnailStorageId])
+        }
+        return { ok: true, id: existingByStorage._id }
+      }
+      await deleteUnownedStorage(ctx, [args.thumbnailStorageId])
+      return { ok: false, error: 'VIDEO_UPLOAD_NOT_FOUND' }
+    }
+
+    if (await isStorageOwned(ctx, args.storageId)) {
+      await deleteUnownedStorage(ctx, [args.thumbnailStorageId])
+      return { ok: false, error: 'VIDEO_UPLOAD_NOT_FOUND' }
+    }
+
+    if (
+      args.thumbnailStorageId !== undefined &&
+      (args.thumbnailStorageId === args.storageId ||
+        (await isStorageOwned(ctx, args.thumbnailStorageId)))
+    ) {
+      await deleteUnownedStorage(ctx, [args.storageId])
+      return { ok: false, error: 'VIDEO_THUMBNAIL_INVALID' }
+    }
+
+    const metadata = await ctx.db.system.get(args.storageId)
+    if (metadata === null) {
+      await deleteUnownedStorage(ctx, [args.thumbnailStorageId])
+      return { ok: false, error: 'VIDEO_UPLOAD_NOT_FOUND' }
+    }
+
+    const mime = normalizeVideoMime(metadata.contentType)
+    if (mime === null) {
+      await deleteUnownedStorage(ctx, [args.storageId, args.thumbnailStorageId])
+      return { ok: false, error: 'VIDEO_UNSUPPORTED_TYPE' }
+    }
+
+    if (metadata.size <= 0) {
+      await deleteUnownedStorage(ctx, [args.storageId, args.thumbnailStorageId])
+      return { ok: false, error: 'VIDEO_EMPTY' }
+    }
+
+    if (metadata.size > MAX_VIDEO_BYTES) {
+      await deleteUnownedStorage(ctx, [args.storageId, args.thumbnailStorageId])
+      return { ok: false, error: 'VIDEO_TOO_LARGE' }
+    }
+
+    const caption = trimmedOrUndefined(args.caption)
+    if (caption !== undefined && caption.length > MAX_CAPTION_LENGTH) {
+      await deleteUnownedStorage(ctx, [args.storageId, args.thumbnailStorageId])
+      return { ok: false, error: 'PHOTO_CAPTION_TOO_LONG' }
+    }
+
+    const thumbnailStorageId = args.thumbnailStorageId
+    if (thumbnailStorageId !== undefined) {
+      const thumbMeta = await ctx.db.system.get(thumbnailStorageId)
+      if (
+        thumbMeta === null ||
+        !(thumbMeta.contentType ?? '').startsWith('image/') ||
+        thumbMeta.size <= 0
+      ) {
+        await deleteUnownedStorage(ctx, [args.storageId, thumbnailStorageId])
+        return { ok: false, error: 'VIDEO_THUMBNAIL_INVALID' }
+      }
+      if (thumbMeta.size > MAX_FILE_SIZE) {
+        await deleteUnownedStorage(ctx, [args.storageId, thumbnailStorageId])
+        return { ok: false, error: 'VIDEO_THUMBNAIL_TOO_LARGE' }
+      }
+    }
+
+    const clientUploadId = trimmedOrUndefined(args.clientUploadId)
+    if (clientUploadId !== undefined) {
+      const existing = await ctx.db
+        .query('photos')
+        .withIndex('by_client_upload', (q) =>
+          q.eq('uploaderId', profile._id).eq('clientUploadId', clientUploadId),
+        )
+        .unique()
+      if (existing !== null) {
+        await deleteUnownedStorage(ctx, [
+          existing.storageId !== args.storageId ? args.storageId : undefined,
+          existing.thumbnailStorageId !== thumbnailStorageId
+            ? thumbnailStorageId
+            : undefined,
+        ])
+        await ctx.db.patch(existing._id, { caption })
+        return { ok: true, id: existing._id }
+      }
+    }
+
+    const target = await albumTargetFor(ctx, args.eventId)
+    const eventId = target.eventId
+    const now = Date.now()
+    const albumKey = target.albumKey
+
+    const photoId = await ctx.db.insert('photos', {
+      storageId: args.storageId,
+      thumbnailStorageId,
+      mediaKind: 'video',
+      mimeType: mime,
+      sizeBytes: metadata.size,
+      width: args.width,
+      height: args.height,
+      caption,
+      albumKey,
+      eventId,
+      uploaderId: profile._id,
+      clientUploadId,
+      createdAt: now,
+      optimizationStatus: 'ready',
+      optimizationAttempts: 0,
+      optimizationCompletedAt: now,
+      commentCount: 0,
+      displayToken: newFileToken(),
+      ...(thumbnailStorageId !== undefined
+        ? { thumbnailToken: newFileToken() }
+        : {}),
+    })
+
+    await addPhotoToAlbum(ctx, {
+      photoId,
+      albumKey,
+      eventId,
+      eventTitle: target.event?.title,
+      createdAt: now,
+      ready: true,
+      thumbnailStorageId,
+      optimizedStorageId: undefined,
+    })
+
+    return { ok: true, id: photoId }
   },
 })
 
@@ -1202,10 +1498,19 @@ export const mintPhotoTokens = mutation({
     const photos = await ctx.db.query('photos').take(200)
     let minted = 0
     for (const photo of photos) {
-      if (photo.displayToken && photo.thumbnailToken) continue
+      const needsThumbnailToken =
+        photo.mediaKind !== 'video' || photo.thumbnailStorageId !== undefined
+      if (
+        photo.displayToken &&
+        (!needsThumbnailToken || photo.thumbnailToken)
+      ) {
+        continue
+      }
       await ctx.db.patch(photo._id, {
         displayToken: photo.displayToken ?? newFileToken(),
-        thumbnailToken: photo.thumbnailToken ?? newFileToken(),
+        ...(needsThumbnailToken
+          ? { thumbnailToken: photo.thumbnailToken ?? newFileToken() }
+          : {}),
       })
       minted += 1
     }
@@ -1223,9 +1528,11 @@ export const revokePhotoLink = mutation({
     if (!profile.isAdmin && photo.uploaderId !== profile._id) {
       throw new ConvexError('PHOTO_NOT_ALLOWED')
     }
+    const needsThumbnailToken =
+      photo.mediaKind !== 'video' || photo.thumbnailStorageId !== undefined
     await ctx.db.patch(photo._id, {
       displayToken: newFileToken(),
-      thumbnailToken: newFileToken(),
+      ...(needsThumbnailToken ? { thumbnailToken: newFileToken() } : {}),
     })
     return null
   },
@@ -1277,6 +1584,17 @@ export const photoForToken = internalQuery({
             )
             .unique()
     if (photo === null) return null
+    if (photo.mediaKind === 'video') {
+      if (args.kind === 'display' || photo.thumbnailStorageId === undefined) {
+        return null
+      }
+      const meta = await ctx.db.system.get(photo.thumbnailStorageId)
+      if (meta === null) return null
+      return {
+        storageId: photo.thumbnailStorageId,
+        contentType: meta.contentType ?? 'image/jpeg',
+      }
+    }
     const storageId =
       args.kind === 'display'
         ? (photo.optimizedStorageId ??
@@ -1291,4 +1609,224 @@ export const photoForToken = internalQuery({
       contentType: meta?.contentType ?? 'application/octet-stream',
     }
   },
+})
+
+export const videoForToken = internalQuery({
+  args: { token: v.string() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    storageId: Id<'_storage'>
+    contentType: string
+    sizeBytes: number
+  } | null> => {
+    const photo = await ctx.db
+      .query('photos')
+      .withIndex('by_display_token', (q) => q.eq('displayToken', args.token))
+      .unique()
+    if (photo === null || photo.mediaKind !== 'video') return null
+    const meta = await ctx.db.system.get(photo.storageId)
+    if (meta === null) return null
+    const contentType =
+      normalizeVideoMime(photo.mimeType ?? meta.contentType) ?? 'video/mp4'
+    return {
+      storageId: photo.storageId,
+      contentType,
+      sizeBytes: meta.size,
+    }
+  },
+})
+
+/**
+ * Skærer et byteinterval `[start, end]` ud af en `ReadableStream` uden `.tee()`,
+ * så kasserede prefix-bytes frigives med det samme i stedet for at samle sig i
+ * V8-isolatets 64 MiB hukommelse. Stopper læsningen straks efter `end`.
+ */
+export function sliceReadableStream(
+  stream: ReadableStream<Uint8Array>,
+  start: number,
+  end: number,
+): ReadableStream<Uint8Array> {
+  const reader = stream.getReader()
+  let offset = 0
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) {
+          controller.close()
+          return
+        }
+        const chunkStart = offset
+        const chunkEnd = offset + value.byteLength - 1
+        offset += value.byteLength
+
+        if (chunkEnd < start) {
+          continue
+        }
+        if (chunkStart > end) {
+          await reader.cancel()
+          controller.close()
+          return
+        }
+
+        const sliceStart = Math.max(0, start - chunkStart)
+        const sliceEnd = Math.min(value.byteLength, end - chunkStart + 1)
+        const chunk =
+          sliceStart === 0 && sliceEnd === value.byteLength
+            ? value
+            : value.slice(sliceStart, sliceEnd)
+
+        if (chunk.byteLength > 0) {
+          controller.enqueue(chunk)
+        }
+
+        if (chunkEnd >= end) {
+          await reader.cancel()
+          controller.close()
+          return
+        }
+        if (chunk.byteLength > 0) {
+          return
+        }
+      }
+    },
+    async cancel(reason) {
+      await reader.cancel(reason)
+    },
+  })
+}
+
+export const serveVideo = httpAction(async (ctx, request) => {
+  const token = new URL(request.url).searchParams.get('token')
+  if (!token) {
+    return new Response('Mangler token', { status: 400 })
+  }
+
+  const match = await ctx.runQuery(internal.gallery.videoForToken, { token })
+  if (match === null) {
+    return new Response('Linket virker ikke længere', { status: 404 })
+  }
+
+  const totalSize = match.sizeBytes
+  const baseHeaders: Record<string, string> = {
+    'Content-Type': match.contentType,
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'private, max-age=3600',
+    'X-Content-Type-Options': 'nosniff',
+  }
+
+  const range = parseByteRange(request.headers.get('range'), totalSize)
+  if (range.kind === 'invalid') {
+    return new Response(
+      request.method === 'HEAD' ? null : 'Ugyldigt byteinterval',
+      {
+        status: 416,
+        headers: {
+          'Content-Range': `bytes */${totalSize}`,
+          'Accept-Ranges': 'bytes',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      },
+    )
+  }
+
+  if (request.method === 'HEAD') {
+    if (range.kind === 'range') {
+      const chunkLength = range.end - range.start + 1
+      return new Response(null, {
+        status: 206,
+        headers: {
+          ...baseHeaders,
+          'Content-Range': `bytes ${range.start}-${range.end}/${totalSize}`,
+          'Content-Length': String(chunkLength),
+        },
+      })
+    }
+    return new Response(null, {
+      status: 200,
+      headers: {
+        ...baseHeaders,
+        'Content-Length': String(totalSize),
+      },
+    })
+  }
+
+  const upstreamUrl = await ctx.storage.getUrl(match.storageId)
+  if (upstreamUrl === null) {
+    return new Response('Filen findes ikke', { status: 404 })
+  }
+
+  let upstream: Response
+  try {
+    upstream =
+      range.kind === 'range'
+        ? await fetch(upstreamUrl, {
+            headers: { Range: `bytes=${range.start}-${range.end}` },
+          })
+        : await fetch(upstreamUrl)
+  } catch {
+    return new Response('Videoen kunne ikke hentes', { status: 502 })
+  }
+
+  if (upstream.status === 404) {
+    await upstream.body?.cancel()
+    return new Response('Filen findes ikke', { status: 404 })
+  }
+
+  if (upstream.status === 416) {
+    await upstream.body?.cancel()
+    return new Response('Ugyldigt byteinterval', {
+      status: 416,
+      headers: {
+        'Content-Range': `bytes */${totalSize}`,
+        'Accept-Ranges': 'bytes',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    })
+  }
+
+  if (!upstream.ok || upstream.body === null) {
+    await upstream.body?.cancel()
+    return new Response('Videoen kunne ikke hentes', { status: 502 })
+  }
+
+  if (range.kind === 'range') {
+    const requestedLength = range.end - range.start + 1
+    if (upstream.status === 206) {
+      const contentRange =
+        upstream.headers.get('content-range') ??
+        `bytes ${range.start}-${range.end}/${totalSize}`
+      const contentLength =
+        upstream.headers.get('content-length') ?? String(requestedLength)
+      return new Response(upstream.body, {
+        status: 206,
+        headers: {
+          ...baseHeaders,
+          'Content-Range': contentRange,
+          'Content-Length': contentLength,
+        },
+      })
+    }
+
+    const sliced = sliceReadableStream(upstream.body, range.start, range.end)
+    return new Response(sliced, {
+      status: 206,
+      headers: {
+        ...baseHeaders,
+        'Content-Range': `bytes ${range.start}-${range.end}/${totalSize}`,
+        'Content-Length': String(requestedLength),
+      },
+    })
+  }
+
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      ...baseHeaders,
+      'Content-Length': String(totalSize),
+    },
+  })
 })

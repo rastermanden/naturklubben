@@ -75,6 +75,7 @@ import GalleryPage from './GalleryPage'
 function makePhoto(id: string, overrides: Partial<Photo> = {}): Photo {
   return {
     id,
+    mediaKind: 'image',
     caption: `Billede ${id}`,
     eventId: null,
     albumKey: 'without-event',

@@ -3,7 +3,7 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
 import { currentUserId, requireProfile } from './authz'
-import { removePhotoFromAlbum } from './gallery'
+import { removePhotoFromAlbum, photoFileUrl, videoFileUrl } from './gallery'
 import { audioFileUrl } from './audio'
 import type { Doc, Id } from './_generated/dataModel'
 
@@ -961,25 +961,40 @@ async function exportPhotos(ctx: QueryCtx, profileId: Id<'profiles'>) {
     .collect()
 
   const rows = await Promise.all(
-    photos.map(async (photo) => ({
-      id: photo._id,
-      caption: photo.caption ?? null,
-      createdAt: photo.createdAt,
-      eventId: photo.eventId ?? null,
-      albumKey: photo.albumKey,
-      optimizationStatus: photo.optimizationStatus,
-      downloadUrls: {
-        original: await ctx.storage.getUrl(photo.storageId),
-        optimized:
-          photo.optimizedStorageId === undefined
-            ? null
-            : await ctx.storage.getUrl(photo.optimizedStorageId),
-        thumbnail:
-          photo.thumbnailStorageId === undefined
-            ? null
-            : await ctx.storage.getUrl(photo.thumbnailStorageId),
-      },
-    })),
+    photos.map(async (photo) => {
+      const isVideo = photo.mediaKind === 'video'
+      return {
+        id: photo._id,
+        mediaKind: isVideo ? ('video' as const) : ('image' as const),
+        mimeType: photo.mimeType ?? null,
+        sizeBytes: photo.sizeBytes ?? null,
+        caption: photo.caption ?? null,
+        createdAt: photo.createdAt,
+        eventId: photo.eventId ?? null,
+        albumKey: photo.albumKey,
+        optimizationStatus: photo.optimizationStatus,
+        downloadUrls: isVideo
+          ? {
+              original: videoFileUrl(photo.displayToken),
+              optimized: null,
+              thumbnail:
+                photo.thumbnailStorageId !== undefined
+                  ? photoFileUrl(photo.thumbnailToken)
+                  : null,
+            }
+          : {
+              original: await ctx.storage.getUrl(photo.storageId),
+              optimized:
+                photo.optimizedStorageId === undefined
+                  ? null
+                  : await ctx.storage.getUrl(photo.optimizedStorageId),
+              thumbnail:
+                photo.thumbnailStorageId === undefined
+                  ? null
+                  : await ctx.storage.getUrl(photo.thumbnailStorageId),
+            },
+      }
+    }),
   )
 
   return rows.sort((left, right) => left.createdAt - right.createdAt)

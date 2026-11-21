@@ -351,11 +351,13 @@ export function ObservationForm({
           className="min-h-11 rounded-lg border border-line px-3 py-2 text-ink"
         >
           <option value="">Intet billede</option>
-          {photos.results.map((photo) => (
-            <option key={photo.id} value={photo.id}>
-              {photo.caption?.trim() || 'Billede uden tekst'}
-            </option>
-          ))}
+          {photos.results
+            .filter((photo) => photo.mediaKind !== 'video')
+            .map((photo) => (
+              <option key={photo.id} value={photo.id}>
+                {photo.caption?.trim() || 'Billede uden tekst'}
+              </option>
+            ))}
         </select>
       </label>
 
