@@ -233,7 +233,7 @@ export function BralGame() {
   function handleCanvasPointerDown(
     event: ReactPointerEvent<HTMLCanvasElement>,
   ) {
-    if (stateRef.current.status !== 'playing') return
+    if (stateRef.current.status !== 'playing' || event.button !== 0) return
     event.preventDefault()
     const canvas = canvasRef.current
     if (!canvas) return
@@ -484,31 +484,105 @@ function PressButton({
   onAction: () => void
 }) {
   const suppressClick = useRef(false)
+  const pointerDownActive = useRef(false)
+  const clearTimer = useRef<number | null>(null)
+  const releaseWindowListeners = useRef<(() => void) | null>(null)
+
+  function clearPendingTimer() {
+    if (clearTimer.current !== null) {
+      window.clearTimeout(clearTimer.current)
+      clearTimer.current = null
+    }
+  }
+
+  function detachWindowListeners() {
+    releaseWindowListeners.current?.()
+    releaseWindowListeners.current = null
+  }
+
+  function resetSuppress() {
+    clearPendingTimer()
+    detachWindowListeners()
+    pointerDownActive.current = false
+    suppressClick.current = false
+  }
+
+  function scheduleSuppressClear() {
+    clearPendingTimer()
+    detachWindowListeners()
+    pointerDownActive.current = false
+    clearTimer.current = window.setTimeout(() => {
+      clearTimer.current = null
+      suppressClick.current = false
+    }, 0)
+  }
+
+  useEffect(() => {
+    if (!pointerDownActive.current) {
+      if (clearTimer.current !== null) {
+        window.clearTimeout(clearTimer.current)
+        clearTimer.current = null
+      }
+      suppressClick.current = false
+    }
+  }, [disabled])
+
+  useEffect(() => {
+    return () => {
+      if (clearTimer.current !== null) {
+        window.clearTimeout(clearTimer.current)
+        clearTimer.current = null
+      }
+      releaseWindowListeners.current?.()
+      releaseWindowListeners.current = null
+    }
+  }, [])
 
   return (
     <button
       type="button"
       disabled={disabled}
       onPointerDown={(event) => {
-        if (disabled) return
+        if (disabled || event.button !== 0) return
         event.preventDefault()
+        clearPendingTimer()
+        detachWindowListeners()
+        pointerDownActive.current = true
         suppressClick.current = true
+
+        const onWindowUp = () => scheduleSuppressClear()
+        const onWindowCancel = () => resetSuppress()
+        window.addEventListener('pointerup', onWindowUp)
+        window.addEventListener('pointercancel', onWindowCancel)
+        releaseWindowListeners.current = () => {
+          window.removeEventListener('pointerup', onWindowUp)
+          window.removeEventListener('pointercancel', onWindowCancel)
+        }
+
         onAction()
       }}
+      onPointerUp={() => {
+        if (pointerDownActive.current) {
+          scheduleSuppressClear()
+        }
+      }}
       onPointerCancel={() => {
-        suppressClick.current = false
+        resetSuppress()
+      }}
+      onLostPointerCapture={() => {
+        resetSuppress()
       }}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
-          suppressClick.current = false
+          resetSuppress()
         }
       }}
-      onClick={() => {
+      onClick={(event) => {
         if (suppressClick.current) {
-          suppressClick.current = false
+          resetSuppress()
           return
         }
-        if (disabled) return
+        if (disabled || event.button !== 0) return
         onAction()
       }}
       aria-label={ariaLabel}

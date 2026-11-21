@@ -546,4 +546,62 @@ describe('BralGame', () => {
       screen.queryByText('Resultatet blev ikke gemt. Prøv igen'),
     ).toBeNull()
   })
+
+  it('ignorerer højreklik og nulstiller suppressClick når knap bliver disabled eller mister capture', () => {
+    vi.useFakeTimers()
+    opening.override = {
+      molten: 8,
+      markerPos: 0.5,
+      ovenTemp: 650,
+    }
+
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    const bellows = screen.getByRole('button', { name: 'Blæsebælg' })
+    const strike = screen.getByRole('button', { name: 'Slå mønt' })
+
+    // Højreklik sætter ikke suppressClick og udløser intet.
+    fireEvent.pointerDown(bellows, { button: 2 })
+    fireEvent.pointerDown(strike, { button: 2 })
+    expect(bellows.textContent).toContain('650 °C')
+    expect(
+      screen
+        .getByText('Mønter')
+        .parentElement?.textContent?.replace('Mønter', ''),
+    ).toBe('0')
+
+    // Efterfølgende rent click på Blæsebælg virker med det samme.
+    fireEvent.click(bellows)
+    expect(bellows.textContent).toContain('718 °C')
+
+    // Tryk på Slå mønt gør knappen disabled under cooldown (300 ms); rent click efter cooldown slår mønt nr. 2.
+    fireEvent.pointerDown(strike, { button: 0 })
+    expect(strike.hasAttribute('disabled')).toBe(true)
+    expect(
+      screen
+        .getByText('Mønter')
+        .parentElement?.textContent?.replace('Mønter', ''),
+    ).toBe('1')
+
+    fireEvent.pointerUp(window)
+    act(() => {
+      vi.advanceTimersByTime(350)
+    })
+    expect(strike.hasAttribute('disabled')).toBe(false)
+
+    fireEvent.click(strike)
+    expect(
+      screen
+        .getByText('Mønter')
+        .parentElement?.textContent?.replace('Mønter', ''),
+    ).toBe('2')
+
+    // Tabt pointer capture sluger heller ikke næste rene click.
+    fireEvent.pointerDown(bellows, { button: 0 })
+    const tempAfterDown = bellows.textContent
+    fireEvent.lostPointerCapture(bellows)
+    fireEvent.click(bellows)
+    expect(bellows.textContent).not.toBe(tempAfterDown)
+  })
 })
