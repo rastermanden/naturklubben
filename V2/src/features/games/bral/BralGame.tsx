@@ -24,6 +24,15 @@ const ZONE_LABELS = {
   hot: 'For varm!',
 } as const
 
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return (
+    target.closest(
+      'button, a, input, textarea, select, [role="button"], [contenteditable="true"]',
+    ) !== null
+  )
+}
+
 /**
  * Bral smeltning: saml faldende øldåser, hold ovnen omkring 660 °C,
  * og slå Bral-mønter inden uret når nul.
@@ -94,6 +103,7 @@ export function BralGame() {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.repeat || stateRef.current.status !== 'playing') return
+      if (isInteractiveTarget(event.target)) return
       if (
         event.key === 'b' ||
         event.key === 'B' ||

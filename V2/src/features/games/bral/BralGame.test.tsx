@@ -198,4 +198,60 @@ describe('BralGame', () => {
       durationSeconds: 60,
     })
   })
+
+  it('lader fokuserede knapper beholde Enter og mellemrum i stedet for at slå mønt', () => {
+    opening.override = {
+      molten: 4,
+      markerPos: 0.5,
+      ovenTemp: 650,
+    }
+
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    const bellows = screen.getByRole('button', { name: 'Blæsebælg' })
+    bellows.focus()
+
+    const enterEvent = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => {
+      bellows.dispatchEvent(enterEvent)
+    })
+    expect(enterEvent.defaultPrevented).toBe(false)
+    expect(
+      screen
+        .getByText('Mønter')
+        .parentElement?.textContent?.replace('Mønter', ''),
+    ).toBe('0')
+
+    fireEvent.click(bellows)
+    expect(bellows.textContent).toContain('718 °C')
+    expect(
+      screen
+        .getByText('Mønter')
+        .parentElement?.textContent?.replace('Mønter', ''),
+    ).toBe('0')
+
+    const spaceEvent = new KeyboardEvent('keydown', {
+      key: ' ',
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => {
+      bellows.dispatchEvent(spaceEvent)
+    })
+    expect(spaceEvent.defaultPrevented).toBe(false)
+    expect(
+      screen
+        .getByText('Mønter')
+        .parentElement?.textContent?.replace('Mønter', ''),
+    ).toBe('0')
+
+    bellows.blur()
+    fireEvent.keyDown(window, { key: ' ' })
+    expect(screen.getByRole('status').textContent).toContain('Ti Bral')
+  })
 })
