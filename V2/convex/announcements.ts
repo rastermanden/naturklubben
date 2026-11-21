@@ -260,6 +260,12 @@ export const ANNOUNCEMENTS = [
     body: 'Åbn et billede, du selv har lagt op, og tryk på "Redigér" for at rette billedteksten eller flytte billedet til en tur. I albummet "Uden begivenhed" kan du også vælge flere billeder og flytte dem samlet.',
     path: 'billeder',
   },
+  {
+    slug: 'lyd-mp3',
+    title: 'Nu kan du lægge lydfiler op og afspille dem',
+    body: 'Under Aktiviteter finder du nu Lyd. Her kan du lægge mp3-filer op på op til 15 MB og afspille dem direkte i appen.',
+    path: 'lyd',
+  },
 ] as const
 
 /** Hvor længe en nyhed kan nå at blive sendt, efter den er udgivet. */

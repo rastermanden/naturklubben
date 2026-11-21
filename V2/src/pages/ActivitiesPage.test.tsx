@@ -24,5 +24,8 @@ describe('ActivitiesPage', () => {
     expect(
       screen.getByRole('link', { name: /Naturlog/ }).getAttribute('href'),
     ).toBe('/naturlog')
+    expect(screen.getByRole('link', { name: /Lyd/ }).getAttribute('href')).toBe(
+      '/lyd',
+    )
   })
 })

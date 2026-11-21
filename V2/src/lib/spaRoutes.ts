@@ -19,6 +19,7 @@ export const spaIndexPaths = [
   'kalender/offentlig',
   'konto-slettet',
   'login',
+  'lyd',
   'medlemmer',
   'naturlog',
   'ny-adgangskode',
