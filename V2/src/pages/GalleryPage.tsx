@@ -14,6 +14,7 @@ import {
   validateFiles,
   type UploadQueueItem,
 } from '../features/gallery/useUploadPhotos'
+import { EventPicker } from '../features/gallery/EventPicker'
 import { GalleryAlbumGrid } from '../features/gallery/GalleryAlbumGrid'
 import { PhotoThumbnail } from '../features/gallery/PhotoThumbnail'
 import { PhotoLightbox } from '../features/gallery/PhotoLightbox'
@@ -22,6 +23,7 @@ import {
   updateGallerySearchParam,
 } from '../features/gallery/gallerySearchParams'
 import type { GalleryAlbum, Photo } from '../features/gallery/types'
+import { AppErrorBoundary } from '../components/AppErrorBoundary'
 
 /**
  * Gallerisiden. Porteret fra `src/pages/GalleryPage.tsx`.
@@ -30,15 +32,12 @@ import type { GalleryAlbum, Photo } from '../features/gallery/types'
  * React Query og Realtime-kanalerne: `usePaginatedQuery` og `useQuery` holder
  * selv gitteret, albummene og kommentarerne opdaterede, når en mutation gemmer.
  *
- * To ting er *ikke* porteret, fordi de afhænger af dele af V2, der ikke findes
- * endnu:
+ * Én ting er *ikke* porteret: den delte `useErrorFocus`-hook og
+ * `useDialogFocus`. Fokus sættes her med en ref, og lysbordet lukker med
+ * Escape.
  *
- * - Vælgeren "knyt til begivenhed" i upload-formularen. Den hentede listen af
- *   begivenheder i den gamle app; `events`-tabellen hører til kalender-slicen
- *   og findes ikke her. `createPhoto` tager allerede `eventId`, så en
- *   kalender-slice kan sende det med via `?album=<eventId>`.
- * - Den delte `useErrorFocus`-hook og `useDialogFocus`. Fokus sættes her med
- *   en ref, og lysbordet lukker med Escape.
+ * Vælgeren "knyt til begivenhed" findes nu igen (#332), som `EventPicker` ved
+ * siden af. Den ventede på, at `events` kom med kalender-slicen.
  */
 
 const PHOTO_PAGE_SIZE = 40
@@ -89,6 +88,17 @@ function GalleryPage() {
   useAutoOptimizePendingPhotos()
 
   const [caption, setCaption] = useState('')
+  /**
+   * Medlemmets eget valg i "Knyt til begivenhed", eller `null`, når feltet
+   * ikke er rørt. `null` frem for `''`, så albummets egen begivenhed kan være
+   * forvalgt, uden at et aktivt "Ingen" bliver overskrevet af den.
+   *
+   * Valget nulstilles, når man skifter album: ellers ville et billede uploadet
+   * inde i album B kunne havne i album A, fordi feltet blev rørt dér -- og et
+   * "Ingen" valgt i et album ville også gælde næste gang, man kom ind i det,
+   * hvor forvalget skal være albummets egen begivenhed igen.
+   */
+  const [eventChoice, setEventChoice] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
@@ -118,6 +128,16 @@ function GalleryPage() {
   const currentAlbum = albumParam
     ? (albums?.find((album) => album.albumId === albumParam) ?? null)
     : null
+
+  // Står man inde i et begivenhedsalbum, er den begivenhed forvalgt -- det var
+  // uploadens opførsel, før feltet fandtes, og den skal ikke blive dårligere.
+  const selectedEventId = eventChoice ?? currentAlbum?.eventId ?? ''
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- albumParam er
+  // hele pointen: valget hører til det album, det blev truffet i.
+  useEffect(() => {
+    setEventChoice(null)
+  }, [albumParam])
 
   // Hent næste side, inden man bladrer ud til kanten af det indlæste galleri.
   useEffect(() => {
@@ -169,8 +189,7 @@ function GalleryPage() {
       upload.enqueue({
         files: validFiles,
         caption,
-        eventId: currentAlbum?.eventId ?? null,
-        eventTitle: currentAlbum?.title,
+        eventId: selectedEventId === '' ? null : selectedEventId,
       })
       setCaption('')
     }
@@ -244,6 +263,29 @@ function GalleryPage() {
             className="min-h-11 rounded border border-line-strong px-3 py-2 text-base"
           />
         </label>
+
+        <AppErrorBoundary
+          fallback={(retry) => (
+            <p role="alert" className="text-sm text-danger">
+              {currentAlbum?.eventId
+                ? `Listen over begivenheder kunne ikke hentes. Du kan stadig uploade — billederne lander i ”${currentAlbum.title}”.`
+                : 'Listen over begivenheder kunne ikke hentes. Du kan stadig uploade uden at vælge en begivenhed.'}{' '}
+              <button
+                type="button"
+                onClick={retry}
+                className="min-h-11 underline"
+              >
+                Prøv igen
+              </button>
+            </p>
+          )}
+        >
+          <EventPicker
+            value={selectedEventId}
+            valueTitle={currentAlbum?.title}
+            onChange={setEventChoice}
+          />
+        </AppErrorBoundary>
 
         <input
           ref={fileInputRef}
