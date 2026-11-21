@@ -36,6 +36,9 @@ import { BralGame } from './BralGame'
 afterEach(() => {
   cleanup()
   submit.mutate.mockReset()
+  submit.isPending = false
+  submit.isError = false
+  submit.isSuccess = false
   opening.override = null
   vi.useRealTimers()
   vi.restoreAllMocks()
@@ -478,5 +481,69 @@ describe('BralGame', () => {
       ),
     ).toBe(true)
     expect(nextContainer.children[2]).toBe(nextChildren[2])
+  })
+
+  it('nulstiller gem-status ved Spil igen så et parti med 0 point ikke arver forrige runde', () => {
+    vi.useFakeTimers()
+    submit.isSuccess = true
+    opening.override = {
+      timeLeft: 0.05,
+      score: 25,
+      coins: 3,
+    }
+
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    act(() => {
+      vi.advanceTimersByTime(120)
+    })
+
+    expect(screen.getByText('Tiden er gået')).toBeTruthy()
+    expect(submit.mutate).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Resultatet er på listen.')).toBeTruthy()
+
+    opening.override = {
+      timeLeft: 0.05,
+      score: 0,
+      coins: 0,
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Spil igen' }))
+    act(() => {
+      vi.advanceTimersByTime(120)
+    })
+
+    expect(screen.getByText('Tiden er gået')).toBeTruthy()
+    expect(submit.mutate).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Resultatet er på listen.')).toBeNull()
+
+    cleanup()
+    submit.isSuccess = false
+    submit.isError = true
+    opening.override = {
+      timeLeft: 0.05,
+      score: 10,
+      coins: 1,
+    }
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    act(() => {
+      vi.advanceTimersByTime(120)
+    })
+    expect(
+      screen.getByText('Resultatet blev ikke gemt. Prøv igen'),
+    ).toBeTruthy()
+
+    opening.override = {
+      timeLeft: 0.05,
+      score: 0,
+      coins: 0,
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Spil igen' }))
+    act(() => {
+      vi.advanceTimersByTime(120)
+    })
+    expect(
+      screen.queryByText('Resultatet blev ikke gemt. Prøv igen'),
+    ).toBeNull()
   })
 })

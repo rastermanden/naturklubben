@@ -55,6 +55,8 @@ export function BralGame() {
   const bestBefore = useRef(0)
   const finishedSeconds = useRef(0)
   const [record, setRecord] = useState(false)
+  const [round, setRound] = useState(0)
+  const [submittedRound, setSubmittedRound] = useState<number | null>(null)
 
   function syncSnapshot(next: BralState) {
     const previous = stateRef.current
@@ -189,14 +191,17 @@ export function BralGame() {
   function begin() {
     submitted.current = false
     setRecord(false)
+    setSubmittedRound(null)
+    setRound((current) => current + 1)
     bestBefore.current = personalBest.data?.score ?? 0
     const next = startBral()
     stateRef.current = next
     setSnapshot(next)
   }
 
-  function saveResult(seconds: number) {
+  function saveResult(seconds: number, targetRound: number) {
     if (!userId || snapshot.score <= 0) return
+    setSubmittedRound(targetRound)
     submitScore.mutate({
       score: snapshot.score,
       lines: snapshot.coins,
@@ -220,10 +225,10 @@ export function BralGame() {
       Math.min(BRAL_DURATION_SECONDS, Math.round(snapshot.elapsedSeconds)),
     )
     setRecord(snapshot.score > bestBefore.current)
-    saveResult(finishedSeconds.current)
+    saveResult(finishedSeconds.current, round)
     // saveResult læser det parti, effekten allerede har set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot, userId])
+  }, [snapshot, userId, round])
 
   function handleCanvasPointerDown(
     event: ReactPointerEvent<HTMLCanvasElement>,
@@ -259,6 +264,8 @@ export function BralGame() {
   const zone = ovenZone(snapshot.ovenTemp)
   const zoneLabel = ZONE_LABELS[zone]
   const secondsLeft = Math.max(0, Math.ceil(snapshot.timeLeft))
+  const showSubmitStatus =
+    snapshot.status === 'over' && snapshot.score > 0 && submittedRound === round
 
   const liveParts: string[] = []
   if (snapshot.status === 'over') {
@@ -390,19 +397,19 @@ export function BralGame() {
                 Ny personlig rekord!
               </p>
             )}
-            {snapshot.status === 'over' && submitScore.isPending && (
+            {showSubmitStatus && submitScore.isPending && (
               <p className="text-sm text-white/80">Gemmer resultatet…</p>
             )}
-            {snapshot.status === 'over' && submitScore.isError && (
+            {showSubmitStatus && submitScore.isError && (
               <button
                 type="button"
-                onClick={() => saveResult(finishedSeconds.current)}
+                onClick={() => saveResult(finishedSeconds.current, round)}
                 className="min-h-11 rounded border border-white/60 px-4 py-2 text-sm"
               >
                 Resultatet blev ikke gemt. Prøv igen
               </button>
             )}
-            {snapshot.status === 'over' && submitScore.isSuccess && (
+            {showSubmitStatus && submitScore.isSuccess && (
               <p className="text-sm text-white/80">Resultatet er på listen.</p>
             )}
             <button
