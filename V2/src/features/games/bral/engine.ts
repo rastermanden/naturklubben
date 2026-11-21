@@ -8,6 +8,7 @@ import {
   BRAL_MAX_COIN_VALUE,
   BRAL_MELT_CANS_PER_SEC,
   BRAL_MIN_COIN_VALUE,
+  BRAL_TABS_PER_COIN,
   bralScoreIsPlausible,
 } from '../../../../convex/bralRules'
 
@@ -21,6 +22,7 @@ export {
   BRAL_MAX_COIN_VALUE,
   BRAL_MELT_CANS_PER_SEC,
   BRAL_MIN_COIN_VALUE,
+  BRAL_TABS_PER_COIN,
   bralScoreIsPlausible,
 }
 
@@ -49,12 +51,26 @@ export const STRIKE_SPEED = 1.15
 export const STRIKE_COOLDOWN_S = 0.3
 export const LAST_COIN_TTL_S = 1.1
 
+export const SHORTAGE_START_MIN_S = 16
+export const SHORTAGE_START_MAX_S = 34
+export const SHORTAGE_CAN_SPAWN_INTERVAL_S = 2.6
+export const TAB_SPAWN_INTERVAL_S = 1.05
+export const SHORTAGE_INITIAL_TABS = 2
+export const RELAY_TARGET_STEPS = 6
+export const RELAY_REFILL_CRUCIBLE_CANS = 3
+export const RELAY_REFILL_CHUTE_CANS = 2
+export const SHORTAGE_NOTICE_TTL_S = 2.2
+
 export type BralStatus = 'ready' | 'playing' | 'over'
 export type OvenZone = 'cold' | 'optimal' | 'hot'
 export type CoinDenomination = 'en' | 'fem' | 'ti'
+export type FallingItemKind = 'can' | 'tab'
+export type ShortagePhase = 'pending' | 'active' | 'resolved'
+export type RelayHand = 'left' | 'right'
 
 export interface FallingCan {
   id: number
+  kind: FallingItemKind
   x: number
   y: number
   speed: number
@@ -68,6 +84,17 @@ export interface LastCoin {
   ttl: number
 }
 
+export interface RelayState {
+  active: boolean
+  steps: number
+  nextHand: RelayHand
+}
+
+export interface ShortageNotice {
+  text: string
+  ttl: number
+}
+
 export interface BralState {
   status: BralStatus
   timeLeft: number
@@ -75,11 +102,18 @@ export interface BralState {
   score: number
   coins: number
   cansCaught: number
+  tabsCaught: number
+  pullTabs: number
   crucibleCans: number
   molten: number
   ovenTemp: number
   cans: FallingCan[]
   spawnTimer: number
+  tabSpawnTimer: number
+  shortage: ShortagePhase
+  shortageTriggerAt: number
+  relay: RelayState
+  shortageNotice: ShortageNotice | null
   markerPos: number
   markerDir: 1 | -1
   strikeCooldown: number
@@ -137,11 +171,22 @@ export function createBralState(): BralState {
     score: 0,
     coins: 0,
     cansCaught: 0,
+    tabsCaught: 0,
+    pullTabs: 0,
     crucibleCans: 0,
     molten: 0,
     ovenTemp: OVEN_START_TEMP,
     cans: [],
     spawnTimer: BRAL_CAN_SPAWN_INTERVAL_S,
+    tabSpawnTimer: 0,
+    shortage: 'pending',
+    shortageTriggerAt: (SHORTAGE_START_MIN_S + SHORTAGE_START_MAX_S) / 2,
+    relay: {
+      active: false,
+      steps: 0,
+      nextHand: 'left',
+    },
+    shortageNotice: null,
     markerPos: 0.5,
     markerDir: 1,
     strikeCooldown: 0,
@@ -169,9 +214,11 @@ function makeCan(
   y: number,
   cans: readonly FallingCan[],
   rng: () => number,
+  kind: FallingItemKind = 'can',
 ): FallingCan {
   return {
     id,
+    kind,
     x: pickCanX(cans, rng),
     y,
     speed: 48 + rng() * 18,
@@ -185,13 +232,46 @@ export function startBral(rng: () => number = Math.random): BralState {
   let nextId = base.nextId
   for (let index = 0; index < BRAL_INITIAL_CANS; index += 1) {
     const y = CAN_PLAY_TOP_Y + 4 + index * 40
-    cans.push(makeCan(nextId++, y, cans, rng))
+    cans.push(makeCan(nextId++, y, cans, rng, 'can'))
   }
+  const shortageTriggerAt =
+    SHORTAGE_START_MIN_S + rng() * (SHORTAGE_START_MAX_S - SHORTAGE_START_MIN_S)
   return {
     ...base,
     status: 'playing',
     cans,
+    shortageTriggerAt,
     nextId,
+  }
+}
+
+function collectFallingItem(state: BralState, index: number): BralState {
+  const item = state.cans[index]
+  const cans = state.cans.filter((_, itemIndex) => itemIndex !== index)
+  if (item.kind === 'can') {
+    return {
+      ...state,
+      cans,
+      cansCaught: state.cansCaught + 1,
+      crucibleCans: state.crucibleCans + 1,
+    }
+  }
+
+  const totalTabs = state.pullTabs + 1
+  const strikes = Math.floor(totalTabs / BRAL_TABS_PER_COIN)
+  const pullTabs = totalTabs % BRAL_TABS_PER_COIN
+  const crucibleGain = strikes * BRAL_CANS_PER_COIN
+
+  return {
+    ...state,
+    cans,
+    tabsCaught: state.tabsCaught + 1,
+    pullTabs,
+    crucibleCans: state.crucibleCans + crucibleGain,
+    shortageNotice:
+      strikes > 0
+        ? { text: 'PULL-TAB STRIKE · METAL READY', ttl: 1.6 }
+        : state.shortageNotice,
   }
 }
 
@@ -217,15 +297,9 @@ export function catchCanAt(
 
   if (bestIndex === -1) return { state, caught: false }
 
-  const cans = state.cans.filter((_, index) => index !== bestIndex)
   return {
     caught: true,
-    state: {
-      ...state,
-      cans,
-      cansCaught: state.cansCaught + 1,
-      crucibleCans: state.crucibleCans + 1,
-    },
+    state: collectFallingItem(state, bestIndex),
   }
 }
 
@@ -244,15 +318,9 @@ export function catchLowestCan(state: BralState): {
     }
   }
 
-  const cans = state.cans.filter((_, index) => index !== bestIndex)
   return {
     caught: true,
-    state: {
-      ...state,
-      cans,
-      cansCaught: state.cansCaught + 1,
-      crucibleCans: state.crucibleCans + 1,
-    },
+    state: collectFallingItem(state, bestIndex),
   }
 }
 
@@ -261,6 +329,80 @@ export function pumpBellows(state: BralState): BralState {
   return {
     ...state,
     ovenTemp: Math.min(OVEN_MAX_TEMP, state.ovenTemp + BELLOWS_BOOST),
+  }
+}
+
+export function startRelay(state: BralState): BralState {
+  if (
+    state.status !== 'playing' ||
+    state.shortage !== 'active' ||
+    state.relay.active
+  ) {
+    return state
+  }
+  return {
+    ...state,
+    relay: {
+      active: true,
+      steps: 0,
+      nextHand: 'left',
+    },
+  }
+}
+
+export function passRelay(
+  state: BralState,
+  hand: RelayHand,
+  rng: () => number = Math.random,
+): BralState {
+  if (
+    state.status !== 'playing' ||
+    state.shortage !== 'active' ||
+    !state.relay.active ||
+    hand !== state.relay.nextHand
+  ) {
+    return state
+  }
+
+  const steps = state.relay.steps + 1
+  if (steps < RELAY_TARGET_STEPS) {
+    return {
+      ...state,
+      relay: {
+        active: true,
+        steps,
+        nextHand: hand === 'left' ? 'right' : 'left',
+      },
+    }
+  }
+
+  const cans = [...state.cans]
+  let nextId = state.nextId
+  for (let index = 0; index < RELAY_REFILL_CHUTE_CANS; index += 1) {
+    if (cans.length < MAX_ACTIVE_CANS) {
+      cans.push(
+        makeCan(nextId++, CAN_PLAY_TOP_Y + 8 + index * 26, cans, rng, 'can'),
+      )
+    }
+  }
+
+  return {
+    ...state,
+    shortage: 'resolved',
+    relay: {
+      active: false,
+      steps: 0,
+      nextHand: 'left',
+    },
+    tabSpawnTimer: 0,
+    spawnTimer: Math.min(state.spawnTimer, BRAL_CAN_SPAWN_INTERVAL_S),
+    crucibleCans: state.crucibleCans + RELAY_REFILL_CRUCIBLE_CANS,
+    cans,
+    nextId,
+    shortageNotice: {
+      text: 'SHORTAGE CLEARED · RESERVE RESTORED',
+      ttl: SHORTAGE_NOTICE_TTL_S,
+    },
   }
 }
 
@@ -333,12 +475,51 @@ export function stepBral(
     .map((can) => ({ ...can, y: can.y + can.speed * appliedDt }))
     .filter((can) => can.y <= CAN_PLAY_BOTTOM_Y)
 
-  let spawnTimer = state.spawnTimer - appliedDt
+  let shortageNotice = state.shortageNotice
+  if (shortageNotice) {
+    const nextNoticeTtl = shortageNotice.ttl - appliedDt
+    shortageNotice =
+      nextNoticeTtl <= 0 ? null : { ...shortageNotice, ttl: nextNoticeTtl }
+  }
+
+  let shortage = state.shortage
+  let tabSpawnTimer = state.tabSpawnTimer
   let nextId = state.nextId
+
+  if (
+    shortage === 'pending' &&
+    elapsedSeconds >= state.shortageTriggerAt &&
+    timeLeft > 0
+  ) {
+    shortage = 'active'
+    tabSpawnTimer = TAB_SPAWN_INTERVAL_S
+    for (let index = 0; index < SHORTAGE_INITIAL_TABS; index += 1) {
+      if (cans.length < MAX_ACTIVE_CANS) {
+        const y = CAN_PLAY_TOP_Y + 6 + index * 26
+        cans.push(makeCan(nextId++, y, cans, rng, 'tab'))
+      }
+    }
+  }
+
+  const spawnInterval =
+    shortage === 'active'
+      ? SHORTAGE_CAN_SPAWN_INTERVAL_S
+      : BRAL_CAN_SPAWN_INTERVAL_S
+  let spawnTimer = Math.min(state.spawnTimer, spawnInterval) - appliedDt
   while (spawnTimer <= 0 && timeLeft > 0) {
-    spawnTimer += BRAL_CAN_SPAWN_INTERVAL_S
+    spawnTimer += spawnInterval
     if (cans.length < MAX_ACTIVE_CANS) {
-      cans.push(makeCan(nextId++, CAN_PLAY_TOP_Y, cans, rng))
+      cans.push(makeCan(nextId++, CAN_PLAY_TOP_Y, cans, rng, 'can'))
+    }
+  }
+
+  if (shortage === 'active') {
+    tabSpawnTimer -= appliedDt
+    while (tabSpawnTimer <= 0 && timeLeft > 0) {
+      tabSpawnTimer += TAB_SPAWN_INTERVAL_S
+      if (cans.length < MAX_ACTIVE_CANS) {
+        cans.push(makeCan(nextId++, CAN_PLAY_TOP_Y, cans, rng, 'tab'))
+      }
     }
   }
 
@@ -373,6 +554,10 @@ export function stepBral(
       molten,
       cans: [],
       spawnTimer,
+      tabSpawnTimer,
+      shortage,
+      relay: { ...state.relay, active: false },
+      shortageNotice: null,
       markerPos,
       markerDir,
       strikeCooldown,
@@ -390,6 +575,9 @@ export function stepBral(
     molten,
     cans,
     spawnTimer,
+    tabSpawnTimer,
+    shortage,
+    shortageNotice,
     markerPos,
     markerDir,
     strikeCooldown,

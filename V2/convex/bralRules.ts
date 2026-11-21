@@ -18,6 +18,7 @@ export const BRAL_MIN_COIN_VALUE = BRAL_COIN_VALUES.en
 export const BRAL_MAX_COIN_VALUE = BRAL_COIN_VALUES.ti
 
 export const BRAL_INITIAL_CANS = 2
+export const BRAL_TABS_PER_COIN = 5
 export const BRAL_CAN_SPAWN_INTERVAL_S = 0.62
 export const BRAL_MELT_CANS_PER_SEC = 1.6
 
@@ -26,6 +27,8 @@ export const BRAL_MELT_CANS_PER_SEC = 1.6
  * Ved fuld smeltetakt (1,6 dåser/sek) når den 24. dåsepulje (96 dåser) først
  * frem ved t = 60,0 s, hvor partiet slutter før et slag kan nås. Den sidste
  * mulige prægning sker ved t = 57,5 s (23 mønter).
+ * Nødslag af ringtræk og genopfyldning fra ølstafet fylder råmetal i diglen,
+ * så det samme smelte-loft på 23 mønter gælder både med og uden dåsemangel.
  */
 export const BRAL_MAX_COINS_PER_GAME = 23
 

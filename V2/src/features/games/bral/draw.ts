@@ -1,5 +1,6 @@
 import {
   BRAL_CANS_PER_COIN,
+  BRAL_TABS_PER_COIN,
   BRAL_WORLD,
   OVEN_MAX_TEMP,
   OVEN_MIN_TEMP,
@@ -61,6 +62,35 @@ function drawCan(ctx: CanvasRenderingContext2D, can: FallingCan) {
   ctx.fillStyle = '#94a3b8'
   ctx.fillRect(-8, -16, 16, 3)
   ctx.fillRect(-3, -18, 6, 2)
+
+  ctx.restore()
+}
+
+function drawPullTab(ctx: CanvasRenderingContext2D, tab: FallingCan) {
+  ctx.save()
+  ctx.translate(tab.x, tab.y)
+  ctx.rotate(tab.tilt * 1.4)
+
+  ctx.beginPath()
+  ctx.arc(0, 0, 20, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(245, 158, 11, 0.16)'
+  ctx.fill()
+
+  traceRoundedRect(ctx, -8, -13, 16, 26, 7)
+  ctx.fillStyle = '#e2e8f0'
+  ctx.fill()
+  ctx.strokeStyle = '#d97706'
+  ctx.lineWidth = 1.6
+  ctx.stroke()
+
+  ctx.fillStyle = '#241c15'
+  traceRoundedRect(ctx, -4, -9, 8, 7, 3)
+  ctx.fill()
+  traceRoundedRect(ctx, -4, 2, 8, 7, 3)
+  ctx.fill()
+
+  ctx.fillStyle = '#94a3b8'
+  ctx.fillRect(-5, -1, 10, 2)
 
   ctx.restore()
 }
@@ -301,7 +331,32 @@ function drawLastCoinBanner(ctx: CanvasRenderingContext2D, state: BralState) {
   )
 }
 
-/** Tegner støberiet: faldende øldåser, ovn, digle og prægebjælke. */
+function drawShortageHud(ctx: CanvasRenderingContext2D, state: BralState) {
+  if (state.shortage !== 'active') return
+  const pillW = 94
+  const pillH = 22
+  const pillX = BRAL_WORLD.w - pillW - 10
+  const pillY = 10
+
+  traceRoundedRect(ctx, pillX, pillY, pillW, pillH, 6)
+  ctx.fillStyle = 'rgba(28, 25, 23, 0.88)'
+  ctx.fill()
+  ctx.strokeStyle = '#d97706'
+  ctx.lineWidth = 1.2
+  ctx.stroke()
+
+  ctx.font = '700 10px monospace'
+  ctx.fillStyle = '#fde68a'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(
+    `RINGTRÆK ${state.pullTabs}/${BRAL_TABS_PER_COIN}`,
+    pillX + pillW / 2,
+    pillY + pillH / 2,
+  )
+}
+
+/** Tegner støberiet: faldende øldåser, ringtræk, ovn, digle og prægebjælke. */
 export function drawBral(
   ctx: CanvasRenderingContext2D,
   state: BralState,
@@ -311,8 +366,13 @@ export function drawBral(
   const { w, h } = BRAL_WORLD
 
   const sky = ctx.createLinearGradient(0, 0, 0, 176)
-  sky.addColorStop(0, '#132329')
-  sky.addColorStop(1, '#1b3138')
+  if (state.shortage === 'active') {
+    sky.addColorStop(0, '#221a13')
+    sky.addColorStop(1, '#2e2217')
+  } else {
+    sky.addColorStop(0, '#132329')
+    sky.addColorStop(1, '#1b3138')
+  }
   ctx.fillStyle = sky
   ctx.fillRect(0, 0, w, 176)
 
@@ -328,10 +388,15 @@ export function drawBral(
     ctx.stroke()
   }
 
-  for (const can of state.cans) {
-    drawCan(ctx, can)
+  for (const item of state.cans) {
+    if (item.kind === 'tab') {
+      drawPullTab(ctx, item)
+    } else {
+      drawCan(ctx, item)
+    }
   }
 
+  drawShortageHud(ctx, state)
   drawLastCoinBanner(ctx, state)
   drawFurnaceCard(ctx, state)
   drawCrucibleCard(ctx, state)

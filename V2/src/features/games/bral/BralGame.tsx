@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { formatScore } from '../leaderboard'
 import { usePersonalBest, usePlayerId, useSubmitScore } from '../useGameScores'
 import { drawBral } from './draw'
@@ -7,17 +7,22 @@ import {
   BRAL_CANS_PER_COIN,
   BRAL_DURATION_SECONDS,
   BRAL_MAX_COINS_PER_GAME,
+  BRAL_TABS_PER_COIN,
   BRAL_WORLD,
+  RELAY_TARGET_STEPS,
   canStrike,
   catchCanAt,
   catchLowestCan,
   createBralState,
   ovenZone,
+  passRelay,
   pumpBellows,
   startBral,
+  startRelay,
   stepBral,
   strikeCoin,
   type BralState,
+  type RelayHand,
 } from './engine'
 
 const ZONE_LABELS = {
@@ -49,8 +54,6 @@ export function BralGame() {
   const submitted = useRef(false)
   const bestBefore = useRef(0)
   const finishedSeconds = useRef(0)
-  const suppressBellowsClick = useRef(false)
-  const suppressStrikeClick = useRef(false)
   const [record, setRecord] = useState(false)
 
   function syncSnapshot(next: BralState) {
@@ -64,7 +67,13 @@ export function BralGame() {
       canStrike(previous) !== canStrike(next) ||
       ovenZone(previous.ovenTemp) !== ovenZone(next.ovenTemp) ||
       Math.round(previous.ovenTemp / 5) !== Math.round(next.ovenTemp / 5) ||
-      previous.lastCoin?.label !== next.lastCoin?.label
+      previous.lastCoin?.label !== next.lastCoin?.label ||
+      previous.shortage !== next.shortage ||
+      previous.pullTabs !== next.pullTabs ||
+      previous.relay.active !== next.relay.active ||
+      previous.relay.steps !== next.relay.steps ||
+      previous.relay.nextHand !== next.relay.nextHand ||
+      previous.shortageNotice?.text !== next.shortageNotice?.text
     ) {
       setSnapshot(next)
     }
@@ -111,6 +120,16 @@ export function BralGame() {
     if (caught) syncSnapshot(next)
   }
 
+  function handleStartRelay() {
+    const next = startRelay(stateRef.current)
+    if (next !== stateRef.current) syncSnapshot(next)
+  }
+
+  function handleRelayPass(hand: RelayHand) {
+    const next = passRelay(stateRef.current, hand)
+    if (next !== stateRef.current) syncSnapshot(next)
+  }
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.repeat || stateRef.current.status !== 'playing') return
@@ -136,6 +155,31 @@ export function BralGame() {
       } else if (event.key === ' ' || event.key === 'Enter') {
         event.preventDefault()
         handleStrike()
+      } else if (event.key === 'r' || event.key === 'R') {
+        handleStartRelay()
+      } else if (
+        stateRef.current.shortage === 'active' &&
+        stateRef.current.relay.active
+      ) {
+        if (
+          event.key === 'ArrowLeft' ||
+          event.key === 'a' ||
+          event.key === 'A' ||
+          event.key === 'v' ||
+          event.key === 'V'
+        ) {
+          if (event.key === 'ArrowLeft') event.preventDefault()
+          handleRelayPass('left')
+        } else if (
+          event.key === 'ArrowRight' ||
+          event.key === 'l' ||
+          event.key === 'L' ||
+          event.key === 'h' ||
+          event.key === 'H'
+        ) {
+          if (event.key === 'ArrowRight') event.preventDefault()
+          handleRelayPass('right')
+        }
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -216,12 +260,28 @@ export function BralGame() {
   const zoneLabel = ZONE_LABELS[zone]
   const secondsLeft = Math.max(0, Math.ceil(snapshot.timeLeft))
 
-  const liveStatus =
-    snapshot.status === 'over'
-      ? `Partiet er slut. ${formatScore(snapshot.score)} point og ${snapshot.coins} ${snapshot.coins === 1 ? 'mønt' : 'mønter'}.`
-      : snapshot.lastCoin
-        ? `${snapshot.lastCoin.label}, ${snapshot.lastCoin.value} point.`
-        : ''
+  const liveParts: string[] = []
+  if (snapshot.status === 'over') {
+    liveParts.push(
+      `Partiet er slut. ${formatScore(snapshot.score)} point og ${snapshot.coins} ${snapshot.coins === 1 ? 'mønt' : 'mønter'}.`,
+    )
+  } else {
+    if (snapshot.lastCoin) {
+      liveParts.push(
+        `${snapshot.lastCoin.label}, ${snapshot.lastCoin.value} point.`,
+      )
+    }
+    if (snapshot.shortageNotice) {
+      liveParts.push(snapshot.shortageNotice.text)
+    } else if (snapshot.shortage === 'active') {
+      liveParts.push(
+        snapshot.relay.active
+          ? `Ølstafet ${snapshot.relay.steps} af ${RELAY_TARGET_STEPS}.`
+          : 'Dåsemangel aktiv.',
+      )
+    }
+  }
+  const liveStatus = liveParts.join(' ')
 
   return (
     <div
@@ -240,6 +300,72 @@ export function BralGame() {
         />
       </div>
 
+      {playing && snapshot.shortage === 'active' && (
+        <div
+          role="region"
+          aria-label="Dåsemangel"
+          className="flex flex-col gap-2 rounded-xl border border-warn-line bg-warn-surface px-3 py-2.5 text-warn-strong"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-mono text-xs font-semibold tracking-wider">
+                {snapshot.relay.active
+                  ? `FORCED RELAY · ${snapshot.relay.steps}/${RELAY_TARGET_STEPS}`
+                  : 'CAN SHORTAGE · RESERVE BELOW PEG'}
+              </p>
+              <p className="font-mono text-xs opacity-90">
+                {snapshot.relay.active
+                  ? 'Skift venstre og højre for at fylde lageret.'
+                  : `Ringtræk ${snapshot.pullTabs}/${BRAL_TABS_PER_COIN} eller start alkoholfri ølstafet`}
+              </p>
+            </div>
+            {!snapshot.relay.active && (
+              <PressButton
+                onAction={handleStartRelay}
+                ariaLabel="Start ølstafet"
+                className="min-h-11 shrink-0 touch-none rounded-lg border border-warn-line bg-surface px-3 py-2 font-mono text-xs font-semibold text-ink-body select-none active:bg-surface-raised"
+              >
+                Start ølstafet
+              </PressButton>
+            )}
+          </div>
+          {snapshot.relay.active && (
+            <div className="grid grid-cols-2 gap-2">
+              <PressButton
+                onAction={() => handleRelayPass('left')}
+                disabled={snapshot.relay.nextHand !== 'left'}
+                ariaLabel="Venstre hånd"
+                className={`flex min-h-11 touch-none items-center justify-center rounded-lg border px-3 py-2 font-mono text-xs font-semibold select-none disabled:opacity-40 ${
+                  snapshot.relay.nextHand === 'left'
+                    ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
+                    : 'border-warn-line bg-surface text-ink-body'
+                }`}
+              >
+                Venstre hånd
+              </PressButton>
+              <PressButton
+                onAction={() => handleRelayPass('right')}
+                disabled={snapshot.relay.nextHand !== 'right'}
+                ariaLabel="Højre hånd"
+                className={`flex min-h-11 touch-none items-center justify-center rounded-lg border px-3 py-2 font-mono text-xs font-semibold select-none disabled:opacity-40 ${
+                  snapshot.relay.nextHand === 'right'
+                    ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
+                    : 'border-warn-line bg-surface text-ink-body'
+                }`}
+              >
+                Højre hånd
+              </PressButton>
+            </div>
+          )}
+        </div>
+      )}
+
+      {playing && snapshot.shortageNotice && (
+        <p className="rounded-lg border border-line-strong bg-surface-raised px-3 py-1.5 font-mono text-xs text-ink-body">
+          {snapshot.shortageNotice.text}
+        </p>
+      )}
+
       <div className="relative overflow-hidden rounded-xl border border-line-soft bg-[#132329]">
         <canvas
           ref={canvasRef}
@@ -257,7 +383,7 @@ export function BralGame() {
             <p className="max-w-sm text-sm text-white/85">
               {snapshot.status === 'over'
                 ? `Du fik ${formatScore(snapshot.score)} point fra ${snapshot.coins} ${snapshot.coins === 1 ? 'mønt' : 'mønter'}.`
-                : 'Tryk på de faldende øldåser, hold ovnen omkring 660 °C med blæsebælgen, og slå En, Fem eller Ti Bral. Fire dåser giver én mønt på et minut.'}
+                : 'Tryk på de faldende øldåser, hold ovnen omkring 660 °C med blæsebælgen, og slå En, Fem eller Ti Bral. Fire dåser giver én mønt på et minut. Rammer dåsemanglen, samler du ringtræk eller løser den med en alkoholfri ølstafet.'}
             </p>
             {snapshot.status === 'over' && record && snapshot.score > 0 && (
               <p className="text-sm font-medium text-warn-ring">
@@ -291,64 +417,22 @@ export function BralGame() {
       </div>
 
       <div className="grid touch-none grid-cols-2 gap-3 select-none">
-        <button
-          type="button"
+        <PressButton
           disabled={!playing}
-          onPointerDown={(event) => {
-            if (!playing) return
-            event.preventDefault()
-            suppressBellowsClick.current = true
-            handleBellows()
-          }}
-          onPointerCancel={() => {
-            suppressBellowsClick.current = false
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              suppressBellowsClick.current = false
-            }
-          }}
-          onClick={() => {
-            if (suppressBellowsClick.current) {
-              suppressBellowsClick.current = false
-              return
-            }
-            handleBellows()
-          }}
-          aria-label="Blæsebælg"
+          onAction={handleBellows}
+          ariaLabel="Blæsebælg"
           className="flex h-16 touch-none flex-col items-center justify-center rounded-xl border border-line-strong bg-surface px-3 text-ink-body select-none active:bg-surface-raised disabled:opacity-40"
         >
           <span className="font-semibold">Blæsebælg</span>
           <span className="text-xs text-ink-subtle tabular-nums">
             {Math.round(snapshot.ovenTemp)} °C · {zoneLabel}
           </span>
-        </button>
+        </PressButton>
 
-        <button
-          type="button"
+        <PressButton
           disabled={!strikeReady}
-          onPointerDown={(event) => {
-            if (!strikeReady) return
-            event.preventDefault()
-            suppressStrikeClick.current = true
-            handleStrike()
-          }}
-          onPointerCancel={() => {
-            suppressStrikeClick.current = false
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              suppressStrikeClick.current = false
-            }
-          }}
-          onClick={() => {
-            if (suppressStrikeClick.current) {
-              suppressStrikeClick.current = false
-              return
-            }
-            handleStrike()
-          }}
-          aria-label="Slå mønt"
+          onAction={handleStrike}
+          ariaLabel="Slå mønt"
           className={`flex h-16 touch-none flex-col items-center justify-center rounded-xl border px-3 select-none disabled:opacity-40 ${
             strikeReady
               ? 'border-accent bg-accent text-on-accent active:bg-accent-hover'
@@ -363,18 +447,68 @@ export function BralGame() {
           >
             {strikeSublabel}
           </span>
-        </button>
+        </PressButton>
       </div>
 
       <p className="text-sm text-ink-subtle">
-        Tryk på dåserne på skærmen, eller brug D til at gribe, B eller pil op
-        til blæsebælgen og mellemrum til at slå mønten.
+        Tryk på dåserne og ringtræk på skærmen, eller brug D til at gribe, B
+        eller pil op til blæsebælgen og mellemrum til at slå mønten. Ved
+        dåsemangel starter R en alkoholfri ølstafet med pil venstre og højre.
       </p>
 
       <p role="status" aria-live="polite" className="sr-only">
         {liveStatus}
       </p>
     </div>
+  )
+}
+
+function PressButton({
+  ariaLabel,
+  children,
+  className,
+  disabled = false,
+  onAction,
+}: {
+  ariaLabel: string
+  children: ReactNode
+  className: string
+  disabled?: boolean
+  onAction: () => void
+}) {
+  const suppressClick = useRef(false)
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onPointerDown={(event) => {
+        if (disabled) return
+        event.preventDefault()
+        suppressClick.current = true
+        onAction()
+      }}
+      onPointerCancel={() => {
+        suppressClick.current = false
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          suppressClick.current = false
+        }
+      }}
+      onClick={() => {
+        if (suppressClick.current) {
+          suppressClick.current = false
+          return
+        }
+        if (disabled) return
+        onAction()
+      }}
+      aria-label={ariaLabel}
+      className={className}
+    >
+      {children}
+    </button>
   )
 }
 

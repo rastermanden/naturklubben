@@ -317,4 +317,103 @@ describe('BralGame', () => {
       screen.getByRole('button', { name: 'Slå mønt' }).textContent,
     ).toContain('Loft nået')
   })
+
+  it('viser dåsemangel-banner, giver nødslag ved 5 ringtræk og løser mangel med ølstafet', () => {
+    opening.override = {
+      shortage: 'active',
+      pullTabs: 4,
+      tabsCaught: 4,
+      cans: [{ id: 901, kind: 'tab', x: 180, y: 90, speed: 0, tilt: 0 }],
+    }
+
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    const container = screen.getByTestId('bral-container')
+    expect(container.className).toContain('touch-none')
+    expect(screen.getByText('CAN SHORTAGE · RESERVE BELOW PEG')).toBeTruthy()
+    expect(screen.getByText(/Ringtræk 4\/5/)).toBeTruthy()
+
+    const canvas = screen.getByLabelText('Bral-støberiet')
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 360,
+      bottom: 320,
+      width: 360,
+      height: 320,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.pointerDown(canvas, { clientX: 180, clientY: 90 })
+    expect(
+      screen.getAllByText('PULL-TAB STRIKE · METAL READY').length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(screen.getByRole('status').textContent).toContain(
+      'PULL-TAB STRIKE · METAL READY',
+    )
+    expect(screen.getByText(/Ringtræk 0\/5/)).toBeTruthy()
+
+    const startRelayBtn = screen.getByRole('button', { name: 'Start ølstafet' })
+    fireEvent.pointerDown(startRelayBtn)
+    fireEvent.click(startRelayBtn)
+
+    expect(screen.getByText('FORCED RELAY · 0/6')).toBeTruthy()
+    const leftBtn = screen.getByRole('button', { name: 'Venstre hånd' })
+    const rightBtn = screen.getByRole('button', { name: 'Højre hånd' })
+    expect(leftBtn.hasAttribute('disabled')).toBe(false)
+    expect(rightBtn.hasAttribute('disabled')).toBe(true)
+
+    for (let step = 0; step < 3; step += 1) {
+      fireEvent.pointerDown(leftBtn)
+      fireEvent.click(leftBtn)
+      expect(leftBtn.hasAttribute('disabled')).toBe(true)
+      expect(rightBtn.hasAttribute('disabled')).toBe(false)
+
+      fireEvent.pointerDown(rightBtn)
+      fireEvent.click(rightBtn)
+    }
+
+    expect(screen.queryByText('CAN SHORTAGE · RESERVE BELOW PEG')).toBeNull()
+    expect(
+      screen.getAllByText('SHORTAGE CLEARED · RESERVE RESTORED').length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(screen.getByRole('status').textContent).toContain(
+      'SHORTAGE CLEARED · RESERVE RESTORED',
+    )
+  })
+
+  it('styrer fangst, start af ølstafet og skiftende hænder med tastaturet', () => {
+    opening.override = {
+      shortage: 'active',
+      pullTabs: 4,
+      tabsCaught: 4,
+      cans: [{ id: 902, kind: 'tab', x: 180, y: 90, speed: 0, tilt: 0 }],
+    }
+
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    fireEvent.keyDown(window, { key: 'd' })
+    expect(
+      screen.getAllByText('PULL-TAB STRIKE · METAL READY').length,
+    ).toBeGreaterThanOrEqual(1)
+
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(screen.getByText('FORCED RELAY · 0/6')).toBeTruthy()
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(screen.getByText('FORCED RELAY · 0/6')).toBeTruthy()
+
+    for (const key of ['ArrowLeft', 'ArrowRight', 'a', 'l', 'v', 'h']) {
+      fireEvent.keyDown(window, { key })
+    }
+
+    expect(screen.queryByText('FORCED RELAY · 0/6')).toBeNull()
+    expect(
+      screen.getAllByText('SHORTAGE CLEARED · RESERVE RESTORED').length,
+    ).toBeGreaterThanOrEqual(1)
+  })
 })
