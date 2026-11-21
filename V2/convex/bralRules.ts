@@ -37,8 +37,14 @@ export function bralScoreIsPlausible(
   score: number,
   lines: number,
   level: number,
+  durationSeconds: number,
 ): boolean {
-  if (!Number.isInteger(score) || !Number.isInteger(lines) || level !== 1) {
+  if (
+    !Number.isInteger(score) ||
+    !Number.isInteger(lines) ||
+    level !== 1 ||
+    durationSeconds !== BRAL_DURATION_SECONDS
+  ) {
     return false
   }
   if (lines < 0 || lines > BRAL_MAX_COINS_PER_GAME) return false

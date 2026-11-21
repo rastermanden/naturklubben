@@ -6,6 +6,7 @@ import {
   BRAL_DURATION_SECONDS,
   BRAL_MAX_COINS_PER_GAME,
   BRAL_MAX_COIN_VALUE,
+  BRAL_MELT_CANS_PER_SEC,
   BRAL_MIN_COIN_VALUE,
   BRAL_TABS_PER_COIN,
   CAN_PLAY_BOTTOM_Y,
@@ -187,21 +188,38 @@ describe('bral-motor', () => {
     expect(state.molten).toBe(MOLTEN_CAPACITY)
   })
 
-  it('slutter efter 60 sekunder og når præcis loftet ved perfekt spil med og uden mangel', () => {
-    const playPerfect = (withShortage: boolean, rngValue: number) => {
+  it('slutter efter 60 sekunder og måler fysikkens loft uden aktivt møntloft med og uden mangel', () => {
+    expect(
+      Math.ceil(
+        (BRAL_MELT_CANS_PER_SEC * BRAL_DURATION_SECONDS) / BRAL_CANS_PER_COIN,
+      ) - 1,
+    ).toBe(BRAL_MAX_COINS_PER_GAME)
+    expect(
+      canStrike({ ...startBral(), molten: 8, coins: BRAL_MAX_COINS_PER_GAME }),
+    ).toBe(false)
+
+    const playUncapped = (
+      mode: 'no-shortage' | 'shortage-relay' | 'unlimited-crucible',
+      rngValue: number,
+      dt: number,
+    ) => {
       let state = createBralState()
       expect(state.status).toBe('ready')
       state = startBral(() => rngValue)
-      if (!withShortage) {
+      if (mode !== 'shortage-relay') {
         state = { ...state, shortage: 'resolved' }
       }
 
-      for (let tick = 0; tick < BRAL_DURATION_SECONDS * 20; tick += 1) {
+      const maxTicks = Math.ceil(BRAL_DURATION_SECONDS / dt) + 2
+      for (let tick = 0; tick < maxTicks; tick += 1) {
         if (state.status !== 'playing') break
         if (ovenZone(state.ovenTemp) === 'cold' || state.ovenTemp < 650) {
           state = pumpBellows(state)
         }
-        if (state.shortage === 'active') {
+        if (mode === 'unlimited-crucible') {
+          state = { ...state, crucibleCans: Math.max(state.crucibleCans, 10) }
+        }
+        if (mode === 'shortage-relay' && state.shortage === 'active') {
           state = startRelay(state)
           while (state.relay.active) {
             state = passRelay(state, state.relay.nextHand, () => rngValue)
@@ -212,19 +230,25 @@ describe('bral-motor', () => {
           if (!caught.caught) break
           state = caught.state
         }
-        if (canStrike(state)) {
-          state = strikeCoin({ ...state, markerPos: 0.5 })
+        if (canStrike(state, { ignoreCoinCap: true })) {
+          state = strikeCoin(
+            { ...state, markerPos: 0.5 },
+            { ignoreCoinCap: true },
+          )
         }
-        state = stepBral(state, 0.05, () => rngValue)
+        state = stepBral(state, dt, () => rngValue)
       }
       return state
     }
 
     for (const run of [
-      playPerfect(false, 0.5),
-      playPerfect(true, 0),
-      playPerfect(true, 0.5),
-      playPerfect(true, 0.99),
+      playUncapped('no-shortage', 0.5, 0.05),
+      playUncapped('shortage-relay', 0, 0.05),
+      playUncapped('shortage-relay', 0.5, 0.05),
+      playUncapped('shortage-relay', 0.99, 0.05),
+      playUncapped('shortage-relay', 0.5, 1 / 60),
+      playUncapped('unlimited-crucible', 0.5, 0.05),
+      playUncapped('unlimited-crucible', 0.5, 1 / 60),
     ]) {
       expect(run.status).toBe('over')
       expect(run.timeLeft).toBe(0)
@@ -233,7 +257,14 @@ describe('bral-motor', () => {
       expect(run.coins).toBe(BRAL_MAX_COINS_PER_GAME)
       expect(run.score).toBe(BRAL_MAX_COINS_PER_GAME * BRAL_MAX_COIN_VALUE)
       expect(run.score).toBeGreaterThanOrEqual(run.coins * BRAL_MIN_COIN_VALUE)
-      expect(bralScoreIsPlausible(run.score, run.coins, 1)).toBe(true)
+      expect(
+        bralScoreIsPlausible(
+          run.score,
+          run.coins,
+          1,
+          Math.round(run.elapsedSeconds),
+        ),
+      ).toBe(true)
     }
   })
 
@@ -381,7 +412,9 @@ describe('bral-motor', () => {
     })
     expect(state.score).toBe(16)
     expect(state.coins).toBe(3)
-    expect(bralScoreIsPlausible(state.score, state.coins, 1)).toBe(true)
+    expect(
+      bralScoreIsPlausible(state.score, state.coins, 1, BRAL_DURATION_SECONDS),
+    ).toBe(true)
   })
 
   it('kniber diglen under dåsemangel uden ølstafet men holder ringtræk-prægning i gang under loftet', () => {
@@ -395,8 +428,11 @@ describe('bral-motor', () => {
       while (state.cans.length > 0) {
         state = catchLowestCan(state).state
       }
-      if (canStrike(state)) {
-        state = strikeCoin({ ...state, markerPos: 0.5 })
+      if (canStrike(state, { ignoreCoinCap: true })) {
+        state = strikeCoin(
+          { ...state, markerPos: 0.5 },
+          { ignoreCoinCap: true },
+        )
       }
       state = stepBral(state, 0.05, () => 0.5)
     }
@@ -406,6 +442,13 @@ describe('bral-motor', () => {
     expect(state.tabsCaught).toBeGreaterThanOrEqual(BRAL_TABS_PER_COIN)
     expect(state.coins).toBeGreaterThan(15)
     expect(state.coins).toBeLessThan(BRAL_MAX_COINS_PER_GAME)
-    expect(bralScoreIsPlausible(state.score, state.coins, 1)).toBe(true)
+    expect(
+      bralScoreIsPlausible(
+        state.score,
+        state.coins,
+        1,
+        Math.round(state.elapsedSeconds),
+      ),
+    ).toBe(true)
   })
 })

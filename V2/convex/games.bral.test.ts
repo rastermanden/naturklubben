@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest'
 import { convexTest } from 'convex-test'
 import { api } from './_generated/api'
 import schema from './schema'
-import { BRAL_MAX_COINS_PER_GAME, bralScoreIsPlausible } from './bralRules'
+import {
+  BRAL_DURATION_SECONDS,
+  BRAL_MAX_COINS_PER_GAME,
+  bralScoreIsPlausible,
+} from './bralRules'
 
 const modules = import.meta.glob('./**/*.ts')
 
@@ -30,24 +34,31 @@ async function seedMember(
 }
 
 describe('bralScoreIsPlausible', () => {
-  it('godkender gyldige møntkombinationer og afviser umulige pointtal', () => {
-    expect(bralScoreIsPlausible(0, 0, 1)).toBe(true)
-    expect(bralScoreIsPlausible(1, 1, 1)).toBe(true)
-    expect(bralScoreIsPlausible(5, 1, 1)).toBe(true)
-    expect(bralScoreIsPlausible(10, 1, 1)).toBe(true)
-    expect(bralScoreIsPlausible(16, 3, 1)).toBe(true)
-    expect(bralScoreIsPlausible(25, 3, 1)).toBe(true)
-    expect(bralScoreIsPlausible(230, 23, 1)).toBe(true)
+  it('godkender gyldige møntkombinationer på 60 sekunder og afviser umulige pointtal og varigheder', () => {
+    const validDuration = BRAL_DURATION_SECONDS
+    expect(bralScoreIsPlausible(0, 0, 1, validDuration)).toBe(true)
+    expect(bralScoreIsPlausible(1, 1, 1, validDuration)).toBe(true)
+    expect(bralScoreIsPlausible(5, 1, 1, validDuration)).toBe(true)
+    expect(bralScoreIsPlausible(10, 1, 1, validDuration)).toBe(true)
+    expect(bralScoreIsPlausible(16, 3, 1, validDuration)).toBe(true)
+    expect(bralScoreIsPlausible(25, 3, 1, validDuration)).toBe(true)
+    expect(bralScoreIsPlausible(230, 23, 1, validDuration)).toBe(true)
 
-    expect(bralScoreIsPlausible(2, 1, 1)).toBe(false)
-    expect(bralScoreIsPlausible(6, 1, 1)).toBe(false)
-    expect(bralScoreIsPlausible(9, 2, 1)).toBe(false)
-    expect(bralScoreIsPlausible(26, 3, 1)).toBe(false)
-    expect(bralScoreIsPlausible(11, 1, 1)).toBe(false)
-    expect(bralScoreIsPlausible(0, 1, 1)).toBe(false)
-    expect(bralScoreIsPlausible(2, 3, 1)).toBe(false)
-    expect(bralScoreIsPlausible(240, 24, 1)).toBe(false)
-    expect(bralScoreIsPlausible(10, 1, 2)).toBe(false)
+    expect(bralScoreIsPlausible(2, 1, 1, validDuration)).toBe(false)
+    expect(bralScoreIsPlausible(6, 1, 1, validDuration)).toBe(false)
+    expect(bralScoreIsPlausible(9, 2, 1, validDuration)).toBe(false)
+    expect(bralScoreIsPlausible(26, 3, 1, validDuration)).toBe(false)
+    expect(bralScoreIsPlausible(11, 1, 1, validDuration)).toBe(false)
+    expect(bralScoreIsPlausible(0, 1, 1, validDuration)).toBe(false)
+    expect(bralScoreIsPlausible(2, 3, 1, validDuration)).toBe(false)
+    expect(bralScoreIsPlausible(240, 24, 1, validDuration)).toBe(false)
+    expect(bralScoreIsPlausible(10, 1, 2, validDuration)).toBe(false)
+
+    expect(bralScoreIsPlausible(230, 23, 1, 1)).toBe(false)
+    expect(bralScoreIsPlausible(10, 1, 1, 0)).toBe(false)
+    expect(bralScoreIsPlausible(10, 1, 1, 59)).toBe(false)
+    expect(bralScoreIsPlausible(10, 1, 1, 61)).toBe(false)
+    expect(bralScoreIsPlausible(10, 1, 1, 59.5)).toBe(false)
   })
 })
 
@@ -123,7 +134,12 @@ describe('games.submit bral', () => {
     const t = convexTest(schema, modules)
     const spiller1 = await seedMember(t, 'spiller1@example.com', 'Spiller 1')
 
-    for (const bad of [
+    const badCases: Array<{
+      score: number
+      lines: number
+      level: number
+      durationSeconds?: number
+    }> = [
       { score: 2, lines: 1, level: 1 },
       { score: 26, lines: 3, level: 1 },
       { score: 50, lines: 1, level: 1 },
@@ -134,13 +150,20 @@ describe('games.submit bral', () => {
       },
       { score: 0, lines: 1, level: 1 },
       { score: 10, lines: 1, level: 2 },
-    ]) {
+      { score: 230, lines: 23, level: 1, durationSeconds: 1 },
+      { score: 10, lines: 1, level: 1, durationSeconds: 59 },
+      { score: 10, lines: 1, level: 1, durationSeconds: 61 },
+    ]
+
+    for (const bad of badCases) {
       const failure = await t
         .withIdentity({ subject: spiller1.userId })
         .mutation(api.games.submit, {
           game: 'bral',
-          ...bad,
-          durationSeconds: 60,
+          score: bad.score,
+          lines: bad.lines,
+          level: bad.level,
+          durationSeconds: bad.durationSeconds ?? BRAL_DURATION_SECONDS,
         })
         .then(
           () => null,
