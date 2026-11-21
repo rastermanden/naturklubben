@@ -4,6 +4,7 @@ import { internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
 import { currentUserId, requireProfile } from './authz'
 import { removePhotoFromAlbum } from './gallery'
+import { audioFileUrl } from './audio'
 import type { Doc, Id } from './_generated/dataModel'
 
 /**
@@ -75,6 +76,7 @@ const RESERVATION_TTL_MS = 15 * 60 * 1000
 export const PERSONAL_TABLES = [
   'photos',
   'photoComments',
+  'audioClips',
   'eventAttendance',
   'messageReactions',
   'pollVotes',
@@ -147,6 +149,7 @@ export const exportData = query({
     const messages = await exportMessages(ctx, profile._id)
     const photos = await exportPhotos(ctx, profile._id)
     const photoComments = await exportPhotoComments(ctx, profile._id)
+    const audioClips = await exportAudioClips(ctx, profile._id)
     const attendance = await exportAttendance(ctx, profile._id)
     const pollVotes = await exportPollVotes(ctx, profile._id)
     const observations = await exportObservations(ctx, profile._id)
@@ -192,6 +195,7 @@ export const exportData = query({
       messages,
       photos,
       photoComments,
+      audioClips,
       activityRegistrations: attendance,
       pollVotes,
       observations,
@@ -427,6 +431,7 @@ async function deleteAccount(ctx: MutationCtx, profileId: Id<'profiles'>) {
     await ctx.storage.delete(profile.avatarStorageId)
   }
   await deleteMemberGallery(ctx, profileId)
+  await deleteMemberAudio(ctx, profileId)
 
   // 6. Kalenderen: tilmeldinger, opgaver og begivenhedernes ophav.
   await clearMemberCalendar(ctx, profileId)
@@ -572,6 +577,19 @@ async function deleteMemberGallery(
   }
 
   await anonymizeModerationLog(ctx, profileId)
+}
+
+/** Lydfiler: medlemmets egne lydklip slettes sammen med filerne i fillageret. */
+async function deleteMemberAudio(ctx: MutationCtx, profileId: Id<'profiles'>) {
+  const clips = await ctx.db
+    .query('audioClips')
+    .withIndex('by_uploader', (q) => q.eq('uploaderId', profileId))
+    .collect()
+
+  for (const clip of clips) {
+    await ctx.storage.delete(clip.storageId)
+    await ctx.db.delete(clip._id)
+  }
 }
 
 /**
@@ -981,6 +999,24 @@ async function exportPhotoComments(ctx: QueryCtx, profileId: Id<'profiles'>) {
       photoId: comment.photoId,
       body: comment.body,
       createdAt: comment.createdAt,
+    }))
+}
+
+/** Medlemmets egne lydfiler, ældste først. */
+async function exportAudioClips(ctx: QueryCtx, profileId: Id<'profiles'>) {
+  const clips = await ctx.db
+    .query('audioClips')
+    .withIndex('by_uploader', (q) => q.eq('uploaderId', profileId))
+    .collect()
+
+  return clips
+    .sort((left, right) => left.createdAt - right.createdAt)
+    .map((clip) => ({
+      id: clip._id,
+      title: clip.title,
+      sizeBytes: clip.sizeBytes,
+      createdAt: clip.createdAt,
+      audioUrl: audioFileUrl(clip.playToken),
     }))
 }
 

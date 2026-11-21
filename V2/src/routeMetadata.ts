@@ -89,6 +89,11 @@ export const routeMetadata = [
     announcement: 'Naturlog indlæst',
   },
   {
+    path: '/lyd',
+    documentTitle: 'Lyd | Naturklubben',
+    announcement: 'Lyd indlæst',
+  },
+  {
     path: '/spil',
     documentTitle: 'Spil | Naturklubben',
     announcement: 'Spil indlæst',

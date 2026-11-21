@@ -2,6 +2,7 @@ import { httpRouter } from 'convex/server'
 import { auth } from './auth'
 import { registerCalendarFeedRoutes } from './calendarFeed'
 import { servePhoto } from './gallery'
+import { serveAudio } from './audio'
 import { probationHttpRoutes } from './probation'
 
 /**
@@ -17,6 +18,7 @@ const http = httpRouter()
 auth.addHttpRoutes(http)
 registerCalendarFeedRoutes(http)
 http.route({ path: '/photo', method: 'GET', handler: servePhoto })
+http.route({ path: '/audio', method: 'GET', handler: serveAudio })
 
 // Prøvemedlemskabets ansøgningsformular. Ruterne ejes af `probation.ts`, som
 // også har validering, HMAC og rate limiting; her bindes de blot til routeren.

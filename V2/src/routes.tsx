@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { audioRoutes } from './features/audio/routes'
 import { authRoutes } from './features/auth/routes'
 import { calendarRoutes } from './features/calendar/routes'
 import { chatRoutes } from './features/chat/routes'
@@ -25,6 +26,7 @@ export const appRoutes: AppRoute[] = [
   ...authRoutes,
   ...chatRoutes,
   ...galleryRoutes,
+  ...audioRoutes,
   ...notificationRoutes,
   ...gameRoutes,
 ]
