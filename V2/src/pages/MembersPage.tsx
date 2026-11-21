@@ -1,6 +1,14 @@
+import { useState } from 'react'
 import { Avatar } from '../components/Avatar'
 import { useCurrentProfile } from '../features/auth/useCurrentProfile'
-import { useMembers } from '../features/members/useMembers'
+import { BadgeShowcase } from '../features/badges/BadgeShowcase'
+import { NominateBadgeDialog } from '../features/badges/NominateBadgeDialog'
+import {
+  groupBadgesByMember,
+  useAllMemberBadges,
+  useBadgeCatalog,
+} from '../features/badges/useBadges'
+import { useMembers, type Member } from '../features/members/useMembers'
 import { CauseMarks } from '../features/profile/CauseMarks'
 import { displayPronouns } from '../features/profile/pronouns'
 
@@ -34,25 +42,33 @@ function MembersLoadingState() {
   )
 }
 
-/**
- * Medlemslisten.
- *
- * Badges og "indstil til en badge" hører til badge-slicen og er ikke med her;
- * det samme gælder det store avatar-billede, som kræver den fælles
- * dialog-fokusfælde i `src/hooks/`. Se rapporten.
- */
+/** Medlemslisten med tildelte badges og mulighed for at indstille andre medlemmer. */
 export default function MembersPage() {
   const { profile } = useCurrentProfile()
   const { members, isLoading } = useMembers()
+  const allMemberBadges = useAllMemberBadges()
+  const catalog = useBadgeCatalog()
+  const [nominating, setNominating] = useState<Member | null>(null)
+  const [nominationStatus, setNominationStatus] = useState<string | null>(null)
+
+  const badgesByMember = groupBadgesByMember(allMemberBadges)
+  const activeBadges = (catalog ?? []).filter((badge) => badge.isActive)
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 sm:p-6">
       <div>
         <h1 className="text-2xl font-semibold text-ink-body">Medlemmer</h1>
         <p className="text-ink-subtle">
-          Mød de andre medlemmer i Naturklubben.
+          Mød de andre medlemmer i Naturklubben -- og indstil dem til en badge,
+          de fortjener.
         </p>
       </div>
+
+      {nominationStatus && (
+        <p role="status" className="text-sm text-ink-subtle">
+          {nominationStatus}
+        </p>
+      )}
 
       {isLoading && <MembersLoadingState />}
 
@@ -67,6 +83,7 @@ export default function MembersPage() {
           {members.map((member) => {
             const name = member.fullName?.trim() || 'Unavngivet medlem'
             const pronouns = displayPronouns(member.pronouns)
+            const memberBadges = badgesByMember.get(member._id) ?? []
 
             return (
               <li
@@ -110,10 +127,39 @@ export default function MembersPage() {
                     </p>
                   </div>
                 </div>
+
+                <BadgeShowcase badges={memberBadges} size="sm" />
+
+                {profile && member._id !== profile._id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNominationStatus(null)
+                      setNominating(member)
+                    }}
+                    className="min-h-11 self-start rounded-lg border border-line-strong px-3 py-2 text-sm text-ink-muted"
+                  >
+                    Indstil til en badge
+                  </button>
+                )}
               </li>
             )
           })}
         </ul>
+      )}
+
+      {nominating && (
+        <NominateBadgeDialog
+          nomineeId={nominating._id}
+          nomineeName={nominating.fullName?.trim() || 'medlemmet'}
+          badges={activeBadges}
+          onClose={() => setNominating(null)}
+          onNominated={(badgeName) =>
+            setNominationStatus(
+              `Indstillingen til ${badgeName} er sendt. To administratorer skal godkende den.`,
+            )
+          }
+        />
       )}
     </main>
   )

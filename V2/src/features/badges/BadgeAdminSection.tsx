@@ -2,7 +2,6 @@ import { useState } from 'react'
 import {
   badgeErrorMessage,
   useBadgeActions,
-  useMyNominations,
   useOpenProductions,
   usePendingNominations,
 } from './useBadges'
@@ -12,18 +11,10 @@ const dateFormatter = new Intl.DateTimeFormat('da-DK', {
   month: 'short',
 })
 
-function statusText(nomination: { status: string }): string {
-  if (nomination.status === 'approved') return 'Tildelt'
-  if (nomination.status === 'rejected') return 'Afvist'
-  return 'Venter på stemmer'
-}
-
 /**
  * Admin-panelets badge-værktøj: køen af indstillinger, der mangler stemmer, og
- * de produktionsopgaver, der ikke er færdige.
- *
- * Der er ingen rute for badges i V2 endnu -- værktøjet er en sektion, som
- * admin-siden kan montere, og det kan stå samme sted som i den gamle app.
+ * de produktionsopgaver, der ikke er færdige. Badge-kataloget monteres efter
+ * denne sektion på admin-fanen, så rækkefølgen matcher V1.
  */
 export function BadgeAdminSection() {
   const nominations = usePendingNominations()
@@ -175,36 +166,6 @@ export function BadgeAdminSection() {
           ))}
         </ul>
       </div>
-
-      <MyNominationList />
     </section>
-  )
-}
-
-/** Ens egne indstillinger -- også dem, der blev afvist. */
-function MyNominationList() {
-  const nominations = useMyNominations()
-
-  if (nominations === undefined || nominations.length === 0) return null
-
-  return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-lg font-semibold text-ink-body">
-        Mine indstillinger
-      </h3>
-      <ul className="flex flex-col gap-1 text-sm">
-        {nominations.map((nomination) => (
-          <li
-            key={nomination._id}
-            className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line-soft py-2 last:border-b-0"
-          >
-            <span className="text-ink-body">
-              {nomination.nomineeName} → {nomination.badgeName}
-            </span>
-            <span className="text-ink-subtle">{statusText(nomination)}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
   )
 }
