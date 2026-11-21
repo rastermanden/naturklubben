@@ -150,4 +150,63 @@ describe('useUploadPhotos: videoer', () => {
       'Videoen er for stor. Maksimum er 50 MB.',
     )
   })
+
+  it('giver billeder med tom MIME-type deres udledte MIME før skalering (R2)', async () => {
+    generateUploadUrlMock
+      .mockResolvedValueOnce({ uploadUrl: 'https://upload.example.test/disp' })
+      .mockResolvedValueOnce({ uploadUrl: 'https://upload.example.test/thumb' })
+    resizePhotoFileMock
+      .mockResolvedValueOnce({
+        blob: new Blob(['disp'], { type: 'image/jpeg' }),
+        width: 1200,
+        height: 800,
+      })
+      .mockResolvedValueOnce({
+        blob: new Blob(['thumb'], { type: 'image/jpeg' }),
+        width: 400,
+        height: 267,
+      })
+    createPhotoMock.mockResolvedValue('photo-empty-mime')
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ storageId: 'storage-disp' }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ storageId: 'storage-thumb' }), {
+          status: 200,
+        }),
+      )
+
+    const { result } = renderHook(() => useUploadPhotos())
+    const jpgWithoutMime = new File(['jpgbytes'], 'mobilfoto.jpg', {
+      type: '',
+    })
+
+    await act(async () => {
+      result.current.enqueue({
+        files: [jpgWithoutMime],
+        caption: 'Fra kamerarulle',
+        eventId: null,
+      })
+    })
+
+    await vi.waitFor(() => {
+      expect(result.current.items[0]?.status).toBe('saved')
+    })
+
+    expect(resizePhotoFileMock).toHaveBeenCalledTimes(2)
+    const firstPassedBlob = resizePhotoFileMock.mock.calls[0]?.[0] as Blob
+    expect(firstPassedBlob).toBeInstanceOf(Blob)
+    expect(firstPassedBlob.type).toBe('image/jpeg')
+    expect(createPhotoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storageId: 'storage-disp',
+        thumbnailStorageId: 'storage-thumb',
+        caption: 'Fra kamerarulle',
+      }),
+    )
+  })
 })

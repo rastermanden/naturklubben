@@ -115,6 +115,7 @@ export const galleryTables = {
     .index('by_display_token', ['displayToken'])
     .index('by_thumbnail_token', ['thumbnailToken'])
     .index('by_storage_id', ['storageId'])
+    .index('by_optimized_storage_id', ['optimizedStorageId'])
     .index('by_thumbnail_storage_id', ['thumbnailStorageId']),
 
   /**

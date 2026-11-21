@@ -1,8 +1,9 @@
 import { ConvexError, v } from 'convex/values'
 import { mutation, query } from './_generated/server'
-import type { Doc, Id } from './_generated/dataModel'
-import type { QueryCtx } from './_generated/server'
+import type { Doc } from './_generated/dataModel'
+import type { MutationCtx, QueryCtx } from './_generated/server'
 import { requireProfile, requireWritableProfile } from './authz'
+import { photoFileUrl } from './gallery'
 
 /**
  * Naturloggen: medlemmer skriver, hvad de har set -- art, sted, dato, noter,
@@ -105,13 +106,14 @@ function validateContent(input: ObservationContent): ObservationContent {
 
 async function photoView(ctx: QueryCtx, photoId: string | undefined) {
   if (photoId === undefined) return null
-  const photo = await ctx.db.get(photoId as Id<'photos'>)
+  const normalized = ctx.db.normalizeId('photos', photoId)
+  if (normalized === null) return null
+  const photo = await ctx.db.get(normalized)
   if (photo === null || !('storageId' in photo)) return null
   if (photo.mediaKind === 'video') {
-    const thumbUrl =
-      photo.thumbnailStorageId !== undefined
-        ? await ctx.storage.getUrl(photo.thumbnailStorageId)
-        : null
+    if (photo.thumbnailStorageId === undefined) return null
+    const thumbUrl = photoFileUrl(photo.thumbnailToken)
+    if (thumbUrl === null) return null
     return {
       id: photo._id,
       caption: photo.caption ?? null,
@@ -126,6 +128,19 @@ async function photoView(ctx: QueryCtx, photoId: string | undefined) {
     caption: photo.caption ?? null,
     thumbnailUrl: url,
     displayUrl: url,
+  }
+}
+
+async function assertObservationPhotoAllowed(
+  ctx: MutationCtx,
+  photoId: string | undefined,
+) {
+  if (photoId === undefined) return
+  const normalized = ctx.db.normalizeId('photos', photoId)
+  if (normalized === null) return
+  const photo = await ctx.db.get(normalized)
+  if (photo !== null && photo.mediaKind === 'video') {
+    throw new ConvexError('OBSERVATION_PHOTO_VIDEO_NOT_ALLOWED')
   }
 }
 
@@ -179,6 +194,7 @@ export const add = mutation({
   handler: async (ctx, args) => {
     const profile = await requireWritableProfile(ctx)
     const content = validateContent(args)
+    await assertObservationPhotoAllowed(ctx, args.photoId)
 
     const now = Date.now()
     return await ctx.db.insert('observations', {
@@ -218,6 +234,7 @@ export const update = mutation({
     if (observation.createdById !== profile._id) {
       throw new ConvexError('OBSERVATION_NOT_OWNER')
     }
+    await assertObservationPhotoAllowed(ctx, args.photoId)
 
     const content = validateContent({
       species: args.species ?? observation.species,

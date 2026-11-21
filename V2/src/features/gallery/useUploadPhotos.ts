@@ -162,8 +162,12 @@ export function useUploadPhotos() {
           return
         }
 
-        const display = await resizePhotoFile(item.file, PHOTO_MAX_EDGE)
-        const thumb = await resizePhotoFile(item.file, THUMB_MAX_EDGE)
+        const imageSource =
+          item.file.type.trim() !== ''
+            ? item.file
+            : new Blob([item.file], { type: detected.mimeType })
+        const display = await resizePhotoFile(imageSource, PHOTO_MAX_EDGE)
+        const thumb = await resizePhotoFile(imageSource, THUMB_MAX_EDGE)
         const storageId = await postFile(
           generateUploadUrl,
           display.blob,

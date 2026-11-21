@@ -760,6 +760,13 @@ async function isStorageOwned(
     .withIndex('by_storage_id', (q) => q.eq('storageId', storageId))
     .first()
   if (byPhoto !== null) return true
+  const byOptimized = await ctx.db
+    .query('photos')
+    .withIndex('by_optimized_storage_id', (q) =>
+      q.eq('optimizedStorageId', storageId),
+    )
+    .first()
+  if (byOptimized !== null) return true
   const byThumb = await ctx.db
     .query('photos')
     .withIndex('by_thumbnail_storage_id', (q) =>
@@ -771,7 +778,24 @@ async function isStorageOwned(
     .query('audioClips')
     .withIndex('by_storage_id', (q) => q.eq('storageId', storageId))
     .first()
-  return byAudio !== null
+  if (byAudio !== null) return true
+  const byAvatar = await ctx.db
+    .query('profiles')
+    .withIndex('by_avatar_storage_id', (q) =>
+      q.eq('avatarStorageId', storageId),
+    )
+    .first()
+  if (byAvatar !== null) return true
+  const byBadgeImage = await ctx.db
+    .query('badges')
+    .withIndex('by_image_storage_id', (q) => q.eq('imageStorageId', storageId))
+    .first()
+  if (byBadgeImage !== null) return true
+  const byBadgePrint = await ctx.db
+    .query('badges')
+    .withIndex('by_print_storage_id', (q) => q.eq('printStorageId', storageId))
+    .first()
+  return byBadgePrint !== null
 }
 
 async function deleteUnownedStorage(

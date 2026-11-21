@@ -829,3 +829,170 @@ describe('/video token-httpAction med streaming Range uden hele filen i RAM', ()
     expect(chunksPulled).toBe(2)
   })
 })
+
+describe('review-rettelser: observations og isStorageOwned (#366)', () => {
+  it('afviser videoer i observations.add/update og udleverer aldrig getUrl i observations.list (R1)', async () => {
+    const t = setup()
+    const member = await seedMember(t, {
+      email: 'obs@example.com',
+      fullName: 'Observatør',
+    })
+    const asMember = t.withIdentity({ subject: member.userId })
+
+    const videoStorage = await storeFile(t, 'vid-obs', 'video/mp4')
+    const thumbStorage = await storeFile(t, 'thumb-obs', 'image/jpeg')
+    const vidWithThumb = await asMember.mutation(api.gallery.createVideo, {
+      storageId: videoStorage,
+      thumbnailStorageId: thumbStorage,
+      caption: 'Rådyr video',
+    })
+    const vidWithoutThumb = await asMember.mutation(api.gallery.createVideo, {
+      storageId: await storeFile(t, 'vid-obs-2', 'video/webm'),
+      caption: 'Video uden miniature',
+    })
+    const imgStorage = await storeFile(t, 'img-obs', 'image/jpeg')
+    const photoId = await asMember.mutation(api.gallery.createPhoto, {
+      storageId: imgStorage,
+      thumbnailStorageId: await storeFile(t, 'img-obs-thumb', 'image/jpeg'),
+      caption: 'Rigtigt foto',
+    })
+    if (!vidWithThumb.ok || !vidWithoutThumb.ok) {
+      throw new Error('expected videos')
+    }
+
+    // add og update med video-id afvises.
+    await expect(
+      asMember.mutation(api.observations.add, {
+        species: 'Rådyr',
+        observedOn: '2026-11-21',
+        photoId: vidWithThumb.id,
+      }),
+    ).rejects.toThrow('OBSERVATION_PHOTO_VIDEO_NOT_ALLOWED')
+
+    const obsId = await asMember.mutation(api.observations.add, {
+      species: 'Musvåge',
+      observedOn: '2026-11-21',
+      photoId,
+    })
+
+    await expect(
+      asMember.mutation(api.observations.update, {
+        observationId: obsId,
+        photoId: vidWithThumb.id,
+      }),
+    ).rejects.toThrow('OBSERVATION_PHOTO_VIDEO_NOT_ALLOWED')
+
+    // Hvis en ældre eller direkte indsat observation peger på en video, må
+    // observations.list aldrig returnere ctx.storage.getUrl.
+    await t.run(async (ctx) => {
+      await ctx.db.insert('observations', {
+        species: 'Video med thumb',
+        observedOn: '2026-11-20',
+        photoId: vidWithThumb.id,
+        createdById: member.profileId,
+        createdByName: 'Observatør',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await ctx.db.insert('observations', {
+        species: 'Video uden thumb',
+        observedOn: '2026-11-19',
+        photoId: vidWithoutThumb.id,
+        createdById: member.profileId,
+        createdByName: 'Observatør',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+    })
+
+    const list = await asMember.query(api.observations.list, {})
+    const withThumbRow = list.find((row) => row.species === 'Video med thumb')
+    const withoutThumbRow = list.find(
+      (row) => row.species === 'Video uden thumb',
+    )
+
+    expect(withThumbRow?.photo?.thumbnailUrl).toMatch(
+      /^https:\/\/galleri-video-test\.convex\.site\/photo\?token=[a-f0-9]+$/,
+    )
+    expect(withThumbRow?.photo?.displayUrl).toBe(
+      withThumbRow?.photo?.thumbnailUrl,
+    )
+    expect(JSON.stringify(withThumbRow?.photo)).not.toContain(
+      'convex.cloud/api/storage',
+    )
+    expect(withoutThumbRow?.photo).toBeNull()
+  })
+
+  it('beskytter avatarStorageId, badges imageStorageId/printStorageId og photos optimizedStorageId i createVideo (R3)', async () => {
+    const t = setup()
+    const member = await seedMember(t, {
+      email: 'ejet@example.com',
+      fullName: 'Ejer',
+    })
+    const asMember = t.withIdentity({ subject: member.userId })
+
+    const avatarStorage = await storeFile(t, 'avatar-bytes', 'image/png')
+    const badgeImgStorage = await storeFile(t, 'badge-img', 'image/png')
+    const badgePrintStorage = await storeFile(t, 'badge-print', 'image/png')
+    const photoOriginal = await storeFile(t, 'photo-orig', 'image/jpeg')
+    const photoOptimized = await storeFile(t, 'photo-opt', 'image/jpeg')
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(member.profileId, { avatarStorageId: avatarStorage })
+      await ctx.db.insert('badges', {
+        slug: 'eget-badge',
+        name: 'Eget Badge',
+        imageStorageId: badgeImgStorage,
+        imageWidth: 100,
+        imageHeight: 100,
+        imageMimeType: 'image/png',
+        cropX: 0,
+        cropY: 0,
+        cropSize: 100,
+        diameterMm: 44,
+        bleedMm: 2,
+        printStorageId: badgePrintStorage,
+        printStatus: 'ready',
+        printAttempts: 1,
+        isActive: true,
+        createdAt: 1,
+        updatedAt: 1,
+        awardedCount: 0,
+      })
+      await ctx.db.insert('photos', {
+        storageId: photoOriginal,
+        optimizedStorageId: photoOptimized,
+        albumKey: 'without-event',
+        uploaderId: member.profileId,
+        createdAt: 1,
+        optimizationStatus: 'ready',
+        optimizationAttempts: 0,
+        commentCount: 0,
+      })
+    })
+
+    for (const ownedId of [
+      avatarStorage,
+      badgeImgStorage,
+      badgePrintStorage,
+      photoOptimized,
+    ]) {
+      // Forsøg som video-storageId
+      const asStorage = await asMember.mutation(api.gallery.createVideo, {
+        storageId: ownedId,
+      })
+      expect(asStorage).toEqual({ ok: false, error: 'VIDEO_UPLOAD_NOT_FOUND' })
+      expect(await t.run((ctx) => ctx.storage.getUrl(ownedId))).not.toBeNull()
+
+      // Forsøg som thumbnailStorageId sammen med en ny ugyldig video-storageId
+      const freshBadVideo = await storeFile(t, 'bad', 'text/plain')
+      const asThumb = await asMember.mutation(api.gallery.createVideo, {
+        storageId: freshBadVideo,
+        thumbnailStorageId: ownedId,
+      })
+      expect(asThumb).toEqual({ ok: false, error: 'VIDEO_THUMBNAIL_INVALID' })
+      expect(await t.run((ctx) => ctx.storage.getUrl(ownedId))).not.toBeNull()
+      expect(await t.run((ctx) => ctx.storage.getUrl(freshBadVideo))).toBeNull()
+    }
+  })
+})
