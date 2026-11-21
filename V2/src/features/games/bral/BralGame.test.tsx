@@ -604,4 +604,63 @@ describe('BralGame', () => {
     fireEvent.click(bellows)
     expect(bellows.textContent).not.toBe(tempAfterDown)
   })
+
+  it('beholder D, R og piletaster ved knapfokus og ignorerer Ctrl, Meta og Alt', () => {
+    opening.override = {
+      shortage: 'active',
+      pullTabs: 4,
+      tabsCaught: 4,
+      cans: [
+        { id: 905, kind: 'tab', x: 180, y: 120, speed: 0, tilt: 0 },
+        { id: 906, kind: 'can', x: 120, y: 100, speed: 0, tilt: 0 },
+      ],
+    }
+
+    render(<BralGame />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+
+    const bellows = screen.getByRole('button', { name: 'Blæsebælg' })
+    bellows.focus()
+
+    // Ctrl, Meta og Alt må aldrig udløse spilhandlinger.
+    fireEvent.keyDown(bellows, { key: 'd', ctrlKey: true })
+    fireEvent.keyDown(bellows, { key: 'd', metaKey: true })
+    fireEvent.keyDown(bellows, { key: 'f', altKey: true })
+    fireEvent.keyDown(bellows, { key: 'r', ctrlKey: true })
+    expect(screen.queryByText('PULL-TAB STRIKE · METAL READY')).toBeNull()
+    expect(screen.queryByText('FORCED RELAY · 0/6')).toBeNull()
+
+    // Fokus på et tekstfelt udelukker fortsat alle spilgenveje.
+    const input = document.createElement('input')
+    bellows.parentElement?.appendChild(input)
+    input.focus()
+    fireEvent.keyDown(input, { key: 'd' })
+    expect(screen.queryByText('PULL-TAB STRIKE · METAL READY')).toBeNull()
+    input.remove()
+
+    // Tilbage til knapfokus: rent D og rent R virker, mens Alt+ArrowLeft ikke opsnappes.
+    bellows.focus()
+    fireEvent.keyDown(bellows, { key: 'd' })
+    expect(
+      screen.getAllByText('PULL-TAB STRIKE · METAL READY').length,
+    ).toBeGreaterThanOrEqual(1)
+
+    fireEvent.keyDown(bellows, { key: 'r' })
+    expect(screen.getByText('FORCED RELAY · 0/6')).toBeTruthy()
+
+    const altLeft = new KeyboardEvent('keydown', {
+      key: 'ArrowLeft',
+      altKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => {
+      window.dispatchEvent(altLeft)
+    })
+    expect(altLeft.defaultPrevented).toBe(false)
+    expect(screen.getByText('FORCED RELAY · 0/6')).toBeTruthy()
+
+    fireEvent.keyDown(bellows, { key: 'ArrowLeft' })
+    expect(screen.getByText('FORCED RELAY · 1/6')).toBeTruthy()
+  })
 })

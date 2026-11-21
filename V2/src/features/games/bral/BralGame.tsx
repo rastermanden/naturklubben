@@ -31,13 +31,19 @@ const ZONE_LABELS = {
   hot: 'For varm!',
 } as const
 
-function isInteractiveTarget(target: EventTarget | null): boolean {
+function isTextInputTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false
+  if (target instanceof HTMLElement && target.isContentEditable) return true
   return (
     target.closest(
-      'button, a, input, textarea, select, [role="button"], [contenteditable="true"]',
+      'input, textarea, select, [contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]',
     ) !== null
   )
+}
+
+function isButtonOrLinkTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return target.closest('button, a, [role="button"]') !== null
 }
 
 /**
@@ -134,8 +140,16 @@ export function BralGame() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.repeat || stateRef.current.status !== 'playing') return
-      if (isInteractiveTarget(event.target)) return
+      if (
+        event.repeat ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        stateRef.current.status !== 'playing'
+      ) {
+        return
+      }
+      if (isTextInputTarget(event.target)) return
       if (
         event.key === 'b' ||
         event.key === 'B' ||
@@ -155,6 +169,7 @@ export function BralGame() {
         if (event.key === 'ArrowDown') event.preventDefault()
         handleCatchLowest()
       } else if (event.key === ' ' || event.key === 'Enter') {
+        if (isButtonOrLinkTarget(event.target)) return
         event.preventDefault()
         handleStrike()
       } else if (event.key === 'r' || event.key === 'R') {
