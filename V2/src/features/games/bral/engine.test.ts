@@ -169,7 +169,7 @@ describe('bral-motor', () => {
     expect(state.molten).toBe(MOLTEN_CAPACITY)
   })
 
-  it('slutter efter 60 sekunder med plausible point og mønter', () => {
+  it('slutter efter 60 sekunder og når præcis loftet ved perfekt spil', () => {
     let state = createBralState()
     expect(state.status).toBe('ready')
     state = startBral(() => 0.5)
@@ -179,7 +179,7 @@ describe('bral-motor', () => {
       if (ovenZone(state.ovenTemp) === 'cold' || state.ovenTemp < 650) {
         state = pumpBellows(state)
       }
-      while (state.cans.length > 0 && state.crucibleCans < 8) {
+      while (state.cans.length > 0) {
         const caught = catchLowestCan(state)
         if (!caught.caught) break
         state = caught.state
@@ -193,12 +193,11 @@ describe('bral-motor', () => {
     expect(state.status).toBe('over')
     expect(state.timeLeft).toBe(0)
     expect(state.cans).toEqual([])
-    expect(state.coins).toBeGreaterThan(0)
-    expect(state.coins).toBeLessThanOrEqual(BRAL_MAX_COINS_PER_GAME)
+    expect(state.coins).toBe(BRAL_MAX_COINS_PER_GAME)
+    expect(state.score).toBe(BRAL_MAX_COINS_PER_GAME * BRAL_MAX_COIN_VALUE)
     expect(state.score).toBeGreaterThanOrEqual(
       state.coins * BRAL_MIN_COIN_VALUE,
     )
-    expect(state.score).toBeLessThanOrEqual(state.coins * BRAL_MAX_COIN_VALUE)
     expect(bralScoreIsPlausible(state.score, state.coins, 1)).toBe(true)
   })
 })

@@ -37,7 +37,7 @@ describe('bralScoreIsPlausible', () => {
     expect(bralScoreIsPlausible(10, 1, 1)).toBe(true)
     expect(bralScoreIsPlausible(16, 3, 1)).toBe(true)
     expect(bralScoreIsPlausible(25, 3, 1)).toBe(true)
-    expect(bralScoreIsPlausible(240, 24, 1)).toBe(true)
+    expect(bralScoreIsPlausible(230, 23, 1)).toBe(true)
 
     expect(bralScoreIsPlausible(2, 1, 1)).toBe(false)
     expect(bralScoreIsPlausible(6, 1, 1)).toBe(false)
@@ -46,7 +46,7 @@ describe('bralScoreIsPlausible', () => {
     expect(bralScoreIsPlausible(11, 1, 1)).toBe(false)
     expect(bralScoreIsPlausible(0, 1, 1)).toBe(false)
     expect(bralScoreIsPlausible(2, 3, 1)).toBe(false)
-    expect(bralScoreIsPlausible(250, 25, 1)).toBe(false)
+    expect(bralScoreIsPlausible(240, 24, 1)).toBe(false)
     expect(bralScoreIsPlausible(10, 1, 2)).toBe(false)
   })
 })
@@ -127,7 +127,11 @@ describe('games.submit bral', () => {
       { score: 2, lines: 1, level: 1 },
       { score: 26, lines: 3, level: 1 },
       { score: 50, lines: 1, level: 1 },
-      { score: 250, lines: BRAL_MAX_COINS_PER_GAME + 1, level: 1 },
+      {
+        score: (BRAL_MAX_COINS_PER_GAME + 1) * 10,
+        lines: BRAL_MAX_COINS_PER_GAME + 1,
+        level: 1,
+      },
       { score: 0, lines: 1, level: 1 },
       { score: 10, lines: 1, level: 2 },
     ]) {

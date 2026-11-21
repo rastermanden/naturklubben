@@ -22,11 +22,12 @@ export const BRAL_CAN_SPAWN_INTERVAL_S = 0.62
 export const BRAL_MELT_CANS_PER_SEC = 1.6
 
 /**
- * Maks antal mønter på 60 sekunder, beregnet ud fra spawn-takt og smeltetakt:
- * `Math.floor((2 + Math.floor(60 / 0.62)) / 4) = 24` og
- * `Math.floor((60 * 1.6) / 4) = 24`.
+ * Maks antal mønter på 60 sekunder.
+ * Ved fuld smeltetakt (1,6 dåser/sek) når den 24. dåsepulje (96 dåser) først
+ * frem ved t = 60,0 s, hvor partiet slutter før et slag kan nås. Den sidste
+ * mulige prægning sker ved t = 57,5 s (23 mønter).
  */
-export const BRAL_MAX_COINS_PER_GAME = 24
+export const BRAL_MAX_COINS_PER_GAME = 23
 
 /** Om et Bral-resultat kan være spillet på et minut. */
 export function bralScoreIsPlausible(
