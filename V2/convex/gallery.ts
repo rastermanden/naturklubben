@@ -586,6 +586,76 @@ export const createPhoto = mutation({
 })
 
 /**
+ * Flytter et billede til en anden begivenhed -- eller væk fra den, til "Uden
+ * begivenhed". Ejeren selv eller en admin må flytte, samme regel som
+ * sletningen har.
+ *
+ * Før kunne et billede kun få sin begivenhed, mens det blev uploadet (#332):
+ * et billede lagt op uden en tur blev liggende under "Uden begivenhed" for
+ * evigt, og et billede på den forkerte tur skulle slettes og lægges op igen --
+ * og så fulgte kommentarerne med i faldet. Her flyttes kun albumnøglen, så
+ * billedtekst, kommentarer og filer bliver, hvor de er.
+ *
+ * Filerne røres ikke, så en optimering, der er i gang, er ikke i vejen:
+ * `finishOptimization` læser billedets albumnøgle, når den er færdig, og ser
+ * derfor den nye.
+ */
+export const movePhoto = mutation({
+  args: { photoId: v.id('photos'), eventId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const profile = await requireWritableProfile(ctx)
+
+    const photo = await ctx.db.get(args.photoId)
+    if (photo === null) {
+      throw new ConvexError('PHOTO_NOT_FOUND')
+    }
+    if (photo.uploaderId !== profile._id && !profile.isAdmin) {
+      throw new ConvexError('PHOTO_MOVE_NOT_AUTHORIZED')
+    }
+
+    // Samme tre udfald som ved en upload, så et album ikke kan få et navn,
+    // ingen begivenhed har -- og så et V1-album stadig kan rammes.
+    const target = await albumTargetFor(ctx, args.eventId)
+    if (target.albumKey === photo.albumKey) return null
+
+    // Rækkefølgen er vigtig: `removePhotoFromAlbum` læser billedets nuværende
+    // albumnøgle, så den skal kaldes før patchen.
+    await removePhotoFromAlbum(ctx, photo)
+    await ctx.db.patch(photo._id, {
+      albumKey: target.albumKey,
+      eventId: target.eventId,
+    })
+    await addPhotoToAlbum(ctx, {
+      albumKey: target.albumKey,
+      eventId: target.eventId,
+      eventTitle: target.event?.title,
+      // Billedets egen dato, ikke nu: `latestPhotoAt` er "seneste billede i
+      // albummet", og en flytning laver ikke et nyere billede.
+      createdAt: photo.createdAt,
+    })
+
+    // Et album, der lige er oprettet af flytningen, har ingen forside. Er
+    // billedet klart, bliver det den -- ellers stod albummet uden billede på
+    // forsiden, til nogen lagde et nyt op.
+    const album = await albumByKey(ctx, target.albumKey)
+    if (
+      album !== null &&
+      album.coverPhotoId === undefined &&
+      photo.optimizationStatus === 'ready'
+    ) {
+      await ctx.db.patch(album._id, {
+        coverPhotoId: photo._id,
+        coverThumbnailStorageId: photo.thumbnailStorageId,
+        coverOptimizedStorageId: photo.optimizedStorageId,
+        coverCreatedAt: photo.createdAt,
+      })
+    }
+
+    return null
+  },
+})
+
+/**
  * Sletter et billede. Ejeren selv eller en admin må slette -- samme regel som
  * `claim_photo_deletion` (20260823215500_admin_photo_moderation.sql) gav.
  *
