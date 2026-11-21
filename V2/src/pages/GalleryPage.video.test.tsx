@@ -10,6 +10,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GalleryAlbum, Photo } from '../features/gallery/types'
 import {
+  GALLERY_ACCEPT,
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
 } from '../features/gallery/galleryMedia'
@@ -271,5 +272,127 @@ describe('GalleryPage: video i galleriet (#365)', () => {
         eventId: 'event1',
       }),
     )
+  })
+})
+
+describe('GalleryPage: optag video med kameraet (#367)', () => {
+  it('viser "Optag video" ved siden af "Tag billede" med accept="video/*" og capture="environment" uden at ændre foto- og filvælgeren', () => {
+    renderGallery()
+
+    const fileButton = screen.getByRole('button', {
+      name: 'Vælg billeder eller video',
+    })
+    const photoButton = screen.getByRole('button', { name: 'Tag billede' })
+    const videoButton = screen.getByRole('button', { name: 'Optag video' })
+
+    // "Optag video" ligger lige efter "Tag billede" i samme knaprække og er touch-venlig.
+    expect(photoButton.nextElementSibling).toBe(videoButton)
+    expect(videoButton.className).toContain('min-h-11')
+
+    const fileInput = screen.getByLabelText(
+      'Vælg billeder og videoer fra enheden',
+    ) as HTMLInputElement
+    const photoInput = screen.getByLabelText(
+      'Tag et billede med kameraet',
+    ) as HTMLInputElement
+    const videoInput = screen.getByLabelText(
+      'Optag en video med kameraet',
+    ) as HTMLInputElement
+
+    // Video-input bruger video/* og bagkamera, så Android åbner kameraet i videotilstand.
+    expect(videoInput.type).toBe('file')
+    expect(videoInput.accept).toBe('video/*')
+    expect(videoInput.getAttribute('capture')).toBe('environment')
+    expect(videoInput.multiple).toBe(false)
+
+    // Foto-input er uændret (kun foto med bagkamera).
+    expect(photoInput.type).toBe('file')
+    expect(photoInput.accept).toBe('image/*')
+    expect(photoInput.getAttribute('capture')).toBe('environment')
+    expect(photoInput.multiple).toBe(false)
+
+    // Filvælgeren er uændret (ingen capture, GALLERY_ACCEPT og multiple).
+    expect(fileInput.accept).toBe(GALLERY_ACCEPT)
+    expect(fileInput.getAttribute('capture')).toBeNull()
+    expect(fileInput.multiple).toBe(true)
+
+    // Hver knap åbner sit eget skjulte input.
+    const fileClickSpy = vi.spyOn(fileInput, 'click')
+    const photoClickSpy = vi.spyOn(photoInput, 'click')
+    const videoClickSpy = vi.spyOn(videoInput, 'click')
+
+    fireEvent.click(videoButton)
+    expect(videoClickSpy).toHaveBeenCalledTimes(1)
+    expect(photoClickSpy).not.toHaveBeenCalled()
+    expect(fileClickSpy).not.toHaveBeenCalled()
+
+    fireEvent.click(photoButton)
+    expect(photoClickSpy).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(fileButton)
+    expect(fileClickSpy).toHaveBeenCalledTimes(1)
+
+    // 50 MB-grænsen vises tæt ved knapperne, før man optager.
+    expect(screen.getByText(/Videoer.*50 MB/i)).toBeTruthy()
+  })
+
+  it('sender en gyldig optaget video gennem den eksisterende upload-sti med billedtekst og begivenhed', () => {
+    renderGallery()
+
+    const videoInput = screen.getByLabelText(
+      'Optag en video med kameraet',
+    ) as HTMLInputElement
+
+    fireEvent.change(screen.getByLabelText('Billedtekst (valgfri)'), {
+      target: { value: 'Rådyr i skovbrynet' },
+    })
+    fireEvent.change(screen.getByLabelText(/Knyt til begivenhed/), {
+      target: { value: 'event1' },
+    })
+
+    const recorded = new File(['mp4'], 'VID_20261121.mp4', {
+      type: 'video/mp4',
+    })
+    fireEvent.change(videoInput, { target: { files: [recorded] } })
+
+    expect(enqueueSpy).toHaveBeenCalledTimes(1)
+    expect(enqueueSpy).toHaveBeenCalledWith({
+      files: [recorded],
+      caption: 'Rådyr i skovbrynet',
+      eventId: 'event1',
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('afviser en for stor eller forkert video fra video-inputtet med tydelig dansk fejl og kalder ikke upload.enqueue', () => {
+    renderGallery()
+
+    const videoInput = screen.getByLabelText(
+      'Optag en video med kameraet',
+    ) as HTMLInputElement
+
+    // For stor video (> 50 MB)
+    const tooLarge = new File(['big'], 'lang_optagelse.mp4', {
+      type: 'video/mp4',
+    })
+    Object.defineProperty(tooLarge, 'size', { value: MAX_VIDEO_BYTES + 1 })
+
+    fireEvent.change(videoInput, { target: { files: [tooLarge] } })
+
+    expect(screen.getByRole('alert').textContent).toContain(
+      'lang_optagelse.mp4 er for stor. Videoer må højst være 50 MB.',
+    )
+    expect(enqueueSpy).not.toHaveBeenCalled()
+
+    // Forkert videotype (fx 3gp fra ældre kamerakonfiguration)
+    const wrongType = new File(['3gp'], 'klip.3gp', {
+      type: 'video/3gpp',
+    })
+    fireEvent.change(videoInput, { target: { files: [wrongType] } })
+
+    expect(screen.getByRole('alert').textContent).toContain(
+      'klip.3gp kan ikke lægges op. Brug mp4, webm eller mov.',
+    )
+    expect(enqueueSpy).not.toHaveBeenCalled()
   })
 })
