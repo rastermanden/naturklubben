@@ -5,6 +5,7 @@ import { useAction, useConvexAuth } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import { appUrl } from '../features/auth/authRedirect'
 import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
+import { signInWithPreviewFallback } from '../features/auth/signInWithPreviewFallback'
 
 /**
  * Login med e-mail og adgangskode via Convex Auth.
@@ -51,10 +52,10 @@ export default function LoginPage() {
     const submittedPassword = String(data.get('password') ?? '')
 
     try {
-      const result = await signIn('password', {
+      const { result, usedPreviewMember } = await signInWithPreviewFallback({
+        signIn,
         email: submittedEmail,
         password: submittedPassword,
-        flow: 'signIn',
         redirectTo: appUrl('velkommen'),
       })
       if (!result.signingIn) {
@@ -63,9 +64,11 @@ export default function LoginPage() {
         emailRef.current?.focus()
         return
       }
-      // Importerede bcrypt-hashes skrives om, når login er lykkedes.
-      // Fejler det, er man stadig logget ind.
-      await rehashIfImported({ password: submittedPassword }).catch(() => {})
+      if (!usedPreviewMember) {
+        // Importerede bcrypt-hashes skrives om, når login er lykkedes.
+        // Fejler det, er man stadig logget ind.
+        await rehashIfImported({ password: submittedPassword }).catch(() => {})
+      }
     } catch (signInError) {
       // Convex Auth's tekst er engelsk og ikke en kontrakt, så feltet vælges
       // ud fra, hvad fejlen handler om -- ikke ud fra en fast streng.

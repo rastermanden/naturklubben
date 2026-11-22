@@ -67,4 +67,10 @@ crons.interval(
   internal.account.completeReservedDeletions,
 )
 
+crons.cron(
+  'cleanup-preview-verify-attempts',
+  '23 * * * *',
+  internal.previewMemberAuth.cleanupVerifyAttempts,
+)
+
 export default crons

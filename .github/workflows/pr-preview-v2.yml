@@ -20,10 +20,12 @@ name: PR Preview V2 (Convex)
 #   væk, selv om PR'en stadig er åben.
 # - Deploymentet starter **tomt**. Der er ingen kopi af produktionsdata.
 #   Efter deploy kører `previewSeed:ensure`, som opretter testbrugeren fra
-#   repo-secrets (se AGENTS.md). Er `PREVIEW_SHARED_PASSWORD` sat, oprettes
-#   også klubbens medlemmer med den adgangskode. Mangler den, skrives en
-#   linje i loggen, og previewet fejler ikke af den grund. Det kører aldrig
-#   mod produktion.
+#   repo-secrets (se AGENTS.md). Medlemmer logger ind med deres sædvanlige
+#   naturklubben.dk-konto (`preview-member` verificerer mod produktionens
+#   `POST /preview/verify-member` uden at gemme adgangskoden). Er
+#   `PREVIEW_SHARED_PASSWORD` sat, lægges den kun ind som valgfri fallback og
+#   skrives aldrig ud. Mangler den, fortsætter previewet uden fejl. Det kører
+#   aldrig mod produktion.
 # - PR'er fra forks får ingen secrets og kan derfor ikke bygge et preview, og
 #   PR'er fra Copilot coding agent skal have deres workflows godkendt manuelt.
 #   Det er samme begrænsning som i `pr-preview.yml`.
@@ -279,6 +281,24 @@ jobs:
           npm init -y --prefix /tmp/preview-smoke >/dev/null
           npm install --prefix /tmp/preview-smoke --silent puppeteer@24.15.0
           node V2/scripts/previewLoginSmoke.mjs
+
+      # Verificerer `POST /preview/verify-member` mod previewets eget deployment
+      # (prod får først ruten, når PR'en er merget og deployed).
+      - if: github.event.action != 'closed'
+        name: Tjek /preview/verify-member med testbrugeren
+        working-directory: V2
+        env:
+          PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
+          PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+        run: |
+          set -euo pipefail
+          host=$(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123')
+          if [[ -z "$host" || "$host" == *quaint-parakeet-652* ]]; then
+            echo "Ugyldig preview-vært til verify-member-smoke."
+            exit 1
+          fi
+          export PREVIEW_CONVEX_SITE_URL="${host%.convex.cloud}.convex.site"
+          node scripts/previewVerifyMemberSmoke.mjs
 
       # Samme session som testbrugeren. Mutationen er den, spillet kalder,
       # og siden skal vise rækken bagefter.

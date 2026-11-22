@@ -1,6 +1,8 @@
+import { ConvexCredentials } from '@convex-dev/auth/providers/ConvexCredentials'
 import { Password } from '@convex-dev/auth/providers/Password'
 import { convexAuth, type EmailConfig } from '@convex-dev/auth/server'
 import { internal } from './_generated/api'
+import type { DataModel } from './_generated/dataModel'
 import type { ActionCtx } from './_generated/server'
 import { env } from './_generated/server'
 import {
@@ -10,6 +12,10 @@ import {
 } from './authEmail'
 import { hashPassword, verifyPassword } from './passwordCrypto'
 import { assertPasswordLength, normalizeAuthEmail } from './passwords'
+import {
+  authorizePreviewMember,
+  PREVIEW_MEMBER_PROVIDER_ID,
+} from './previewMemberAuth'
 
 /**
  * Convex Auth med adgangskode, bekræftelsesmail og nulstilling.
@@ -107,5 +113,9 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
     // dem her fejler linket med "password-verify is not configured".
     verifyEmail,
     resetEmail,
+    ConvexCredentials<DataModel>({
+      id: PREVIEW_MEMBER_PROVIDER_ID,
+      authorize: (params, ctx) => authorizePreviewMember(params, ctx),
+    }),
   ],
 })
