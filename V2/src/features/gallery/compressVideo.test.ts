@@ -10,6 +10,7 @@ import {
   compressedFileName,
   computeCompressedDimensions,
   computeCompressionPlan,
+  mimeHasExplicitVideoOnlyCodecs,
   selectRecorderMimeType,
 } from './compressVideo'
 
@@ -113,41 +114,119 @@ describe('computeCompressionPlan', () => {
 })
 
 describe('selectRecorderMimeType og compressedFileName', () => {
-  it('foretrækker mp4 frem for webm og falder tilbage til webm', () => {
+  it('foretrækker en mimeType med opus ved lyd og undgår ren video/mp4 uden lyd-codec', () => {
     expect(
       selectRecorderMimeType(
         true,
         (mime) => mime.startsWith('video/mp4') || mime.startsWith('video/webm'),
       ),
+    ).toBe('video/webm;codecs=vp9,opus')
+
+    // Android Chrome rapporterer ofte ren video/mp4 som understøttet sammen med vp8,opus.
+    expect(
+      selectRecorderMimeType(
+        true,
+        (mime) => mime === 'video/mp4' || mime === 'video/webm;codecs=vp8,opus',
+      ),
+    ).toBe('video/webm;codecs=vp8,opus')
+
+    // Når kun ren video/mp4 eller video-only codecs understøttes, må hasAudio=true ikke vælge dem.
+    expect(
+      selectRecorderMimeType(
+        true,
+        (mime) =>
+          mime === 'video/mp4' ||
+          mime === 'video/mp4;codecs=avc1.42E01E' ||
+          mime === 'video/webm',
+      ),
+    ).toBeNull()
+
+    // Safari-lignende miljø uden webm/opus falder tilbage til mp4 med eksplicit lyd-codec
+    // og foretrækker AAC (mp4a.40.2) frem for mp4+opus for bredere afspilning.
+    expect(
+      selectRecorderMimeType(
+        true,
+        (mime) =>
+          mime === 'video/mp4' ||
+          mime === 'video/mp4;codecs=avc1.42E01E,opus' ||
+          mime === 'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+      ),
     ).toBe('video/mp4;codecs=avc1.42E01E,mp4a.40.2')
 
     expect(
+      selectRecorderMimeType(
+        true,
+        (mime) =>
+          mime === 'video/mp4;codecs=avc1,opus' ||
+          mime === 'video/mp4;codecs=avc1,mp4a.40.2',
+      ),
+    ).toBe('video/mp4;codecs=avc1,mp4a.40.2')
+
+    // Uden lyd virker video-only-stien stadig.
+    expect(
       selectRecorderMimeType(false, (mime) => mime === 'video/webm;codecs=vp9'),
     ).toBe('video/webm;codecs=vp9')
+    expect(selectRecorderMimeType(false, (mime) => mime === 'video/mp4')).toBe(
+      'video/mp4',
+    )
 
     expect(selectRecorderMimeType(true, () => false)).toBeNull()
 
     expect(compressedFileName('IMG_0042.MOV', 'video/mp4')).toBe('IMG_0042.mp4')
-    expect(compressedFileName('tur.mp4', 'video/webm;codecs=vp9')).toBe(
+    expect(compressedFileName('tur.mp4', 'video/webm;codecs=vp9,opus')).toBe(
       'tur.webm',
     )
   })
+
+  it('genkender lyd-codecs i både citerede og uciterede mime-strenge med komma og mellemrum', () => {
+    expect(
+      mimeHasExplicitVideoOnlyCodecs(
+        'video/mp4; codecs=avc1.42E01E, mp4a.40.2',
+      ),
+    ).toBe(false)
+    expect(mimeHasExplicitVideoOnlyCodecs('video/webm; codecs=vp9, opus')).toBe(
+      false,
+    )
+    expect(
+      mimeHasExplicitVideoOnlyCodecs(
+        'video/webm; codecs=vp9, opus; profiles=foo',
+      ),
+    ).toBe(false)
+    expect(
+      mimeHasExplicitVideoOnlyCodecs(
+        'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+      ),
+    ).toBe(false)
+    expect(
+      mimeHasExplicitVideoOnlyCodecs('video/webm; codecs="vp9, opus"'),
+    ).toBe(false)
+    expect(mimeHasExplicitVideoOnlyCodecs('video/webm; codecs=vp9')).toBe(true)
+    expect(
+      mimeHasExplicitVideoOnlyCodecs('video/mp4; codecs="avc1.42E01E"'),
+    ).toBe(true)
+    expect(mimeHasExplicitVideoOnlyCodecs('video/mp4')).toBe(false)
+  })
 })
+
+type MockAudioContextState = AudioContextState | 'interrupted'
 
 interface MockAudioContextHandle {
   ctx: AudioContext
   connectSpy: ReturnType<typeof vi.fn>
   closeSpy: ReturnType<typeof vi.fn>
   resumeSpy: ReturnType<typeof vi.fn>
+  createMediaElementSourceSpy: ReturnType<typeof vi.fn>
+  createMediaStreamDestinationSpy: ReturnType<typeof vi.fn>
   audioTrackStopSpy: ReturnType<typeof vi.fn>
   destinationNode: { id: string }
+  setState: (next: MockAudioContextState) => void
 }
 
 function createMockAudioContext(
-  initialState: AudioContextState = 'running',
-  stateAfterResume: AudioContextState = 'running',
+  initialState: MockAudioContextState = 'running',
+  stateAfterResume: MockAudioContextState = 'running',
 ): MockAudioContextHandle {
-  let state: AudioContextState = initialState
+  let state: MockAudioContextState = initialState
   const connectSpy = vi.fn()
   const disconnectSpy = vi.fn()
   const audioTrackStopSpy = vi.fn()
@@ -159,6 +238,16 @@ function createMockAudioContext(
   const closeSpy = vi.fn(async () => {
     state = 'closed'
   })
+  const createMediaElementSourceSpy = vi.fn(() => ({
+    connect: connectSpy,
+    disconnect: disconnectSpy,
+  }))
+  const createMediaStreamDestinationSpy = vi.fn(() => ({
+    stream: {
+      getAudioTracks: () => [{ kind: 'audio', stop: audioTrackStopSpy }],
+      getTracks: () => [{ kind: 'audio', stop: audioTrackStopSpy }],
+    },
+  }))
 
   const ctx = {
     get state() {
@@ -167,16 +256,8 @@ function createMockAudioContext(
     destination: destinationNode,
     resume: resumeSpy,
     close: closeSpy,
-    createMediaElementSource: vi.fn(() => ({
-      connect: connectSpy,
-      disconnect: disconnectSpy,
-    })),
-    createMediaStreamDestination: vi.fn(() => ({
-      stream: {
-        getAudioTracks: () => [{ kind: 'audio', stop: audioTrackStopSpy }],
-        getTracks: () => [{ kind: 'audio', stop: audioTrackStopSpy }],
-      },
-    })),
+    createMediaElementSource: createMediaElementSourceSpy,
+    createMediaStreamDestination: createMediaStreamDestinationSpy,
   } as unknown as AudioContext
 
   return {
@@ -184,8 +265,13 @@ function createMockAudioContext(
     connectSpy,
     closeSpy,
     resumeSpy,
+    createMediaElementSourceSpy,
+    createMediaStreamDestinationSpy,
     audioTrackStopSpy,
     destinationNode,
+    setState: (next: MockAudioContextState) => {
+      state = next
+    },
   }
 }
 
@@ -199,6 +285,7 @@ function setupCompressionMocks(options?: {
   chunkSizes?: number[]
   supportPauseResume?: boolean
   throwOnRecorderCreate?: boolean
+  throwOnStartOnce?: boolean
   playMock?: (videoEl: HTMLVideoElement, attempt: number) => Promise<void>
 }) {
   const supported = new Set(
@@ -294,6 +381,8 @@ function setupCompressionMocks(options?: {
   })
 
   interface RecorderHandle {
+    readonly stream: MediaStream
+    readonly initOptions?: MediaRecorderOptions
     mimeType: string
     state: RecordingState
     ondataavailable: ((ev: BlobEvent) => void) | null
@@ -310,9 +399,12 @@ function setupCompressionMocks(options?: {
   const stopMock = vi.fn()
   const pauseMock = vi.fn()
   const resumeMock = vi.fn()
+  let startThrowsRemaining = options?.throwOnStartOnce ? 1 : 0
 
   class MockMediaRecorder {
     static isTypeSupported = vi.fn((mime: string) => supported.has(mime))
+    readonly stream: MediaStream
+    readonly initOptions?: MediaRecorderOptions
     readonly mimeType: string
     state: RecordingState = 'inactive'
     ondataavailable: ((ev: BlobEvent) => void) | null = null
@@ -321,10 +413,12 @@ function setupCompressionMocks(options?: {
     pause?: () => void
     resume?: () => void
 
-    constructor(_stream: MediaStream, init?: MediaRecorderOptions) {
+    constructor(stream: MediaStream, init?: MediaRecorderOptions) {
       if (options?.throwOnRecorderCreate) {
         throw new Error('NotSupportedError')
       }
+      this.stream = stream
+      this.initOptions = init
       this.mimeType = options?.recorderMime ?? init?.mimeType ?? 'video/mp4'
       if (options?.supportPauseResume) {
         this.pause = () => {
@@ -340,6 +434,10 @@ function setupCompressionMocks(options?: {
     }
 
     start(timeslice?: number) {
+      if (startThrowsRemaining > 0) {
+        startThrowsRemaining -= 1
+        throw new Error('InvalidStateError')
+      }
       this.state = 'recording'
       startMock(timeslice)
     }
@@ -557,20 +655,41 @@ describe('compressVideoFile', () => {
     })
   })
 
-  it('optager lyd lydløst via AudioContext uden at forbinde til højttaler og lukker konteksten', async () => {
+  it('optager lyd lydløst via AudioContext uden at forbinde til højttaler, kombinerer video+lyd i stream og vælger opus', async () => {
     const audioMock = createMockAudioContext('running')
+    let mutedDuringConnect: boolean | null = null
+    const env = setupCompressionMocks({
+      chunkSizes: [2048],
+      supportedMimes: [
+        'video/mp4',
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+      ],
+    })
+    audioMock.connectSpy.mockImplementation(() => {
+      mutedDuringConnect = env.videoEl.muted
+    })
     vi.stubGlobal(
       'AudioContext',
       vi.fn(function MockAudioContext() {
         return audioMock.ctx
       }),
     )
-    const env = setupCompressionMocks({ chunkSizes: [2048] })
     const input = new File(['raw'], 'medlyd.mp4', { type: 'video/mp4' })
 
     const result = await compressVideoFile(input)
 
+    const recorder = env.getLatestRecorder()
+    expect(recorder).not.toBeNull()
+    expect(recorder!.mimeType).toBe('video/webm;codecs=vp9,opus')
+    expect(recorder!.stream.getVideoTracks()).toHaveLength(1)
+    expect(recorder!.stream.getAudioTracks()).toHaveLength(1)
     expect(result.audioIncluded).toBe(true)
+    expect(result.file.name).toBe('medlyd.webm')
+    expect(result.file.type).toBe('video/webm')
+    // Elementet starter mutet indtil WebAudio-grafen er forbundet, og unmutes derefter uden højttalerforbindelse.
+    expect(mutedDuringConnect).toBe(true)
     expect(env.videoEl.muted).toBe(false)
     expect(audioMock.connectSpy).toHaveBeenCalledTimes(1)
     expect(audioMock.connectSpy).not.toHaveBeenCalledWith(
@@ -578,6 +697,481 @@ describe('compressVideoFile', () => {
     )
     expect(audioMock.audioTrackStopSpy).toHaveBeenCalled()
     expect(audioMock.closeSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('bruger ikke mutet Chromium video.captureStream() som lyd-fallback når AudioContext forbliver suspended', async () => {
+    const audioMock = createMockAudioContext('suspended', 'suspended')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      chunkSizes: [2048],
+      supportedMimes: [
+        'video/mp4',
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp8',
+      ],
+    })
+    const probedAudioStop = vi.fn()
+    const probedVideoStop = vi.fn()
+    const captureStreamSpy = vi.fn(() => ({
+      getAudioTracks: () => [
+        {
+          kind: 'audio',
+          readyState: 'live',
+          enabled: true,
+          stop: probedAudioStop,
+        },
+      ],
+      getVideoTracks: () => [
+        {
+          kind: 'video',
+          readyState: 'live',
+          enabled: true,
+          stop: probedVideoStop,
+        },
+      ],
+      getTracks: () => [
+        {
+          kind: 'video',
+          readyState: 'live',
+          enabled: true,
+          stop: probedVideoStop,
+        },
+        {
+          kind: 'audio',
+          readyState: 'live',
+          enabled: true,
+          stop: probedAudioStop,
+        },
+      ],
+    }))
+    Object.defineProperty(env.videoEl, 'captureStream', {
+      configurable: true,
+      value: captureStreamSpy,
+    })
+
+    const input = new File(['raw'], 'chromium-muted.mp4', {
+      type: 'video/mp4',
+    })
+    const result = await compressVideoFile(input)
+
+    const recorder = env.getLatestRecorder()
+    expect(recorder).not.toBeNull()
+    expect(recorder!.mimeType).toBe('video/mp4')
+    expect(recorder!.stream.getVideoTracks()).toHaveLength(1)
+    expect(recorder!.stream.getAudioTracks()).toHaveLength(0)
+    expect(env.videoEl.muted).toBe(true)
+    expect(result.audioIncluded).toBe(false)
+    // Probede spor stoppes med det samme, og captureStream bruges ikke som lyd-fallback.
+    expect(probedAudioStop).toHaveBeenCalled()
+    expect(probedVideoStop).toHaveBeenCalled()
+    expect(captureStreamSpy).toHaveBeenCalledTimes(1)
+    expect(audioMock.closeSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('falder tilbage til lydspor fra Firefox mozCaptureStream() når WebAudio ikke giver et brugbart spor', async () => {
+    const audioMock = createMockAudioContext('suspended', 'suspended')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      chunkSizes: [2048],
+      supportedMimes: ['video/mp4', 'video/webm;codecs=vp8,opus'],
+    })
+    const capturedAudioStop = vi.fn()
+    const capturedVideoStop = vi.fn()
+    const capturedAudioTrack = {
+      kind: 'audio',
+      readyState: 'live',
+      enabled: true,
+      stop: capturedAudioStop,
+    } as unknown as MediaStreamTrack
+    const capturedVideoTrack = {
+      kind: 'video',
+      readyState: 'live',
+      enabled: true,
+      stop: capturedVideoStop,
+    } as unknown as MediaStreamTrack
+    Object.defineProperty(env.videoEl, 'mozHasAudio', {
+      configurable: true,
+      value: true,
+    })
+    Object.defineProperty(env.videoEl, 'mozCaptureStream', {
+      configurable: true,
+      value: vi.fn(() => ({
+        getAudioTracks: () => [capturedAudioTrack],
+        getVideoTracks: () => [capturedVideoTrack],
+        getTracks: () => [capturedVideoTrack, capturedAudioTrack],
+      })),
+    })
+
+    const input = new File(['raw'], 'mozfallback.mp4', {
+      type: 'video/mp4',
+    })
+    const result = await compressVideoFile(input)
+
+    const recorder = env.getLatestRecorder()
+    expect(recorder).not.toBeNull()
+    expect(recorder!.mimeType).toBe('video/webm;codecs=vp8,opus')
+    expect(recorder!.stream.getVideoTracks()).toHaveLength(1)
+    expect(recorder!.stream.getAudioTracks()).toEqual([capturedAudioTrack])
+    // Uden WebAudio-graf forbliver video-elementet mutet, så kilden ikke spiller i højttaleren.
+    expect(env.videoEl.muted).toBe(true)
+    expect(result.audioIncluded).toBe(true)
+    expect(capturedAudioStop).toHaveBeenCalled()
+    expect(capturedVideoStop).toHaveBeenCalled()
+    expect(audioMock.closeSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('falder ikke tilbage til captureStream/mozCaptureStream hvis createMediaElementSource allerede har bundet elementet', async () => {
+    const audioMock = createMockAudioContext('running')
+    audioMock.createMediaStreamDestinationSpy.mockImplementation(() => {
+      throw new Error('Destination failed')
+    })
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      chunkSizes: [2048],
+      supportedMimes: ['video/mp4', 'video/webm;codecs=vp8,opus'],
+    })
+    const mozCaptureSpy = vi.fn(() => ({
+      getAudioTracks: () => [
+        { kind: 'audio', readyState: 'live', enabled: true, stop: vi.fn() },
+      ],
+      getVideoTracks: () => [],
+      getTracks: () => [],
+    }))
+    const captureSpy = vi.fn(() => ({
+      getAudioTracks: () => [
+        { kind: 'audio', readyState: 'live', enabled: true, stop: vi.fn() },
+      ],
+      getVideoTracks: () => [],
+      getTracks: () => [],
+    }))
+    Object.defineProperty(env.videoEl, 'mozHasAudio', {
+      configurable: true,
+      value: true,
+    })
+    Object.defineProperty(env.videoEl, 'mozCaptureStream', {
+      configurable: true,
+      value: mozCaptureSpy,
+    })
+    Object.defineProperty(env.videoEl, 'captureStream', {
+      configurable: true,
+      value: captureSpy,
+    })
+
+    const input = new File(['raw'], 'bound-element.mp4', { type: 'video/mp4' })
+    const result = await compressVideoFile(input)
+
+    expect(audioMock.createMediaElementSourceSpy).toHaveBeenCalledTimes(1)
+    expect(mozCaptureSpy).not.toHaveBeenCalled()
+    expect(captureSpy).not.toHaveBeenCalled()
+    expect(audioMock.closeSpy).toHaveBeenCalledTimes(1)
+    expect(env.videoEl.muted).toBe(true)
+    expect(result.audioIncluded).toBe(false)
+    expect(env.getLatestRecorder()!.stream.getAudioTracks()).toHaveLength(0)
+  })
+
+  it('falder tilbage til lydløs video hvis browseren kun støtter ren video/mp4 uden lyd-codec', async () => {
+    const audioMock = createMockAudioContext('running')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: ['video/mp4'],
+    })
+    const input = new File(['raw'], 'kunmp4.mp4', { type: 'video/mp4' })
+
+    const result = await compressVideoFile(input)
+
+    const recorder = env.getLatestRecorder()
+    expect(recorder!.mimeType).toBe('video/mp4')
+    expect(recorder!.stream.getAudioTracks()).toHaveLength(0)
+    expect(result.audioIncluded).toBe(false)
+    expect(env.videoEl.muted).toBe(true)
+    expect(audioMock.closeSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('komprimerer videoer uden lydspor via video-only-stien selv med kørende AudioContext (captureStream-probe, mozHasAudio og audioTracks)', async () => {
+    const audioMock = createMockAudioContext('running')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: [
+        'video/webm;codecs=vp9,opus',
+        'video/mp4;codecs=avc1.42E01E',
+      ],
+    })
+    const silentVideoTrackStop = vi.fn()
+    Object.defineProperty(env.videoEl, 'captureStream', {
+      configurable: true,
+      value: vi.fn(() => ({
+        getAudioTracks: () => [],
+        getVideoTracks: () => [{ kind: 'video', stop: silentVideoTrackStop }],
+        getTracks: () => [{ kind: 'video', stop: silentVideoTrackStop }],
+      })),
+    })
+
+    const silentInput = new File(['raw'], 'stum.mp4', { type: 'video/mp4' })
+    const silentResult = await compressVideoFile(silentInput)
+
+    expect(silentResult.audioIncluded).toBe(false)
+    expect(silentResult.file.type).toBe('video/mp4')
+    expect(env.getLatestRecorder()!.mimeType).toBe(
+      'video/mp4;codecs=avc1.42E01E',
+    )
+    expect(env.getLatestRecorder()!.stream.getAudioTracks()).toHaveLength(0)
+    expect(silentVideoTrackStop).toHaveBeenCalled()
+    expect(audioMock.createMediaElementSourceSpy).not.toHaveBeenCalled()
+
+    // Eksplicit mozHasAudio === false med kørende AudioContext
+    const envMoz = setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: [
+        'video/webm;codecs=vp9,opus',
+        'video/mp4;codecs=avc1.42E01E',
+      ],
+    })
+    Object.defineProperty(envMoz.videoEl, 'mozHasAudio', {
+      configurable: true,
+      value: false,
+    })
+    const mozResult = await compressVideoFile(
+      new File(['raw'], 'stum-moz.mp4', { type: 'video/mp4' }),
+    )
+    expect(mozResult.audioIncluded).toBe(false)
+    expect(envMoz.getLatestRecorder()!.stream.getAudioTracks()).toHaveLength(0)
+    expect(audioMock.createMediaElementSourceSpy).not.toHaveBeenCalled()
+
+    // Eksplicit audioTracks.length === 0 (Safari/WebKit med populeret videoTracks) med kørende AudioContext
+    const envTracks = setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: [
+        'video/webm;codecs=vp9,opus',
+        'video/mp4;codecs=avc1.42E01E',
+      ],
+    })
+    Object.defineProperty(envTracks.videoEl, 'videoTracks', {
+      configurable: true,
+      value: { length: 1 },
+    })
+    Object.defineProperty(envTracks.videoEl, 'audioTracks', {
+      configurable: true,
+      value: { length: 0 },
+    })
+    const tracksResult = await compressVideoFile(
+      new File(['raw'], 'stum-tracks.mp4', { type: 'video/mp4' }),
+    )
+    expect(tracksResult.audioIncluded).toBe(false)
+    expect(envTracks.getLatestRecorder()!.stream.getAudioTracks()).toHaveLength(
+      0,
+    )
+    expect(audioMock.createMediaElementSourceSpy).not.toHaveBeenCalled()
+  })
+
+  it('bevarer audioIncluded=true når recorder.mimeType bruger uciteret eller citeret komma+mellemrum med lyd-codec', async () => {
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return createMockAudioContext('running').ctx
+      }),
+    )
+    setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: ['video/mp4;codecs=avc1.42E01E,mp4a.40.2'],
+      recorderMime: 'video/mp4; codecs=avc1.42E01E, mp4a.40.2',
+    })
+    const unquoted = await compressVideoFile(
+      new File(['raw'], 'uciteret.mp4', { type: 'video/mp4' }),
+    )
+    expect(unquoted.audioIncluded).toBe(true)
+
+    setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: ['video/webm;codecs=vp9,opus'],
+      recorderMime: 'video/webm; codecs="vp9, opus"',
+    })
+    const quoted = await compressVideoFile(
+      new File(['raw'], 'citeret.mp4', { type: 'video/mp4' }),
+    )
+    expect(quoted.audioIncluded).toBe(true)
+  })
+
+  it('markerer audioIncluded=false hvis MediaRecorder rapporterer en video-only codec', async () => {
+    const audioMock = createMockAudioContext('running')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: ['video/webm;codecs=vp9,opus'],
+      recorderMime: 'video/webm;codecs=vp9',
+    })
+    const input = new File(['raw'], 'nedgraderet.mp4', { type: 'video/mp4' })
+
+    const result = await compressVideoFile(input)
+    expect(result.audioIncluded).toBe(false)
+  })
+
+  it('falder tilbage til lydløs optagelse hvis recorder.start() kaster med lyd', async () => {
+    const audioMock = createMockAudioContext('running')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp9'],
+      throwOnStartOnce: true,
+    })
+    const input = new File(['raw'], 'startfejl.mp4', { type: 'video/mp4' })
+
+    const result = await compressVideoFile(input)
+    expect(result.audioIncluded).toBe(false)
+    expect(env.getLatestRecorder()!.mimeType).toBe('video/webm;codecs=vp9')
+    expect(env.getLatestRecorder()!.stream.getAudioTracks()).toHaveLength(0)
+  })
+
+  it('falder tilbage til lydløs optagelse ved asynkron recorder.onerror med lyd før første chunk', async () => {
+    const audioMock = createMockAudioContext('running')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    let envRef: ReturnType<typeof setupCompressionMocks>
+    envRef = setupCompressionMocks({
+      supportedMimes: ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp9'],
+      playMock: async (_videoEl, attempt) => {
+        if (attempt === 1) {
+          queueMicrotask(() => {
+            envRef.getLatestRecorder()?.onerror?.(new Event('error'))
+          })
+          return
+        }
+        queueMicrotask(() => {
+          envRef.emitChunksAndEnd()
+        })
+      },
+    })
+    const input = new File(['raw'], 'async-onerror.mp4', { type: 'video/mp4' })
+
+    const result = await compressVideoFile(input)
+
+    expect(envRef.stopMock).toHaveBeenCalledTimes(2)
+    expect(envRef.videoEl.muted).toBe(true)
+    expect(audioMock.closeSpy).toHaveBeenCalledTimes(1)
+    expect(result.audioIncluded).toBe(false)
+    expect(envRef.getLatestRecorder()!.mimeType).toBe('video/webm;codecs=vp9')
+    expect(envRef.getLatestRecorder()!.stream.getAudioTracks()).toHaveLength(0)
+  })
+
+  it('afviser med ENCODE_FAILED ved recorder.onerror efter der allerede er modtaget data med lyd', async () => {
+    const audioMock = createMockAudioContext('running')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      supportedMimes: ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp9'],
+    })
+    const input = new File(['raw'], 'midway-error.mp4', { type: 'video/mp4' })
+
+    const promise = compressVideoFile(input)
+    await vi.waitFor(() => {
+      expect(env.getLatestRecorder()).not.toBeNull()
+    })
+    const rec = env.getLatestRecorder()!
+    rec.ondataavailable?.({
+      data: new Blob([new Uint8Array(512)], { type: 'video/webm' }),
+    } as BlobEvent)
+    rec.onerror?.(new Event('error'))
+
+    await expect(promise).rejects.toMatchObject({
+      name: 'VideoCompressionError',
+      code: 'ENCODE_FAILED',
+    })
+    expect(env.startMock).toHaveBeenCalledTimes(1)
+    expect(env.stopMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('genoptager AudioContext i iOS Safari interrupted-tilstand ved opstart og visibilitychange', async () => {
+    let hidden = false
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => hidden,
+    })
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => (hidden ? 'hidden' : 'visible'),
+    })
+
+    const audioMock = createMockAudioContext('interrupted', 'running')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      supportPauseResume: true,
+      supportedMimes: ['video/webm;codecs=vp9,opus'],
+    })
+    const input = new File(['raw'], 'ios-interrupted.mp4', {
+      type: 'video/mp4',
+    })
+
+    const promise = compressVideoFile(input)
+    await vi.waitFor(() => {
+      expect(env.startMock).toHaveBeenCalledTimes(1)
+    })
+    expect(audioMock.resumeSpy).toHaveBeenCalledTimes(1)
+
+    // Simuler at iOS Safari sætter AudioContext til 'interrupted' mens siden er skjult.
+    hidden = true
+    audioMock.setState('interrupted')
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    hidden = false
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    await vi.waitFor(() => {
+      expect(audioMock.resumeSpy).toHaveBeenCalledTimes(2)
+      expect(env.videoPlaySpy).toHaveBeenCalledTimes(2)
+    })
+
+    env.emitChunksAndEnd()
+    const result = await promise
+    expect(result.audioIncluded).toBe(true)
   })
 
   it('lukker suspended AudioContext der ikke vågner og fortsætter uden lyd', async () => {

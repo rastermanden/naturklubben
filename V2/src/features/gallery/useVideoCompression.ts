@@ -32,6 +32,14 @@ type WindowWithWebkitAudio = typeof globalThis & {
   webkitAudioContext?: typeof AudioContext
 }
 
+function shouldResumeAudioContext(
+  ctx: AudioContext | null | undefined,
+): ctx is AudioContext {
+  if (!ctx) return false
+  const state = ctx.state as string
+  return state !== 'running' && state !== 'closed'
+}
+
 function closeAudioContextSafely(ctx: AudioContext | null | undefined) {
   if (!ctx || ctx.state === 'closed') return
   try {
@@ -88,7 +96,7 @@ export function useVideoCompression({
   const prepareAudioContext = useCallback(() => {
     const existing = unlockedAudioHolderRef.current.ctx
     if (existing && existing.state !== 'closed') {
-      if (existing.state === 'suspended') {
+      if (shouldResumeAudioContext(existing)) {
         try {
           void existing.resume?.().catch(() => undefined)
         } catch {
@@ -105,7 +113,7 @@ export function useVideoCompression({
     try {
       const ctx = new AudioCtx()
       unlockedAudioHolderRef.current.ctx = ctx
-      if (ctx.state === 'suspended') {
+      if (shouldResumeAudioContext(ctx)) {
         void ctx.resume?.().catch(() => undefined)
       }
     } catch {
