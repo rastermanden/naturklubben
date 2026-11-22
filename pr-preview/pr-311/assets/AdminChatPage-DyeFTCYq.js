@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-BkSabwWG.js";import t from"./ChatPage-CkL67Y0u.js";var n=e();function r(){return(0,n.jsx)(t,{room:`admin`})}export{r as default};
