@@ -113,22 +113,55 @@ describe('computeCompressionPlan', () => {
 })
 
 describe('selectRecorderMimeType og compressedFileName', () => {
-  it('foretrækker mp4 frem for webm og falder tilbage til webm', () => {
+  it('foretrækker en mimeType med opus ved lyd og undgår ren video/mp4 uden lyd-codec', () => {
     expect(
       selectRecorderMimeType(
         true,
         (mime) => mime.startsWith('video/mp4') || mime.startsWith('video/webm'),
       ),
+    ).toBe('video/webm;codecs=vp9,opus')
+
+    // Android Chrome rapporterer ofte ren video/mp4 som understøttet sammen med vp8,opus.
+    expect(
+      selectRecorderMimeType(
+        true,
+        (mime) => mime === 'video/mp4' || mime === 'video/webm;codecs=vp8,opus',
+      ),
+    ).toBe('video/webm;codecs=vp8,opus')
+
+    // Når kun ren video/mp4 eller video-only codecs understøttes, må hasAudio=true ikke vælge dem.
+    expect(
+      selectRecorderMimeType(
+        true,
+        (mime) =>
+          mime === 'video/mp4' ||
+          mime === 'video/mp4;codecs=avc1.42E01E' ||
+          mime === 'video/webm',
+      ),
+    ).toBeNull()
+
+    // Safari-lignende miljø uden webm/opus falder tilbage til mp4 med eksplicit lyd-codec.
+    expect(
+      selectRecorderMimeType(
+        true,
+        (mime) =>
+          mime === 'video/mp4' ||
+          mime === 'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+      ),
     ).toBe('video/mp4;codecs=avc1.42E01E,mp4a.40.2')
 
+    // Uden lyd virker video-only-stien stadig.
     expect(
       selectRecorderMimeType(false, (mime) => mime === 'video/webm;codecs=vp9'),
     ).toBe('video/webm;codecs=vp9')
+    expect(selectRecorderMimeType(false, (mime) => mime === 'video/mp4')).toBe(
+      'video/mp4',
+    )
 
     expect(selectRecorderMimeType(true, () => false)).toBeNull()
 
     expect(compressedFileName('IMG_0042.MOV', 'video/mp4')).toBe('IMG_0042.mp4')
-    expect(compressedFileName('tur.mp4', 'video/webm;codecs=vp9')).toBe(
+    expect(compressedFileName('tur.mp4', 'video/webm;codecs=vp9,opus')).toBe(
       'tur.webm',
     )
   })
@@ -199,6 +232,7 @@ function setupCompressionMocks(options?: {
   chunkSizes?: number[]
   supportPauseResume?: boolean
   throwOnRecorderCreate?: boolean
+  throwOnStartOnce?: boolean
   playMock?: (videoEl: HTMLVideoElement, attempt: number) => Promise<void>
 }) {
   const supported = new Set(
@@ -294,6 +328,8 @@ function setupCompressionMocks(options?: {
   })
 
   interface RecorderHandle {
+    readonly stream: MediaStream
+    readonly initOptions?: MediaRecorderOptions
     mimeType: string
     state: RecordingState
     ondataavailable: ((ev: BlobEvent) => void) | null
@@ -310,9 +346,12 @@ function setupCompressionMocks(options?: {
   const stopMock = vi.fn()
   const pauseMock = vi.fn()
   const resumeMock = vi.fn()
+  let startThrowsRemaining = options?.throwOnStartOnce ? 1 : 0
 
   class MockMediaRecorder {
     static isTypeSupported = vi.fn((mime: string) => supported.has(mime))
+    readonly stream: MediaStream
+    readonly initOptions?: MediaRecorderOptions
     readonly mimeType: string
     state: RecordingState = 'inactive'
     ondataavailable: ((ev: BlobEvent) => void) | null = null
@@ -321,10 +360,12 @@ function setupCompressionMocks(options?: {
     pause?: () => void
     resume?: () => void
 
-    constructor(_stream: MediaStream, init?: MediaRecorderOptions) {
+    constructor(stream: MediaStream, init?: MediaRecorderOptions) {
       if (options?.throwOnRecorderCreate) {
         throw new Error('NotSupportedError')
       }
+      this.stream = stream
+      this.initOptions = init
       this.mimeType = options?.recorderMime ?? init?.mimeType ?? 'video/mp4'
       if (options?.supportPauseResume) {
         this.pause = () => {
@@ -340,6 +381,10 @@ function setupCompressionMocks(options?: {
     }
 
     start(timeslice?: number) {
+      if (startThrowsRemaining > 0) {
+        startThrowsRemaining -= 1
+        throw new Error('InvalidStateError')
+      }
       this.state = 'recording'
       startMock(timeslice)
     }
@@ -557,20 +602,41 @@ describe('compressVideoFile', () => {
     })
   })
 
-  it('optager lyd lydløst via AudioContext uden at forbinde til højttaler og lukker konteksten', async () => {
+  it('optager lyd lydløst via AudioContext uden at forbinde til højttaler, kombinerer video+lyd i stream og vælger opus', async () => {
     const audioMock = createMockAudioContext('running')
+    let mutedDuringConnect: boolean | null = null
+    const env = setupCompressionMocks({
+      chunkSizes: [2048],
+      supportedMimes: [
+        'video/mp4',
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+      ],
+    })
+    audioMock.connectSpy.mockImplementation(() => {
+      mutedDuringConnect = env.videoEl.muted
+    })
     vi.stubGlobal(
       'AudioContext',
       vi.fn(function MockAudioContext() {
         return audioMock.ctx
       }),
     )
-    const env = setupCompressionMocks({ chunkSizes: [2048] })
     const input = new File(['raw'], 'medlyd.mp4', { type: 'video/mp4' })
 
     const result = await compressVideoFile(input)
 
+    const recorder = env.getLatestRecorder()
+    expect(recorder).not.toBeNull()
+    expect(recorder!.mimeType).toBe('video/webm;codecs=vp9,opus')
+    expect(recorder!.stream.getVideoTracks()).toHaveLength(1)
+    expect(recorder!.stream.getAudioTracks()).toHaveLength(1)
     expect(result.audioIncluded).toBe(true)
+    expect(result.file.name).toBe('medlyd.webm')
+    expect(result.file.type).toBe('video/webm')
+    // Elementet starter mutet indtil WebAudio-grafen er forbundet, og unmutes derefter uden højttalerforbindelse.
+    expect(mutedDuringConnect).toBe(true)
     expect(env.videoEl.muted).toBe(false)
     expect(audioMock.connectSpy).toHaveBeenCalledTimes(1)
     expect(audioMock.connectSpy).not.toHaveBeenCalledWith(
@@ -578,6 +644,160 @@ describe('compressVideoFile', () => {
     )
     expect(audioMock.audioTrackStopSpy).toHaveBeenCalled()
     expect(audioMock.closeSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('falder tilbage til lydspor fra video.captureStream() når WebAudio ikke giver et brugbart spor', async () => {
+    const audioMock = createMockAudioContext('suspended', 'suspended')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      chunkSizes: [2048],
+      supportedMimes: ['video/mp4', 'video/webm;codecs=vp8,opus'],
+    })
+    const capturedAudioStop = vi.fn()
+    const capturedVideoStop = vi.fn()
+    const capturedAudioTrack = {
+      kind: 'audio',
+      readyState: 'live',
+      enabled: true,
+      stop: capturedAudioStop,
+    } as unknown as MediaStreamTrack
+    const capturedVideoTrack = {
+      kind: 'video',
+      readyState: 'live',
+      enabled: true,
+      stop: capturedVideoStop,
+    } as unknown as MediaStreamTrack
+    Object.defineProperty(env.videoEl, 'captureStream', {
+      configurable: true,
+      value: vi.fn(() => ({
+        getAudioTracks: () => [capturedAudioTrack],
+        getVideoTracks: () => [capturedVideoTrack],
+        getTracks: () => [capturedVideoTrack, capturedAudioTrack],
+      })),
+    })
+
+    const input = new File(['raw'], 'capturefallback.mp4', {
+      type: 'video/mp4',
+    })
+    const result = await compressVideoFile(input)
+
+    const recorder = env.getLatestRecorder()
+    expect(recorder).not.toBeNull()
+    expect(recorder!.mimeType).toBe('video/webm;codecs=vp8,opus')
+    expect(recorder!.stream.getVideoTracks()).toHaveLength(1)
+    expect(recorder!.stream.getAudioTracks()).toEqual([capturedAudioTrack])
+    // Uden WebAudio-graf forbliver video-elementet mutet, så kilden ikke spiller i højttaleren.
+    expect(env.videoEl.muted).toBe(true)
+    expect(result.audioIncluded).toBe(true)
+    expect(capturedAudioStop).toHaveBeenCalled()
+    expect(capturedVideoStop).toHaveBeenCalled()
+    expect(audioMock.closeSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('falder tilbage til lydløs video hvis browseren kun støtter ren video/mp4 uden lyd-codec', async () => {
+    const audioMock = createMockAudioContext('running')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: ['video/mp4'],
+    })
+    const input = new File(['raw'], 'kunmp4.mp4', { type: 'video/mp4' })
+
+    const result = await compressVideoFile(input)
+
+    const recorder = env.getLatestRecorder()
+    expect(recorder!.mimeType).toBe('video/mp4')
+    expect(recorder!.stream.getAudioTracks()).toHaveLength(0)
+    expect(result.audioIncluded).toBe(false)
+    expect(env.videoEl.muted).toBe(true)
+    expect(audioMock.closeSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('komprimerer videoer uden lydspor via video-only-stien når hverken WebAudio eller captureStream giver lyd', async () => {
+    const audioMock = createMockAudioContext('suspended', 'suspended')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: [
+        'video/webm;codecs=vp9,opus',
+        'video/mp4;codecs=avc1.42E01E',
+      ],
+    })
+    const silentVideoTrackStop = vi.fn()
+    Object.defineProperty(env.videoEl, 'captureStream', {
+      configurable: true,
+      value: vi.fn(() => ({
+        getAudioTracks: () => [],
+        getVideoTracks: () => [{ kind: 'video', stop: silentVideoTrackStop }],
+        getTracks: () => [{ kind: 'video', stop: silentVideoTrackStop }],
+      })),
+    })
+
+    const silentInput = new File(['raw'], 'stum.mp4', { type: 'video/mp4' })
+    const silentResult = await compressVideoFile(silentInput)
+
+    expect(silentResult.audioIncluded).toBe(false)
+    expect(silentResult.file.type).toBe('video/mp4')
+    expect(env.getLatestRecorder()!.mimeType).toBe(
+      'video/mp4;codecs=avc1.42E01E',
+    )
+    expect(env.getLatestRecorder()!.stream.getAudioTracks()).toHaveLength(0)
+    expect(silentVideoTrackStop).toHaveBeenCalled()
+  })
+
+  it('markerer audioIncluded=false hvis MediaRecorder rapporterer en video-only codec', async () => {
+    const audioMock = createMockAudioContext('running')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: ['video/webm;codecs=vp9,opus'],
+      recorderMime: 'video/webm;codecs=vp9',
+    })
+    const input = new File(['raw'], 'nedgraderet.mp4', { type: 'video/mp4' })
+
+    const result = await compressVideoFile(input)
+    expect(result.audioIncluded).toBe(false)
+  })
+
+  it('falder tilbage til lydløs optagelse hvis recorder.start() kaster med lyd', async () => {
+    const audioMock = createMockAudioContext('running')
+    vi.stubGlobal(
+      'AudioContext',
+      vi.fn(function MockAudioContext() {
+        return audioMock.ctx
+      }),
+    )
+    const env = setupCompressionMocks({
+      chunkSizes: [1024],
+      supportedMimes: ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp9'],
+      throwOnStartOnce: true,
+    })
+    const input = new File(['raw'], 'startfejl.mp4', { type: 'video/mp4' })
+
+    const result = await compressVideoFile(input)
+    expect(result.audioIncluded).toBe(false)
+    expect(env.getLatestRecorder()!.mimeType).toBe('video/webm;codecs=vp9')
+    expect(env.getLatestRecorder()!.stream.getAudioTracks()).toHaveLength(0)
   })
 
   it('lukker suspended AudioContext der ikke vågner og fortsætter uden lyd', async () => {
