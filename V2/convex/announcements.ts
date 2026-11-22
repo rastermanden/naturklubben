@@ -272,6 +272,12 @@ export const ANNOUNCEMENTS = [
     body: 'Under Billeder kan du nu lægge videoer op på op til 50 MB (mp4, webm og mov) ved siden af billederne og afspille dem direkte i albummet.',
     path: 'billeder',
   },
+  {
+    slug: 'galleri-video-95-mb',
+    title: 'Plads til større videoer',
+    body: 'Videoer på op til 95 MB lægges nu op i fuld kvalitet -- før var grænsen 50 MB. Større videoer bliver stadig gjort mindre i appen, men nu kan klip med lyd være op til ca. 50 minutter lange. Store videoer kræver en god forbindelse, så brug gerne wifi.',
+    path: 'billeder',
+  },
 ] as const
 
 /** Hvor længe en nyhed kan nå at blive sendt, efter den er udgivet. */

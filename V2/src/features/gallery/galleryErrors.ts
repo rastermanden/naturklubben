@@ -12,7 +12,7 @@ const KNOWN_CODES: Record<string, string> = {
   VIDEO_UNSUPPORTED_TYPE:
     'Videoen kan ikke lægges op. Brug mp4, webm eller mov.',
   VIDEO_EMPTY: 'Filen er tom.',
-  VIDEO_TOO_LARGE: 'Videoen er for stor. Maksimum er 50 MB.',
+  VIDEO_TOO_LARGE: 'Videoen er for stor. Maksimum er 95 MB.',
   VIDEO_THUMBNAIL_INVALID: 'Videoens miniature kunne ikke gemmes.',
   VIDEO_THUMBNAIL_TOO_LARGE: 'Videoens miniature er for stor.',
   NOT_A_MEMBER: 'Du skal være logget ind som medlem.',

@@ -1,5 +1,6 @@
 export const MAX_IMAGE_BYTES = 15 * 1024 * 1024
-export const MAX_VIDEO_BYTES = 50 * 1024 * 1024
+/** Samme loft som `MAX_VIDEO_BYTES` i `convex/gallery.ts` -- se begrundelsen dér. */
+export const MAX_VIDEO_BYTES = 95 * 1024 * 1024
 
 export const ALLOWED_VIDEO_MIME_TYPES = new Set([
   'video/mp4',
@@ -96,7 +97,7 @@ export function validateGalleryFile(
   }
 
   if (detected.kind === 'video' && file.size > MAX_VIDEO_BYTES) {
-    return `${file.name} er for stor. Videoer må højst være 50 MB.`
+    return `${file.name} er for stor. Videoer må højst være 95 MB.`
   }
 
   return null

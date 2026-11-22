@@ -42,7 +42,7 @@ function closeAudioContextSafely(ctx: AudioContext | null | undefined) {
 }
 
 /**
- * Sekventiel kø til klient-komprimering af store videoer (> 50 MB).
+ * Sekventiel kø til klient-komprimering af store videoer (> 95 MB).
  * Modulet med komprimering (`compressVideo.ts`) lazy-loades først, når der
  * faktisk lægges en for stor video i kø.
  */
@@ -196,7 +196,7 @@ export function useVideoCompression({
 
           if (result.file.size > MAX_VIDEO_BYTES) {
             onErrorRef.current(
-              `${nextJob.file.name} var stadig over 50 MB efter komprimering og blev ikke lagt op. Prøv et kortere klip.`,
+              `${nextJob.file.name} var stadig over 95 MB efter komprimering og blev ikke lagt op. Prøv et kortere klip.`,
             )
             continue
           }

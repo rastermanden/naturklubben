@@ -16,7 +16,14 @@ function makeFile(name: string, type: string, size: number): File {
 }
 
 describe('galleryMedia', () => {
-  it('accepterer mp4, webm og mov op til 50 MB og billeder op til 15 MB', () => {
+  it('har samme loft som serveren: 95 MB', () => {
+    // Skal svare til `MAX_VIDEO_BYTES` i `convex/gallery.ts`, som har sin egen
+    // test af samme værdi. Ligger de to skævt, afviser serveren en video, som
+    // klienten har lagt op uden at komprimere -- efter hele uploaden.
+    expect(MAX_VIDEO_BYTES).toBe(95 * 1024 * 1024)
+  })
+
+  it('accepterer mp4, webm og mov op til 95 MB og billeder op til 15 MB', () => {
     expect(
       validateGalleryFile(makeFile('klip.mp4', 'video/mp4', MAX_VIDEO_BYTES)),
     ).toBeNull()
@@ -55,7 +62,7 @@ describe('galleryMedia', () => {
       validateGalleryFile(
         makeFile('stor.mp4', 'video/mp4', MAX_VIDEO_BYTES + 1),
       ),
-    ).toBe('stor.mp4 er for stor. Videoer må højst være 50 MB.')
+    ).toBe('stor.mp4 er for stor. Videoer må højst være 95 MB.')
 
     expect(
       validateGalleryFile(
@@ -87,7 +94,7 @@ describe('galleryMedia', () => {
     )
   })
 
-  it('genkender kun understøttede videoer over 50 MB til klient-komprimering', () => {
+  it('genkender kun understøttede videoer over 95 MB til klient-komprimering', () => {
     expect(
       isOversizeGalleryVideo(
         makeFile('stor.mp4', 'video/mp4', MAX_VIDEO_BYTES + 1),

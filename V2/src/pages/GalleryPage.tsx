@@ -647,7 +647,7 @@ function GalleryPage() {
         </div>
 
         <p className="text-xs text-ink-subtle">
-          Billeder må højst være 15 MB. Videoer i mp4, webm eller mov over 50 MB
+          Billeder må højst være 15 MB. Videoer i mp4, webm eller mov over 95 MB
           forsøges komprimeret før upload, hvis din browser kan — hold skærmen
           tændt undervejs. Du kan også trække filer herind.
         </p>

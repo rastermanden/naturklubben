@@ -12,10 +12,11 @@ import {
 export { VideoCompressionError, type VideoCompressionErrorCode }
 
 /**
- * Mål-størrelse for komprimerede videoer: 42 MB giver plads til muxer-overhead
- * og VBR-udsving, så det færdige resultat sikkert holder sig under 50 MB.
+ * Mål-størrelse for komprimerede videoer: 80 MB giver plads til muxer-overhead
+ * og VBR-udsving, så det færdige resultat sikkert holder sig under 95 MB --
+ * samme forhold (ca. 84 %) som de 42/50 MB, der virkede før loftet blev hævet.
  */
-export const TARGET_OUTPUT_BYTES = 42 * 1024 * 1024
+export const TARGET_OUTPUT_BYTES = 80 * 1024 * 1024
 export const MAX_VIDEO_BITRATE = 2_500_000
 export const MIN_VIDEO_BITRATE = 150_000
 export const FALLBACK_VIDEO_BITRATE = 1_500_000
@@ -121,7 +122,7 @@ export function computeCompressedDimensions(
 
 /**
  * Beregner opløsning, billedhastighed og bitrate ud fra videolængde så
- * slutresultatet holder sig under 50 MB. Returnerer `null`, hvis klippet er
+ * slutresultatet holder sig under 95 MB. Returnerer `null`, hvis klippet er
  * for langt til at ramme en brugbar bitrate inden for loftet.
  */
 export function computeCompressionPlan({

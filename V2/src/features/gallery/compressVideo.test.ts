@@ -65,6 +65,8 @@ describe('computeCompressionPlan', () => {
       audioBitsPerSecond: 128_000,
     })
 
+    // Med et mål på 80 MB er der så meget plads til et kort klip, at det
+    // rammer bitrate-loftet: fuld 720p-kvalitet.
     const threeMinClip = computeCompressionPlan({
       srcWidth: 1920,
       srcHeight: 1080,
@@ -74,19 +76,59 @@ describe('computeCompressionPlan', () => {
     expect(threeMinClip).not.toBeNull()
     expect(threeMinClip?.width).toBe(1280)
     expect(threeMinClip?.height).toBe(720)
-    const expectedTotal = Math.floor((TARGET_OUTPUT_BYTES * 8) / 180)
-    expect(threeMinClip?.videoBitsPerSecond).toBe(expectedTotal - 128_000)
+    expect(threeMinClip?.videoBitsPerSecond).toBe(MAX_VIDEO_BITRATE)
 
-    const tenMinClip = computeCompressionPlan({
+    // Under loftet regnes bitraten ud af målet og varigheden.
+    const sixMinClip = computeCompressionPlan({
       srcWidth: 1920,
       srcHeight: 1080,
-      durationSeconds: 600,
+      durationSeconds: 360,
       hasAudio: true,
     })
-    expect(tenMinClip).not.toBeNull()
-    expect(tenMinClip?.fps).toBe(24)
-    expect(tenMinClip?.height).toBe(480)
-    expect(tenMinClip?.videoBitsPerSecond).toBeLessThan(700_000)
+    const expectedTotal = Math.floor((TARGET_OUTPUT_BYTES * 8) / 360)
+    expect(sixMinClip?.height).toBe(720)
+    expect(sixMinClip?.videoBitsPerSecond).toBe(expectedTotal - 128_000)
+
+    const twentyFiveMinClip = computeCompressionPlan({
+      srcWidth: 1920,
+      srcHeight: 1080,
+      durationSeconds: 1500,
+      hasAudio: true,
+    })
+    expect(twentyFiveMinClip).not.toBeNull()
+    expect(twentyFiveMinClip?.fps).toBe(24)
+    expect(twentyFiveMinClip?.height).toBe(480)
+    expect(twentyFiveMinClip?.videoBitsPerSecond).toBeLessThan(700_000)
+
+    // Med det gamle mål (42 MB) kunne et klip med lyd højst være ca. 27
+    // minutter. Nu kommer 45 minutter igennem -- i lav opløsning, men op.
+    const fortyFiveMinClip = computeCompressionPlan({
+      srcWidth: 1920,
+      srcHeight: 1080,
+      durationSeconds: 45 * 60,
+      hasAudio: true,
+    })
+    expect(fortyFiveMinClip).not.toBeNull()
+    expect(fortyFiveMinClip?.height).toBe(360)
+
+    // Loftet ligger lige over 52 minutter: under det når videoens bitrate ikke
+    // de 150 kbit/s, der skal til for at billedet kan bruges.
+    expect(
+      computeCompressionPlan({
+        srcWidth: 1920,
+        srcHeight: 1080,
+        durationSeconds: 50 * 60,
+        hasAudio: true,
+      }),
+    ).not.toBeNull()
+    expect(
+      computeCompressionPlan({
+        srcWidth: 1920,
+        srcHeight: 1080,
+        durationSeconds: 55 * 60,
+        hasAudio: true,
+      }),
+    ).toBeNull()
 
     const oneHourClip = computeCompressionPlan({
       srcWidth: 1920,
@@ -504,7 +546,7 @@ describe('compressVideoFile', () => {
     expect(env.revokeObjectURL).toHaveBeenCalledWith('blob:video-input')
   })
 
-  it('afviser med STILL_TOO_LARGE så snart strømmen overstiger 50 MB', async () => {
+  it('afviser med STILL_TOO_LARGE så snart strømmen overstiger 95 MB', async () => {
     const env = setupCompressionMocks({
       chunkSizes: [MAX_VIDEO_BYTES + 1024],
     })
@@ -518,8 +560,10 @@ describe('compressVideoFile', () => {
     expect(env.trackStop).toHaveBeenCalled()
   })
 
-  it('afviser med TOO_LONG når klippet er for langt til at komme under 50 MB', async () => {
-    const env = setupCompressionMocks({ duration: 3600 })
+  it('afviser med TOO_LONG når klippet er for langt til at komme under 95 MB', async () => {
+    // To timer. Testvideoen har ingen lyd, og uden lyd ligger loftet ved et
+    // mål på 80 MB på ca. 75 minutter -- en time ville komme igennem.
+    const env = setupCompressionMocks({ duration: 7200 })
     const input = new File(['long'], 'timeslang.mp4', { type: 'video/mp4' })
 
     await expect(compressVideoFile(input)).rejects.toMatchObject({

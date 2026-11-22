@@ -61,6 +61,14 @@ export function createUploadQueueItems({
   })
 }
 
+/**
+ * Når selve overførslen af en video fejler. Convex' upload-request timer ud
+ * efter 2 minutter, så en stor video på en langsom forbindelse kan ikke nå
+ * frem -- og så hjælper "Prøv igen" alene ikke. 95 MB kræver ca. 6,6 Mbit/s.
+ */
+export const VIDEO_UPLOAD_FAILED =
+  'Videoen kunne ikke lægges op. Store videoer kræver en god forbindelse — prøv igen, gerne på wifi.'
+
 async function postFile(
   generateUploadUrl: () => Promise<{ uploadUrl: string }>,
   blob: Blob,
@@ -178,7 +186,12 @@ export function useUploadPhotos() {
         console.error('Upload fejlede', caught)
         updateItem(item.id, {
           status: 'failed',
-          error: galleryErrorMessage(caught, 'Upload fejlede. Prøv igen.'),
+          error: galleryErrorMessage(
+            caught,
+            detected.kind === 'video'
+              ? VIDEO_UPLOAD_FAILED
+              : 'Upload fejlede. Prøv igen.',
+          ),
         })
       }
     },

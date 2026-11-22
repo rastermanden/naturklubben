@@ -29,7 +29,7 @@ vi.mock('./resizePhoto', () => ({
   resizePhotoFile: (...args: unknown[]) => resizePhotoFileMock(...args),
 }))
 
-import { useUploadPhotos } from './useUploadPhotos'
+import { VIDEO_UPLOAD_FAILED, useUploadPhotos } from './useUploadPhotos'
 
 beforeEach(() => {
   generateUploadUrlMock.mockReset()
@@ -44,6 +44,59 @@ afterEach(() => {
 })
 
 describe('useUploadPhotos: videoer', () => {
+  it('nævner forbindelsen, når selve overførslen af en video fejler', async () => {
+    // Convex' upload timer ud efter 2 minutter. En stor video på en langsom
+    // forbindelse kan derfor ikke nå frem, og "Prøv igen" alene hjælper ikke
+    // -- beskeden skal pege på forbindelsen (#371). Et netværksbrud giver
+    // samme `TypeError` fra `fetch` som en afbrudt request.
+    generateUploadUrlMock.mockResolvedValueOnce({
+      uploadUrl: 'https://upload.example.test/video',
+    })
+    captureVideoThumbnailMock.mockResolvedValue(null)
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(
+      new TypeError('Failed to fetch'),
+    )
+
+    const { result } = renderHook(() => useUploadPhotos())
+    await act(async () => {
+      result.current.enqueue({
+        files: [new File(['mp4bytes'], 'lang.mp4', { type: 'video/mp4' })],
+        caption: '',
+        eventId: null,
+      })
+    })
+
+    await vi.waitFor(() => {
+      expect(result.current.items[0]?.status).toBe('failed')
+    })
+    expect(result.current.items[0]?.error).toBe(VIDEO_UPLOAD_FAILED)
+    expect(result.current.items[0]?.error).toMatch(/forbindelse/)
+    expect(createVideoMock).not.toHaveBeenCalled()
+  })
+
+  it('beholder den almindelige besked, når et billede fejler', async () => {
+    generateUploadUrlMock.mockResolvedValueOnce({
+      uploadUrl: 'https://upload.example.test/foto',
+    })
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(
+      new TypeError('Failed to fetch'),
+    )
+
+    const { result } = renderHook(() => useUploadPhotos())
+    await act(async () => {
+      result.current.enqueue({
+        files: [new File(['jpg'], 'fugl.jpg', { type: 'image/jpeg' })],
+        caption: '',
+        eventId: null,
+      })
+    })
+
+    await vi.waitFor(() => {
+      expect(result.current.items[0]?.status).toBe('failed')
+    })
+    expect(result.current.items[0]?.error).not.toBe(VIDEO_UPLOAD_FAILED)
+  })
+
   it('fanger stillbillede, uploader video + miniature og registrerer via createVideo', async () => {
     generateUploadUrlMock
       .mockResolvedValueOnce({ uploadUrl: 'https://upload.example.test/video' })
@@ -147,7 +200,7 @@ describe('useUploadPhotos: videoer', () => {
       }),
     )
     expect(result.current.items[0]?.error).toBe(
-      'Videoen er for stor. Maksimum er 50 MB.',
+      'Videoen er for stor. Maksimum er 95 MB.',
     )
   })
 

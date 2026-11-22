@@ -312,7 +312,7 @@ describe('video upload-validering på serveren', () => {
     expect(eventAlbum?.coverUrl).toBeNull()
   })
 
-  it('afviser forkerte typer, tomme filer, video over 50 MB og billeder over 15 MB med sletning af afviste filer', async () => {
+  it('afviser forkerte typer, tomme filer, video over 95 MB og billeder over 15 MB med sletning af afviste filer', async () => {
     const t = setup()
     const member = await seedMember(t, {
       email: 'val@example.com',
@@ -350,7 +350,13 @@ describe('video upload-validering på serveren', () => {
     ).toEqual({ ok: false, error: 'VIDEO_EMPTY' })
     expect(await t.run((ctx) => ctx.storage.getUrl(emptyId))).toBeNull()
 
-    // Video over 50 MB afvises og slettes; præcis 50 MB accepteres.
+    // Selve værdien låses fast: grænsen nedenfor testes via konstanten, så
+    // uden denne linje ville testen også passere med et forkert tal. 95 MB
+    // ligger lige under Convex' loft på 100 MiB for et svar fra en HTTP-action,
+    // som videoerne afspilles igennem (#371).
+    expect(MAX_VIDEO_BYTES).toBe(95 * 1024 * 1024)
+
+    // Video over 95 MB afvises og slettes; præcis 95 MB accepteres.
     const tooLargeVideo = await storeFile(
       t,
       new Uint8Array(MAX_VIDEO_BYTES + 1),
@@ -363,16 +369,16 @@ describe('video upload-validering på serveren', () => {
     ).toEqual({ ok: false, error: 'VIDEO_TOO_LARGE' })
     expect(await t.run((ctx) => ctx.storage.getUrl(tooLargeVideo))).toBeNull()
 
-    const exact50MbVideo = await storeFile(
+    const exact95MbVideo = await storeFile(
       t,
       new Uint8Array(MAX_VIDEO_BYTES),
       'video/mp4',
     )
-    const ok50Mb = await asMember.mutation(api.gallery.createVideo, {
-      storageId: exact50MbVideo,
-      caption: 'Præcis 50 MB',
+    const ok95Mb = await asMember.mutation(api.gallery.createVideo, {
+      storageId: exact95MbVideo,
+      caption: 'Præcis 95 MB',
     })
-    expect(ok50Mb.ok).toBe(true)
+    expect(ok95Mb.ok).toBe(true)
 
     // Billeder beholder 15 MB-grænsen og createPhoto afviser videoer.
     const tooLargeImage = await storeFile(

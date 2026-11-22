@@ -58,8 +58,19 @@ const WITHOUT_EVENT_ALBUM = 'without-event'
 /** Matcher `MAX_FILE_SIZE` i den gamle uploadkø og bucket-grænsen på 15 MB. */
 export const MAX_FILE_SIZE = 15 * 1024 * 1024
 
-/** Loft for videoer i galleriet: 50 MB (under 2-min upload-timeout og 100 MiB svarloft). */
-export const MAX_VIDEO_BYTES = 50 * 1024 * 1024
+/**
+ * Loft for videoer i galleriet: 95 MB.
+ *
+ * Det er lige under Convex' loft på 100 MiB for et svar fra en HTTP-action, og
+ * videoerne afspilles gennem `serveVideo`, som sender hele filen i ét svar,
+ * når browseren beder om `bytes=0-` (Chrome gør). Over 100 MiB kan en video
+ * altså ikke afspilles, som koden ser ud nu.
+ *
+ * Den anden grænse er uploadens timeout på 2 minutter: 95 MB kræver mindst ca.
+ * 6,6 Mbit/s. Skal loftet over 100 MiB, skal `serveVideo` dele et åbent
+ * interval op i bidder, og uploaden skal uden om 2-minuttersgrænsen (#371).
+ */
+export const MAX_VIDEO_BYTES = 95 * 1024 * 1024
 
 export const ALLOWED_VIDEO_MIME_TYPES = new Set([
   'video/mp4',

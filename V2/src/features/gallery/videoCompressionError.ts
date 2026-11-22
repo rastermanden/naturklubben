@@ -36,7 +36,7 @@ export function createCompressionError(
     case 'UNSUPPORTED_BROWSER':
       return new VideoCompressionError(
         code,
-        `${fileName} er over 50 MB, og din browser kan ikke komprimere videoer. Vælg en video på højst 50 MB.`,
+        `${fileName} er over 95 MB, og din browser kan ikke komprimere videoer. Vælg en video på højst 95 MB.`,
       )
     case 'CANCELLED':
       return new VideoCompressionError(
@@ -51,12 +51,12 @@ export function createCompressionError(
     case 'TOO_LONG':
       return new VideoCompressionError(
         code,
-        `${fileName} er for lang til at komme under 50 MB og blev ikke lagt op. Prøv et kortere klip.`,
+        `${fileName} er for lang til at komme under 95 MB og blev ikke lagt op. Prøv et kortere klip.`,
       )
     case 'STILL_TOO_LARGE':
       return new VideoCompressionError(
         code,
-        `${fileName} var stadig over 50 MB efter komprimering og blev ikke lagt op. Prøv et kortere klip.`,
+        `${fileName} var stadig over 95 MB efter komprimering og blev ikke lagt op. Prøv et kortere klip.`,
       )
     case 'ENCODE_FAILED':
       return new VideoCompressionError(

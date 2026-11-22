@@ -180,7 +180,7 @@ afterEach(() => {
 })
 
 describe('GalleryPage: video i galleriet (#365)', () => {
-  it('accepterer mp4/webm/mov op til 50 MB, afviser forkerte typer og for store filer på dansk uden upload', () => {
+  it('accepterer mp4/webm/mov op til 95 MB, afviser forkerte typer og for store filer på dansk uden upload', () => {
     renderGallery()
 
     const input = screen.getByLabelText(
@@ -211,7 +211,7 @@ describe('GalleryPage: video i galleriet (#365)', () => {
     expect(enqueueSpy).not.toHaveBeenCalled()
     expect(loadVideoCompressorMock).not.toHaveBeenCalled()
 
-    // Gyldig video op til og med 50 MB sendes uændret i kø uden komprimering.
+    // Gyldig video op til og med 95 MB sendes uændret i kø uden komprimering.
     const validVideo = new File(['mp4'], 'ugle.mp4', { type: 'video/mp4' })
     Object.defineProperty(validVideo, 'size', { value: MAX_VIDEO_BYTES })
     fireEvent.change(screen.getByLabelText('Billedtekst (valgfri)'), {
@@ -355,8 +355,8 @@ describe('GalleryPage: optag video med kameraet (#367)', () => {
     fireEvent.click(fileButton)
     expect(fileClickSpy).toHaveBeenCalledTimes(1)
 
-    // 50 MB-grænsen og skærm-vejledningen vises tæt ved knapperne, før man optager.
-    expect(screen.getByText(/Videoer.*50 MB/i)).toBeTruthy()
+    // 95 MB-grænsen og skærm-vejledningen vises tæt ved knapperne, før man optager.
+    expect(screen.getByText(/Videoer.*95 MB/i)).toBeTruthy()
     expect(screen.getByText(/hvis din browser kan/i)).toBeTruthy()
     expect(screen.getByText(/hold skærmen tændt/i)).toBeTruthy()
   })
@@ -389,7 +389,7 @@ describe('GalleryPage: optag video med kameraet (#367)', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('starter komprimering af en video over 50 MB fra video-inputtet og afviser stadig forkert videotype uden upload', async () => {
+  it('starter komprimering af en video over 95 MB fra video-inputtet og afviser stadig forkert videotype uden upload', async () => {
     let resolveCompress!: (res: { file: File; audioIncluded: boolean }) => void
     compressVideoFileMock.mockImplementationOnce(
       () =>
@@ -404,7 +404,7 @@ describe('GalleryPage: optag video med kameraet (#367)', () => {
       'Optag en video med kameraet',
     ) as HTMLInputElement
 
-    // Video > 50 MB fra kameraet starter komprimering med dansk status og Annullér.
+    // Video > 95 MB fra kameraet starter komprimering med dansk status og Annullér.
     const tooLarge = new File(['big'], 'lang_optagelse.mp4', {
       type: 'video/mp4',
     })
@@ -457,7 +457,7 @@ describe('GalleryPage: optag video med kameraet (#367)', () => {
 })
 
 describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
-  it('lægger video på højst 50 MB op uændret uden at hente komprimeringsmodulet', () => {
+  it('lægger video på højst 95 MB op uændret uden at hente komprimeringsmodulet', () => {
     renderGallery()
 
     const input = screen.getByLabelText(
@@ -477,7 +477,7 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     })
   })
 
-  it('viser dansk fremskridt og Annullér-knap for video over 50 MB og uploader resultatet med billedtekst og begivenhed', async () => {
+  it('viser dansk fremskridt og Annullér-knap for video over 95 MB og uploader resultatet med billedtekst og begivenhed', async () => {
     let resolveCompress!: (res: { file: File; audioIncluded: boolean }) => void
     let capturedOnProgress:
       | ((p: {
@@ -577,7 +577,7 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
 
     renderGallery()
     const largeMp4 = new File(['raw'], 'skovsti.mp4', { type: 'video/mp4' })
-    Object.defineProperty(largeMp4, 'size', { value: 90 * 1024 * 1024 })
+    Object.defineProperty(largeMp4, 'size', { value: 130 * 1024 * 1024 })
     fireEvent.change(
       screen.getByLabelText('Vælg billeder og videoer fra enheden'),
       { target: { files: [largeMp4] } },
@@ -597,7 +597,7 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     expect(enqueueSpy).not.toHaveBeenCalled()
   })
 
-  it('viser synlig dansk fejl og gemmer ikke hvis komprimering fejler eller resultatet stadig er over 50 MB', async () => {
+  it('viser synlig dansk fejl og gemmer ikke hvis komprimering fejler eller resultatet stadig er over 95 MB', async () => {
     compressVideoFileMock.mockRejectedValueOnce(
       new VideoCompressionError(
         'DECODE_FAILED',
@@ -621,7 +621,7 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     expect(scrollIntoViewMock).toHaveBeenCalled()
     expect(enqueueSpy).not.toHaveBeenCalled()
 
-    // Resultat stadig over 50 MB
+    // Resultat stadig over 95 MB
     const stillBig = new File(['raw'], 'stadig_stor.mp4', { type: 'video/mp4' })
     Object.defineProperty(stillBig, 'size', { value: MAX_VIDEO_BYTES + 10 })
     compressVideoFileMock.mockResolvedValueOnce({
@@ -637,7 +637,7 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain(
-        'stadig_stor.mp4 var stadig over 50 MB efter komprimering og blev ikke lagt op.',
+        'stadig_stor.mp4 var stadig over 95 MB efter komprimering og blev ikke lagt op.',
       )
     })
     expect(enqueueSpy).not.toHaveBeenCalled()
@@ -647,13 +647,13 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     compressVideoFileMock.mockRejectedValueOnce(
       new VideoCompressionError(
         'UNSUPPORTED_BROWSER',
-        'mobil.mp4 er over 50 MB, og din browser kan ikke komprimere videoer. Vælg en video på højst 50 MB.',
+        'mobil.mp4 er over 95 MB, og din browser kan ikke komprimere videoer. Vælg en video på højst 95 MB.',
       ),
     )
 
     renderGallery()
     const largeMp4 = new File(['raw'], 'mobil.mp4', { type: 'video/mp4' })
-    Object.defineProperty(largeMp4, 'size', { value: 80 * 1024 * 1024 })
+    Object.defineProperty(largeMp4, 'size', { value: 120 * 1024 * 1024 })
 
     fireEvent.change(screen.getByLabelText('Optag en video med kameraet'), {
       target: { files: [largeMp4] },
@@ -661,7 +661,7 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain(
-      'mobil.mp4 er over 50 MB, og din browser kan ikke komprimere videoer. Vælg en video på højst 50 MB.',
+      'mobil.mp4 er over 95 MB, og din browser kan ikke komprimere videoer. Vælg en video på højst 95 MB.',
     )
     expect(scrollIntoViewMock).toHaveBeenCalled()
     expect(enqueueSpy).not.toHaveBeenCalled()
@@ -697,7 +697,7 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     const largeMov = new File(['raw'], 'udelyd.mov', {
       type: 'video/quicktime',
     })
-    Object.defineProperty(largeMov, 'size', { value: 75 * 1024 * 1024 })
+    Object.defineProperty(largeMov, 'size', { value: 115 * 1024 * 1024 })
     fireEvent.change(screen.getByLabelText('Optag en video med kameraet'), {
       target: { files: [largeMov] },
     })
@@ -735,7 +735,7 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     ) as HTMLInputElement
 
     const bigMp4 = new File(['raw'], 'skov.mp4', { type: 'video/mp4' })
-    Object.defineProperty(bigMp4, 'size', { value: 90 * 1024 * 1024 })
+    Object.defineProperty(bigMp4, 'size', { value: 130 * 1024 * 1024 })
     fireEvent.change(input, { target: { files: [bigMp4] } })
 
     await waitFor(() => {

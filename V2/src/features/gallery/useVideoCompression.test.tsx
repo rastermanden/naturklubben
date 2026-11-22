@@ -157,7 +157,7 @@ describe('useVideoCompression', () => {
     expect(onCompressed).not.toHaveBeenCalled()
   })
 
-  it('beholder kendt VideoCompressionError-besked på dansk og afviser resultat over 50 MB', async () => {
+  it('beholder kendt VideoCompressionError-besked på dansk og afviser resultat over 95 MB', async () => {
     const onCompressed = vi.fn()
     const onError = vi.fn()
 
@@ -205,7 +205,7 @@ describe('useVideoCompression', () => {
       expect(onError).toHaveBeenCalledTimes(2)
     })
     expect(onError).toHaveBeenLastCalledWith(
-      'stadig-stor.mp4 var stadig over 50 MB efter komprimering og blev ikke lagt op. Prøv et kortere klip.',
+      'stadig-stor.mp4 var stadig over 95 MB efter komprimering og blev ikke lagt op. Prøv et kortere klip.',
     )
     expect(onCompressed).not.toHaveBeenCalled()
   })
