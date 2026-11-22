@@ -79,4 +79,17 @@ export const memberTables = {
     newIsAdmin: v.boolean(),
     changedAt: v.number(),
   }).index('by_changed_at', ['changedAt']),
+
+  /**
+   * Rate limiting af `POST /preview/verify-member`.
+   * Kun hashede signaler (aldrig rå IP eller e-mail); ryddes hver time af cron.
+   */
+  previewVerifyAttempts: defineTable({
+    ipHash: v.string(),
+    emailHash: v.string(),
+    attemptedAt: v.number(),
+  })
+    .index('by_ip_and_time', ['ipHash', 'attemptedAt'])
+    .index('by_email_and_time', ['emailHash', 'attemptedAt'])
+    .index('by_attempted_at', ['attemptedAt']),
 }

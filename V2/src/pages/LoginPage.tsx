@@ -5,6 +5,7 @@ import { useAction, useConvexAuth } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import { appUrl } from '../features/auth/authRedirect'
 import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
+import { isPreviewDeployment } from '../features/pwa/previewInstall'
 
 /**
  * Login med e-mail og adgangskode via Convex Auth.
@@ -51,21 +52,34 @@ export default function LoginPage() {
     const submittedPassword = String(data.get('password') ?? '')
 
     try {
-      const result = await signIn('password', {
-        email: submittedEmail,
-        password: submittedPassword,
-        flow: 'signIn',
-        redirectTo: appUrl('velkommen'),
-      })
+      let signedInViaPreviewMember = false
+      let result: Awaited<ReturnType<typeof signIn>>
+      try {
+        result = await signIn('password', {
+          email: submittedEmail,
+          password: submittedPassword,
+          flow: 'signIn',
+          redirectTo: appUrl('velkommen'),
+        })
+      } catch (passwordError) {
+        if (!isPreviewDeployment()) throw passwordError
+        signedInViaPreviewMember = true
+        result = await signIn('preview-member', {
+          email: submittedEmail,
+          password: submittedPassword,
+        })
+      }
       if (!result.signingIn) {
         setError('Bekræft venligst din e-mail, før du logger ind.')
         setErrorField('email')
         emailRef.current?.focus()
         return
       }
-      // Importerede bcrypt-hashes skrives om, når login er lykkedes.
-      // Fejler det, er man stadig logget ind.
-      await rehashIfImported({ password: submittedPassword }).catch(() => {})
+      if (!signedInViaPreviewMember) {
+        // Importerede bcrypt-hashes skrives om, når login er lykkedes.
+        // Fejler det, er man stadig logget ind.
+        await rehashIfImported({ password: submittedPassword }).catch(() => {})
+      }
     } catch (signInError) {
       // Convex Auth's tekst er engelsk og ikke en kontrakt, så feltet vælges
       // ud fra, hvad fejlen handler om -- ikke ud fra en fast streng.

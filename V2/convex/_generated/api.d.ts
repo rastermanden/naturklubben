@@ -38,6 +38,7 @@ import type * as passwordCrypto from "../passwordCrypto.js";
 import type * as passwords from "../passwords.js";
 import type * as planTypes from "../planTypes.js";
 import type * as probation from "../probation.js";
+import type * as previewMemberAuth from "../previewMemberAuth.js";
 import type * as previewSeed from "../previewSeed.js";
 import type * as push from "../push.js";
 import type * as pushSend from "../pushSend.js";
@@ -90,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   passwords: typeof passwords;
   planTypes: typeof planTypes;
   probation: typeof probation;
+  previewMemberAuth: typeof previewMemberAuth;
   previewSeed: typeof previewSeed;
   push: typeof push;
   pushSend: typeof pushSend;
