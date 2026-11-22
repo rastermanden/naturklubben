@@ -7,61 +7,9 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Unikke migration-versioner
-        # supabase db push sporer anvendte migrations på versionsnummeret alene.
-        # Deler to filer nummer, bliver den, der merges sidst, sprunget over uden
-        # fejl -- og tabellen mangler så i produktion (skete for
-        # probation_applications). Fang det i PR'en i stedet.
-        run: |
-          dupes=$(ls supabase/migrations/*.sql | xargs -n1 basename | sed 's/_.*//' | sort | uniq -d)
-          if [ -n "$dupes" ]; then
-            echo "::error::Flere migrations deler versionsnummer: $dupes"
-            exit 1
-          fi
-
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: 2.9.5
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-
-      # --config peger på supabase/deno.json, som slår node_modules fra for
-      # Deno. Uden den ser Deno repoets package.json, bruger node_modules som
-      # kilde til npm-pakker og kræver, at den installerede @supabase/supabase-js
-      # er præcis den version, Edge Functions pinner -- så hver gang Dependabot
-      # hæver package.json, blev dette job rødt. Edge Functions kører aldrig med
-      # node_modules, så her hentes pakken fra registry'et, som ved deploy.
-      - name: Test Edge Function-hjælpere
-        run: deno test --config supabase/deno.json supabase/functions/_shared/*.test.ts
-
-      - name: Typecheck Edge Functions
-        run: deno check --config supabase/deno.json supabase/functions/*/index.ts
-
-      - name: Test
-        run: npm test
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npx tsc -b
-
-      - name: Format check
-        run: npm run format:check
-
-  # V2 er appen, der deployes (deploy.yml udgiver V2/dist). Dens test, lint og
-  # typecheck skal derfor køre her, så en PR ikke kan slippe igennem med en V2,
-  # der ikke bygger eller fejler sine tests. V1-jobbet ovenfor rører kun roden.
+  # V2 er produktionsappen (deploy.yml udgiver V2/dist). Test, lint, typecheck
+  # og formatering kører her, så en PR ikke kan slippe igennem med en V2,
+  # der ikke bygger eller fejler sine tjek.
   v2:
     runs-on: ubuntu-latest
     steps:
@@ -79,8 +27,6 @@ jobs:
         working-directory: V2
         run: npm ci
 
-      # V2 har intet eget format-script; dets formatering tjekkes allerede af
-      # `format:check` i lint-and-typecheck (prettier --check . dækker V2/).
       - name: Test
         working-directory: V2
         run: npm test
@@ -93,59 +39,6 @@ jobs:
         working-directory: V2
         run: npx tsc -b
 
-  database:
-    runs-on: ubuntu-latest
-    services:
-      # Supabase's egen Postgres-build, så de extensions migrationerne bruger
-      # (pgcrypto, citext, pg_net, pg_cron, pgTAP) findes med samme versioner
-      # som i produktion. Taggen bør følge projektets Postgres-version.
-      #
-      # Bemærk: dette bryder ikke no-Docker-princippet i AGENTS.md. Princippet
-      # handler om, hvad en *bidragyder* skal have installeret; en service
-      # container kører i GitHub's runner og kræver intet af nogen.
-      postgres:
-        image: supabase/postgres:17.6.1.165
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 30
-    env:
-      PGHOST: localhost
-      PGPORT: 5432
-      # supabase_admin, ikke postgres: imaget ejer auth- og storage-skemaerne med
-      # den rolle, og postgres-rollen har hverken lov til at oprette
-      # storage.objects eller at lægge allowlist-triggeren på auth.users. I et
-      # rigtigt Supabase-projekt findes de objekter allerede, når migrationerne
-      # kører; her skal de først op. Imaget sætter samme adgangskode på
-      # supabase_admin som på postgres.
-      PGUSER: supabase_admin
-      PGPASSWORD: postgres
-      PGDATABASE: postgres
-      # supabase_admin har som standard auth i sin search_path. Kør med samme
-      # search_path som produktionens postgres-rolle, så et ukvalificeret navn
-      # aldrig kan opføre sig anderledes i CI end i produktion.
-      PGOPTIONS: -c search_path=public,extensions
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Ingen migrations deler versionsnummer
-        # Ekstra vagt lige her, før kæden afspilles: to migrations med samme
-        # 14-cifrede versionsprefix får kun den ene anvendt af Supabase
-        # (skete for 20260913160000_event_waitlist.sql vs.
-        # 20260913160000_tournament_record_guards.sql). Fanger det, selvom
-        # lint-and-typecheck-jobbets tilsvarende tjek af en eller anden grund
-        # skulle blive omgået eller ændret.
-        run: |
-          dupes=$(ls supabase/migrations/*.sql | xargs -n1 basename | cut -c1-14 | sort | uniq -d)
-          if [ -n "$dupes" ]; then
-            echo "::error::Flere migrations deler 14-cifret versionsprefix: $dupes"
-            exit 1
-          fi
-
-      - name: Afspil migrationer og kør pgTAP-tests
-        run: supabase/tests/run.sh
+      - name: Format check
+        working-directory: V2
+        run: npx prettier --check .

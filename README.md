@@ -2,96 +2,98 @@
 
 [![Deploy to GitHub Pages](https://github.com/rastermanden/naturklubben/actions/workflows/deploy.yml/badge.svg)](https://github.com/rastermanden/naturklubben/actions/workflows/deploy.yml)
 
-Medlemsapp for Naturklubben — hero-forside, aktivitetsside, offentlig kalender med de
-begivenheder, arrangøren har åbnet for ikke-medlemmer (#224), og bag login: kalender,
-billedgalleri og gruppechat. Se GitHub-issue #1 for den fulde plan og `AGENTS.md` for
-projektets udviklingskonventioner. `CLAUDE.md` importerer samme fil.
+Medlemsapp for Naturklubben på `https://naturklubben.dk` — hero-forside,
+aktivitetsside, offentlig kalender for ikke-medlemmer (#224), og bag login:
+kalender, billedgalleri, gruppechat, naturlog, spil og medlemsprofil. Se `AGENTS.md`
+for projektets udviklingskonventioner (`CLAUDE.md` importerer samme fil) og
+[`V2/README.md`](V2/README.md) for detaljer om produktionsappen.
 
 ## Teknologi
 
-Vite + React + TypeScript + Tailwind CSS, React Router, TanStack Query,
-`@supabase/supabase-js`, `vite-plugin-pwa`. Backend er Supabase (Postgres, Auth, Storage,
-Realtime, Edge Functions).
+Produktionen på `https://naturklubben.dk` kører **V2** i `V2/`: Vite + React +
+TypeScript + Tailwind CSS, React Router, Convex (`quaint-parakeet-652`),
+`@convex-dev/auth` og `vite-plugin-pwa`. Frontend udgives statisk til GitHub
+Pages (`V2/dist` via `.github/workflows/deploy.yml`).
 
-## Kom i gang lokalt
+> **Overgang fra V1/Supabase (#378 / #315):** V1-byggepipelinen
+> (`pr-preview.yml`, `deploy-functions.yml`, `sync-auth-config.yml` samt
+> `database`- og V1/Deno-jobbene i `ci.yml`) er fjernet. Fjernelsen af
+> `deploy-functions.yml` stopper kun _nye_ deploys; de 14 aktive Edge
+> Functions på Supabase-projektet bliver ved med at køre, indtil projektet
+> pauses eller slettes manuelt. Selve V1-koden (`src/`, `supabase/`) og
+> `migrate-v1.yml` bevares i repoet indtil #379. Ingen hemmeligheder er
+> slettet.
+
+## Kom i gang lokalt (V2)
 
 ```bash
+cd V2
 npm install
-cp .env.example .env.local   # udfyld med værdier fra Supabase, se AGENTS.md/issue #2
+npx convex dev   # logger ind, sætter VITE_CONVEX_URL i V2/.env.local og genererer convex/_generated/
 npm run dev
 ```
 
-Appen kører som udgangspunkt på `http://localhost:5173/` -- samme sti som produktionen på
-`https://naturklubben.dk/`.
+Se [`V2/README.md`](V2/README.md) og [`V2/.env.example`](V2/.env.example) for
+miljøvariabler og opsætning.
 
-## Andre kommandoer
+## Andre kommandoer (i `V2/`)
 
 ```bash
-npm run build         # typecheck + produktionsbuild til dist/
-npm run preview        # server dist/ lokalt
-npm test               # deterministiske komponent- og logiktests
-npm run lint            # oxlint
-npm run format          # prettier --write
-npm run format:check    # prettier --check
+npm run build             # typecheck + produktionsbuild til V2/dist/
+npm run preview           # server V2/dist/ lokalt
+npm test                  # Vitest + convex-test
+npm run lint              # oxlint
+npx tsc -b                # TypeScript-check (app, convex, node, worker)
+npx prettier --check .    # Prettier-tjek for V2/
 ```
 
 ## Tests
 
-`npm test` kører Vitest én gang i jsdom uden browser, netværk, lokal Supabase eller
+`cd V2 && npm test` kører Vitest og `convex-test` uden netværk, browser eller
 produktionsdata. Testfiler ligger ved den kode, de dækker, som `*.test.ts` eller
-`*.test.tsx`.
-
-Foretræk ren logik som kalenderens iCal-generator. Når en komponent afhænger af en ekstern
-grænse, gives kontrollerede testdata gennem den nærmeste provider eller et mock af selve
-grænsen; `ProtectedRoute.test.tsx` viser provider-mønsteret for auth. Kald aldrig den
-rigtige Supabase-klient fra en test. CI kører samme `npm test` på pull requests og `main`.
+`*.test.tsx`. CI (`.github/workflows/ci.yml`) kører `npm test`, `npm run lint`,
+`npx tsc -b` og `npx prettier --check .` i `V2/` på pull requests og `main`.
 
 ## App-version
 
-Footeren viser, hvilket build der kører, fx `Version 37a86ae · 29.08.2026`. Strengen
-kommer fra `git describe --tags --always` og commit-datoen, og inlines ved build af
-`vite.config.ts` (se `src/lib/appVersion.ts`).
+Footeren viser, hvilket build der kører, fx `Version 37a86ae · 29.08.2026`.
+Strengen kommer fra `git describe --tags --always` og commit-datoen og inlines
+ved build af `V2/vite.config.ts` (se `V2/src/lib/appVersion.ts`).
 
-Der er bevidst **ingen** manuelt vedligeholdt version i `package.json` og ingen krav om
-tags: hver merge til `main` deployer, så commit'en _er_ udgivelsen. Vil man alligevel
-markere en milepæl, koster det ikke andet end at sætte et tag på `main` -- så viser
-footeren tagget (`v1.2.0`) i stedet for sha'en, og `v1.2.0-3-gabc1234` for de commits, der
-kommer efter. Derfor checker `deploy.yml` og `pr-preview.yml` ud med `fetch-depth: 0`.
+Der er bevidst **ingen** manuelt vedligeholdt version i `package.json` og ingen
+krav om tags: hver merge til `main` deployer, så commit'en _er_ udgivelsen.
+Derfor checker `deploy.yml` og `pr-preview-v2.yml` ud med `fetch-depth: 0`.
 
-Preview-builds får deres PR-nummer med i strengen (`Version PR #123 · abc1234 · ...`), så
-man kan se på selve appen, at man ikke er på produktionssitet.
+Preview-builds får deres PR-nummer med i strengen (`Version PR #123 · abc1234 · ...`),
+så man kan se på selve appen, at man ikke er på produktionssitet.
 
 ## Links fra mails og dybe links
 
-Bekræftelses- og nulstillingsmails fra Supabase lander på `/velkommen` og
-`/ny-adgangskode` i appen. GitHub Pages har ingen SPA-fallback, så buildet udgiver en
-`404.html`, der sender vilkårlige stier videre til `index.html` med sti, query og
-fragment i behold. Push-notifikationer om kalenderen åbner på samme måde
-`/kalender/<id>` direkte. Hvilke URL'er Supabase overhovedet må sende folk hen til, styres
-af `.github/workflows/sync-auth-config.yml` -- se `supabase/README.md`.
+Bekræftelses- og nulstillingsmails fra Convex Auth (via Resend) lander på
+`/velkommen` og `/ny-adgangskode` i appen. GitHub Pages har ingen SPA-fallback,
+så buildet udgiver en `404.html`, der sender vilkårlige stier videre til
+`index.html` med sti, query og fragment i behold. Push-notifikationer om
+kalenderen åbner på samme måde `/kalender/<id>` direkte.
 
 ## Dokumentation
 
-- [`docs/kodegennemgang-2026-08-23.md`](docs/kodegennemgang-2026-08-23.md) — gennemgang af
-  hele appen: arkitektur, styrker, fund og roadmap. Fundene er oprettet som issues med
-  labels `blocker`, `risiko`, `friktion` og `finish`.
+- [`V2/README.md`](V2/README.md) — produktionsappen (Convex, auth, mails,
+  previews og verifikation).
 - `VISION.md` — hvorfor appen findes, og de principper hver ændring tjekkes imod.
 - `FLOW.md` — arbejdsgangen for hver ændring, fra observation til udgivelse.
-- `.agents/skills/` — skills til coding agents, delt af alle modeller (`.claude/skills` er
-  et symlink hertil). Se `AGENTS.md`.
+- `.agents/skills/` — skills til coding agents, delt af alle modeller
+  (`.claude/skills` er et symlink hertil). Se `AGENTS.md`.
 - `AGENTS.md` — projektets udviklingskonventioner. `CLAUDE.md` importerer samme fil.
-- `supabase/README.md` — backend-opsætning, nøgler og auth-URL'er.
+- `supabase/README.md` — historisk dokumentation for den tidligere V1-backend
+  (bevares indtil #379).
 
 ## Mappestruktur
 
 ```
-src/
-  pages/       # side-komponenter (HeroPage, ActivitiesPage, CalendarPage, ...)
-  components/  # delte UI-komponenter (tilføjes efterhånden, se issue #8)
-  features/    # feature-specifik logik (auth, calendar, gallery, chat)
-  lib/         # supabaseClient.ts, queryClient.ts
-  hooks/       # delte React hooks
-supabase/
-  migrations/  # SQL-migrations — deployes automatisk ved merge til main, se AGENTS.md
-  functions/   # Edge Functions — deployes via GitHub Actions, se AGENTS.md
+V2/
+  convex/      # produktions-backend på Convex (schema, tabeller, auth, HTTP-ruter)
+  src/         # produktions-frontend (pages, features, components, lib)
+  scripts/     # preview-smoke og V1-migration (migrateFromSupabase.mjs)
+src/           # gammel V1-frontend (bevares indtil #379)
+supabase/      # gammel V1-backend (bevares indtil #379)
 ```

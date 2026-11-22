@@ -18,21 +18,23 @@ færdig.
 
 ## 2. Blast radius, før der bygges
 
-Skriv ned, hvad ændringen rører: filer, tabeller, politikker, Edge Functions, workflows og
-medlemmernes data — og hvad der skal forblive urørt. En ændring i en RLS-politik rammer
-mere end den skærm, man kigger på. `/blast-radius` i skills-mappen går listen igennem.
+Skriv ned, hvad ændringen rører: filer, tabeller, autorisationsregler, Convex-funktioner,
+workflows og medlemmernes data — og hvad der skal forblive urørt. `/blast-radius` i
+skills-mappen går listen igennem.
 
 ## 3. Byg
 
 - Egen branch, aldrig direkte på `main`.
 - Ny adfærd får en test ved den kode, den dækker. Rører ændringen autorisationsmodellen,
-  får den en test, der kalder ind som den rigtige rolle og måler, hvad der faktisk sker. I
-  V2 er det en `convex-test` ved siden af funktionen, ikke en pgTAP-test: `convex-test`
-  erstatter `supabase/tests/rls/`, se `V2/README.md`.
-- Ændres V1's database, er det stadig migrationer: nye filer i `supabase/migrations/`. Ret
-  aldrig i en fil, der er kørt i produktion, og skriv selv grants med (se `AGENTS.md`). En
-  migration, der fejler, rettes med en ny migration. V1 er den app, der ligger i roden og
-  stadig deployes fra `main`; V2 ligger i `V2/` og har sin egen kæde.
+  får den en `convex-test`, der kalder ind som den rigtige rolle og måler, hvad der faktisk
+  sker (`V2/convex/authz.ts`, se `V2/README.md`).
+- Produktionen på `https://naturklubben.dk` kører **V2** i `V2/` mod Convex
+  (`quaint-parakeet-652`). V1-koden (`src/`, `supabase/`) og `migrate-v1.yml` bliver i
+  repoet indtil oprydningen i #379, men V1-byggepipelinen (`pr-preview.yml`,
+  `deploy-functions.yml`, `sync-auth-config.yml` samt `database`- og V1/Deno-jobbene i
+  `ci.yml`) er fjernet (#378). Bemærk at fjernelse af `deploy-functions.yml` kun stopper
+  _nye_ deploys; de 14 aktive Edge Functions i Supabase bliver ved med at køre, indtil
+  Martin pauser eller sletter Supabase-projektet.
 - Nye funktioner, medlemmerne kan mærke, tager deres nyhed med i samme ændring.
 - Brugertekst læses som medlem, ikke som udvikler. Kør `/unslop` på ny tekst.
 - Ændres frontend, så se den i et preview, ikke kun i test. Ændres design, så kom med et
@@ -41,21 +43,18 @@ mere end den skærm, man kigger på. `/blast-radius` i skills-mappen går listen
 ## 4. Verificér lokalt, før PR'en åbnes
 
 ```bash
-npm test && npm run lint && npm run format:check && npx tsc -b   # V1, i roden
-cd V2 && npm test && npm run lint && npx tsc -b                   # V2
+cd V2 && npm test && npm run lint && npx tsc -b && npx prettier --check .
 ```
 
 Er branch'en bagud for `main`, merges `main` ind først — en forældet branch giver
-misvisende resultater. CI kører det samme på PR'en. Rører PR'en `supabase/`, afspiller
-`database`-jobbet desuden hele migrationskæden på en tom Postgres sammen med V1's pgTAP-suite
-— den del holder op med at være relevant i samme takt som V1 udfases.
+misvisende resultater. CI (`.github/workflows/ci.yml`) kører de samme V2-tjek på PR'en.
 
 ## 5. Pull request
 
 Beskriv hvad der er ændret, hvilke issues der lukkes (`Fixes #N`), hvad der er kørt af
-tjek, og hvad et menneske stadig skal se efter. Vent på preview-linket og brug det:
-`naturklubben.dk/pr-preview/pr-<nr>/`. Rører PR'en `supabase/`, bygges previewet mod PR'ens
-egen Preview Branch, så data og skema passer sammen.
+tjek, og hvad et menneske stadig skal se efter. Vent på preview-linket fra
+`pr-preview-v2.yml` og brug det: `naturklubben.dk/pr-preview/pr-<nr>/`, som kører mod sit
+eget Convex preview-deployment.
 
 ## 6. Uafhængigt review
 
@@ -66,10 +65,10 @@ samme PR. Fund, der ikke kan genskabes i koden, noteres og lukkes med grunden.
 
 ## 7. Merge og udgivelse
 
-Mennesket merger. Ved merge til `main` deployer `deploy.yml` automatisk til
-`https://naturklubben.dk`, og Supabase deployer migrationerne og Edge Functions. Ingen
-kører en deploy-kommando i hånden. Grøn CI er ikke det samme som live: kig på det
-udgivne site, og luk issueet først derefter.
+Mennesket merger. Ved merge til `main` deployer `.github/workflows/deploy.yml` automatisk
+Convex-funktionerne til produktion (`quaint-parakeet-652`) og udgiver `V2/dist` til
+`https://naturklubben.dk`. Ingen kører en deploy-kommando i hånden. Grøn CI er ikke det
+samme som live: kig på det udgivne site, og luk issueet først derefter.
 
 ## 8. Aflevering
 
