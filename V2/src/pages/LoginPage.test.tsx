@@ -129,4 +129,36 @@ describe('LoginPage preview-login', () => {
     )
     expect(message).toBeTruthy()
   })
+
+  it('falder tilbage til preview-member når password returnerer signingIn: false på preview', async () => {
+    mocks.isPreviewDeployment = true
+    mocks.signIn
+      .mockResolvedValueOnce({ signingIn: false })
+      .mockResolvedValueOnce({ signingIn: true })
+    submitCredentials('ubekraeftet@naturklubben.dk', 'prod-adgangskode')
+
+    await vi.waitFor(() => {
+      expect(mocks.signIn).toHaveBeenCalledTimes(2)
+    })
+    expect(mocks.signIn).toHaveBeenNthCalledWith(2, 'preview-member', {
+      email: 'ubekraeftet@naturklubben.dk',
+      password: 'prod-adgangskode',
+    })
+    expect(mocks.rehashIfImported).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText('Bekræft venligst din e-mail, før du logger ind.'),
+    ).toBeNull()
+  })
+
+  it('viser bekræftelsesbesked uden preview-member når password returnerer signingIn: false uden for preview', async () => {
+    mocks.isPreviewDeployment = false
+    mocks.signIn.mockResolvedValueOnce({ signingIn: false })
+    submitCredentials('ubekraeftet@naturklubben.dk', 'prod-adgangskode')
+
+    const message = await screen.findByText(
+      'Bekræft venligst din e-mail, før du logger ind.',
+    )
+    expect(message).toBeTruthy()
+    expect(mocks.signIn).toHaveBeenCalledTimes(1)
+  })
 })

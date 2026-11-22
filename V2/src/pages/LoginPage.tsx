@@ -5,7 +5,7 @@ import { useAction, useConvexAuth } from 'convex/react'
 import { api } from '../../convex/_generated/api'
 import { appUrl } from '../features/auth/authRedirect'
 import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
-import { isPreviewDeployment } from '../features/pwa/previewInstall'
+import { signInWithPreviewFallback } from '../features/auth/signInWithPreviewFallback'
 
 /**
  * Login med e-mail og adgangskode via Convex Auth.
@@ -52,30 +52,19 @@ export default function LoginPage() {
     const submittedPassword = String(data.get('password') ?? '')
 
     try {
-      let signedInViaPreviewMember = false
-      let result: Awaited<ReturnType<typeof signIn>>
-      try {
-        result = await signIn('password', {
-          email: submittedEmail,
-          password: submittedPassword,
-          flow: 'signIn',
-          redirectTo: appUrl('velkommen'),
-        })
-      } catch (passwordError) {
-        if (!isPreviewDeployment()) throw passwordError
-        signedInViaPreviewMember = true
-        result = await signIn('preview-member', {
-          email: submittedEmail,
-          password: submittedPassword,
-        })
-      }
+      const { result, usedPreviewMember } = await signInWithPreviewFallback({
+        signIn,
+        email: submittedEmail,
+        password: submittedPassword,
+        redirectTo: appUrl('velkommen'),
+      })
       if (!result.signingIn) {
         setError('Bekræft venligst din e-mail, før du logger ind.')
         setErrorField('email')
         emailRef.current?.focus()
         return
       }
-      if (!signedInViaPreviewMember) {
+      if (!usedPreviewMember) {
         // Importerede bcrypt-hashes skrives om, når login er lykkedes.
         // Fejler det, er man stadig logget ind.
         await rehashIfImported({ password: submittedPassword }).catch(() => {})

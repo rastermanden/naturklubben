@@ -8,6 +8,7 @@ import {
   internalMutation,
   internalQuery,
 } from './_generated/server'
+import { hasActiveDeletionReservation } from './authz'
 import { verifyPassword } from './passwordCrypto'
 import { normalizeAuthEmail } from './passwords'
 import { assertPreviewSeedAllowed, PROD_DEPLOYMENT_SLUG } from './previewSeed'
@@ -32,15 +33,19 @@ const EMAIL_MAX_LENGTH = 320
 const PASSWORD_MAX_LENGTH = 512
 const VERIFY_FETCH_TIMEOUT_MS = 10_000
 
-const WINDOW_15_MINUTES_MS = 15 * 60 * 1000
+const WINDOW_1_HOUR_MS = 60 * 60 * 1000
 const WINDOW_24_HOURS_MS = 24 * 60 * 60 * 1000
 const ATTEMPT_RETENTION_MS = 25 * 60 * 60 * 1000
 
-export const MAX_PER_EMAIL_15_MINUTES = 10
-export const MAX_PER_EMAIL_24_HOURS = 25
-export const MAX_PER_IP_15_MINUTES = 30
-export const MAX_PER_IP_24_HOURS = 150
-export const MAX_GLOBAL_24_HOURS = 500
+/**
+ * Under `@convex-dev/auth`s indbyggede password-login-grænse (10 pr. time),
+ * så endpointet aldrig udvider gætterummet pr. medlem. Kun fejlforsøg tælles.
+ */
+export const MAX_FAILED_PER_EMAIL_1_HOUR = 8
+export const MAX_FAILED_PER_EMAIL_24_HOURS = 20
+export const MAX_FAILED_PER_IP_1_HOUR = 30
+export const MAX_FAILED_PER_IP_24_HOURS = 150
+export const MAX_FAILED_GLOBAL_24_HOURS = 500
 
 /**
  * Gyldig Lucia-Scrypt-streng (`32 hex-salt : 128 hex-key`), så ukendte adresser
@@ -67,7 +72,8 @@ function toHex(buffer: ArrayBuffer): string {
 }
 
 /**
- * Klientens IP-adresse fra HTTP-headere, udelukkende til rate limiting.
+ * Klientens IP-adresse fra verificeret proxy-header, udelukkende til grov
+ * fejl-begrænsning. Spoofbare `x-real-ip`/`x-forwarded-for` bruges ikke.
  * Rå IP gemmes aldrig; den hashes med det samme.
  */
 export function clientAddress(headers: Headers): string {
@@ -76,13 +82,6 @@ export function clientAddress(headers: Headers): string {
     const trimmed = direct.trim()
     if (trimmed.length > 0) return trimmed
   }
-
-  const realIp = headers.get('x-real-ip')?.trim()
-  if (realIp) return realIp
-
-  const forwarded = headers.get('x-forwarded-for')
-  const first = forwarded?.split(',')[0]?.trim()
-  if (first) return first
 
   return 'unknown'
 }
@@ -189,7 +188,7 @@ export function parseVerifyMemberResponse(
   }
 }
 
-export const recordVerifyAttempt = internalMutation({
+export const checkVerifyRateLimit = internalQuery({
   args: { ipHash: v.string(), emailHash: v.string() },
   returns: v.union(
     v.object({ allowed: v.literal(true) }),
@@ -202,12 +201,12 @@ export const recordVerifyAttempt = internalMutation({
     { allowed: true } | { allowed: false; retryAfterSeconds: number }
   > => {
     const now = Date.now()
-    const perEmailShort = await ctx.db
+    const perEmailHour = await ctx.db
       .query('previewVerifyAttempts')
       .withIndex('by_email_and_time', (q) =>
         q
           .eq('emailHash', args.emailHash)
-          .gt('attemptedAt', now - WINDOW_15_MINUTES_MS),
+          .gt('attemptedAt', now - WINDOW_1_HOUR_MS),
       )
       .collect()
     const perEmailDay = await ctx.db
@@ -218,12 +217,10 @@ export const recordVerifyAttempt = internalMutation({
           .gt('attemptedAt', now - WINDOW_24_HOURS_MS),
       )
       .collect()
-    const perIpShort = await ctx.db
+    const perIpHour = await ctx.db
       .query('previewVerifyAttempts')
       .withIndex('by_ip_and_time', (q) =>
-        q
-          .eq('ipHash', args.ipHash)
-          .gt('attemptedAt', now - WINDOW_15_MINUTES_MS),
+        q.eq('ipHash', args.ipHash).gt('attemptedAt', now - WINDOW_1_HOUR_MS),
       )
       .collect()
     const perIpDay = await ctx.db
@@ -241,28 +238,28 @@ export const recordVerifyAttempt = internalMutation({
 
     const waits = [
       waitForSlot(
-        perEmailShort.map((row) => row.attemptedAt),
-        MAX_PER_EMAIL_15_MINUTES,
-        WINDOW_15_MINUTES_MS,
+        perEmailHour.map((row) => row.attemptedAt),
+        MAX_FAILED_PER_EMAIL_1_HOUR,
+        WINDOW_1_HOUR_MS,
       ),
       waitForSlot(
         perEmailDay.map((row) => row.attemptedAt),
-        MAX_PER_EMAIL_24_HOURS,
+        MAX_FAILED_PER_EMAIL_24_HOURS,
         WINDOW_24_HOURS_MS,
       ),
       waitForSlot(
-        perIpShort.map((row) => row.attemptedAt),
-        MAX_PER_IP_15_MINUTES,
-        WINDOW_15_MINUTES_MS,
+        perIpHour.map((row) => row.attemptedAt),
+        MAX_FAILED_PER_IP_1_HOUR,
+        WINDOW_1_HOUR_MS,
       ),
       waitForSlot(
         perIpDay.map((row) => row.attemptedAt),
-        MAX_PER_IP_24_HOURS,
+        MAX_FAILED_PER_IP_24_HOURS,
         WINDOW_24_HOURS_MS,
       ),
       waitForSlot(
         globalDay.map((row) => row.attemptedAt),
-        MAX_GLOBAL_24_HOURS,
+        MAX_FAILED_GLOBAL_24_HOURS,
         WINDOW_24_HOURS_MS,
       ),
     ]
@@ -274,12 +271,20 @@ export const recordVerifyAttempt = internalMutation({
       }
     }
 
+    return { allowed: true }
+  },
+})
+
+export const recordFailedVerifyAttempt = internalMutation({
+  args: { ipHash: v.string(), emailHash: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
     await ctx.db.insert('previewVerifyAttempts', {
       ipHash: args.ipHash,
       emailHash: args.emailHash,
-      attemptedAt: now,
+      attemptedAt: Date.now(),
     })
-    return { allowed: true }
+    return null
   },
 })
 
@@ -339,7 +344,7 @@ export const lookupMemberForVerify = internalQuery({
       .withIndex('by_user', (q) => q.eq('userId', account.userId))
       .unique()
     const hasActiveProfile =
-      profile !== null && profile.deletionReservedAt === undefined
+      profile !== null && !hasActiveDeletionReservation(profile)
     const trimmedName = profile?.fullName?.trim() ?? ''
     return {
       secret: account.secret,
@@ -392,28 +397,34 @@ export const provisionVerifiedMember = internalMutation({
           .eq('providerAccountId', email),
       )
       .unique()
-    const existingPasswordAccount =
+    const existingPasswordAccount = await ctx.db
+      .query('authAccounts')
+      .withIndex('providerAndAccountId', (q) =>
+        q.eq('provider', 'password').eq('providerAccountId', email),
+      )
+      .unique()
+
+    const previewUser =
       existingPreviewAccount !== null
-        ? null
-        : await ctx.db
-            .query('authAccounts')
-            .withIndex('providerAndAccountId', (q) =>
-              q.eq('provider', 'password').eq('providerAccountId', email),
-            )
-            .unique()
+        ? await ctx.db.get(existingPreviewAccount.userId)
+        : null
+    const passwordUser =
+      existingPasswordAccount !== null
+        ? await ctx.db.get(existingPasswordAccount.userId)
+        : null
     const existingUser =
-      existingPreviewAccount !== null || existingPasswordAccount !== null
-        ? null
-        : await ctx.db
+      previewUser === null && passwordUser === null
+        ? await ctx.db
             .query('users')
             .withIndex('email', (q) => q.eq('email', email))
             .first()
+        : null
 
     let userId: Id<'users'>
-    if (existingPreviewAccount !== null) {
-      userId = existingPreviewAccount.userId
-    } else if (existingPasswordAccount !== null) {
-      userId = existingPasswordAccount.userId
+    if (previewUser !== null) {
+      userId = previewUser._id
+    } else if (passwordUser !== null) {
+      userId = passwordUser._id
     } else if (existingUser !== null) {
       userId = existingUser._id
     } else {
@@ -436,8 +447,21 @@ export const provisionVerifiedMember = internalMutation({
         providerAccountId: email,
         emailVerified: email,
       })
-    } else if (existingPreviewAccount.emailVerified !== email) {
-      await ctx.db.patch(existingPreviewAccount._id, { emailVerified: email })
+    } else {
+      const updates: { userId?: Id<'users'>; emailVerified?: string } = {}
+      if (existingPreviewAccount.userId !== userId) {
+        updates.userId = userId
+      }
+      if (existingPreviewAccount.emailVerified !== email) {
+        updates.emailVerified = email
+      }
+      if (Object.keys(updates).length > 0) {
+        await ctx.db.patch(existingPreviewAccount._id, updates)
+      }
+    }
+
+    if (existingPasswordAccount !== null && passwordUser === null) {
+      await ctx.db.patch(existingPasswordAccount._id, { userId })
     }
 
     const existingProfile = await ctx.db
@@ -531,8 +555,8 @@ export const verifyMember = httpAction(async (ctx, req) => {
 
   let attempt: { allowed: true } | { allowed: false; retryAfterSeconds: number }
   try {
-    attempt = await ctx.runMutation(
-      internal.previewMemberAuth.recordVerifyAttempt,
+    attempt = await ctx.runQuery(
+      internal.previewMemberAuth.checkVerifyRateLimit,
       { ipHash, emailHash },
     )
   } catch {
@@ -547,6 +571,10 @@ export const verifyMember = httpAction(async (ctx, req) => {
 
   if (!email.includes('@') || password.length === 0) {
     await verifyPassword(password || 'x', DUMMY_SCRYPT_HASH)
+    await ctx.runMutation(
+      internal.previewMemberAuth.recordFailedVerifyAttempt,
+      { ipHash, emailHash },
+    )
     return jsonNoStore({ ok: false }, 401)
   }
 
@@ -557,6 +585,10 @@ export const verifyMember = httpAction(async (ctx, req) => {
   const hashToCheck = candidate?.secret ?? DUMMY_SCRYPT_HASH
   const passwordValid = await verifyPassword(password, hashToCheck)
   if (candidate === null || !passwordValid || !candidate.hasActiveProfile) {
+    await ctx.runMutation(
+      internal.previewMemberAuth.recordFailedVerifyAttempt,
+      { ipHash, emailHash },
+    )
     return jsonNoStore({ ok: false }, 401)
   }
 
@@ -632,7 +664,12 @@ export async function authorizePreviewMember(
   if (response.status === 429) {
     throw new ConvexError('RATE_LIMITED')
   }
-  if (response.status >= 500) {
+  if (
+    response.status === 403 ||
+    response.status === 404 ||
+    response.status === 405 ||
+    response.status >= 500
+  ) {
     throw new ConvexError('PREVIEW_AUTH_UNAVAILABLE')
   }
   if (!response.ok) {

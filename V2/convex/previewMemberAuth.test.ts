@@ -5,14 +5,17 @@ import { convexTest } from 'convex-test'
 import { ConvexError } from 'convex/values'
 import { api, internal } from './_generated/api'
 import schema from './schema'
+import { DELETION_RESERVATION_MS } from './authz'
 import { hashPassword } from './passwordCrypto'
 import { writeImportedPassword } from './passwords'
 import {
-  MAX_PER_EMAIL_15_MINUTES,
-  MAX_PER_IP_15_MINUTES,
+  MAX_FAILED_PER_EMAIL_1_HOUR,
+  MAX_FAILED_PER_EMAIL_24_HOURS,
+  MAX_FAILED_PER_IP_1_HOUR,
   PREVIEW_MEMBER_PROVIDER_ID,
   PREVIEW_VERIFY_MEMBER_PATH,
   PROD_VERIFY_MEMBER_URL,
+  clientAddress,
   hashRateLimitSignal,
   waitForSlot,
 } from './previewMemberAuth'
@@ -128,6 +131,34 @@ describe('previewMemberAuth hjælpere', () => {
     const ipHash = await hashRateLimitSignal('ip', '203.0.113.5')
     expect(ipHash).not.toBe(withSecret)
   })
+
+  it('ignorerer spoofbare IP-headere i clientAddress og bruger kun cf-connecting-ip', () => {
+    expect(
+      clientAddress(
+        new Headers({
+          'x-forwarded-for': '1.2.3.4',
+          'x-real-ip': '5.6.7.8',
+        }),
+      ),
+    ).toBe('unknown')
+
+    expect(
+      clientAddress(
+        new Headers({
+          'cf-connecting-ip': '203.0.113.10',
+          'x-forwarded-for': '1.2.3.4',
+        }),
+      ),
+    ).toBe('203.0.113.10')
+
+    expect(
+      clientAddress(
+        new Headers({
+          'cf-connecting-ip': '203.0.113.10, 1.2.3.4',
+        }),
+      ),
+    ).toBe('unknown')
+  })
 })
 
 describe(`POST ${PREVIEW_VERIFY_MEMBER_PATH}`, () => {
@@ -206,14 +237,36 @@ describe(`POST ${PREVIEW_VERIFY_MEMBER_PATH}`, () => {
         deletionReservedAt: Date.now(),
         createdAt: 1,
       })
+
+      const expiredReservationId = await ctx.db.insert('users', {
+        email: 'udloebet-reservation@naturklubben.dk',
+      })
+      await ctx.db.insert('authAccounts', {
+        userId: expiredReservationId,
+        provider: 'password',
+        providerAccountId: 'udloebet-reservation@naturklubben.dk',
+        secret: scryptHash,
+        emailVerified: 'udloebet-reservation@naturklubben.dk',
+      })
+      await ctx.db.insert('profiles', {
+        userId: expiredReservationId,
+        fullName: 'Beholder Konto',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        deletionReservedAt: Date.now() - DELETION_RESERVATION_MS - 60_000,
+        createdAt: 1,
+      })
     })
 
-    const post = (body: unknown, ip = '198.51.100.1') =>
+    const post = (body: unknown, ip?: string) =>
       t.fetch(PREVIEW_VERIFY_MEMBER_PATH, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-forwarded-for': ip,
+          ...(ip ? { 'cf-connecting-ip': ip } : {}),
         },
         body: typeof body === 'string' ? body : JSON.stringify(body),
       })
@@ -238,6 +291,25 @@ describe(`POST ${PREVIEW_VERIFY_MEMBER_PATH}`, () => {
       ok: true,
       member: { isAdmin: true, fullName: 'Anker Admin' },
     })
+
+    const expiredRes = await post(
+      {
+        email: 'udloebet-reservation@naturklubben.dk',
+        password: 'rigtig-adgangskode',
+      },
+      '198.51.100.3',
+    )
+    expect(expiredRes.status).toBe(200)
+    expect(await expiredRes.json()).toEqual({
+      ok: true,
+      member: { isAdmin: false, fullName: 'Beholder Konto' },
+    })
+
+    // Gyldige kald (200) må ikke forbruge rate-limit-rækker.
+    const attemptsAfterSuccess = await t.run((ctx) =>
+      ctx.db.query('previewVerifyAttempts').collect(),
+    )
+    expect(attemptsAfterSuccess).toHaveLength(0)
 
     const deniedCases = [
       {
@@ -281,35 +353,102 @@ describe(`POST ${PREVIEW_VERIFY_MEMBER_PATH}`, () => {
     })
     expect(oversized.status).toBe(400)
     expect(await oversized.json()).toEqual({ ok: false })
+
+    const attemptsAfterValidationErrors = await t.run((ctx) =>
+      ctx.db.query('previewVerifyAttempts').collect(),
+    )
+    // Kun de 4 afviste forsøg (401) tælles; 200 og 400 giver ingen rækker.
+    expect(attemptsAfterValidationErrors).toHaveLength(deniedCases.length)
   })
 
-  it('begrænser forsøg pr. e-mail og IP, gemmer kun hashes og rydder gamle rækker', async () => {
+  it('tæller ikke 200-verifikationer fra samme IP/unknown mod loftet', async () => {
+    const t = convexTest(schema, modules)
+    const scryptHash = await hashPassword('rigtig-adgangskode')
+
+    await t.run(async (ctx) => {
+      const userId = await ctx.db.insert('users', {
+        email: 'mange@naturklubben.dk',
+      })
+      await ctx.db.insert('authAccounts', {
+        userId,
+        provider: 'password',
+        providerAccountId: 'mange@naturklubben.dk',
+        secret: scryptHash,
+        emailVerified: 'mange@naturklubben.dk',
+      })
+      await ctx.db.insert('profiles', {
+        userId,
+        fullName: 'Trofast Medlem',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+    })
+
+    for (let i = 0; i < MAX_FAILED_PER_IP_1_HOUR + 5; i += 1) {
+      const unknownIpRes = await t.fetch(PREVIEW_VERIFY_MEMBER_PATH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'mange@naturklubben.dk',
+          password: 'rigtig-adgangskode',
+        }),
+      })
+      expect(unknownIpRes.status).toBe(200)
+
+      const sameIpRes = await t.fetch(PREVIEW_VERIFY_MEMBER_PATH, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'cf-connecting-ip': '198.51.100.77',
+        },
+        body: JSON.stringify({
+          email: 'mange@naturklubben.dk',
+          password: 'rigtig-adgangskode',
+        }),
+      })
+      expect(sameIpRes.status).toBe(200)
+    }
+
+    const attempts = await t.run((ctx) =>
+      ctx.db.query('previewVerifyAttempts').collect(),
+    )
+    expect(attempts).toHaveLength(0)
+  }, 20_000)
+
+  it('begrænser fejlforsøg pr. e-mail (under Convex Auth-grænsen) og grov IP-backstop, ignorerer spoofbare headere og rydder gamle rækker', async () => {
     const t = convexTest(schema, modules)
     const env = envMap()
     env.RATE_LIMIT_HASH_SECRET = 'test-rate-limit-secret'
+    expect(MAX_FAILED_PER_EMAIL_1_HOUR).toBeLessThanOrEqual(10)
+    expect(MAX_FAILED_PER_EMAIL_24_HOURS).toBeGreaterThanOrEqual(
+      MAX_FAILED_PER_EMAIL_1_HOUR,
+    )
 
-    const callVerify = (email: string, ip: string) =>
+    const callVerify = (email: string, headers: Record<string, string> = {}) =>
       t.fetch(PREVIEW_VERIFY_MEMBER_PATH, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-forwarded-for': ip,
+          ...headers,
         },
         body: JSON.stringify({ email, password: 'forkert-password' }),
       })
 
-    for (let attempt = 0; attempt < MAX_PER_EMAIL_15_MINUTES; attempt += 1) {
-      const res = await callVerify(
-        'offer@naturklubben.dk',
-        `198.51.101.${attempt + 1}`,
-      )
+    for (let attempt = 0; attempt < MAX_FAILED_PER_EMAIL_1_HOUR; attempt += 1) {
+      const res = await callVerify('offer@naturklubben.dk', {
+        'x-forwarded-for': `198.51.101.${attempt + 1}`,
+        'x-real-ip': `198.51.102.${attempt + 1}`,
+      })
       expect(res.status).toBe(401)
     }
 
-    const emailBlocked = await callVerify(
-      'offer@naturklubben.dk',
-      '198.51.101.200',
-    )
+    const emailBlocked = await callVerify('offer@naturklubben.dk', {
+      'x-forwarded-for': '198.51.101.200',
+    })
     expect(emailBlocked.status).toBe(429)
     expect(Number(emailBlocked.headers.get('retry-after'))).toBeGreaterThan(0)
     expect(await emailBlocked.json()).toEqual({
@@ -317,11 +456,11 @@ describe(`POST ${PREVIEW_VERIFY_MEMBER_PATH}`, () => {
       error: 'rate_limited',
     })
 
-    // Seed 29 tidligere IP-forsøg i vinduet, så 30. går igennem og 31. rammer loftet.
+    // Seed tidligere IP-fejlforsøg i vinduet, så næste fejl går igennem og efterfølgende rammer loftet.
     const sharedIpHash = await hashRateLimitSignal('ip', '203.0.113.99')
     await t.run(async (ctx) => {
       const now = Date.now()
-      for (let i = 0; i < MAX_PER_IP_15_MINUTES - 1; i += 1) {
+      for (let i = 0; i < MAX_FAILED_PER_IP_1_HOUR - 1; i += 1) {
         await ctx.db.insert('previewVerifyAttempts', {
           ipHash: sharedIpHash,
           emailHash: `seeded-email-hash-${i}`,
@@ -329,19 +468,20 @@ describe(`POST ${PREVIEW_VERIFY_MEMBER_PATH}`, () => {
         })
       }
     })
-    const lastAllowedIp = await callVerify(
-      'sidste-tilladte@example.com',
-      '203.0.113.99',
-    )
+    const lastAllowedIp = await callVerify('sidste-tilladte@example.com', {
+      'cf-connecting-ip': '203.0.113.99',
+    })
     expect(lastAllowedIp.status).toBe(401)
-    const ipBlocked = await callVerify('sidste@example.com', '203.0.113.99')
+    const ipBlocked = await callVerify('sidste@example.com', {
+      'cf-connecting-ip': '203.0.113.99',
+    })
     expect(ipBlocked.status).toBe(429)
 
     const attempts = await t.run(async (ctx) =>
       ctx.db.query('previewVerifyAttempts').collect(),
     )
     expect(attempts.length).toBe(
-      MAX_PER_EMAIL_15_MINUTES + MAX_PER_IP_15_MINUTES,
+      MAX_FAILED_PER_EMAIL_1_HOUR + MAX_FAILED_PER_IP_1_HOUR,
     )
     const serialized = JSON.stringify(attempts)
     expect(serialized).not.toContain('offer@naturklubben.dk')
@@ -558,6 +698,12 @@ describe('preview-member login på PR-preview', () => {
           status: 429,
         }),
       )
+      .mockResolvedValueOnce(new Response('Forbidden', { status: 403 }))
+      .mockResolvedValueOnce(new Response('Not Found', { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response('Method Not Allowed', { status: 405 }),
+      )
+      .mockResolvedValueOnce(new Response('Server Error', { status: 500 }))
       .mockRejectedValueOnce(new Error('network down'))
 
     const denied = await t
@@ -587,6 +733,25 @@ describe('preview-member login på PR-preview', () => {
     expect(JSON.parse((limited as ConvexError<string>).data)).toBe(
       'RATE_LIMITED',
     )
+
+    for (const statusLabel of ['403', '404', '405', '500']) {
+      const upstreamError = await t
+        .action(api.auth.signIn, {
+          provider: PREVIEW_MEMBER_PROVIDER_ID,
+          params: {
+            email: `medlem-${statusLabel}@medlem.dk`,
+            password: 'kode',
+          },
+        })
+        .then(
+          () => null,
+          (error: unknown) => error,
+        )
+      expect(upstreamError).toBeInstanceOf(ConvexError)
+      expect(JSON.parse((upstreamError as ConvexError<string>).data)).toBe(
+        'PREVIEW_AUTH_UNAVAILABLE',
+      )
+    }
 
     const offline = await t
       .action(api.auth.signIn, {
@@ -731,5 +896,72 @@ describe('preview-member login på PR-preview', () => {
 
     expect(signedIn.tokens?.token).toBeTypeOf('string')
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('genskaber og genknytter bruger hvis eksisterende authAccounts er forældreløse', async () => {
+    const env = envMap()
+    env.PREVIEW_SEED = '1'
+    env.CONVEX_CLOUD_URL = TEST_PREVIEW_CLOUD_URL
+
+    const t = convexTest(schema, modules)
+    const orphanedUserId = await t.run(async (ctx) => {
+      const deletedUserId = await ctx.db.insert('users', {
+        email: 'foraeldreloes@naturklubben.dk',
+      })
+      await ctx.db.delete(deletedUserId)
+      await ctx.db.insert('authAccounts', {
+        userId: deletedUserId,
+        provider: PREVIEW_MEMBER_PROVIDER_ID,
+        providerAccountId: 'foraeldreloes@naturklubben.dk',
+        emailVerified: 'foraeldreloes@naturklubben.dk',
+      })
+      await ctx.db.insert('authAccounts', {
+        userId: deletedUserId,
+        provider: 'password',
+        providerAccountId: 'foraeldreloes@naturklubben.dk',
+        secret: 'gammel-lokal-hash',
+        emailVerified: 'foraeldreloes@naturklubben.dk',
+      })
+      return deletedUserId
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          member: { isAdmin: false, fullName: 'Forældreløs Bruger' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+    const signedIn = (await t.action(api.auth.signIn, {
+      provider: PREVIEW_MEMBER_PROVIDER_ID,
+      params: {
+        email: 'foraeldreloes@naturklubben.dk',
+        password: 'rigtig-prod-password',
+      },
+    })) as { tokens?: { token: string } | null }
+
+    expect(signedIn.tokens?.token).toBeTypeOf('string')
+
+    const state = await t.run(async (ctx) => ({
+      users: await ctx.db.query('users').collect(),
+      accounts: await ctx.db.query('authAccounts').collect(),
+      profiles: await ctx.db.query('profiles').collect(),
+      sessions: await ctx.db.query('authSessions').collect(),
+    }))
+
+    expect(state.users).toHaveLength(1)
+    const liveUserId = state.users[0]!._id
+    expect(liveUserId).not.toBe(orphanedUserId)
+    expect(state.accounts).toHaveLength(2)
+    for (const acc of state.accounts) {
+      expect(acc.userId).toBe(liveUserId)
+    }
+    expect(state.profiles).toHaveLength(1)
+    expect(state.profiles[0]?.userId).toBe(liveUserId)
+    expect(state.sessions).toHaveLength(1)
+    expect(state.sessions[0]?.userId).toBe(liveUserId)
   })
 })

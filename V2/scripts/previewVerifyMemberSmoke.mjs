@@ -86,8 +86,9 @@ if (
   )
 }
 
+const uniqueUnknownEmail = `ukendt-smoke-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
 const unknownEmail = await postVerify({
-  email: 'ukendt-smoke-ikke-medlem@example.com',
+  email: uniqueUnknownEmail,
   password: `${password}-forkert`,
 })
 if (

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { useConvex, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
+import { signInWithPreviewFallback } from '../auth/signInWithPreviewFallback'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { useErrorFocus } from '../../hooks/useErrorFocus'
 import {
@@ -30,9 +31,17 @@ export function DeleteAccountSection() {
   const exportTriggerRef = useRef<HTMLButtonElement>(null)
 
   async function confirmPassword(password: string) {
+    let signedIn: Awaited<ReturnType<typeof signInWithPreviewFallback>>
     try {
-      await signIn('password', { email, password, flow: 'signIn' })
+      signedIn = await signInWithPreviewFallback({
+        signIn,
+        email,
+        password,
+      })
     } catch {
+      throw new AccountDeletionError('invalid_password')
+    }
+    if (signedIn.result && !signedIn.result.signingIn) {
       throw new AccountDeletionError('invalid_password')
     }
   }

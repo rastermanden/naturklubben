@@ -30,7 +30,17 @@ type Ctx = QueryCtx | MutationCtx
  * en strandet reservation fra et afbrudt sletningsforsøg må ikke spærre
  * kontoen for evigt.
  */
-const DELETION_RESERVATION_MS = 15 * 60 * 1000
+export const DELETION_RESERVATION_MS = 15 * 60 * 1000
+
+export function hasActiveDeletionReservation(
+  profile: Pick<Doc<'profiles'>, 'deletionReservedAt'>,
+  now = Date.now(),
+): boolean {
+  return (
+    profile.deletionReservedAt !== undefined &&
+    now - profile.deletionReservedAt < DELETION_RESERVATION_MS
+  )
+}
 
 /**
  * Fejlkoderne kastes som `ConvexError`, ikke som `Error`.
@@ -92,10 +102,7 @@ export async function requireWritableProfile(
   ctx: Ctx,
 ): Promise<Doc<'profiles'>> {
   const profile = await requireProfile(ctx)
-  if (
-    profile.deletionReservedAt !== undefined &&
-    Date.now() - profile.deletionReservedAt < DELETION_RESERVATION_MS
-  ) {
+  if (hasActiveDeletionReservation(profile)) {
     throw new ConvexError('ACCOUNT_DELETION_RESERVED')
   }
   return profile
