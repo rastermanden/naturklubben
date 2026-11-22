@@ -136,6 +136,27 @@ export function toFriendlyCalendarError(error: unknown): string {
   if (hasCode(error, 'NOT_TASK_CREATOR')) {
     return 'Kun den, der oprettede opgaven, kan slette den.'
   }
+  if (hasCode(error, 'MEAL_DISH_INVALID')) {
+    return 'Hovedretten skal udfyldes og må højst være 80 tegn.'
+  }
+  if (hasCode(error, 'MEAL_WISH_INVALID')) {
+    return 'Ønsket skal udfyldes og må højst være 80 tegn.'
+  }
+  if (hasCode(error, 'MEAL_WISHES_FULL')) {
+    return 'Listen er fuld. Fjern et ønske, før du skriver et nyt.'
+  }
+  if (hasCode(error, 'MEAL_NOT_FOUND')) {
+    return 'Der er ikke en madplan på begivenheden.'
+  }
+  if (hasCode(error, 'MEAL_EXISTS')) {
+    return 'Begivenheden har allerede en madplan.'
+  }
+  if (hasCode(error, 'NOT_MEAL_EDITOR')) {
+    return 'Du kan kun fjerne dine egne ønsker.'
+  }
+  if (hasCode(error, 'BUYER_NOT_FOUND')) {
+    return 'Madansvarlig findes ikke længere.'
+  }
   if (hasCode(error, 'GUEST_REQUEST_DECIDED')) {
     return 'Ansøgningen er allerede afgjort eller findes ikke længere.'
   }

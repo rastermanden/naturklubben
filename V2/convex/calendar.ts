@@ -862,6 +862,17 @@ export const deleteEvent = mutation({
       .collect()) {
       await ctx.db.delete(reminder._id)
     }
+    const meal = await ctx.db
+      .query('eventMeals')
+      .withIndex('by_event', (q) => q.eq('eventId', args.eventId))
+      .unique()
+    if (meal !== null) await ctx.db.delete(meal._id)
+    for (const wish of await ctx.db
+      .query('eventMealWishes')
+      .withIndex('by_event_created', (q) => q.eq('eventId', args.eventId))
+      .collect()) {
+      await ctx.db.delete(wish._id)
+    }
 
     await ctx.db.delete(args.eventId)
     return null
