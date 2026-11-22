@@ -6,6 +6,7 @@ import { api } from '../../convex/_generated/api'
 import { downloadIcal } from '../lib/ical'
 import { AttendanceSection } from '../features/calendar/AttendanceSection'
 import { EventForm } from '../features/calendar/EventForm'
+import { EventMealSection } from '../features/calendar/EventMealSection'
 import { EventTasksSection } from '../features/calendar/EventTasksSection'
 import { GuestRequestsSection } from '../features/calendar/GuestRequestsSection'
 import { SubscribeDialog } from '../features/calendar/SubscribeDialog'
@@ -240,6 +241,7 @@ function EventDetails({
         {!past && (
           <>
             <GuestRequestsSection event={event} />
+            <EventMealSection eventId={event.id} />
             <EventTasksSection eventId={event.id} />
           </>
         )}

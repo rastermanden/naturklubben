@@ -272,6 +272,12 @@ export const ANNOUNCEMENTS = [
     body: 'Under Billeder kan du nu lægge videoer op på op til 50 MB (mp4, webm og mov) ved siden af billederne og afspille dem direkte i albummet.',
     path: 'billeder',
   },
+  {
+    slug: 'mad-og-indkoeb',
+    title: 'Skriv madønsker til en tur',
+    body: 'Åbn turen i kalenderen. Er der mad og indkøb, kan du skrive pålæg, brød, snacks eller andet på listen. Hovedretten står øverst, og den, der køber ind, kan se det hele samlet.',
+    path: 'kalender',
+  },
 ] as const
 
 /** Hvor længe en nyhed kan nå at blive sendt, efter den er udgivet. */

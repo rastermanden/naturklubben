@@ -29,6 +29,7 @@ import type * as emailProbe from "../emailProbe.js";
 import type * as gallery from "../gallery.js";
 import type * as games from "../games.js";
 import type * as http from "../http.js";
+import type * as meals from "../meals.js";
 import type * as members from "../members.js";
 import type * as migrateV1 from "../migrateV1.js";
 import type * as notifications from "../notifications.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   emailProbe: typeof emailProbe;
   gallery: typeof gallery;
   games: typeof games;
+  meals: typeof meals;
   http: typeof http;
   members: typeof members;
   migrateV1: typeof migrateV1;

@@ -70,8 +70,9 @@ const RESERVATION_TTL_MS = 15 * 60 * 1000
  * gjorde ved hvert stemme.
  *
  * `events.createdBy`, `messages.authorId`, `observations.createdById`,
- * `chatPolls.createdBy` og `tournaments.*` står bevidst ikke her: de skal
- * *nulstilles*, ikke slettes, fordi de er klubbens fælles historik.
+ * `chatPolls.createdBy`, `eventMealWishes.authorId`, `eventMeals.buyerId` og
+ * `tournaments.*` står bevidst ikke her: de skal *nulstilles*, ikke slettes,
+ * fordi de er klubbens fælles historik. Et madønske bliver på indkøbslisten.
  */
 export const PERSONAL_TABLES = [
   'photos',
@@ -201,6 +202,7 @@ export const exportData = query({
       observations,
       gameScores,
       memberBadges,
+      mealWishes: await exportMealWishes(ctx, profile._id),
     }
   },
 })
@@ -712,6 +714,23 @@ async function clearMemberCalendar(
     }
   }
 
+  // Ønsket hører til indkøbslisten, ikke til personen. Forfatteren fjernes,
+  // og madansvarlig slipper planen, så den kan få en ny.
+  const wishes = await ctx.db
+    .query('eventMealWishes')
+    .withIndex('by_author', (q) => q.eq('authorId', profileId))
+    .collect()
+  for (const wish of wishes) {
+    await ctx.db.patch(wish._id, { authorId: undefined })
+  }
+  const meals = await ctx.db
+    .query('eventMeals')
+    .withIndex('by_buyer', (q) => q.eq('buyerId', profileId))
+    .collect()
+  for (const meal of meals) {
+    await ctx.db.patch(meal._id, { buyerId: undefined })
+  }
+
   // Begivenhederne er klubbens historik og bliver stående. `createdBy` er
   // valgfrit netop for at gøre dette muligt.
   const events = await ctx.db
@@ -1033,6 +1052,29 @@ async function exportAudioClips(ctx: QueryCtx, profileId: Id<'profiles'>) {
       createdAt: clip.createdAt,
       audioUrl: audioFileUrl(clip.playToken),
     }))
+}
+
+/** Madønsker, medlemmet selv har skrevet, ældste først. */
+async function exportMealWishes(ctx: QueryCtx, profileId: Id<'profiles'>) {
+  const rows = await ctx.db
+    .query('eventMealWishes')
+    .withIndex('by_author', (q) => q.eq('authorId', profileId))
+    .collect()
+
+  const entries = await Promise.all(
+    rows.map(async (row) => {
+      const event = await ctx.db.get(row.eventId)
+      return {
+        eventId: row.eventId,
+        eventTitle: event?.title ?? null,
+        category: row.category,
+        text: row.text,
+        createdAt: row.createdAt,
+      }
+    }),
+  )
+
+  return entries.sort((left, right) => left.createdAt - right.createdAt)
 }
 
 /** Medlemmets svar på begivenheder, med begivenhedens titel og tid. */

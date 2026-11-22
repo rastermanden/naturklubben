@@ -3,7 +3,7 @@ import { v } from 'convex/values'
 
 /**
  * Kalenderdomænet: aktiviteter, begivenheder, tilmeldinger, venteliste, gæster,
- * opgaver og påmindelser.
+ * opgaver, mad og indkøb, og påmindelser.
  *
  * Oversat fra Postgres-tabellerne med samme navn (se `supabase/migrations/`).
  * Feltnavnene er camelCase, fordi Convex-dokumenter er JavaScript-objekter hele
@@ -11,6 +11,17 @@ import { v } from 'convex/values'
  * indekser, findes ikke i Convex: de håndhæves i mutationerne i
  * `convex/calendar.ts`, og der står en kommentar dér ved hver af dem.
  */
+
+/**
+ * Kategori på et madønske. Teksten, medlemmerne ser, ligger i klienten.
+ * Værdierne er faste, så en stavefejl i et kald afvises ved indsættelsen.
+ */
+export const mealWishCategory = v.union(
+  v.literal('paalaeg'),
+  v.literal('broed'),
+  v.literal('snacks'),
+  v.literal('andet'),
+)
 
 /** Et svar på en begivenhed. Samme tre værdier som den gamle `status`-kolonne. */
 const attendanceStatus = v.union(
@@ -125,6 +136,35 @@ export const calendarTables = {
   })
     .index('by_event', ['eventId'])
     .index('by_event_created', ['eventId', 'createdAt']),
+
+  /**
+   * Madplanen på en begivenhed. Højst én pr. begivenhed. Det håndhæves i
+   * `startMeal`, fordi Convex ikke har et unikt indeks.
+   *
+   * `buyerId` er den, der køber ind. Feltet er valgfrit, så planen bliver
+   * stående, når madansvarlig sletter sin konto.
+   */
+  eventMeals: defineTable({
+    eventId: v.id('events'),
+    mainDish: v.string(),
+    buyerId: v.optional(v.id('profiles')),
+  })
+    .index('by_event', ['eventId'])
+    .index('by_buyer', ['buyerId']),
+
+  /**
+   * Ønsker til indkøbet. Alle medlemmer må skrive og se dem. `authorId` er
+   * valgfrit, så ønsket bliver på listen, når forfatteren sletter sin konto.
+   */
+  eventMealWishes: defineTable({
+    eventId: v.id('events'),
+    authorId: v.optional(v.id('profiles')),
+    category: mealWishCategory,
+    text: v.string(),
+    createdAt: v.number(),
+  })
+    .index('by_event_created', ['eventId', 'createdAt'])
+    .index('by_author', ['authorId']),
 
   /**
    * Kørslen af påmindelsen dagen før en begivenhed -- i den gamle app en outbox,
