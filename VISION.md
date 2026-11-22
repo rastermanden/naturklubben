@@ -31,15 +31,15 @@ at gætte.
 
 1. **Medlemmernes sprog.** Dansk, korte sætninger, ord folk faktisk bruger. Nyheder,
    knapper og fejlbeskeder skrives til medlemmer, ikke til udviklere.
-2. **Databasen bestemmer, hvem der må se hvad.** Autorisationslaget i databasen — RLS og
-   `security definer`-funktioner i V1, `convex/authz.ts` i V2 — er sikkerhedsgrænsen.
+2. **Databasen bestemmer, hvem der må se hvad.** Autorisationslaget i databasen —
+   `convex/authz.ts` — er sikkerhedsgrænsen.
    Klienten kan skjule og vise, men aldrig autorisere. Rører en ændring
    autorisationsmodellen, har den en test, der kalder ind som den rigtige rolle og måler,
    hvad der faktisk sker.
 3. **Alt kan bygges og udgives fra en browser.** Ingen udvikling må kræve lokal Docker, en
-   lokal database eller en deploy-kommando kørt af et menneske. Kode, SQL og workflows
-   pushes, og integrationerne gør resten. Kun de to engangsopsætninger (Supabase-projektet
-   og GitHub Pages) er manuelle.
+   lokal database eller en deploy-kommando kørt af et menneske. Kode og workflows
+   pushes, og integrationerne gør resten. Kun de manuelle engangsopsætninger
+   (Convex-projektet og GitHub Pages) sker i et dashboard.
 4. **Rolig app.** En notifikation er et afbrud i nogens dag. Medlemmerne får besked om
    noget, de kan mærke — en tur, en besked, en ny ting de kan bruge — aldrig om
    refaktoreringer eller interne rettelser. Kan ingen se forskel, er der ingen nyhed.
@@ -51,11 +51,11 @@ at gætte.
 7. **Færdigt slår nyt.** Rydde op, rette det der driller og gøre det halvfærdige færdigt er
    lige så meget værd som en ny side. Færre ting, der virker hver gang, slår flere ting,
    der næsten virker.
-8. **Hemmeligheder bliver på serveren.** Kun publishable-nøglen må ende i det, browseren
-   henter. Secret key, VAPID-nøgler og adgangstokens findes kun for Edge Functions og
-   GitHub Actions.
+8. **Hemmeligheder bliver på serveren.** Kun offentlige URL'er (`VITE_CONVEX_URL` og
+   `VITE_CONVEX_SITE_URL`) må ende i det, browseren henter. Deploy-nøgler, API-nøgler og
+   VAPID-nøgler findes kun i Convex-miljøet og GitHub Actions.
 9. **Man kan se, hvad der kører.** Footeren viser commit'en, og hvert pull request får sit
    eget preview på `naturklubben.dk/pr-preview/pr-<nr>/`. Man skal aldrig gætte, om man
-   kigger på produktion, og en PR med migrationer prøves mod sin egen database.
-10. **Ærlig dokumentation.** README, `AGENTS.md` og `supabase/README.md` beskriver det, der
-    faktisk er prøvet, og peger på den fil eller kommando, der bestemmer sandheden.
+   kigger på produktion, og en PR prøves mod sit eget Convex-preview.
+10. **Ærlig dokumentation.** `README.md`, `AGENTS.md` og `V2/README.md` beskriver det,
+    der faktisk er prøvet, og peger på den fil eller kommando, der bestemmer sandheden.

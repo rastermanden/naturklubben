@@ -29,12 +29,11 @@ skills-mappen går listen igennem.
   får den en `convex-test`, der kalder ind som den rigtige rolle og måler, hvad der faktisk
   sker (`V2/convex/authz.ts`, se `V2/README.md`).
 - Produktionen på `https://naturklubben.dk` kører **V2** i `V2/` mod Convex
-  (`quaint-parakeet-652`). V1-koden (`src/`, `supabase/`) og `migrate-v1.yml` bliver i
-  repoet indtil oprydningen i #379, men V1-byggepipelinen (`pr-preview.yml`,
-  `deploy-functions.yml`, `sync-auth-config.yml` samt `database`- og V1/Deno-jobbene i
-  `ci.yml`) er fjernet (#378). Bemærk at fjernelse af `deploy-functions.yml` kun stopper
-  _nye_ deploys; de 14 aktive Edge Functions i Supabase bliver ved med at køre, indtil
-  Martin pauser eller sletter Supabase-projektet.
+  (`quaint-parakeet-652`). V1-byggepipelinen (#378) samt V1-koden (`src/`, `supabase/`),
+  `migrate-v1.yml`, `V2/scripts/migrateFromSupabase.mjs` og V1-rodconfig (#379) er
+  fjernet, så repoet er rent V2/Convex. Bemærk at de 14 aktive Edge Functions i Supabase
+  stadig bliver ved med at køre, indtil Martin pauser eller sletter Supabase-projektet, og
+  at ingen GitHub-secrets (heller ikke `VAPID_*` eller `SUPABASE_*`) er slettet.
 - Nye funktioner, medlemmerne kan mærke, tager deres nyhed med i samme ændring.
 - Brugertekst læses som medlem, ikke som udvikler. Kør `/unslop` på ny tekst.
 - Ændres frontend, så se den i et preview, ikke kun i test. Ændres design, så kom med et

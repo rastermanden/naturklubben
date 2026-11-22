@@ -1,9 +1,9 @@
 # Naturklubben V2 — Convex-native omskrivning
 
-V2 er den samme medlemsapp bygget om på Convex i stedet for Supabase. Den ligger
-i sin egen mappe med sit eget `package.json` og sit eget build, så den kan
-deployes uden at røre den nuværende app. **Den nuværende app i roden er
-uændret, og `main`-deployet peger stadig på den.**
+V2 er medlemsappen bygget på Convex (`quaint-parakeet-652`). Den ligger i `V2/`
+med sit eget `package.json` og sit eget build, og produktions-deployet på `main`
+(`.github/workflows/deploy.yml`) bygger og udgiver den til `https://naturklubben.dk`.
+Den tidligere V1-app i roden er fjernet (#379).
 
 ## Status
 
@@ -79,22 +79,15 @@ Til GitHub Actions skal der bruges to ting i repoets indstillinger:
   `deploy-v2.yml`. PR-previewet skal ikke bruge den: der kommer URL'en fra
   deployet selv.
 
-## Skift mellem de to apps
+## Deploy på `main`
 
-De to apps har hvert sit build og deler ikke kode. Et skift er derfor et
-deploy-valg, ikke en kodeændring:
+V1-koden i roden er fjernet (#379), så `V2/` er den eneste app i repoet:
 
-- **Begge samtidigt.** `deploy-v2.yml` bygger V2 med standardstien `/v2/`
-  og lægger den ved siden af den nuværende app på naturklubben.dk. Intet af
-  den gamle app røres.
-- **V2 som den rigtige app.** Kør samme workflow med `base_path` sat til `/`
-  og `publish_to_root` slået til. V2 overskriver da
-  `index.html` på produktions-URL'en; den gamle app ligger stadig i git og kan
-  deployes tilbage med `deploy.yml`.
-- **Tilbage til den gamle app.** Kør `deploy.yml` igen. Der er intet at
-  migrere tilbage, fordi V2 ikke skriver i den gamle apps database.
-
-Begge apps kan køre mod hver sin backend samtidigt; de deler kun domænet.
+- **Automatisk produktionsdeploy:** `.github/workflows/deploy.yml` kører på hvert
+  push til `main`, deployer Convex-funktionerne til produktion (`quaint-parakeet-652`)
+  og udgiver `V2/dist` til roden af `gh-pages` (`https://naturklubben.dk`).
+- **Manuelt V2-deploy:** `.github/workflows/deploy-v2.yml` findes stadig som manuelt
+  `workflow_dispatch`-workflow med valgfri `base_path` og `publish_to_root`.
 
 ## Hvad der er anderledes end den gamle app
 
@@ -113,7 +106,7 @@ rører data.** En funktion uden et sådant kald er offentlig. Det erstatter 115
 politikker med et krav om, at hver funktion gør det rigtige — og det er præcis
 den slags, der skal have en test.
 
-`convex-test`-tests erstatter pgTAP-testene i `supabase/tests/rls/`. Kravet fra
+`convex-test`-tests erstattede de tidligere pgTAP-tests. Kravet fra
 `AGENTS.md` gælder uændret: rører en ændring autorisationsmodellen, skal den
 have en test, der kalder funktionen som den rigtige rolle og måler, hvad der
 faktisk sker.
@@ -167,7 +160,7 @@ på `/ny-adgangskode`. Siderne og teksterne er de samme som i den nuværende
 app.
 
 `RESEND_API_KEY` ligger i repoets Actions-secrets og sættes via stdin, både
-på produktion (`deploy-v2.yml`) og på hvert preview-deploy
+på produktion (`deploy.yml` og `deploy-v2.yml`) og på hvert preview-deploy
 (`pr-preview-v2.yml`). Den må ikke commits, og preview-workflowet fjerner
 den ikke igen. Uden nøglen logges mailen, og kaldet lykkes. Previewets
 testbruger markeres som bekræftet, så login-smoken ikke venter på en mail.
@@ -259,11 +252,9 @@ Convex-deployment og gemmer aldrig produktionsadgangskoden.
 
 Kørt lokalt, uden et Convex-deployment:
 
-- I `V2/`: `npm ci`, `npx tsc -p tsconfig.convex.json --noEmit`,
-  `npx tsc -p convex/tsconfig.json --noEmit`, `npm run build` (med
-  `VITE_CONVEX_URL` sat, så Vite ikke stopper buildet), `npm test` og
-  `npm run lint`.
-- Fra roden: `npx prettier --check V2`, `npm run lint` og `npx tsc -b`.
+- I `V2/`: `npm ci`, `npm test`, `npm run lint`, `npx tsc -b`,
+  `npx prettier --check .` samt `npm run build` (med `VITE_CONVEX_URL` sat, så
+  Vite ikke stopper buildet).
 
 `convex/tsconfig.json` er Convex CLI'ens typecheck. `tsconfig.convex.json`
 udvider den, så de to ikke kan drive fra hinanden.
