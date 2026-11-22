@@ -78,6 +78,9 @@ type VideoWithFrameCallback = HTMLVideoElement & {
   cancelVideoFrameCallback?: (handle: number) => void
   captureStream?: () => MediaStream
   mozCaptureStream?: () => MediaStream
+  mozHasAudio?: boolean
+  audioTracks?: { length: number }
+  videoTracks?: { length: number }
 }
 
 class RecorderInitWithAudioError extends Error {
@@ -191,10 +194,10 @@ export function computeCompressionPlan({
 const RECORDER_MIME_WITH_AUDIO = [
   'video/webm;codecs=vp9,opus',
   'video/webm;codecs=vp8,opus',
-  'video/mp4;codecs=avc1.42E01E,opus',
-  'video/mp4;codecs=avc1,opus',
   'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
   'video/mp4;codecs=avc1,mp4a.40.2',
+  'video/mp4;codecs=avc1.42E01E,opus',
+  'video/mp4;codecs=avc1,opus',
 ] as const
 
 const RECORDER_MIME_VIDEO_ONLY = [
@@ -223,8 +226,8 @@ function getUsableAudioTracks(
   return stream.getAudioTracks().filter(isUsableAudioTrack)
 }
 
-function mimeHasExplicitVideoOnlyCodecs(mime: string): boolean {
-  const match = /;\s*codecs\s*=\s*(?:"([^"]*)"|'([^']*)'|([^;\s]+))/i.exec(mime)
+export function mimeHasExplicitVideoOnlyCodecs(mime: string): boolean {
+  const match = /;\s*codecs\s*=\s*(?:"([^"]*)"|'([^']*)'|([^;]+))/i.exec(mime)
   if (!match) return false
   const rawCodecs = (match[1] ?? match[2] ?? match[3] ?? '').trim()
   if (!rawCodecs) return false
@@ -424,21 +427,80 @@ function emptyAudioCapture(): SilentAudioCaptureResult {
   }
 }
 
-function tryCaptureAudioFromVideoElement(
-  video: VideoWithFrameCallback,
-): SilentAudioCaptureResult {
-  const captureFn =
+function shouldResumeAudioContext(
+  ctx: AudioContext | null | undefined,
+): ctx is AudioContext {
+  if (!ctx) return false
+  const state = ctx.state as string
+  return state !== 'running' && state !== 'closed'
+}
+
+function sourceVideoHasNoAudio(video: VideoWithFrameCallback): boolean {
+  if (video.readyState < 1) {
+    return false
+  }
+  if (typeof video.mozHasAudio === 'boolean') {
+    return !video.mozHasAudio
+  }
+  if (video.audioTracks && typeof video.audioTracks.length === 'number') {
+    if (video.audioTracks.length > 0) {
+      return false
+    }
+    const hasPopulatedVideoTracks =
+      !video.videoTracks ||
+      typeof video.videoTracks.length !== 'number' ||
+      video.videoTracks.length > 0
+    if (hasPopulatedVideoTracks) {
+      return true
+    }
+  }
+  if (video.readyState < 2) {
+    return false
+  }
+  const probeFn =
     typeof video.captureStream === 'function'
       ? () => video.captureStream!()
       : typeof video.mozCaptureStream === 'function'
         ? () => video.mozCaptureStream!()
         : null
-  if (!captureFn) {
+  if (!probeFn) {
+    return false
+  }
+  let probedStream: MediaStream | null = null
+  try {
+    probedStream = probeFn()
+    const probedAudioTracks =
+      typeof probedStream?.getAudioTracks === 'function'
+        ? probedStream.getAudioTracks()
+        : null
+    const probedVideoTracks =
+      typeof probedStream?.getVideoTracks === 'function'
+        ? probedStream.getVideoTracks()
+        : null
+    return (
+      probedAudioTracks !== null &&
+      probedAudioTracks.length === 0 &&
+      (probedVideoTracks === null || probedVideoTracks.length > 0)
+    )
+  } catch {
+    return false
+  } finally {
+    stopTracksFromStreams([probedStream])
+  }
+}
+
+function tryCaptureAudioFromMutedVideoElement(
+  video: VideoWithFrameCallback,
+): SilentAudioCaptureResult {
+  // Brug kun Firefox' mozCaptureStream på et mutet element. I Chromium
+  // nulstiller video.muted=true PCM-data til captureStream(), mens sporet
+  // stadig ser levende ud og ville skjule "uden lyd"-beskeden.
+  if (typeof video.mozCaptureStream !== 'function') {
     return emptyAudioCapture()
   }
   let capturedStream: MediaStream | null = null
   try {
-    capturedStream = captureFn()
+    capturedStream = video.mozCaptureStream()
     const audioTracks = getUsableAudioTracks(capturedStream)
     if (audioTracks.length === 0) {
       stopTracksFromStreams([capturedStream])
@@ -463,6 +525,11 @@ async function setupSilentAudioCapture(
   video: VideoWithFrameCallback,
   providedAudioContext?: AudioContext | null,
 ): Promise<SilentAudioCaptureResult> {
+  if (sourceVideoHasNoAudio(video)) {
+    video.muted = true
+    return emptyAudioCapture()
+  }
+
   let audioCtx: AudioContext | null = null
   let ownsAudioContext = false
 
@@ -485,12 +552,13 @@ async function setupSilentAudioCapture(
     }
   }
 
+  let mediaElementSourceAttempted = false
   if (audioCtx) {
     let audioSource: MediaElementAudioSourceNode | null = null
     let audioDestination: MediaStreamAudioDestinationNode | null = null
     try {
       if (
-        audioCtx.state === 'suspended' &&
+        shouldResumeAudioContext(audioCtx) &&
         typeof audioCtx.resume === 'function'
       ) {
         await Promise.race([
@@ -500,7 +568,11 @@ async function setupSilentAudioCapture(
           ),
         ])
       }
-      if (audioCtx.state === 'running') {
+      if (
+        audioCtx.state === 'running' &&
+        typeof audioCtx.createMediaElementSource === 'function'
+      ) {
+        mediaElementSourceAttempted = true
         audioSource = audioCtx.createMediaElementSource(video)
         audioDestination = audioCtx.createMediaStreamDestination()
         // Forbind kun til MediaStreamDestination (aldrig audioCtx.destination),
@@ -525,7 +597,8 @@ async function setupSilentAudioCapture(
         }
       }
     } catch {
-      // Falder tilbage til video.captureStream() nedenfor.
+      // Falder evt. tilbage til mozCaptureStream() nedenfor, medmindre
+      // createMediaElementSource allerede har bundet elementet.
     }
 
     stopTracksFromStreams([audioDestination?.stream])
@@ -539,9 +612,11 @@ async function setupSilentAudioCapture(
     }
   }
 
-  // Hvis WebAudio ikke giver et brugbart lydspor, prøv video.captureStream().
   video.muted = true
-  return tryCaptureAudioFromVideoElement(video)
+  if (mediaElementSourceAttempted) {
+    return emptyAudioCapture()
+  }
+  return tryCaptureAudioFromMutedVideoElement(video)
 }
 
 function stopTracksFromStreams(
@@ -749,7 +824,7 @@ export async function compressVideoFile(
       video.muted = false
       video.volume = 1
     } else {
-      // Ved fallback til video.captureStream() uden WebAudio holdes elementet
+      // Ved fallback til mozCaptureStream() uden WebAudio holdes elementet
       // mutet, så kilden ikke afspilles højt i højttaleren.
       video.muted = true
     }
@@ -1133,7 +1208,7 @@ export async function compressVideoFile(
             }
           }
           acquireWakeLock()
-          if (audioCtx && audioCtx.state === 'suspended') {
+          if (shouldResumeAudioContext(audioCtx)) {
             try {
               void audioCtx.resume?.().catch(() => undefined)
             } catch {
@@ -1194,6 +1269,14 @@ export async function compressVideoFile(
         recorder.onerror = () => {
           cancelFramePump()
           pauseVideoInternally()
+          recorder.ondataavailable = null
+          recorder.onstop = null
+          recorder.onerror = null
+          stopRecorderSafely()
+          if (includeAudio && recordedBytes === 0) {
+            settleReject(new RecorderInitWithAudioError())
+            return
+          }
           settleReject(createCompressionError('ENCODE_FAILED', file.name))
         }
 

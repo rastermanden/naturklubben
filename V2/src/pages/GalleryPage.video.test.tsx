@@ -715,6 +715,77 @@ describe('GalleryPage: klient-komprimering af store videoer (#369)', () => {
     )
   })
 
+  it('forbereder AudioContext synkront ved træk-og-slip af stor video og frigiver den igen ved lille video', async () => {
+    const resumeSpy = vi.fn().mockResolvedValue(undefined)
+    const closeSpy = vi.fn().mockResolvedValue(undefined)
+    const fakeCtx = {
+      state: 'suspended' as AudioContextState,
+      resume: resumeSpy,
+      close: closeSpy,
+    } as unknown as AudioContext
+    const AudioContextMock = vi.fn(function MockAudioContext() {
+      return fakeCtx
+    })
+    vi.stubGlobal('AudioContext', AudioContextMock)
+
+    const compressed = new File(['mp4'], 'droppet.mp4', { type: 'video/mp4' })
+    Object.defineProperty(compressed, 'size', { value: 14 * 1024 * 1024 })
+    compressVideoFileMock.mockResolvedValueOnce({
+      file: compressed,
+      audioIncluded: true,
+    })
+
+    renderGallery()
+    const dropZone = screen
+      .getByRole('heading', { name: 'Upload billeder og videoer' })
+      .closest('div')!
+
+    const largeVideo = new File(['raw'], 'droppet.mov', {
+      type: 'video/quicktime',
+    })
+    Object.defineProperty(largeVideo, 'size', { value: MAX_VIDEO_BYTES + 1024 })
+
+    fireEvent.drop(dropZone, {
+      dataTransfer: { files: [largeVideo] },
+    })
+
+    expect(AudioContextMock).toHaveBeenCalledTimes(1)
+    expect(resumeSpy).toHaveBeenCalledTimes(1)
+
+    await waitFor(() => {
+      expect(compressVideoFileMock).toHaveBeenCalledWith(
+        largeVideo,
+        expect.objectContaining({ audioContext: fakeCtx }),
+      )
+    })
+    await waitFor(() => {
+      expect(enqueueSpy).toHaveBeenCalledWith({
+        files: [compressed],
+        caption: '',
+        eventId: null,
+      })
+    })
+    expect(screen.queryByRole('status')).toBeNull()
+
+    // Lille video (<= 50 MB) via drag-and-drop sendes stadig direkte uden komprimering.
+    const smallVideo = new File(['small'], 'lille-drop.mp4', {
+      type: 'video/mp4',
+    })
+    Object.defineProperty(smallVideo, 'size', { value: MAX_VIDEO_BYTES })
+    fireEvent.drop(dropZone, {
+      dataTransfer: { files: [smallVideo] },
+    })
+
+    expect(loadVideoCompressorMock).toHaveBeenCalledTimes(1)
+    expect(compressVideoFileMock).toHaveBeenCalledTimes(1)
+    expect(enqueueSpy).toHaveBeenLastCalledWith({
+      files: [smallVideo],
+      caption: '',
+      eventId: null,
+    })
+    expect(closeSpy).toHaveBeenCalledTimes(2)
+  })
+
   it('viser dansk fallback ved engelsk TypeError fra komprimering og stjæler ikke fokus fra billedtekst eller forsvinder ved næste filvalg', async () => {
     let rejectCompress!: (err: Error) => void
     compressVideoFileMock.mockImplementationOnce(

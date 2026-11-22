@@ -267,6 +267,16 @@ describe('useVideoCompression', () => {
       result.current.releasePreparedAudioContext()
     })
     expect(closeSpy).toHaveBeenCalledTimes(2)
+
+    // En interrupted kontekst (iOS Safari) genoptages også synkront ved prepareAudioContext
+    state = 'interrupted' as AudioContextState
+    act(() => {
+      result.current.prepareAudioContext()
+    })
+    expect(resumeSpy).toHaveBeenCalledTimes(2)
+    act(() => {
+      result.current.releasePreparedAudioContext()
+    })
   })
 
   it('annullerer både igangværende og ventende job uden upload', async () => {

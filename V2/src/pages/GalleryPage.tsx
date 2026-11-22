@@ -364,7 +364,10 @@ function GalleryPage() {
   }
 
   function handleFilesSelected(files: FileList | null) {
-    if (!files || files.length === 0) return
+    if (!files || files.length === 0) {
+      videoCompression.releasePreparedAudioContext()
+      return
+    }
     const fileArray = Array.from(files)
     const oversizeVideos: File[] = []
     const directFiles: File[] = []
@@ -418,6 +421,7 @@ function GalleryPage() {
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault()
     setDragActive(false)
+    videoCompression.prepareAudioContext()
     handleFilesSelected(event.dataTransfer.files)
   }
 
