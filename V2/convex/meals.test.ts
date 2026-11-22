@@ -9,13 +9,13 @@ const modules = import.meta.glob('./**/*.ts')
 
 async function seedMember(
   t: ReturnType<typeof convexTest>,
-  options: { name: string; email: string; isAdmin?: boolean },
+  options: { name?: string; email: string; isAdmin?: boolean },
 ) {
   return await t.run(async (ctx) => {
     const userId = await ctx.db.insert('users', { email: options.email })
     const profileId = await ctx.db.insert('profiles', {
       userId,
-      fullName: options.name,
+      ...(options.name === undefined ? {} : { fullName: options.name }),
       isAdmin: options.isAdmin === true,
       chatColor: '#16a34a',
       causes: [],
@@ -255,7 +255,7 @@ describe('mad og indkøb', () => {
     expect(left.wishes).toEqual([])
   })
 
-  it('beholder ønsket uden forfatter, når medlemmet sletter sin konto', async () => {
+  it('beholder ønsket uden forfatter og eksporterer egne ønsker ved kontosletning', async () => {
     const t = convexTest(schema, modules)
     const owner = await seedMember(t, {
       name: 'Arrangør',
@@ -277,6 +277,25 @@ describe('mad og indkøb', () => {
       category: 'andet',
       text: 'kaffe',
     })
+    await memberAs(t, owner.userId).mutation(api.meals.addWish, {
+      eventId,
+      category: 'broed',
+      text: 'rugbrød',
+    })
+
+    const exported = await memberAs(t, member.userId).query(
+      api.account.exportData,
+      {},
+    )
+    expect(exported.mealWishes).toEqual([
+      {
+        eventId,
+        eventTitle: 'Efterårsbral',
+        category: 'andet',
+        text: 'kaffe',
+        createdAt: expect.any(Number),
+      },
+    ])
 
     await t.run(async (ctx) => {
       await ctx.db.patch(member.profileId, { deletionReservedAt: Date.now() })
@@ -289,13 +308,340 @@ describe('mad og indkøb', () => {
     const listed = await memberAs(t, owner.userId).query(api.meals.forEvent, {
       eventId,
     })
+    expect(listed.plan?.buyerId).toBeNull()
     expect(listed.plan?.buyerName).toBeNull()
-    expect(listed.wishes).toEqual([
-      expect.objectContaining({
-        text: 'kaffe',
-        authorName: 'Tidligere medlem',
-      }),
+    expect(listed.wishes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: 'kaffe',
+          authorName: 'Tidligere medlem',
+        }),
+        expect.objectContaining({
+          text: 'rugbrød',
+          authorName: 'Arrangør',
+        }),
+      ]),
+    )
+
+    const raw = await t.run(async (ctx) => ({
+      meals: await ctx.db.query('eventMeals').collect(),
+      wishes: await ctx.db.query('eventMealWishes').collect(),
+    }))
+    expect(raw.meals).toHaveLength(1)
+    expect(raw.meals[0]?.buyerId).toBeUndefined()
+    const deletedMemberWish = raw.wishes.find((wish) => wish.text === 'kaffe')
+    const ownerWish = raw.wishes.find((wish) => wish.text === 'rugbrød')
+    expect(deletedMemberWish).toBeDefined()
+    expect(deletedMemberWish?.authorId).toBeUndefined()
+    expect(ownerWish?.authorId).toBe(owner.profileId)
+  })
+
+  it('sorterer eksporterede madønsker med ældste først', async () => {
+    const t = convexTest(schema, modules)
+    const owner = await seedMember(t, {
+      name: 'Arrangør',
+      email: 'arrangor@example.com',
+    })
+    const member = await seedMember(t, {
+      name: 'Kasper',
+      email: 'kasper@example.com',
+    })
+    const eventId = await seedEvent(t, owner.profileId)
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert('eventMealWishes', {
+        eventId,
+        authorId: member.profileId,
+        category: 'snacks',
+        text: 'andet ønske',
+        createdAt: 2000,
+      })
+      await ctx.db.insert('eventMealWishes', {
+        eventId,
+        authorId: member.profileId,
+        category: 'broed',
+        text: 'første ønske',
+        createdAt: 1000,
+      })
+    })
+
+    const exported = await memberAs(t, member.userId).query(
+      api.account.exportData,
+      {},
+    )
+    expect(exported.mealWishes.map((wish) => wish.text)).toEqual([
+      'første ønske',
+      'andet ønske',
     ])
+  })
+
+  it('lader madansvarlig, arrangør og admin slette andres og anonyme ønsker, men ikke andre medlemmer', async () => {
+    const t = convexTest(schema, modules)
+    const owner = await seedMember(t, {
+      name: 'Arrangør',
+      email: 'arrangor@example.com',
+    })
+    const admin = await seedMember(t, {
+      name: 'Admin',
+      email: 'admin@example.com',
+      isAdmin: true,
+    })
+    const buyer = await seedMember(t, {
+      name: 'Troels',
+      email: 'mad@example.com',
+    })
+    const member = await seedMember(t, {
+      name: 'Kasper',
+      email: 'kasper@example.com',
+    })
+    const other = await seedMember(t, {
+      name: 'Mikkel',
+      email: 'mikkel@example.com',
+    })
+    const eventId = await seedEvent(t, owner.profileId)
+
+    await memberAs(t, owner.userId).mutation(api.meals.startMeal, {
+      eventId,
+      mainDish: 'Chili con carne',
+      buyerId: buyer.profileId,
+    })
+
+    const wish1 = await memberAs(t, member.userId).mutation(api.meals.addWish, {
+      eventId,
+      category: 'paalaeg',
+      text: 'ost',
+    })
+    const wish2 = await memberAs(t, member.userId).mutation(api.meals.addWish, {
+      eventId,
+      category: 'broed',
+      text: 'rugbrød',
+    })
+    const wish3 = await memberAs(t, member.userId).mutation(api.meals.addWish, {
+      eventId,
+      category: 'snacks',
+      text: 'chips',
+    })
+
+    await expect(
+      memberAs(t, other.userId).mutation(api.meals.deleteWish, {
+        wishId: wish1,
+      }),
+    ).rejects.toThrow('NOT_MEAL_EDITOR')
+
+    await memberAs(t, buyer.userId).mutation(api.meals.deleteWish, {
+      wishId: wish1,
+    })
+    await memberAs(t, owner.userId).mutation(api.meals.deleteWish, {
+      wishId: wish2,
+    })
+    await memberAs(t, admin.userId).mutation(api.meals.deleteWish, {
+      wishId: wish3,
+    })
+
+    const afterRoleDeletes = await memberAs(t, owner.userId).query(
+      api.meals.forEvent,
+      { eventId },
+    )
+    expect(afterRoleDeletes.wishes).toEqual([])
+
+    const unattributed1 = await memberAs(t, member.userId).mutation(
+      api.meals.addWish,
+      {
+        eventId,
+        category: 'andet',
+        text: 'kaffe',
+      },
+    )
+    const unattributed2 = await memberAs(t, member.userId).mutation(
+      api.meals.addWish,
+      {
+        eventId,
+        category: 'andet',
+        text: 'te',
+      },
+    )
+    await t.run(async (ctx) => {
+      await ctx.db.patch(member.profileId, { deletionReservedAt: Date.now() })
+    })
+    await t.mutation(internal.account.completeDeletion, {
+      profileId: member.profileId,
+    })
+
+    const asOther = await memberAs(t, other.userId).query(api.meals.forEvent, {
+      eventId,
+    })
+    expect(asOther.wishes.every((wish) => !wish.canDelete)).toBe(true)
+    expect(
+      asOther.wishes.every((wish) => wish.authorName === 'Tidligere medlem'),
+    ).toBe(true)
+
+    await expect(
+      memberAs(t, other.userId).mutation(api.meals.deleteWish, {
+        wishId: unattributed1,
+      }),
+    ).rejects.toThrow('NOT_MEAL_EDITOR')
+
+    await memberAs(t, owner.userId).mutation(api.meals.deleteWish, {
+      wishId: unattributed1,
+    })
+    await memberAs(t, admin.userId).mutation(api.meals.deleteWish, {
+      wishId: unattributed2,
+    })
+
+    const afterAnonDeletes = await memberAs(t, owner.userId).query(
+      api.meals.forEvent,
+      { eventId },
+    )
+    expect(afterAnonDeletes.wishes).toEqual([])
+  })
+
+  it('lader arrangør og admin rette hovedret og fjerne madplanen, men afviser andre', async () => {
+    const t = convexTest(schema, modules)
+    const owner = await seedMember(t, {
+      name: 'Arrangør',
+      email: 'arrangor@example.com',
+    })
+    const admin = await seedMember(t, {
+      name: 'Admin',
+      email: 'admin@example.com',
+      isAdmin: true,
+    })
+    const buyer = await seedMember(t, {
+      name: 'Troels',
+      email: 'mad@example.com',
+    })
+    const member = await seedMember(t, {
+      name: 'Kasper',
+      email: 'kasper@example.com',
+    })
+    const eventId = await seedEvent(t, owner.profileId)
+
+    await expect(
+      memberAs(t, owner.userId).mutation(api.meals.updateMainDish, {
+        eventId,
+        mainDish: 'Suppe',
+      }),
+    ).rejects.toThrow('MEAL_NOT_FOUND')
+    await expect(
+      memberAs(t, owner.userId).mutation(api.meals.deleteMeal, { eventId }),
+    ).rejects.toThrow('MEAL_NOT_FOUND')
+
+    await memberAs(t, owner.userId).mutation(api.meals.startMeal, {
+      eventId,
+      mainDish: 'Chili con carne',
+      buyerId: buyer.profileId,
+    })
+    await memberAs(t, member.userId).mutation(api.meals.addWish, {
+      eventId,
+      category: 'broed',
+      text: 'flute',
+    })
+
+    await expect(
+      memberAs(t, member.userId).mutation(api.meals.updateMainDish, {
+        eventId,
+        mainDish: 'Suppe',
+      }),
+    ).rejects.toThrow('NOT_EVENT_MANAGER')
+    await expect(
+      memberAs(t, buyer.userId).mutation(api.meals.updateMainDish, {
+        eventId,
+        mainDish: 'Suppe',
+      }),
+    ).rejects.toThrow('NOT_EVENT_MANAGER')
+    await expect(
+      memberAs(t, member.userId).mutation(api.meals.deleteMeal, { eventId }),
+    ).rejects.toThrow('NOT_EVENT_MANAGER')
+    await expect(
+      memberAs(t, buyer.userId).mutation(api.meals.deleteMeal, { eventId }),
+    ).rejects.toThrow('NOT_EVENT_MANAGER')
+
+    await expect(
+      memberAs(t, owner.userId).mutation(api.meals.updateMainDish, {
+        eventId,
+        mainDish: '   ',
+      }),
+    ).rejects.toThrow('MEAL_DISH_INVALID')
+    await expect(
+      memberAs(t, owner.userId).mutation(api.meals.updateMainDish, {
+        eventId,
+        mainDish: 'a'.repeat(81),
+      }),
+    ).rejects.toThrow('MEAL_DISH_INVALID')
+
+    await memberAs(t, owner.userId).mutation(api.meals.updateMainDish, {
+      eventId,
+      mainDish: '  Grøntsagssuppe  ',
+    })
+    let listed = await memberAs(t, member.userId).query(api.meals.forEvent, {
+      eventId,
+    })
+    expect(listed.plan?.mainDish).toBe('Grøntsagssuppe')
+
+    await memberAs(t, admin.userId).mutation(api.meals.updateMainDish, {
+      eventId,
+      mainDish: 'Kartoffelsuppe',
+    })
+    listed = await memberAs(t, member.userId).query(api.meals.forEvent, {
+      eventId,
+    })
+    expect(listed.plan?.mainDish).toBe('Kartoffelsuppe')
+
+    await memberAs(t, owner.userId).mutation(api.meals.deleteMeal, { eventId })
+    const afterOwnerDelete = await t.run(async (ctx) => ({
+      event: await ctx.db.get(eventId),
+      meals: await ctx.db.query('eventMeals').collect(),
+      wishes: await ctx.db.query('eventMealWishes').collect(),
+    }))
+    expect(afterOwnerDelete.event).not.toBeNull()
+    expect(afterOwnerDelete.meals).toEqual([])
+    expect(afterOwnerDelete.wishes).toEqual([])
+
+    await memberAs(t, owner.userId).mutation(api.meals.startMeal, {
+      eventId,
+      mainDish: 'Pasta',
+      buyerId: null,
+    })
+    await memberAs(t, member.userId).mutation(api.meals.addWish, {
+      eventId,
+      category: 'snacks',
+      text: 'oliven',
+    })
+    await memberAs(t, admin.userId).mutation(api.meals.deleteMeal, { eventId })
+    const afterAdminDelete = await t.run(async (ctx) => ({
+      event: await ctx.db.get(eventId),
+      meals: await ctx.db.query('eventMeals').collect(),
+      wishes: await ctx.db.query('eventMealWishes').collect(),
+    }))
+    expect(afterAdminDelete.event).not.toBeNull()
+    expect(afterAdminDelete.meals).toEqual([])
+    expect(afterAdminDelete.wishes).toEqual([])
+  })
+
+  it('viser "Medlem" som madansvarlig, hvis profilen mangler navn', async () => {
+    const t = convexTest(schema, modules)
+    const owner = await seedMember(t, {
+      name: 'Arrangør',
+      email: 'arrangor@example.com',
+    })
+    const unnamed = await seedMember(t, {
+      email: 'navnloes@example.com',
+    })
+    const eventId = await seedEvent(t, owner.profileId)
+
+    await memberAs(t, owner.userId).mutation(api.meals.startMeal, {
+      eventId,
+      mainDish: 'Chili con carne',
+      buyerId: unnamed.profileId,
+    })
+
+    const listed = await memberAs(t, owner.userId).query(api.meals.forEvent, {
+      eventId,
+    })
+    expect(listed.plan).toMatchObject({
+      buyerId: unnamed.profileId,
+      buyerName: 'Medlem',
+    })
   })
 })
 

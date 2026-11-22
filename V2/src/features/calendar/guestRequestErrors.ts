@@ -154,6 +154,9 @@ export function toFriendlyCalendarError(error: unknown): string {
   if (hasCode(error, 'NOT_MEAL_EDITOR')) {
     return 'Du kan kun fjerne dine egne ønsker.'
   }
+  if (hasCode(error, 'MEAL_WISH_NOT_FOUND')) {
+    return 'Ønsket findes ikke længere.'
+  }
   if (hasCode(error, 'BUYER_NOT_FOUND')) {
     return 'Madansvarlig findes ikke længere.'
   }

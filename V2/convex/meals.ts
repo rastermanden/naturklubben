@@ -9,9 +9,9 @@ import { mealWishCategory } from './tables/calendar'
  * Mad og indkøb på en begivenhed.
  *
  * Alle medlemmer må se listen og skrive et ønske. Arrangøren eller en admin
- * opretter planen og vælger, hvem der køber ind. Madansvarlig, forfatteren og
- * arrangøren kan fjerne et ønske. Klienten viser kun knapperne. Reglerne
- * står her.
+ * opretter, retter og fjerner planen og vælger, hvem der køber ind.
+ * Madansvarlig, forfatteren og arrangøren kan fjerne et ønske. Klienten viser
+ * kun knapperne. Reglerne står her.
  */
 
 const MAX_TEXT = 80
@@ -45,6 +45,17 @@ async function mealForEvent(ctx: Ctx, eventId: Id<'events'>) {
     .query('eventMeals')
     .withIndex('by_event', (q) => q.eq('eventId', eventId))
     .unique()
+}
+
+async function requireManagedMeal(ctx: MutationCtx, eventId: Id<'events'>) {
+  const profile = await requireWritableProfile(ctx)
+  const event = await requireEvent(ctx, eventId)
+  if (!canManageEvent(profile, event)) {
+    throw new ConvexError('NOT_EVENT_MANAGER')
+  }
+  const meal = await mealForEvent(ctx, eventId)
+  if (meal === null) throw new ConvexError('MEAL_NOT_FOUND')
+  return meal
 }
 
 async function resolveBuyer(
@@ -97,7 +108,7 @@ export const forEvent = query({
       plan: {
         mainDish: meal.mainDish,
         buyerId: meal.buyerId ?? null,
-        buyerName: buyer?.fullName ?? null,
+        buyerName: buyer === null ? null : (buyer.fullName ?? 'Medlem'),
         isBuyer,
       },
       canManage,
@@ -140,16 +151,41 @@ export const setBuyer = mutation({
     buyerId: v.union(v.id('profiles'), v.null()),
   },
   handler: async (ctx, args) => {
-    const profile = await requireWritableProfile(ctx)
-    const event = await requireEvent(ctx, args.eventId)
-    if (!canManageEvent(profile, event)) {
-      throw new ConvexError('NOT_EVENT_MANAGER')
-    }
-    const meal = await mealForEvent(ctx, args.eventId)
-    if (meal === null) throw new ConvexError('MEAL_NOT_FOUND')
-
+    const meal = await requireManagedMeal(ctx, args.eventId)
     const buyerId = await resolveBuyer(ctx, args.buyerId)
     await ctx.db.patch(meal._id, { buyerId })
+    return null
+  },
+})
+
+/** Ret hovedretten på madplanen. Arrangøren eller en admin. */
+export const updateMainDish = mutation({
+  args: {
+    eventId: v.id('events'),
+    mainDish: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const meal = await requireManagedMeal(ctx, args.eventId)
+    await ctx.db.patch(meal._id, {
+      mainDish: cleanText(args.mainDish, 'MEAL_DISH_INVALID'),
+    })
+    return null
+  },
+})
+
+/** Fjern madplanen og alle dens ønsker. Arrangøren eller en admin. */
+export const deleteMeal = mutation({
+  args: { eventId: v.id('events') },
+  handler: async (ctx, args) => {
+    const meal = await requireManagedMeal(ctx, args.eventId)
+    const wishes = await ctx.db
+      .query('eventMealWishes')
+      .withIndex('by_event_created', (q) => q.eq('eventId', args.eventId))
+      .collect()
+    for (const wish of wishes) {
+      await ctx.db.delete(wish._id)
+    }
+    await ctx.db.delete(meal._id)
     return null
   },
 })

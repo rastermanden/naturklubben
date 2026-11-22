@@ -1054,14 +1054,14 @@ async function exportAudioClips(ctx: QueryCtx, profileId: Id<'profiles'>) {
     }))
 }
 
-/** Madønsker, medlemmet selv har skrevet. */
+/** Madønsker, medlemmet selv har skrevet, ældste først. */
 async function exportMealWishes(ctx: QueryCtx, profileId: Id<'profiles'>) {
   const rows = await ctx.db
     .query('eventMealWishes')
     .withIndex('by_author', (q) => q.eq('authorId', profileId))
     .collect()
 
-  return await Promise.all(
+  const entries = await Promise.all(
     rows.map(async (row) => {
       const event = await ctx.db.get(row.eventId)
       return {
@@ -1073,6 +1073,8 @@ async function exportMealWishes(ctx: QueryCtx, profileId: Id<'profiles'>) {
       }
     }),
   )
+
+  return entries.sort((left, right) => left.createdAt - right.createdAt)
 }
 
 /** Medlemmets svar på begivenheder, med begivenhedens titel og tid. */

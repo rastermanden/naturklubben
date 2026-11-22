@@ -17,16 +17,21 @@ import {
  */
 export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
   const meal = useQuery(api.meals.forEvent, { eventId })
+  const [creating, setCreating] = useState(false)
   const members = useQuery(
     api.members.listMembers,
-    meal?.canManage === true ? {} : 'skip',
+    meal?.canManage === true && (meal.plan !== null || creating) ? {} : 'skip',
   )
   const startMeal = useMutation(api.meals.startMeal)
+  const updateMainDish = useMutation(api.meals.updateMainDish)
+  const deleteMeal = useMutation(api.meals.deleteMeal)
   const setBuyer = useMutation(api.meals.setBuyer)
   const addWish = useMutation(api.meals.addWish)
   const deleteWish = useMutation(api.meals.deleteWish)
   const [mainDish, setMainDish] = useState('')
   const [buyerId, setBuyerId] = useState('')
+  const [editingDish, setEditingDish] = useState(false)
+  const [dishDraft, setDishDraft] = useState('')
   const [wishText, setWishText] = useState('')
   const [category, setCategory] = useState<MealCategoryId>('paalaeg')
   const [error, setError] = useState<string | null>(null)
@@ -34,6 +39,8 @@ export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
 
   if (meal === undefined) return null
   if (meal.plan === null && !meal.canManage) return null
+
+  const plan = meal.plan
 
   async function run(action: () => Promise<unknown>) {
     setError(null)
@@ -58,6 +65,33 @@ export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
         buyerId: buyerId === '' ? null : (buyerId as Id<'profiles'>),
       })
       setMainDish('')
+      setBuyerId('')
+      setCreating(false)
+    })
+  }
+
+  function handleUpdateDish(formEvent: FormEvent) {
+    formEvent.preventDefault()
+    const dish = dishDraft.trim()
+    if (dish === '') return
+    void run(async () => {
+      await updateMainDish({ eventId, mainDish: dish })
+      setEditingDish(false)
+    })
+  }
+
+  function handleDeleteMeal() {
+    if (
+      !window.confirm(
+        'Vil du fjerne madplanen? Hovedretten og alle ønsker bliver slettet. Begivenheden bliver stående.',
+      )
+    ) {
+      return
+    }
+    void run(async () => {
+      await deleteMeal({ eventId })
+      setEditingDish(false)
+      setCreating(false)
     })
   }
 
@@ -71,7 +105,7 @@ export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
     })
   }
 
-  const groups = meal.plan === null ? [] : wishesByCategory(meal.wishes)
+  const groups = plan === null ? [] : wishesByCategory(meal.wishes)
 
   return (
     <section
@@ -88,51 +122,139 @@ export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
         </p>
       )}
 
-      {meal.plan === null ? (
-        <form onSubmit={handleStart} className="mt-3 flex flex-col gap-3">
-          <label className="block text-sm text-ink-subtle" htmlFor="meal-dish">
-            Hovedret
-            <input
-              id="meal-dish"
-              type="text"
-              value={mainDish}
-              onChange={(event) => setMainDish(event.target.value)}
-              placeholder="Fx chili con carne"
-              maxLength={80}
-              className="mt-1 min-h-11 w-full rounded border border-line-strong px-3 py-2 text-base text-ink"
+      {plan === null ? (
+        creating ? (
+          <form onSubmit={handleStart} className="mt-3 flex flex-col gap-3">
+            <label
+              className="block text-sm text-ink-subtle"
+              htmlFor="meal-dish"
+            >
+              Hovedret
+              <input
+                id="meal-dish"
+                type="text"
+                value={mainDish}
+                onChange={(event) => setMainDish(event.target.value)}
+                placeholder="Fx chili con carne"
+                maxLength={80}
+                disabled={busy}
+                className="mt-1 min-h-11 w-full rounded border border-line-strong px-3 py-2 text-base text-ink disabled:opacity-60"
+              />
+            </label>
+            <BuyerSelect
+              members={members}
+              value={buyerId}
+              disabled={busy}
+              onChange={setBuyerId}
             />
-          </label>
-          <BuyerSelect
-            members={members}
-            value={buyerId}
-            disabled={busy}
-            onChange={setBuyerId}
-          />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={busy || mainDish.trim() === ''}
+                className="min-h-11 rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
+              >
+                Opret listen
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setCreating(false)
+                  setError(null)
+                }}
+                className="min-h-11 rounded border border-accent-soft px-4 py-2 text-sm text-ink-muted hover:bg-surface-sunken disabled:opacity-60"
+              >
+                Annuller
+              </button>
+            </div>
+          </form>
+        ) : (
           <button
-            type="submit"
-            disabled={busy || mainDish.trim() === ''}
-            className="min-h-11 self-start rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
+            type="button"
+            onClick={() => {
+              setError(null)
+              setCreating(true)
+            }}
+            className="mt-3 min-h-11 rounded border border-accent-soft px-4 py-2 text-sm text-ink-muted hover:bg-surface-sunken"
           >
-            Opret listen
+            Opret mad og indkøb
           </button>
-        </form>
+        )
       ) : (
         <>
           <dl className="mt-3 grid gap-3 text-ink">
             <div>
               <dt className="text-sm font-medium text-ink-subtle">Hovedret</dt>
-              <dd>{meal.plan.mainDish}</dd>
+              {editingDish && meal.canManage ? (
+                <dd className="mt-1">
+                  <form
+                    onSubmit={handleUpdateDish}
+                    className="flex flex-col gap-2 sm:flex-row sm:items-center"
+                  >
+                    <label className="sr-only" htmlFor="meal-dish-edit">
+                      Hovedret
+                    </label>
+                    <input
+                      id="meal-dish-edit"
+                      type="text"
+                      value={dishDraft}
+                      onChange={(event) => setDishDraft(event.target.value)}
+                      maxLength={80}
+                      disabled={busy}
+                      className="min-h-11 flex-1 rounded border border-line-strong px-3 py-2 text-base text-ink disabled:opacity-60"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={busy || dishDraft.trim() === ''}
+                        className="min-h-11 rounded bg-accent px-4 py-2 text-sm text-white disabled:opacity-60"
+                      >
+                        Gem
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          setEditingDish(false)
+                          setError(null)
+                        }}
+                        className="min-h-11 rounded border border-accent-soft px-3 py-2 text-sm text-ink-muted hover:bg-surface-sunken disabled:opacity-60"
+                      >
+                        Annuller
+                      </button>
+                    </div>
+                  </form>
+                </dd>
+              ) : (
+                <dd className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 break-words">{plan.mainDish}</span>
+                  {meal.canManage && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setError(null)
+                        setDishDraft(plan.mainDish)
+                        setEditingDish(true)
+                      }}
+                      className="min-h-11 shrink-0 rounded border border-accent-soft px-3 py-1 text-sm text-ink-muted hover:bg-surface-sunken disabled:opacity-60"
+                    >
+                      Ret hovedret
+                    </button>
+                  )}
+                </dd>
+              )}
             </div>
-            {meal.plan.buyerName !== null && (
+            {plan.buyerName !== null && (
               <div>
                 <dt className="text-sm font-medium text-ink-subtle">
                   Madansvarlig
                 </dt>
-                <dd>{meal.plan.buyerName}</dd>
+                <dd>{plan.buyerName}</dd>
               </div>
             )}
           </dl>
-          {meal.plan.isBuyer && (
+          {plan.isBuyer && (
             <p className="mt-3 text-sm text-ink-body">Du står for indkøbet.</p>
           )}
           {meal.canManage && (
@@ -140,7 +262,8 @@ export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
               <BuyerSelect
                 label="Skift madansvarlig"
                 members={members}
-                value={meal.plan.buyerId ?? ''}
+                value={plan.buyerId ?? ''}
+                currentName={plan.buyerName}
                 disabled={busy}
                 onChange={(next) => {
                   void run(() =>
@@ -172,10 +295,10 @@ export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
                     {group.wishes.map((wish) => (
                       <li
                         key={wish.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded bg-surface-sunken p-2"
+                        className="flex flex-wrap items-start justify-between gap-2 rounded bg-surface-sunken p-2"
                       >
-                        <div className="min-w-0">
-                          <p className="truncate text-ink">{wish.text}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-ink">{wish.text}</p>
                           <p className="text-sm text-ink-subtle">
                             {wish.authorName}
                           </p>
@@ -183,11 +306,12 @@ export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
                         {wish.canDelete && (
                           <button
                             type="button"
+                            aria-label={`Slet ${wish.text}`}
                             onClick={() =>
                               void run(() => deleteWish({ wishId: wish.id }))
                             }
                             disabled={busy}
-                            className="min-h-11 rounded border border-danger-line-strong px-3 py-1 text-sm text-danger disabled:opacity-60"
+                            className="min-h-11 shrink-0 rounded border border-danger-line-strong px-3 py-1 text-sm text-danger disabled:opacity-60"
                           >
                             Slet
                           </button>
@@ -214,7 +338,8 @@ export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
               onChange={(event) => setWishText(event.target.value)}
               placeholder="Skriv et ønske"
               maxLength={80}
-              className="min-h-11 flex-1 rounded border border-line-strong px-3 py-2 text-base"
+              disabled={busy}
+              className="min-h-11 flex-1 rounded border border-line-strong px-3 py-2 text-base disabled:opacity-60"
             />
             <label className="sr-only" htmlFor="meal-category">
               Kategori
@@ -225,7 +350,8 @@ export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
               onChange={(event) =>
                 setCategory(event.target.value as MealCategoryId)
               }
-              className="min-h-11 rounded border border-line-strong px-3 py-2 text-base"
+              disabled={busy}
+              className="min-h-11 rounded border border-line-strong px-3 py-2 text-base disabled:opacity-60"
             >
               {MEAL_CATEGORIES.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -241,6 +367,19 @@ export function EventMealSection({ eventId }: { eventId: Id<'events'> }) {
               Tilføj
             </button>
           </form>
+
+          {meal.canManage && (
+            <div className="mt-4">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={handleDeleteMeal}
+                className="min-h-11 rounded border border-danger-line-strong px-3 py-1 text-sm text-danger disabled:opacity-60"
+              >
+                Fjern listen
+              </button>
+            </div>
+          )}
         </>
       )}
     </section>
@@ -251,12 +390,14 @@ function BuyerSelect({
   label = 'Madansvarlig',
   members,
   value,
+  currentName,
   disabled,
   onChange,
 }: {
   label?: string
   members: readonly { _id: Id<'profiles'>; fullName?: string }[] | undefined
   value: string
+  currentName?: string | null
   disabled: boolean
   onChange: (buyerId: string) => void
 }) {
@@ -271,6 +412,9 @@ function BuyerSelect({
         className="mt-1 min-h-11 w-full rounded border border-line-strong px-3 py-2 text-base text-ink"
       >
         <option value="">Ikke valgt</option>
+        {members === undefined && value !== '' && (
+          <option value={value}>{currentName ?? 'Medlem'}</option>
+        )}
         {(members ?? []).map((member) => (
           <option key={member._id} value={member._id}>
             {member.fullName ?? 'Medlem'}
