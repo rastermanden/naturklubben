@@ -37,6 +37,11 @@ const KNOWN_CODES: Record<string, string> = {
   AVATAR_TOO_LARGE: 'Billedet er for stort (maks. 5 MB).',
   AVATAR_UPLOAD_NOT_FOUND: 'Billedet kunne ikke gemmes. Prøv igen.',
   AVATAR_ENCODE: 'Billedet kunne ikke behandles. Prøv et andet.',
+  INVALID_CREDENTIALS: 'Forkert e-mail eller adgangskode.',
+  RATE_LIMITED:
+    'Der er forsøgt for mange gange på kort tid. Prøv igen om lidt.',
+  PREVIEW_AUTH_UNAVAILABLE:
+    'Kunne ikke tjekke dit login lige nu. Prøv igen om lidt.',
 }
 
 /**

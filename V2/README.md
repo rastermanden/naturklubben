@@ -178,16 +178,7 @@ og heller ikke til en adresse, der ikke står på listen. Siden siger
 stadig "Tjek din e-mail", så den ikke fortæller, hvem der findes.
 Oprettelse af en adresse uden for listen afvises, før der sendes mail.
 
-Seedet lægger disse adresser på adgangslisten. Administratorer, som i
-produktion: `martin.martinjensen@gmail.com`, `kaspermoller@gmail.com`,
-`troelsranum@gmail.com`, `mikkellinnet@gmail.com`,
-`uffeschjoedt@gmail.com` og `naturklubben-test@agentmail.to`.
-`kaspermoller+test@gmail.com` er ikke administrator. Er repo-secreten
-`PREVIEW_SHARED_PASSWORD` sat, oprettes de syv som bekræftede konti med
-den adgangskode, så man kan logge ind uden mail. Mangler den, springes
-kontiene over, og previewet fejler ikke. En bruger, der allerede er
-oprettet, får rollen ved næste seed; et udfyldt navn bliver stående.
-Der sendes ingen mail herfra.
+Seedet lægger desuden de syv faste klubadresser på adgangslisten (`PREVIEW_GUEST_ALLOWLIST`), men medlemmer behøver ingen fælles kode: på `/pr-preview/pr-<nr>/login` logger et medlem ind med sin sædvanlige `naturklubben.dk`-e-mail og adgangskode. Previewets `preview-member`-udbyder (`convex/previewMemberAuth.ts`) verificerer adgangskoden server-til-server mod produktion (`POST /preview/verify-member` på `quaint-parakeet-652`), kopierer `isAdmin` fra produktionsprofilen og udsteder en lokal session på previewet uden nogensinde at gemme eller logge produktionsadgangskoden (gælder previews bygget efter at ruten er live i produktion). CI-testbrugeren (`PREVIEW_TEST_EMAIL` / `PREVIEW_TEST_PASSWORD`) logger stadig ind lokalt via `password`-udbyderen, og `PREVIEW_SHARED_PASSWORD` er kun en valgfri, ikke-logget fallback. Der sendes ingen mail herfra.
 
 Prøvemedlemskab og gæsteansøgninger sender ikke mail i den nuværende app
 (push og en mailto-kladde). De er ikke flyttet til Resend.
@@ -255,11 +246,14 @@ skrevet: `.github/workflows/pr-preview-v2.yml` kører `npx convex deploy` med
 `--preview-name pr-<nr>` og `--cmd 'npm run build'` /
 `--cmd-url-env-var-name VITE_CONVEX_URL`, så backend og frontend hører sammen i
 samme build, og lægger resultatet i `pr-preview/pr-<nr>/` med samme action som
-den gamle app. Tre forbehold hører med: preview-deployments er en
-**beta-funktion** og ryddes efter 5 dage (14 på betalte planer), deploymentet
-starter **tomt** (ingen brugere, ingen data — skal et preview testes logget ind,
-oprettes en bruger der), og PR'er fra forks eller fra Copilot coding agent får
-ingen secrets og dermed intet preview, præcis som i dag.
+den gamle app. Fire ting hører med: preview-deployments er en **beta-funktion**
+og ryddes efter 5 dage (14 på betalte planer), deploymentet starter **tomt**
+(kun seedede prøvedata og CI-testbrugeren fra `previewSeed:ensure`), PR'er fra
+forks eller fra Copilot coding agent får ingen secrets og dermed intet preview,
+og medlemmer logger ind med deres sædvanlige `naturklubben.dk`-konto via
+`preview-member` (`POST /preview/verify-member` mod produktion, efter at ruten
+er live i produktion). Preview-frontendet taler fortsat kun med previewets eget
+Convex-deployment og gemmer aldrig produktionsadgangskoden.
 
 ## Verifikation
 

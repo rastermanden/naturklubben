@@ -6,7 +6,7 @@ import {
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
-import type { ActionCtx, MutationCtx } from './_generated/server'
+import type { ActionCtx, MutationCtx, QueryCtx } from './_generated/server'
 import {
   env,
   internalAction,
@@ -201,6 +201,44 @@ function assertAllowedOnThisDeployment(): void {
   })
 }
 
+async function hasPreviewMemberAccountForEmail(
+  ctx: Pick<QueryCtx, 'db'>,
+  email: string,
+): Promise<boolean> {
+  const account = await ctx.db
+    .query('authAccounts')
+    .withIndex('providerAndAccountId', (q) =>
+      q.eq('provider', 'preview-member').eq('providerAccountId', email),
+    )
+    .unique()
+  return account !== null
+}
+
+async function hasPreviewMemberAccountForUser(
+  ctx: Pick<QueryCtx, 'db'>,
+  userId: Id<'users'>,
+): Promise<boolean> {
+  const account = await ctx.db
+    .query('authAccounts')
+    .withIndex('userIdAndProvider', (q) =>
+      q.eq('userId', userId).eq('provider', 'preview-member'),
+    )
+    .unique()
+  return account !== null
+}
+
+export const isPreviewMemberProvisioned = internalQuery({
+  args: { email: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args): Promise<boolean> => {
+    assertAllowedOnThisDeployment()
+    return await hasPreviewMemberAccountForEmail(
+      ctx,
+      normalizePreviewEmail(args.email),
+    )
+  },
+})
+
 async function ensureAllowedEmail(
   ctx: MutationCtx,
   email: string,
@@ -214,17 +252,19 @@ async function ensureAllowedEmail(
     await ctx.db.insert('allowedEmails', { email, isAdmin })
     return
   }
+  if (await hasPreviewMemberAccountForEmail(ctx, email)) return
   if ((existing.isAdmin ?? false) !== isAdmin) {
     await ctx.db.patch(existing._id, { isAdmin })
   }
 }
 
-/** En bruger, der allerede er oprettet, får den rolle, listen siger. */
+/** En bruger, der allerede er oprettet, får den rolle, listen siger, medmindre prod-login styrer den. */
 async function syncExistingAdmin(
   ctx: MutationCtx,
   email: string,
   isAdmin: boolean,
 ): Promise<void> {
+  if (await hasPreviewMemberAccountForEmail(ctx, email)) return
   const account = await ctx.db
     .query('authAccounts')
     .withIndex('providerAndAccountId', (q) =>
@@ -232,6 +272,7 @@ async function syncExistingAdmin(
     )
     .unique()
   if (account === null) return
+  if (await hasPreviewMemberAccountForUser(ctx, account.userId)) return
   const profile = await ctx.db
     .query('profiles')
     .withIndex('by_user', (q) => q.eq('userId', account.userId))
@@ -242,7 +283,8 @@ async function syncExistingAdmin(
 
 /**
  * Profil til en fælles preview-konto. Navnet sættes kun, når det mangler,
- * så et medlem kan have rettet det. Rollen følger listen hver gang.
+ * så et medlem kan have rettet det. En bruger logget ind via `preview-member`
+ * beholder sin produktions-synkroniserede profil og admin-rolle uændret.
  */
 export async function upsertSharedMemberProfile(
   ctx: MutationCtx,
@@ -267,6 +309,7 @@ export async function upsertSharedMemberProfile(
     })
     return
   }
+  if (await hasPreviewMemberAccountForUser(ctx, userId)) return
   const missingName = (existing.fullName ?? '').trim().length === 0
   if (existing.isAdmin === isAdmin && !missingName) return
   await ctx.db.patch(existing._id, {
@@ -281,6 +324,11 @@ async function provisionSharedAccount(
   password: string,
 ): Promise<void> {
   const email = guest.email
+  const alreadyProvisionedFromProd = await ctx.runQuery(
+    internal.previewSeed.isPreviewMemberProvisioned,
+    { email },
+  )
+  if (alreadyProvisionedFromProd) return
   let userId: Id<'users'>
   try {
     const created = await createAccount(ctx, {
@@ -354,12 +402,20 @@ async function profileIdForAllowlistName(
 ): Promise<Id<'profiles'> | undefined> {
   const guest = PREVIEW_GUEST_ALLOWLIST.find((row) => row.name === name)
   if (guest === undefined) return undefined
-  const account = await ctx.db
+  const passwordAccount = await ctx.db
     .query('authAccounts')
     .withIndex('providerAndAccountId', (q) =>
       q.eq('provider', 'password').eq('providerAccountId', guest.email),
     )
     .unique()
+  const account =
+    passwordAccount ??
+    (await ctx.db
+      .query('authAccounts')
+      .withIndex('providerAndAccountId', (q) =>
+        q.eq('provider', 'preview-member').eq('providerAccountId', guest.email),
+      )
+      .unique())
   if (account === null) return undefined
   const profile = await ctx.db
     .query('profiles')
@@ -795,12 +851,22 @@ export const guestAllowlistReady = internalQuery({
         .unique()
       if (allowed !== null) listed += 1
       if (allowed?.isAdmin === true) allowlistAdmins += 1
-      const account = await ctx.db
+      const passwordAccount = await ctx.db
         .query('authAccounts')
         .withIndex('providerAndAccountId', (q) =>
           q.eq('provider', 'password').eq('providerAccountId', guest.email),
         )
         .unique()
+      const account =
+        passwordAccount ??
+        (await ctx.db
+          .query('authAccounts')
+          .withIndex('providerAndAccountId', (q) =>
+            q
+              .eq('provider', 'preview-member')
+              .eq('providerAccountId', guest.email),
+          )
+          .unique())
       if (account !== null) accounts += 1
       if (guest.email === PREVIEW_MARTIN_EMAIL && account !== null) {
         const profile = await ctx.db

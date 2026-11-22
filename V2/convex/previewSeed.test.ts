@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
 import { convexTest } from 'convex-test'
+import { internal } from './_generated/api'
 import schema from './schema'
 import {
   CLUB_ACTIVITIES,
@@ -635,5 +636,109 @@ describe('writePreviewSample', () => {
       mainDish: SWEDEN_NOVEMBER_MAIN_DISH,
     })
     expect(meal.buyerName).toBe('Troels')
+  })
+
+  it('overskriver ikke isAdmin eller profilfelter på brugere oprettet via preview-member', async () => {
+    const g = globalThis as {
+      process?: { env?: Record<string, string | undefined> }
+    }
+    if (!g.process) g.process = { env: {} }
+    if (!g.process.env) g.process.env = {}
+    const env = g.process.env
+    const prevSeed = env.PREVIEW_SEED
+    const prevUrl = env.CONVEX_CLOUD_URL
+    env.PREVIEW_SEED = '1'
+    env.CONVEX_CLOUD_URL = 'https://savory-possum-345.convex.cloud'
+    try {
+      const t = convexTest(schema, modules)
+      const martin = PREVIEW_GUEST_ALLOWLIST.find(
+        (guest) => guest.email === PREVIEW_MARTIN_EMAIL,
+      )
+      expect(martin?.isAdmin).toBe(true)
+
+      const { martinUserId, sampleUserId } = await t.run(async (ctx) => {
+        const sampleId = await ctx.db.insert('users', {
+          email: 'preview@example.com',
+        })
+        await ctx.db.insert('authAccounts', {
+          userId: sampleId,
+          provider: 'password',
+          providerAccountId: 'preview@example.com',
+        })
+
+        // Martin er tidligere logget ind via preview-member med isAdmin: false fra prod.
+        const mId = await ctx.db.insert('users', {
+          email: PREVIEW_MARTIN_EMAIL,
+        })
+        await ctx.db.insert('authAccounts', {
+          userId: mId,
+          provider: 'preview-member',
+          providerAccountId: PREVIEW_MARTIN_EMAIL,
+          emailVerified: PREVIEW_MARTIN_EMAIL,
+        })
+        await ctx.db.insert('authAccounts', {
+          userId: mId,
+          provider: 'password',
+          providerAccountId: PREVIEW_MARTIN_EMAIL,
+          emailVerified: PREVIEW_MARTIN_EMAIL,
+        })
+        await ctx.db.insert('allowedEmails', {
+          email: PREVIEW_MARTIN_EMAIL,
+          isAdmin: false,
+        })
+        await ctx.db.insert('profiles', {
+          userId: mId,
+          fullName: 'Martin Fra Prod',
+          isAdmin: false,
+          chatColor: '#16a34a',
+          causes: [],
+          chatNotificationPreference: 'all',
+          featureNotificationsEnabled: true,
+          createdAt: 1,
+        })
+        return { martinUserId: mId, sampleUserId: sampleId }
+      })
+
+      await t.mutation(internal.previewSeed.ensureSharedProfile, {
+        userId: martinUserId,
+        fullName: 'Martin',
+        isAdmin: true,
+      })
+      await t.run(async (ctx) => {
+        await writePreviewSample(ctx, sampleUserId)
+      })
+
+      const isMartinProvisioned = await t.query(
+        internal.previewSeed.isPreviewMemberProvisioned,
+        { email: PREVIEW_MARTIN_EMAIL },
+      )
+      expect(isMartinProvisioned).toBe(true)
+
+      const state = await t.run(async (ctx) => ({
+        profile: await ctx.db
+          .query('profiles')
+          .withIndex('by_user', (q) => q.eq('userId', martinUserId))
+          .unique(),
+        allowed: await ctx.db
+          .query('allowedEmails')
+          .withIndex('by_email', (q) => q.eq('email', PREVIEW_MARTIN_EMAIL))
+          .unique(),
+      }))
+
+      expect(state.profile?.isAdmin).toBe(false)
+      expect(state.profile?.fullName).toBe('Martin Fra Prod')
+      expect(state.allowed?.isAdmin).toBe(false)
+    } finally {
+      if (prevSeed === undefined) {
+        delete env.PREVIEW_SEED
+      } else {
+        env.PREVIEW_SEED = prevSeed
+      }
+      if (prevUrl === undefined) {
+        delete env.CONVEX_CLOUD_URL
+      } else {
+        env.CONVEX_CLOUD_URL = prevUrl
+      }
+    }
   })
 })
