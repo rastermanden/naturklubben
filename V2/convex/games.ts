@@ -3,6 +3,7 @@ import { mutation, query } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
 import { gameIdValidator } from './tables/community'
 import { requireProfile, requireWritableProfile } from './authz'
+import { bralScoreIsPlausible } from './bralRules'
 
 /**
  * Spillenes resultatliste. Convex-udgaven af `game_scores` fra den gamle app
@@ -132,6 +133,12 @@ function validateScore(
       // Banerne har 2, 3 og 4 modstandere, og en punktering giver
       // 100 + 50 pr. omgang af de tre baner.
       plausible = bobleScoreIsPlausible(score, lines, level)
+      break
+    case 'bral':
+      // `lines` er prægede mønter, `level` er altid 1. Hver mønt giver mellem
+      // En Bral (1) og Ti Bral (10), partiet varer præcis et minut, og det
+      // har et loft over antal mønter.
+      plausible = bralScoreIsPlausible(score, lines, level, durationSeconds)
       break
   }
 

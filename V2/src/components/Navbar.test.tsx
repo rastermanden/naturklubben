@@ -50,7 +50,7 @@ describe('Navbar', () => {
     )
     expect(
       navLinks.find((link) => link.label === 'Aktiviteter')?.alsoActiveFor,
-    ).toEqual(['/naturlog', '/spil'])
+    ).toEqual(['/naturlog', '/spil', '/lyd'])
   })
 
   it('viser admin-chat i burgermenuen for en administrator', () => {

@@ -45,7 +45,8 @@ export const memberTables = {
     createdAt: v.number(),
   })
     .index('by_user', ['userId'])
-    .index('by_admin', ['isAdmin']),
+    .index('by_admin', ['isAdmin'])
+    .index('by_avatar_storage_id', ['avatarStorageId']),
 
   /**
    * Medlemslisten. Signup afvises, hvis e-mailen ikke står her -- i den gamle

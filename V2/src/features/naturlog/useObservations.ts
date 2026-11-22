@@ -46,6 +46,10 @@ const MESSAGES: [code: string, message: string][] = [
   ['OBSERVATION_POSITION_INVALID', 'Positionen er uden for kloden.'],
   ['OBSERVATION_NOT_OWNER', 'Du kan kun rette dine egne fund.'],
   ['OBSERVATION_NOT_ALLOWED', 'Du har ikke rettigheder til at ændre den.'],
+  [
+    'OBSERVATION_PHOTO_VIDEO_NOT_ALLOWED',
+    'Naturloggen kan kun knyttes til billeder, ikke videoer.',
+  ],
 ]
 
 export function observationErrorMessage(error: unknown): string {

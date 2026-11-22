@@ -38,6 +38,7 @@ export const gameIdValidator = v.union(
   v.literal('fugletraek'),
   v.literal('kabale'),
   v.literal('boble'),
+  v.literal('bral'),
 )
 
 export const communityTables = {
@@ -87,7 +88,9 @@ export const communityTables = {
     awardedCount: v.number(),
   })
     .index('by_slug', ['slug'])
-    .index('by_active_name', ['isActive', 'name']),
+    .index('by_active_name', ['isActive', 'name'])
+    .index('by_image_storage_id', ['imageStorageId'])
+    .index('by_print_storage_id', ['printStorageId']),
 
   /**
    * Indstillinger til en badge. Se badge #159: medlemmer indstiller hinanden,

@@ -47,5 +47,6 @@ describe('aktivitetslinks', () => {
         .getByRole('link', { name: /Se BøsseTennisGolf-siden/ })
         .getAttribute('href'),
     ).toBe('https://rastermanden.github.io/btg/')
+    expect(screen.queryByRole('link', { name: /Lyd/ })).toBeNull()
   })
 })

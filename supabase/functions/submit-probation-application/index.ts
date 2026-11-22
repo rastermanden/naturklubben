@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
 import {
   createSubmissionHandler,
+  SubmissionBackendError,
   type SubmissionRpcArguments,
   type SubmissionRpcResult,
 } from './handler.ts'
@@ -25,7 +26,7 @@ const handler = createSubmissionHandler({
       .rpc('submit_probation_application_limited', arguments_)
       .single<SubmissionRpcResult>()
     if (error) {
-      throw new Error(`submission_rpc_${error.code || 'unknown'}`)
+      throw new SubmissionBackendError(error.code)
     }
     return data
   },

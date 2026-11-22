@@ -242,6 +242,42 @@ export const ANNOUNCEMENTS = [
     body: 'Under beskederne i chatten står nu små billeder af dem, der har læst så langt. Tryk på dem for at se navnene. Det gælder også dig: de andre kan se, hvor langt du har læst.',
     path: 'chat',
   },
+  {
+    slug: 'spil-bral-smeltning',
+    title: 'Nyt spil: Bral smeltning',
+    body: 'Grib tomme øldåser, hold ovnen ved 660 °C, og slå En, Fem og Ti Bral på et minut. Dit bedste resultat lander på klubbens liste under Spil.',
+    path: 'spil/bral',
+  },
+  {
+    slug: 'galleri-knyt-til-begivenhed',
+    title: 'Vælg turen, når du lægger billeder op',
+    body: 'Når du lægger billeder op under Billeder, kan du nu vælge, hvilken tur de hører til. Så lander de i turens album med det samme -- også hvis der ikke er lagt billeder op fra turen før. Vælger du ingen tur, havner de som før under "Uden begivenhed".',
+    path: 'billeder',
+  },
+  {
+    slug: 'galleri-ret-billeder',
+    title: 'Ret billedtekst og flyt billeder til en tur',
+    body: 'Åbn et billede, du selv har lagt op, og tryk på "Redigér" for at rette billedteksten eller flytte billedet til en tur. I albummet "Uden begivenhed" kan du også vælge flere billeder og flytte dem samlet.',
+    path: 'billeder',
+  },
+  {
+    slug: 'lyd-mp3',
+    title: 'Nu kan du lægge lydfiler op og afspille dem',
+    body: 'Under Aktiviteter finder du nu Lyd. Her kan du lægge mp3-filer op på op til 15 MB og afspille dem direkte i appen.',
+    path: 'lyd',
+  },
+  {
+    slug: 'galleri-video',
+    title: 'Nu kan du lægge videoer i galleriet',
+    body: 'Under Billeder kan du nu lægge videoer op på op til 50 MB (mp4, webm og mov) ved siden af billederne og afspille dem direkte i albummet.',
+    path: 'billeder',
+  },
+  {
+    slug: 'mad-og-indkoeb',
+    title: 'Skriv madønsker til en tur',
+    body: 'Åbn turen i kalenderen. Er der mad og indkøb, kan du skrive pålæg, brød, snacks eller andet på listen. Hovedretten står øverst, og den, der køber ind, kan se det hele samlet.',
+    path: 'kalender',
+  },
 ] as const
 
 /** Hvor længe en nyhed kan nå at blive sendt, efter den er udgivet. */

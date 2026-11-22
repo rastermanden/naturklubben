@@ -6,6 +6,12 @@ import { api } from '../../../convex/_generated/api'
 import { newClientId, useChatQueue } from './useChatQueue'
 import { errorText, isRetryableSendError } from './offlineQueue'
 import type { QueuedDraft } from './offlineQueue'
+import {
+  historyCacheKey,
+  resolveHistory,
+  type CachedHistory,
+} from './historyCache'
+import { createHistoryCacheStore } from './historyCacheStore'
 import type {
   ChatMember,
   ChatRoom,
@@ -54,24 +60,66 @@ export function useChatMembers(): ChatMember[] | undefined {
  * Beskedhistorikken som et abonnement. `results` leveres nyeste først, så
  * visningen vender den om; `loadOlder` henter en side mere af gangen.
  */
-export function useChatHistory(room: ChatRoom) {
+export function useChatHistory(room: ChatRoom, profileId: Id<'profiles'>) {
   const paginated = usePaginatedQuery(
     api.chat.history,
     { room },
     { initialNumItems: MESSAGE_PAGE_SIZE },
   )
 
-  const messages = useMemo(
-    () => [...paginated.results].reverse(),
-    [paginated.results],
+  // Den lokale historik: læses ind ved start og skrives, når den live side er
+  // fremme. Nøglen er pr. bruger og rum, så et andet medlem, der logger ind på
+  // samme maskine, aldrig får den forrige brugers beskeder at se.
+  const [store] = useState(createHistoryCacheStore)
+  const [cached, setCached] = useState<CachedHistory | null>(null)
+  const cacheKey = historyCacheKey(profileId, room)
+
+  useEffect(() => {
+    let cancelled = false
+    void store.read(cacheKey).then((entry) => {
+      if (cancelled) return
+      setCached(entry)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [store, cacheKey])
+
+  // Den live side skrives til cachen, så snart den er landet. Mens en side er
+  // undervejs (`LoadingFirstPage`/`LoadingMore`) gemmes der ikke -- det er det
+  // færdige svar, der er "sidst kendte", ikke et halvt.
+  useEffect(() => {
+    if (
+      paginated.status !== 'CanLoadMore' &&
+      paginated.status !== 'Exhausted'
+    ) {
+      return
+    }
+    void store.write({
+      key: cacheKey,
+      room,
+      messages: [...paginated.results].reverse(),
+      hasMore: paginated.status === 'CanLoadMore',
+      updatedAt: Date.now(),
+    })
+  }, [store, cacheKey, room, paginated.results, paginated.status])
+
+  const resolved = useMemo(
+    () =>
+      resolveHistory({
+        cached,
+        liveResults: paginated.results,
+        status: paginated.status,
+      }),
+    [cached, paginated.results, paginated.status],
   )
 
   return {
     /** Ældste først, som en chat læses. */
-    messages,
-    isFirstLoad: paginated.status === 'LoadingFirstPage',
-    hasMore: paginated.status === 'CanLoadMore',
-    isLoadingMore: paginated.status === 'LoadingMore',
+    messages: resolved.messages,
+    isFirstLoad: resolved.isFirstLoad,
+    hasMore: resolved.hasMore,
+    isLoadingMore: resolved.isLoadingMore,
     loadOlder: () => paginated.loadMore(MESSAGE_PAGE_SIZE),
   }
 }
@@ -174,7 +222,7 @@ export interface SendMessageInput {
  * cache at opdatere med hånden.
  */
 export function useMessages(room: ChatRoom, profileId: Id<'profiles'>) {
-  const history = useChatHistory(room)
+  const history = useChatHistory(room, profileId)
   const sendMessageMutation = useMutation(api.chat.sendMessage)
   const deleteMessageMutation = useMutation(api.chat.softDeleteMessage)
   const toggleReactionMutation = useMutation(api.chat.toggleReaction)

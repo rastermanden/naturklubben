@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const photo = {
   id: 'photo1',
+  mediaKind: 'image' as const,
   caption: 'En ræv i skovbunden',
   eventId: null,
   albumKey: 'without-event',
@@ -16,6 +17,7 @@ const photo = {
   optimizationError: null,
   commentCount: 0,
   canDelete: false,
+  canEdit: false,
   isUploader: false,
   displayUrl: 'https://example.convex.cloud/api/storage/fox',
   thumbnailUrl: 'https://example.convex.cloud/api/storage/fox',

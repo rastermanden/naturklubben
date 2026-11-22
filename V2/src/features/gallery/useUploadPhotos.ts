@@ -2,7 +2,10 @@ import { useCallback, useMemo, useState } from 'react'
 import { useMutation } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
+import { galleryErrorMessage } from './galleryErrors'
+import { detectGalleryMediaKind, validateGalleryFile } from './galleryMedia'
 import { PHOTO_MAX_EDGE, THUMB_MAX_EDGE, resizePhotoFile } from './resizePhoto'
+import { captureVideoThumbnail } from './videoThumbnail'
 
 /**
  * Uploadkøen. Porteret fra `src/features/gallery/useUploadPhotos.ts`, men
@@ -19,15 +22,11 @@ import { PHOTO_MAX_EDGE, THUMB_MAX_EDGE, resizePhotoFile } from './resizePhoto'
  * starter ti parallelle uploads.
  */
 
-/** Matcher `MAX_FILE_SIZE` i `convex/gallery.ts` og den gamle bucket-grænse. */
-const MAX_FILE_SIZE = 15 * 1024 * 1024
-
 export interface UploadPhotoInput {
   files: File[]
   caption: string
-  /** Begivenheden billedet hører til, hvis kalenderen har sendt et id med. */
+  /** Begivenheden billedet hører til, eller `null` for "Uden begivenhed". */
   eventId: string | null
-  eventTitle?: string
 }
 
 export type UploadQueueStatus = 'queued' | 'uploading' | 'saved' | 'failed'
@@ -39,28 +38,14 @@ export interface UploadQueueItem {
   file: File
   caption: string
   eventId: string | null
-  eventTitle?: string
   status: UploadQueueStatus
   error: string | null
-}
-
-export function validateFiles(files: File[]): string | null {
-  for (const file of files) {
-    if (!file.type.startsWith('image/')) {
-      return `${file.name} er ikke et billede.`
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      return `${file.name} er for stor (maks. 15 MB).`
-    }
-  }
-  return null
 }
 
 export function createUploadQueueItems({
   files,
   caption,
   eventId,
-  eventTitle,
 }: UploadPhotoInput): UploadQueueItem[] {
   return files.map((file) => {
     const clientUploadId = crypto.randomUUID()
@@ -70,21 +55,21 @@ export function createUploadQueueItems({
       file,
       caption,
       eventId,
-      eventTitle,
       status: 'queued',
       error: null,
     }
   })
 }
 
-async function postImage(
+async function postFile(
   generateUploadUrl: () => Promise<{ uploadUrl: string }>,
   blob: Blob,
+  contentType: string,
 ): Promise<Id<'_storage'>> {
   const { uploadUrl } = await generateUploadUrl()
   const response = await fetch(uploadUrl, {
     method: 'POST',
-    headers: { 'Content-Type': blob.type || 'image/jpeg' },
+    headers: { 'Content-Type': contentType },
     body: blob,
   })
   if (!response.ok) {
@@ -98,6 +83,7 @@ async function postImage(
 export function useUploadPhotos() {
   const generateUploadUrl = useMutation(api.gallery.generateUploadUrl)
   const createPhoto = useMutation(api.gallery.createPhoto)
+  const createVideo = useMutation(api.gallery.createVideo)
   const [items, setItems] = useState<UploadQueueItem[]>([])
 
   const updateItem = useCallback(
@@ -113,13 +99,69 @@ export function useUploadPhotos() {
     async (item: UploadQueueItem) => {
       updateItem(item.id, { status: 'uploading', error: null })
 
+      const detected = detectGalleryMediaKind(item.file)
+      const validationError = validateGalleryFile(item.file)
+      if (detected === null || validationError !== null) {
+        updateItem(item.id, {
+          status: 'failed',
+          error: validationError ?? 'Filen kan ikke lægges op.',
+        })
+        return
+      }
+
       try {
-        const display = await resizePhotoFile(item.file, PHOTO_MAX_EDGE)
-        const thumb = await resizePhotoFile(item.file, THUMB_MAX_EDGE)
-        const storageId = await postImage(generateUploadUrl, display.blob)
-        const thumbnailStorageId = await postImage(
+        if (detected.kind === 'video') {
+          const thumb = await captureVideoThumbnail(item.file)
+          const storageId = await postFile(
+            generateUploadUrl,
+            item.file,
+            detected.mimeType,
+          )
+          const thumbnailStorageId = thumb
+            ? await postFile(
+                generateUploadUrl,
+                thumb.blob,
+                thumb.blob.type || 'image/jpeg',
+              )
+            : undefined
+          const result = await createVideo({
+            storageId,
+            thumbnailStorageId,
+            width: thumb?.width,
+            height: thumb?.height,
+            clientUploadId: item.clientUploadId,
+            caption: item.caption || undefined,
+            eventId: item.eventId ?? undefined,
+          })
+          if (!result.ok) {
+            updateItem(item.id, {
+              status: 'failed',
+              error: galleryErrorMessage(
+                result.error,
+                'Videoen kunne ikke gemmes. Prøv igen.',
+              ),
+            })
+            return
+          }
+          updateItem(item.id, { status: 'saved' })
+          return
+        }
+
+        const imageSource =
+          item.file.type.trim() !== ''
+            ? item.file
+            : new Blob([item.file], { type: detected.mimeType })
+        const display = await resizePhotoFile(imageSource, PHOTO_MAX_EDGE)
+        const thumb = await resizePhotoFile(imageSource, THUMB_MAX_EDGE)
+        const storageId = await postFile(
+          generateUploadUrl,
+          display.blob,
+          display.blob.type || 'image/jpeg',
+        )
+        const thumbnailStorageId = await postFile(
           generateUploadUrl,
           thumb.blob,
+          thumb.blob.type || 'image/jpeg',
         )
 
         await createPhoto({
@@ -130,18 +172,17 @@ export function useUploadPhotos() {
           clientUploadId: item.clientUploadId,
           caption: item.caption || undefined,
           eventId: item.eventId ?? undefined,
-          eventTitle: item.eventTitle,
         })
         updateItem(item.id, { status: 'saved' })
       } catch (caught) {
-        console.error('Billedupload fejlede', caught)
+        console.error('Upload fejlede', caught)
         updateItem(item.id, {
           status: 'failed',
-          error: 'Upload fejlede. Prøv igen.',
+          error: galleryErrorMessage(caught, 'Upload fejlede. Prøv igen.'),
         })
       }
     },
-    [createPhoto, generateUploadUrl, updateItem],
+    [createPhoto, createVideo, generateUploadUrl, updateItem],
   )
 
   const enqueue = useCallback(

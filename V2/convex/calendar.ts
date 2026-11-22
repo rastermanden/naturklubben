@@ -437,6 +437,43 @@ export const upcomingEvents = query({
   },
 })
 
+/**
+ * Begivenhederne til et "knyt til begivenhed"-felt: id, titel og startdato,
+ * nyeste først, både afholdte og kommende.
+ *
+ * Både afholdte og kommende, fordi billeder som regel uploades *efter* turen;
+ * den gamle app hentede på samme måde `events` sorteret på `start_at` uden at
+ * skelne (`src/features/gallery/useEventsForSelect.ts`). Startdatoen er med,
+ * så to ture med samme titel kan skelnes i listen.
+ *
+ * Felterne er med vilje kun de tre: et felt i en upload-formular har intet
+ * brug for tilmeldinger, pladsloft eller beskrivelse, og `toEventSummary`
+ * ville sende dem alle med.
+ */
+export const eventOptions = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireProfile(ctx)
+
+    const limit = Math.min(Math.max(args.limit ?? 50, 1), 100)
+    // Vinduet og rækkefølgen skal bruge samme nøgle. Hentes de nyeste gennem
+    // `by_end` og sorteres der*efter* på `startAt`, kan en flerdagstur --
+    // lav `startAt`, høj `endsAt` -- optage en plads i vinduet og skubbe en
+    // senere, kortere tur helt ud af listen, så den slet ikke kan vælges.
+    const rows = await ctx.db
+      .query('events')
+      .withIndex('by_start')
+      .order('desc')
+      .take(limit)
+
+    return rows.map((event) => ({
+      id: event._id,
+      title: event.title,
+      startAt: event.startAt,
+    }))
+  },
+})
+
 /** Afholdte begivenheder, nyeste først. */
 export const pastEvents = query({
   args: { dayStart: v.number(), limit: v.optional(v.number()) },
@@ -824,6 +861,17 @@ export const deleteEvent = mutation({
       .withIndex('by_event', (q) => q.eq('eventId', args.eventId))
       .collect()) {
       await ctx.db.delete(reminder._id)
+    }
+    const meal = await ctx.db
+      .query('eventMeals')
+      .withIndex('by_event', (q) => q.eq('eventId', args.eventId))
+      .unique()
+    if (meal !== null) await ctx.db.delete(meal._id)
+    for (const wish of await ctx.db
+      .query('eventMealWishes')
+      .withIndex('by_event_created', (q) => q.eq('eventId', args.eventId))
+      .collect()) {
+      await ctx.db.delete(wish._id)
     }
 
     await ctx.db.delete(args.eventId)

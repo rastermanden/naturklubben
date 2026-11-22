@@ -8,6 +8,46 @@ Pages med eget domæne (`public/CNAME`), backend er Supabase
 (Postgres, Auth, Storage, Realtime, Edge Functions). Se GitHub-issue #1 for det fulde
 epos/plan og #2–#15 for de nedbrudte delopgaver.
 
+## Før du gør noget
+
+**Følg `.agents/skills/projekt-workflow/SKILL.md`.** Den beskriver løkken for hver ændring:
+issue med Done-tjek, blast radius, byg, verificér, uafhængigt review, og mennesket som
+publish gate. `FLOW.md` er samme løkke tilpasset dette projekt — læs den sammen med denne
+fil. `VISION.md` siger, hvorfor appen findes, og hvert issue og hver ændring tjekkes op
+imod den.
+
+**Skills bor ét sted: `.agents/skills/`.** Både Antigravity og OpenCode læser den mappe.
+Claude læser `.claude/skills`, som er et symlink til samme mappe, så alle modeller ser
+præcis samme kopi. Ret en skill i `.agents/skills/` — aldrig gennem symlinket.
+
+- `.agents/skills/projekt-workflow/` — løkken for hver ændring. Start her.
+- `.agents/skills/issue-fra-observation/` — løse ord bliver et issue med Problem,
+  Forventet og Done-tjek.
+- `.agents/skills/typesafe-ai/` — valgfri, kun når ejeren beder om et judge-kald.
+- `.agents/skills/VENDORED.md` — hvilke skills der er kopieret uændret fra hvor. De filer
+  rettes ikke her; skal de ændres, gøres det på kilden og kopieres ind igen.
+  `.agents/skills/LICENSE` dækker de kopierede skills, og hver enkelt har sin egen
+  `LICENSE`, hvor kilden kræver det.
+- Resten af mappen er pstack-skills (`architect`, `poteto-mode`, `tdd`, `unslop`,
+  `interrogate`, `blast-radius`, `correct`, `show-me-your-work`, ...). Brug dem, når de
+  passer — de er ikke projektspecifikke krav.
+
+**Kontrakten for en byggerunde:**
+
+- **JOB** — gør ændringen, så den stadig passer med `VISION.md`, og så hvert Done-tjek i
+  issueet er opfyldt.
+- **KILDER** — issueet, `VISION.md`, den kode og de tests ændringen rører, og den faktiske
+  kontrakt i `supabase/` og workflows — ikke en husket version af den.
+- **FÆRDIG** — alle Done-tjek opfyldt eller markeret som ikke testbare her, `npm test`,
+  `npm run lint`, `npm run format:check` og `npx tsc -b` grønne, CI grøn på PR'en, og
+  previewet set med egne øjne når ændringen kan ses.
+- **OUTPUT** — et pull request ejeren kan merge, med hvad der er ændret, hvilke issues der
+  lukkes, hvad der er kørt, og hvad et menneske stadig skal se efter.
+- **FORBUDT** — at merge, tagge eller udgive; at pushe til `main`; at køre
+  `supabase db push` eller en anden manuel deploy; at slette en migrationsfil, der er kørt
+  i produktion; at slette branches med `git push --delete`; at lægge hemmeligheder,
+  personnavne, mailadresser eller hjemmestier i kode eller commits.
+
 ## Kerneprincip: alt udvikling skal kunne ske fra Claude-appen
 
 Denne app udvikles primært af Claude (i Claude Code/Claude-appen), ikke fra en udviklers

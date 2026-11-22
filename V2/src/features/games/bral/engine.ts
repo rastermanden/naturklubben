@@ -1,0 +1,593 @@
+import {
+  BRAL_CANS_PER_COIN,
+  BRAL_CAN_SPAWN_INTERVAL_S,
+  BRAL_COIN_VALUES,
+  BRAL_DURATION_SECONDS,
+  BRAL_INITIAL_CANS,
+  BRAL_MAX_COINS_PER_GAME,
+  BRAL_MAX_COIN_VALUE,
+  BRAL_MELT_CANS_PER_SEC,
+  BRAL_MIN_COIN_VALUE,
+  BRAL_TABS_PER_COIN,
+  bralScoreIsPlausible,
+} from '../../../../convex/bralRules'
+
+export {
+  BRAL_CANS_PER_COIN,
+  BRAL_CAN_SPAWN_INTERVAL_S,
+  BRAL_COIN_VALUES,
+  BRAL_DURATION_SECONDS,
+  BRAL_INITIAL_CANS,
+  BRAL_MAX_COINS_PER_GAME,
+  BRAL_MAX_COIN_VALUE,
+  BRAL_MELT_CANS_PER_SEC,
+  BRAL_MIN_COIN_VALUE,
+  BRAL_TABS_PER_COIN,
+  bralScoreIsPlausible,
+}
+
+export const BRAL_WORLD = { w: 360, h: 320 } as const
+
+export const OVEN_MIN_TEMP = 300
+export const OVEN_MAX_TEMP = 900
+export const OVEN_SWEET_MIN = 580
+export const OVEN_SWEET_MAX = 740
+export const OVEN_TARGET_TEMP = 660
+export const OVEN_START_TEMP = 650
+export const OVEN_COOL_PER_SEC = 42
+export const BELLOWS_BOOST = 68
+
+export const OVERHEAT_LOSS_PER_SEC = 0.55
+export const MOLTEN_CAPACITY = 12
+
+export const CAN_PLAY_TOP_Y = 20
+export const CAN_PLAY_BOTTOM_Y = 172
+export const CAN_HIT_RADIUS = 36
+export const MAX_ACTIVE_CANS = 6
+
+export const STRIKE_TI_HALF_WIDTH = 0.09
+export const STRIKE_FEM_HALF_WIDTH = 0.24
+export const STRIKE_SPEED = 1.15
+export const STRIKE_COOLDOWN_S = 0.3
+export const LAST_COIN_TTL_S = 1.1
+
+export const SHORTAGE_START_MIN_S = 16
+export const SHORTAGE_START_MAX_S = 34
+export const SHORTAGE_CAN_SPAWN_INTERVAL_S = 2.6
+export const TAB_SPAWN_INTERVAL_S = 1.05
+export const SHORTAGE_INITIAL_TABS = 2
+export const RELAY_TARGET_STEPS = 6
+export const RELAY_REFILL_CRUCIBLE_CANS = 3
+export const RELAY_REFILL_CHUTE_CANS = 2
+export const SHORTAGE_NOTICE_TTL_S = 2.2
+
+export type BralStatus = 'ready' | 'playing' | 'over'
+export type OvenZone = 'cold' | 'optimal' | 'hot'
+export type CoinDenomination = 'en' | 'fem' | 'ti'
+export type FallingItemKind = 'can' | 'tab'
+export type ShortagePhase = 'pending' | 'active' | 'resolved'
+export type RelayHand = 'left' | 'right'
+
+export interface FallingCan {
+  id: number
+  kind: FallingItemKind
+  x: number
+  y: number
+  speed: number
+  tilt: number
+}
+
+export interface LastCoin {
+  denomination: CoinDenomination
+  label: string
+  value: number
+  ttl: number
+}
+
+export interface RelayState {
+  active: boolean
+  steps: number
+  nextHand: RelayHand
+}
+
+export interface ShortageNotice {
+  text: string
+  ttl: number
+}
+
+export interface BralState {
+  status: BralStatus
+  timeLeft: number
+  elapsedSeconds: number
+  score: number
+  coins: number
+  cansCaught: number
+  tabsCaught: number
+  pullTabs: number
+  crucibleCans: number
+  molten: number
+  ovenTemp: number
+  cans: FallingCan[]
+  spawnTimer: number
+  tabSpawnTimer: number
+  shortage: ShortagePhase
+  shortageTriggerAt: number
+  relay: RelayState
+  shortageNotice: ShortageNotice | null
+  markerPos: number
+  markerDir: 1 | -1
+  strikeCooldown: number
+  lastCoin: LastCoin | null
+  nextId: number
+}
+
+export function ovenZone(temp: number): OvenZone {
+  if (temp < OVEN_SWEET_MIN) return 'cold'
+  if (temp <= OVEN_SWEET_MAX) return 'optimal'
+  return 'hot'
+}
+
+export function evaluateStrike(markerPos: number): {
+  denomination: CoinDenomination
+  label: string
+  value: number
+} {
+  const offset = Math.abs(markerPos - 0.5)
+  if (offset <= STRIKE_TI_HALF_WIDTH) {
+    return {
+      denomination: 'ti',
+      label: 'Ti Bral',
+      value: BRAL_COIN_VALUES.ti,
+    }
+  }
+  if (offset <= STRIKE_FEM_HALF_WIDTH) {
+    return {
+      denomination: 'fem',
+      label: 'Fem Bral',
+      value: BRAL_COIN_VALUES.fem,
+    }
+  }
+  return {
+    denomination: 'en',
+    label: 'En Bral',
+    value: BRAL_COIN_VALUES.en,
+  }
+}
+
+export function canStrike(
+  state: BralState,
+  options?: { ignoreCoinCap?: boolean },
+): boolean {
+  return (
+    state.status === 'playing' &&
+    state.molten >= BRAL_CANS_PER_COIN &&
+    state.strikeCooldown <= 0 &&
+    (options?.ignoreCoinCap === true || state.coins < BRAL_MAX_COINS_PER_GAME)
+  )
+}
+
+export function createBralState(): BralState {
+  return {
+    status: 'ready',
+    timeLeft: BRAL_DURATION_SECONDS,
+    elapsedSeconds: 0,
+    score: 0,
+    coins: 0,
+    cansCaught: 0,
+    tabsCaught: 0,
+    pullTabs: 0,
+    crucibleCans: 0,
+    molten: 0,
+    ovenTemp: OVEN_START_TEMP,
+    cans: [],
+    spawnTimer: BRAL_CAN_SPAWN_INTERVAL_S,
+    tabSpawnTimer: 0,
+    shortage: 'pending',
+    shortageTriggerAt: (SHORTAGE_START_MIN_S + SHORTAGE_START_MAX_S) / 2,
+    relay: {
+      active: false,
+      steps: 0,
+      nextHand: 'left',
+    },
+    shortageNotice: null,
+    markerPos: 0.5,
+    markerDir: 1,
+    strikeCooldown: 0,
+    lastCoin: null,
+    nextId: 1,
+  }
+}
+
+function pickCanX(cans: readonly FallingCan[], rng: () => number): number {
+  const margin = 34
+  const span = BRAL_WORLD.w - margin * 2
+  let x = margin + rng() * span
+  const previous = cans[cans.length - 1]
+  if (previous && Math.abs(x - previous.x) < 48) {
+    x =
+      previous.x < BRAL_WORLD.w / 2
+        ? Math.min(BRAL_WORLD.w - margin, previous.x + 56)
+        : Math.max(margin, previous.x - 56)
+  }
+  return x
+}
+
+function makeCan(
+  id: number,
+  y: number,
+  cans: readonly FallingCan[],
+  rng: () => number,
+  kind: FallingItemKind = 'can',
+): FallingCan {
+  return {
+    id,
+    kind,
+    x: pickCanX(cans, rng),
+    y,
+    speed: 48 + rng() * 18,
+    tilt: (rng() * 2 - 1) * 0.18,
+  }
+}
+
+export function startBral(rng: () => number = Math.random): BralState {
+  const base = createBralState()
+  const cans: FallingCan[] = []
+  let nextId = base.nextId
+  for (let index = 0; index < BRAL_INITIAL_CANS; index += 1) {
+    const y = CAN_PLAY_TOP_Y + 4 + index * 40
+    cans.push(makeCan(nextId++, y, cans, rng, 'can'))
+  }
+  const shortageTriggerAt =
+    SHORTAGE_START_MIN_S + rng() * (SHORTAGE_START_MAX_S - SHORTAGE_START_MIN_S)
+  return {
+    ...base,
+    status: 'playing',
+    cans,
+    shortageTriggerAt,
+    nextId,
+  }
+}
+
+function collectFallingItem(state: BralState, index: number): BralState {
+  const item = state.cans[index]
+  const cans = state.cans.filter((_, itemIndex) => itemIndex !== index)
+  if (item.kind === 'can') {
+    return {
+      ...state,
+      cans,
+      cansCaught: state.cansCaught + 1,
+      crucibleCans: state.crucibleCans + 1,
+    }
+  }
+
+  const totalTabs = state.pullTabs + 1
+  const strikes = Math.floor(totalTabs / BRAL_TABS_PER_COIN)
+  const pullTabs = totalTabs % BRAL_TABS_PER_COIN
+  const crucibleGain = strikes * BRAL_CANS_PER_COIN
+
+  return {
+    ...state,
+    cans,
+    tabsCaught: state.tabsCaught + 1,
+    pullTabs,
+    crucibleCans: state.crucibleCans + crucibleGain,
+    shortageNotice:
+      strikes > 0
+        ? { text: 'PULL-TAB STRIKE · METAL READY', ttl: 1.6 }
+        : state.shortageNotice,
+  }
+}
+
+export function catchCanAt(
+  state: BralState,
+  x: number,
+  y: number,
+): { state: BralState; caught: boolean } {
+  if (state.status !== 'playing') return { state, caught: false }
+  const radiusSq = CAN_HIT_RADIUS * CAN_HIT_RADIUS
+  let bestIndex = -1
+  let bestY = -Infinity
+
+  for (let index = 0; index < state.cans.length; index += 1) {
+    const can = state.cans[index]
+    const dx = can.x - x
+    const dy = can.y - y
+    if (dx * dx + dy * dy <= radiusSq && can.y > bestY) {
+      bestY = can.y
+      bestIndex = index
+    }
+  }
+
+  if (bestIndex === -1) return { state, caught: false }
+
+  return {
+    caught: true,
+    state: collectFallingItem(state, bestIndex),
+  }
+}
+
+export function catchLowestCan(state: BralState): {
+  state: BralState
+  caught: boolean
+} {
+  if (state.status !== 'playing' || state.cans.length === 0) {
+    return { state, caught: false }
+  }
+
+  let bestIndex = 0
+  for (let index = 1; index < state.cans.length; index += 1) {
+    if (state.cans[index].y > state.cans[bestIndex].y) {
+      bestIndex = index
+    }
+  }
+
+  return {
+    caught: true,
+    state: collectFallingItem(state, bestIndex),
+  }
+}
+
+export function pumpBellows(state: BralState): BralState {
+  if (state.status !== 'playing') return state
+  return {
+    ...state,
+    ovenTemp: Math.min(OVEN_MAX_TEMP, state.ovenTemp + BELLOWS_BOOST),
+  }
+}
+
+export function startRelay(state: BralState): BralState {
+  if (
+    state.status !== 'playing' ||
+    state.shortage !== 'active' ||
+    state.relay.active
+  ) {
+    return state
+  }
+  return {
+    ...state,
+    relay: {
+      active: true,
+      steps: 0,
+      nextHand: 'left',
+    },
+  }
+}
+
+export function passRelay(
+  state: BralState,
+  hand: RelayHand,
+  rng: () => number = Math.random,
+): BralState {
+  if (
+    state.status !== 'playing' ||
+    state.shortage !== 'active' ||
+    !state.relay.active ||
+    hand !== state.relay.nextHand
+  ) {
+    return state
+  }
+
+  const steps = state.relay.steps + 1
+  if (steps < RELAY_TARGET_STEPS) {
+    return {
+      ...state,
+      relay: {
+        active: true,
+        steps,
+        nextHand: hand === 'left' ? 'right' : 'left',
+      },
+    }
+  }
+
+  const cans = [...state.cans]
+  let nextId = state.nextId
+  for (let index = 0; index < RELAY_REFILL_CHUTE_CANS; index += 1) {
+    if (cans.length < MAX_ACTIVE_CANS) {
+      cans.push(
+        makeCan(nextId++, CAN_PLAY_TOP_Y + 8 + index * 26, cans, rng, 'can'),
+      )
+    }
+  }
+
+  return {
+    ...state,
+    shortage: 'resolved',
+    relay: {
+      active: false,
+      steps: 0,
+      nextHand: 'left',
+    },
+    tabSpawnTimer: 0,
+    spawnTimer: Math.min(state.spawnTimer, BRAL_CAN_SPAWN_INTERVAL_S),
+    crucibleCans: state.crucibleCans + RELAY_REFILL_CRUCIBLE_CANS,
+    cans,
+    nextId,
+    shortageNotice: {
+      text: 'SHORTAGE CLEARED · RESERVE RESTORED',
+      ttl: SHORTAGE_NOTICE_TTL_S,
+    },
+  }
+}
+
+export function strikeCoin(
+  state: BralState,
+  options?: { ignoreCoinCap?: boolean },
+): BralState {
+  if (!canStrike(state, options)) return state
+  const result = evaluateStrike(state.markerPos)
+  const rawMolten = Math.max(0, state.molten - BRAL_CANS_PER_COIN)
+  const molten = rawMolten < 1e-6 ? 0 : rawMolten
+  return {
+    ...state,
+    molten,
+    coins: state.coins + 1,
+    score: state.score + result.value,
+    strikeCooldown: STRIKE_COOLDOWN_S,
+    lastCoin: {
+      ...result,
+      ttl: LAST_COIN_TTL_S,
+    },
+  }
+}
+
+export function stepBral(
+  state: BralState,
+  dtSeconds: number,
+  rng: () => number = Math.random,
+): BralState {
+  if (state.status !== 'playing') return state
+
+  const dt = Math.min(Math.max(dtSeconds, 0), 0.1)
+  const appliedDt = Math.min(dt, state.timeLeft)
+  const rawTimeLeft = state.timeLeft - appliedDt
+  const timeLeft = rawTimeLeft < 1e-6 ? 0 : rawTimeLeft
+  const rawElapsed = Math.min(
+    BRAL_DURATION_SECONDS,
+    state.elapsedSeconds + appliedDt,
+  )
+  const elapsedSeconds =
+    BRAL_DURATION_SECONDS - rawElapsed < 1e-6
+      ? BRAL_DURATION_SECONDS
+      : rawElapsed
+
+  const ovenTemp = Math.max(
+    OVEN_MIN_TEMP,
+    state.ovenTemp - OVEN_COOL_PER_SEC * appliedDt,
+  )
+  const zone = ovenZone(ovenTemp)
+
+  let crucibleCans = state.crucibleCans
+  let molten = state.molten
+  if (zone === 'optimal') {
+    const amount = Math.min(
+      crucibleCans,
+      MOLTEN_CAPACITY - molten,
+      BRAL_MELT_CANS_PER_SEC * appliedDt,
+    )
+    crucibleCans -= amount
+    molten += amount
+    if (crucibleCans < 1e-6) {
+      molten = Math.min(MOLTEN_CAPACITY, molten + crucibleCans)
+      crucibleCans = 0
+    }
+    if (Math.abs(molten - Math.round(molten)) < 1e-6) {
+      molten = Math.min(MOLTEN_CAPACITY, Math.round(molten))
+    }
+  } else if (zone === 'hot') {
+    molten = Math.max(0, molten - OVERHEAT_LOSS_PER_SEC * appliedDt)
+  }
+
+  const cans = state.cans
+    .map((can) => ({ ...can, y: can.y + can.speed * appliedDt }))
+    .filter((can) => can.y <= CAN_PLAY_BOTTOM_Y)
+
+  let shortageNotice = state.shortageNotice
+  if (shortageNotice) {
+    const nextNoticeTtl = shortageNotice.ttl - appliedDt
+    shortageNotice =
+      nextNoticeTtl <= 0 ? null : { ...shortageNotice, ttl: nextNoticeTtl }
+  }
+
+  let shortage = state.shortage
+  let tabSpawnTimer = state.tabSpawnTimer
+  let nextId = state.nextId
+
+  if (
+    shortage === 'pending' &&
+    elapsedSeconds >= state.shortageTriggerAt &&
+    timeLeft > 0
+  ) {
+    shortage = 'active'
+    tabSpawnTimer = TAB_SPAWN_INTERVAL_S
+    for (let index = 0; index < SHORTAGE_INITIAL_TABS; index += 1) {
+      if (cans.length < MAX_ACTIVE_CANS) {
+        const y = CAN_PLAY_TOP_Y + 6 + index * 26
+        cans.push(makeCan(nextId++, y, cans, rng, 'tab'))
+      }
+    }
+  }
+
+  const spawnInterval =
+    shortage === 'active'
+      ? SHORTAGE_CAN_SPAWN_INTERVAL_S
+      : BRAL_CAN_SPAWN_INTERVAL_S
+  let spawnTimer = Math.min(state.spawnTimer, spawnInterval) - appliedDt
+  while (spawnTimer <= 0 && timeLeft > 0) {
+    spawnTimer += spawnInterval
+    if (cans.length < MAX_ACTIVE_CANS) {
+      cans.push(makeCan(nextId++, CAN_PLAY_TOP_Y, cans, rng, 'can'))
+    }
+  }
+
+  if (shortage === 'active') {
+    tabSpawnTimer -= appliedDt
+    while (tabSpawnTimer <= 0 && timeLeft > 0) {
+      tabSpawnTimer += TAB_SPAWN_INTERVAL_S
+      if (cans.length < MAX_ACTIVE_CANS) {
+        cans.push(makeCan(nextId++, CAN_PLAY_TOP_Y, cans, rng, 'tab'))
+      }
+    }
+  }
+
+  let markerPos = state.markerPos
+  let markerDir = state.markerDir
+  if (molten >= BRAL_CANS_PER_COIN) {
+    markerPos += markerDir * STRIKE_SPEED * appliedDt
+    if (markerPos >= 1) {
+      markerPos = Math.max(0, 2 - markerPos)
+      markerDir = -1
+    } else if (markerPos <= 0) {
+      markerPos = Math.min(1, -markerPos)
+      markerDir = 1
+    }
+  }
+
+  const strikeCooldown = Math.max(0, state.strikeCooldown - appliedDt)
+  let lastCoin = state.lastCoin
+  if (lastCoin) {
+    const nextTtl = lastCoin.ttl - appliedDt
+    lastCoin = nextTtl <= 0 ? null : { ...lastCoin, ttl: nextTtl }
+  }
+
+  if (timeLeft <= 0) {
+    return {
+      ...state,
+      status: 'over',
+      timeLeft: 0,
+      elapsedSeconds,
+      ovenTemp,
+      crucibleCans,
+      molten,
+      cans: [],
+      spawnTimer,
+      tabSpawnTimer,
+      shortage,
+      relay: { ...state.relay, active: false },
+      shortageNotice: null,
+      markerPos,
+      markerDir,
+      strikeCooldown,
+      lastCoin,
+      nextId,
+    }
+  }
+
+  return {
+    ...state,
+    timeLeft,
+    elapsedSeconds,
+    ovenTemp,
+    crucibleCans,
+    molten,
+    cans,
+    spawnTimer,
+    tabSpawnTimer,
+    shortage,
+    shortageNotice,
+    markerPos,
+    markerDir,
+    strikeCooldown,
+    lastCoin,
+    nextId,
+  }
+}

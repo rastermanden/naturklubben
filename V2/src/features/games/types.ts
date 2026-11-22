@@ -9,6 +9,7 @@ export type GameId =
   | 'fugletraek'
   | 'kabale'
   | 'boble'
+  | 'bral'
 
 /**
  * Et resultat, som det ligger i `gameScores` i Convex.
@@ -26,10 +27,12 @@ export interface GameScore {
   score: number
   /** Ryddede rækker i Tetris, antal træk i Kaptajn Kaper, antal rigtige svar
    *  (ud af 10) i Naturquiz, poster i Stifinderen, vendinger i Fugletræk,
-   *  punkterede modstandere i Boble-spillet; 0 i 2048. */
+   *  punkterede modstandere i Boble-spillet, mønter i Bral smeltning;
+   *  0 i 2048. */
   lines: number
   /** Niveau i Tetris, rang i Kaptajn Kaper, baneklasse i Stifinderen,
-   *  bræt-klasse i Fugletræk, bane i Boble-spillet; 1 i 2048 og Naturquiz. */
+   *  bræt-klasse i Fugletræk, bane i Boble-spillet; 1 i 2048, Naturquiz og
+   *  Bral smeltning. */
   level: number
   durationSeconds: number
   createdAt: number

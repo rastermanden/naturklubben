@@ -39,12 +39,49 @@ export function GalleryAlbumGrid({
         >
           <span className="relative block aspect-square overflow-hidden rounded bg-surface-sunken">
             {album.coverUrl ? (
-              <img
-                src={album.coverUrl}
-                alt=""
-                loading="lazy"
-                className="h-full w-full object-cover"
-              />
+              <>
+                <img
+                  src={album.coverUrl}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+                {album.coverIsVideo && (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-1.5 left-1.5 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white"
+                  >
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                    Video
+                  </span>
+                )}
+              </>
+            ) : album.coverIsVideo ? (
+              <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-2 text-ink-body">
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-raised text-ink shadow-sm"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </span>
+                <span className="text-xs font-medium text-ink-muted">
+                  Video
+                </span>
+              </span>
             ) : (
               <span className="absolute inset-0 flex items-center justify-center p-2 text-center text-xs text-ink-subtle">
                 Intet billede klar endnu

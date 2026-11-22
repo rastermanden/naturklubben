@@ -107,6 +107,16 @@ export const games: readonly GameDefinition[] = [
     describeScore: (score) =>
       `${score.lines} punkterede · bane ${score.level} · ${formatDuration(score.durationSeconds)}`,
   },
+  {
+    id: 'bral',
+    title: 'Bral smeltning',
+    tagline:
+      'Grib tomme øldåser, hold ovnen på 660 grader, og præg Bral-mønter på et minut.',
+    path: '/spil/bral',
+    symbol: '🪙',
+    describeScore: (score) =>
+      `${score.lines} ${score.lines === 1 ? 'mønt' : 'mønter'} · ${formatDuration(score.durationSeconds)}`,
+  },
 ]
 
 export function gameById(id: GameId): GameDefinition {

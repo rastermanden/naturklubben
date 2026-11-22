@@ -78,6 +78,11 @@ function ActivitiesPage() {
                 title="Spil"
                 description="Lidt at give sig til, når regnen sætter ind. Dit bedste resultat ryger på klubbens liste."
               />
+              <ClubLinkCard
+                to="/lyd"
+                title="Lyd"
+                description="Læg mp3-filer op og lyt til dem i appen."
+              />
             </>
           )}
         </ul>

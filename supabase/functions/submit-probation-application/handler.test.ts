@@ -5,6 +5,7 @@ import { extractTrustedClientAddress } from '../_shared/clientAddress'
 import {
   createSubmissionHandler,
   hmacSignal,
+  SubmissionBackendError,
   type SubmissionRpcArguments,
   type SubmissionRpcResult,
 } from './handler'
@@ -224,5 +225,47 @@ describe('submission handler', () => {
     expect(JSON.stringify(reportError.mock.calls)).not.toContain(
       'contains-sensitive-details',
     )
+  })
+
+  it('logs the SQLSTATE with the category, so the cause can be seen in the log', async () => {
+    const reportError = vi.fn()
+    const handler = createSubmissionHandler({
+      secret: 'server-secret',
+      submit: () => Promise.reject(new SubmissionBackendError('55000')),
+      sleep: () => Promise.resolve(),
+      random: () => 0,
+      reportError,
+    })
+
+    const response = await handler(request())
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({
+      code: 'temporarily_unavailable',
+    })
+    expect(reportError).toHaveBeenCalledWith(
+      expect.any(String),
+      'submission_backend_failure:55000',
+    )
+  })
+
+  it('leaves out anything that is not a SQLSTATE', async () => {
+    const reportError = vi.fn()
+    const handler = createSubmissionHandler({
+      secret: 'server-secret',
+      submit: () =>
+        Promise.reject(new SubmissionBackendError('anna@example.com fejlede')),
+      sleep: () => Promise.resolve(),
+      random: () => 0,
+      reportError,
+    })
+
+    await handler(request())
+
+    expect(reportError).toHaveBeenCalledWith(
+      expect.any(String),
+      'submission_backend_failure',
+    )
+    expect(JSON.stringify(reportError.mock.calls)).not.toContain('@example.com')
   })
 })

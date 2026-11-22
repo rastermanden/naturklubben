@@ -10,6 +10,8 @@ import {
   PREVIEW_PHOTO_CAPTION,
   PREVIEW_AGENTMAIL_ADDRESS,
   PREVIEW_EVENT_TITLE,
+  SWEDEN_NOVEMBER_EVENT_TITLE,
+  SWEDEN_NOVEMBER_MAIN_DISH,
   PREVIEW_GUEST_ALLOWLIST,
   PREVIEW_MARTIN_EMAIL,
   PREVIEW_MEMBER_NAME,
@@ -259,14 +261,36 @@ describe('writePreviewSample', () => {
       linkUrl: 'https://rastermanden.github.io/btg/',
       linkLabel: 'Se BøsseTennisGolf-siden',
     })
-    expect(rows.events).toHaveLength(1)
-    expect(rows.events[0]).toMatchObject({
+    expect(rows.events).toHaveLength(2)
+    const previewEvent = rows.events.find(
+      (event) => event.title === PREVIEW_EVENT_TITLE,
+    )
+    expect(previewEvent).toMatchObject({
       title: PREVIEW_EVENT_TITLE,
       isPublic: true,
       attendingCount: 0,
       createdBy: rows.profiles[0]!._id,
     })
-    expect(rows.events[0]!.endsAt).toBeGreaterThan(Date.now())
+    expect(previewEvent!.endsAt).toBeGreaterThan(Date.now())
+    const sweden = rows.events.find(
+      (event) => event.title === SWEDEN_NOVEMBER_EVENT_TITLE,
+    )
+    expect(sweden).toMatchObject({
+      location: 'Loshult, Sverige',
+      isPublic: false,
+      startAt: Date.UTC(2027, 10, 19, 16, 0, 0),
+      endsAt: Date.UTC(2027, 10, 21, 16, 0, 0),
+    })
+    const meals = await t.run(async (ctx) =>
+      ctx.db.query('eventMeals').collect(),
+    )
+    expect(meals).toEqual([
+      expect.objectContaining({
+        eventId: sweden!._id,
+        mainDish: SWEDEN_NOVEMBER_MAIN_DISH,
+      }),
+    ])
+    expect(meals[0]?.buyerId).toBeUndefined()
 
     const messages = await t.run(async (ctx) =>
       ctx.db.query('messages').collect(),
@@ -551,7 +575,65 @@ describe('writePreviewSample', () => {
     })
 
     const events = await t.run(async (ctx) => ctx.db.query('events').collect())
-    expect(events).toHaveLength(1)
-    expect(events[0]!.endsAt).toBeGreaterThan(Date.now())
+    expect(events).toHaveLength(2)
+    const previewEvent = events.find(
+      (event) => event.title === PREVIEW_EVENT_TITLE,
+    )
+    expect(previewEvent!.endsAt).toBeGreaterThan(Date.now())
+    expect(
+      events.filter((event) => event.title === SWEDEN_NOVEMBER_EVENT_TITLE),
+    ).toHaveLength(1)
+  })
+
+  it('sætter Troels som madansvarlig, når hans konto findes', async () => {
+    const t = convexTest(schema, modules)
+    const troels = PREVIEW_GUEST_ALLOWLIST.find(
+      (guest) => guest.name === 'Troels',
+    )
+    expect(troels).toBeDefined()
+    const userId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert('users', { email: 'preview@example.com' })
+      await ctx.db.insert('authAccounts', {
+        userId: id,
+        provider: 'password',
+        providerAccountId: 'preview@example.com',
+      })
+      const troelsId = await ctx.db.insert('users', { email: troels!.email })
+      await ctx.db.insert('authAccounts', {
+        userId: troelsId,
+        provider: 'password',
+        providerAccountId: troels!.email,
+      })
+      await ctx.db.insert('profiles', {
+        userId: troelsId,
+        fullName: 'Troels',
+        isAdmin: true,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+      return id
+    })
+
+    await t.run(async (ctx) => {
+      await writePreviewSample(ctx, userId)
+      await writePreviewSample(ctx, userId)
+    })
+
+    const meal = await t.run(async (ctx) => {
+      const meals = await ctx.db.query('eventMeals').collect()
+      const buyer =
+        meals[0]?.buyerId === undefined
+          ? null
+          : await ctx.db.get(meals[0].buyerId)
+      return { meals, buyerName: buyer?.fullName ?? null }
+    })
+    expect(meal.meals).toHaveLength(1)
+    expect(meal.meals[0]).toMatchObject({
+      mainDish: SWEDEN_NOVEMBER_MAIN_DISH,
+    })
+    expect(meal.buyerName).toBe('Troels')
   })
 })

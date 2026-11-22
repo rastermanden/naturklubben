@@ -4,7 +4,13 @@ import { env, internalAction } from './_generated/server'
 import { internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
 import { announcementPayload } from './announcements'
-import { pushPayload, type PushPayload, type PushTarget } from './push'
+import {
+  CHAT_PUSH_TTL_SECONDS,
+  pushPayload,
+  type ChatPushDelivery,
+  type PushPayload,
+  type PushTarget,
+} from './push'
 import { probationPayload } from './probation'
 import { notificationKind } from './tables/notifications'
 import type { Id } from './_generated/dataModel'
@@ -411,5 +417,80 @@ export const deliverProbationNotification = internalAction({
       succeeded ? undefined : 'Push-tjenesterne modtog ikke notifikationen.',
     )
     return { skipped: false, sent, failed, removed }
+  },
+})
+
+/**
+ * Sender Web Push til de berettigede medlemmer ved en ny chatbesked.
+ *
+ * Erstatter Edge Functionen `supabase/functions/chat-push/index.ts`. Kaldes
+ * asynkront fra `chat.sendMessage` kun når beskeden faktisk blev indsat (ikke
+ * ved offline-køens idempotente gentagelser). Døde endpoints (404/410) slettes
+ * med det samme.
+ */
+export const deliverChatPush = internalAction({
+  args: { messageId: v.id('messages') },
+  returns: v.object({
+    sent: v.number(),
+    failed: v.number(),
+    removed: v.number(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ sent: number; failed: number; removed: number }> => {
+    const deliveries: ChatPushDelivery[] = await ctx.runQuery(
+      internal.push.prepareChatPush,
+      { messageId: args.messageId },
+    )
+    if (deliveries.length === 0) {
+      return { sent: 0, failed: 0, removed: 0 }
+    }
+
+    let vapid: VapidDetails
+    try {
+      vapid = await ctx.runAction(internal.pushSend.ensureVapidKeys, {})
+    } catch (caught) {
+      console.error('Kunne ikke hente eller oprette VAPID-nøglerne', caught)
+      return { sent: 0, failed: deliveries.length, removed: 0 }
+    }
+
+    const results = await Promise.allSettled(
+      deliveries.map(async ({ target, payload }) => {
+        const result = await sendPushNotification(
+          target,
+          JSON.stringify(payload),
+          vapid,
+          CHAT_PUSH_TTL_SECONDS,
+        )
+        if (result.isGone) {
+          await ctx.runMutation(internal.push.removeSubscription, {
+            subscriptionId: target.subscriptionId,
+          })
+        }
+        return result
+      }),
+    )
+
+    let sent = 0
+    let failed = 0
+    let removed = 0
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        failed += 1
+        console.error('Chat-push fejlede', result.reason)
+        continue
+      }
+      if (result.value.isGone) {
+        removed += 1
+      } else if (result.value.status >= 200 && result.value.status < 300) {
+        sent += 1
+      } else {
+        failed += 1
+        console.error(`Chat-push afvist af tjenesten: ${result.value.status}`)
+      }
+    }
+
+    return { sent, failed, removed }
   },
 })

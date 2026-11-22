@@ -4,7 +4,7 @@ begin;
 
 set local search_path = public, tests;
 
-select plan(15);
+select plan(21);
 
 do $$
 begin
@@ -176,6 +176,95 @@ select is(
   'den afviste ansøgning blev ikke oprettet'
 );
 
+-- Uden en host-header kan funktionens adresse ikke udledes. Det er
+-- notifikationens problem, ikke ansøgerens: ansøgningen skal stå alligevel.
+do $$ begin perform set_config('request.headers', '', true); end $$;
+
+select results_eq(
+  $$select * from public.submit_probation_application_limited(
+      'Uden Adresse', 'uden-adresse@example.com'::citext, 'Jeg vil med ud',
+      'https://fcm.googleapis.com/abc', 'p256dh', 'auth',
+      repeat('7', 64), repeat('6', 64), repeat('5', 64)
+    )$$,
+  $$values ('accepted'::text, null::integer)$$,
+  'ansøgningen accepteres, selv om funktionens adresse ikke kan udledes'
+);
+
+select results_eq(
+  $$select notification_function_url, admin_notification_status
+    from public.probation_applications
+    where email = 'uden-adresse@example.com'::citext$$,
+  $$values (
+    'https://naturklubben.supabase.co/functions/v1/probation-notifications'::text,
+    'pending'::text
+  )$$,
+  'adressen lånes af en tidligere ansøgning, så notifikationen alligevel kan sendes'
+);
+
+-- Og er der ingen adresse at låne -- den første ansøgning i et nyt projekt --
+-- står ansøgningen stadig. Leveringen noteres som fejlet, ikke som en fejl på
+-- formularen.
+do $$
+begin
+  perform tests.reset_session();
+  update public.probation_applications set notification_function_url = null;
+  perform tests.login_service();
+  perform set_config('request.headers', '', true);
+end
+$$;
+
+select results_eq(
+  $$select * from public.submit_probation_application_limited(
+      'Første Ansøger', 'foerste@example.com'::citext, 'Jeg vil med ud',
+      'https://fcm.googleapis.com/abc', 'p256dh', 'auth',
+      repeat('b', 64), repeat('c', 64), repeat('d', 64)
+    )$$,
+  $$values ('accepted'::text, null::integer)$$,
+  'ansøgningen accepteres, selv om ingen adresse kan udledes eller lånes'
+);
+
+select results_eq(
+  $$select notification_function_url, admin_notification_status
+    from public.probation_applications
+    where email = 'foerste@example.com'::citext$$,
+  $$values (null::text, 'failed'::text)$$,
+  'den manglende leveringsvej noteres på ansøgningen i stedet for at vælte den'
+);
+
+select is(
+  (
+    select count(*)::int
+    from public.probation_application_push_subscriptions subscription
+    join public.probation_applications application
+      on application.id = subscription.application_id
+    where application.email = 'foerste@example.com'::citext
+  ),
+  1,
+  'push-abonnementet følger med, så svaret kan sendes, når adressen er kendt'
+);
+
+-- Cron-genforsøget låner den sidst kendte adresse, så ansøgningen ikke bliver
+-- liggende usynligt, fordi den ene request manglede sin header.
+do $$
+begin
+  perform tests.reset_session();
+  update public.probation_applications
+  set notification_function_url =
+    'https://naturklubben.supabase.co/functions/v1/probation-notifications'
+  where email = 'ny@example.com'::citext;
+  perform public.retry_probation_notifications();
+  perform tests.login_service();
+end
+$$;
+
+select results_eq(
+  $$select notification_function_url
+    from public.probation_applications
+    where email = 'foerste@example.com'::citext$$,
+  $$values ('https://naturklubben.supabase.co/functions/v1/probation-notifications'::text)$$,
+  'genforsøget udfylder adressen fra en ansøgning, der kunne udlede den'
+);
+
 -- Admin
 do $$
 begin
@@ -186,7 +275,7 @@ $$;
 
 select is(
   (select count(*)::int from public.probation_applications),
-  3,
+  5,
   'en admin kan læse ansøgningerne'
 );
 

@@ -36,7 +36,7 @@ export const navLinks: readonly NavLinkItem[] = [
   {
     to: '/aktiviteter',
     label: 'Aktiviteter',
-    alsoActiveFor: ['/naturlog', '/spil'],
+    alsoActiveFor: ['/naturlog', '/spil', '/lyd'],
   },
   { to: '/kalender', label: 'Kalender', requiresAuth: true },
   { to: '/billeder', label: 'Billeder', requiresAuth: true },

@@ -7,9 +7,13 @@
  */
 export type OptimizationStatus = 'pending' | 'processing' | 'ready' | 'failed'
 
-/** Et billede som `gallery.listPhotos` og `gallery.getPhoto` giver det. */
+export type MediaKind = 'image' | 'video'
+
+/** Et billede eller en video som `gallery.listPhotos` og `gallery.getPhoto` giver det. */
 export interface Photo {
   id: string
+  mediaKind: MediaKind
+  mimeType?: string | null
   caption: string | null
   eventId: string | null
   albumKey: string
@@ -24,6 +28,8 @@ export interface Photo {
   commentCount: number
   /** Sat af serveren: ejer eller admin. */
   canDelete: boolean
+  /** Sat af serveren: ejer eller admin. */
+  canEdit: boolean
   /** Sat af serveren: er den indloggede bruger uploader. */
   isUploader: boolean
   displayUrl: string | null
@@ -39,6 +45,7 @@ export interface GalleryAlbum {
   latestPhotoAt: number | null
   coverPhotoId: string | null
   coverUrl: string | null
+  coverIsVideo?: boolean
 }
 
 /** En kommentar som `gallery.listComments` giver den. */

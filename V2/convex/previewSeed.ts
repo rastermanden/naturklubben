@@ -118,6 +118,18 @@ export const CLUB_ACTIVITIES = [
 
 export const PREVIEW_EVENT_TITLE = 'Preview-tur'
 
+/**
+ * Næste års novemberarrangement i Sverige, så previewet kan prøve madlisten.
+ *
+ * Datoen følger de to seneste ture i Loshult: EfterårsBral 2025 (21. til 23. nov.)
+ * og Efterårsbral 2026 (20. til 22. nov.). 2027 er fredag 19. til søndag 21. nov.
+ * Turen findes ikke i kalenderen endnu, så den lægges kun ind her.
+ */
+export const SWEDEN_NOVEMBER_EVENT_TITLE = 'Efterårsbral 2027'
+export const SWEDEN_NOVEMBER_MAIN_DISH = 'Chili con carne'
+const SWEDEN_NOVEMBER_START = Date.UTC(2027, 10, 19, 16, 0, 0)
+const SWEDEN_NOVEMBER_END = Date.UTC(2027, 10, 21, 16, 0, 0)
+
 /** Stabilt klient-id, så seedet ikke lægger den samme besked ind to gange. */
 export const PREVIEW_CHAT_CLIENT_ID = 'preview-seed-chat'
 export const PREVIEW_CHAT_TEXT = 'Hej fra previewet. Skoven er grøn i dag.'
@@ -336,6 +348,75 @@ function previewAvatarBlob(): Blob {
   return new Blob([bytes], { type: 'image/png' })
 }
 
+async function profileIdForAllowlistName(
+  ctx: MutationCtx,
+  name: string,
+): Promise<Id<'profiles'> | undefined> {
+  const guest = PREVIEW_GUEST_ALLOWLIST.find((row) => row.name === name)
+  if (guest === undefined) return undefined
+  const account = await ctx.db
+    .query('authAccounts')
+    .withIndex('providerAndAccountId', (q) =>
+      q.eq('provider', 'password').eq('providerAccountId', guest.email),
+    )
+    .unique()
+  if (account === null) return undefined
+  const profile = await ctx.db
+    .query('profiles')
+    .withIndex('by_user', (q) => q.eq('userId', account.userId))
+    .unique()
+  return profile?._id
+}
+
+/**
+ * Novemberarrangementet i Sverige med chili con carne som hovedret.
+ * Madansvarlig sættes, når Troels' preview-konto findes. Et nyt kald
+ * lægger ikke turen ind igen og overskriver ikke en rettet hovedret.
+ */
+async function ensureSwedenNovemberMeal(
+  ctx: MutationCtx,
+  createdBy: Id<'profiles'>,
+): Promise<void> {
+  const existing = await ctx.db
+    .query('events')
+    .filter((q) => q.eq(q.field('title'), SWEDEN_NOVEMBER_EVENT_TITLE))
+    .first()
+  const eventId =
+    existing?._id ??
+    (await ctx.db.insert('events', {
+      title: SWEDEN_NOVEMBER_EVENT_TITLE,
+      description:
+        'Novemberarrangement i Sverige. Hovedretten er chili con carne.',
+      location: 'Loshult, Sverige',
+      startAt: SWEDEN_NOVEMBER_START,
+      endAt: SWEDEN_NOVEMBER_END,
+      endsAt: SWEDEN_NOVEMBER_END,
+      createdBy,
+      isPublic: false,
+      attendingCount: 0,
+      waitlistedCount: 0,
+      approvedGuestCount: 0,
+      createdAt: Date.now(),
+    }))
+
+  const buyerId = await profileIdForAllowlistName(ctx, 'Troels')
+  const meal = await ctx.db
+    .query('eventMeals')
+    .withIndex('by_event', (q) => q.eq('eventId', eventId))
+    .unique()
+  if (meal === null) {
+    await ctx.db.insert('eventMeals', {
+      eventId,
+      mainDish: SWEDEN_NOVEMBER_MAIN_DISH,
+      ...(buyerId === undefined ? {} : { buyerId }),
+    })
+    return
+  }
+  if (meal.buyerId === undefined && buyerId !== undefined) {
+    await ctx.db.patch(meal._id, { buyerId })
+  }
+}
+
 /**
  * Medlemskab og prøvedata. Kaldes kun fra `applySample` (som har vagten) og
  * fra testen. Titlerne er stabile, så et nyt preview-build ikke lægger
@@ -450,6 +531,8 @@ export async function writePreviewSample(
       endsAt,
     })
   }
+
+  await ensureSwedenNovemberMeal(ctx, profileId)
 
   const existingKabale = await ctx.db
     .query('gameScores')
@@ -568,6 +651,29 @@ export const userIdForAccount = internalQuery({
       )
       .unique()
     return account?.userId ?? null
+  },
+})
+
+/** Sæt Troels som madansvarlig, når hans preview-konto findes. */
+export const assignSwedenMealBuyer = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx): Promise<null> => {
+    assertAllowedOnThisDeployment()
+    const event = await ctx.db
+      .query('events')
+      .filter((q) => q.eq(q.field('title'), SWEDEN_NOVEMBER_EVENT_TITLE))
+      .first()
+    if (event === null) return null
+    const buyerId = await profileIdForAllowlistName(ctx, 'Troels')
+    if (buyerId === undefined) return null
+    const meal = await ctx.db
+      .query('eventMeals')
+      .withIndex('by_event', (q) => q.eq('eventId', event._id))
+      .unique()
+    if (meal === null || meal.buyerId !== undefined) return null
+    await ctx.db.patch(meal._id, { buyerId })
+    return null
   },
 })
 
@@ -811,6 +917,9 @@ export const ensure = internalAction({
     for (const guest of PREVIEW_GUEST_ALLOWLIST) {
       await provisionSharedAccount(ctx, guest, sharedPassword)
     }
+    // Madplanen lægges ind, før de fælles konti findes. Troels sættes
+    // bagefter, når hans profil er oprettet.
+    await ctx.runMutation(internal.previewSeed.assignSwedenMealBuyer, {})
     return {
       ok: true,
       sharedAccounts: PREVIEW_GUEST_ALLOWLIST.length,

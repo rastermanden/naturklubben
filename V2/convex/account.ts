@@ -3,6 +3,8 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
 import { currentUserId, requireProfile } from './authz'
+import { removePhotoFromAlbum, photoFileUrl, videoFileUrl } from './gallery'
+import { audioFileUrl } from './audio'
 import type { Doc, Id } from './_generated/dataModel'
 
 /**
@@ -68,12 +70,14 @@ const RESERVATION_TTL_MS = 15 * 60 * 1000
  * gjorde ved hvert stemme.
  *
  * `events.createdBy`, `messages.authorId`, `observations.createdById`,
- * `chatPolls.createdBy` og `tournaments.*` står bevidst ikke her: de skal
- * *nulstilles*, ikke slettes, fordi de er klubbens fælles historik.
+ * `chatPolls.createdBy`, `eventMealWishes.authorId`, `eventMeals.buyerId` og
+ * `tournaments.*` står bevidst ikke her: de skal *nulstilles*, ikke slettes,
+ * fordi de er klubbens fælles historik. Et madønske bliver på indkøbslisten.
  */
 export const PERSONAL_TABLES = [
   'photos',
   'photoComments',
+  'audioClips',
   'eventAttendance',
   'messageReactions',
   'pollVotes',
@@ -146,6 +150,7 @@ export const exportData = query({
     const messages = await exportMessages(ctx, profile._id)
     const photos = await exportPhotos(ctx, profile._id)
     const photoComments = await exportPhotoComments(ctx, profile._id)
+    const audioClips = await exportAudioClips(ctx, profile._id)
     const attendance = await exportAttendance(ctx, profile._id)
     const pollVotes = await exportPollVotes(ctx, profile._id)
     const observations = await exportObservations(ctx, profile._id)
@@ -191,11 +196,13 @@ export const exportData = query({
       messages,
       photos,
       photoComments,
+      audioClips,
       activityRegistrations: attendance,
       pollVotes,
       observations,
       gameScores,
       memberBadges,
+      mealWishes: await exportMealWishes(ctx, profile._id),
     }
   },
 })
@@ -426,6 +433,7 @@ async function deleteAccount(ctx: MutationCtx, profileId: Id<'profiles'>) {
     await ctx.storage.delete(profile.avatarStorageId)
   }
   await deleteMemberGallery(ctx, profileId)
+  await deleteMemberAudio(ctx, profileId)
 
   // 6. Kalenderen: tilmeldinger, opgaver og begivenhedernes ophav.
   await clearMemberCalendar(ctx, profileId)
@@ -506,66 +514,6 @@ async function deleteAccount(ctx: MutationCtx, profileId: Id<'profiles'>) {
 /** Navnet, der står i et snapshot i stedet for et slettet medlem. */
 const FORMER_MEMBER_NAME = 'Tidligere medlem'
 
-async function albumByKey(ctx: MutationCtx, albumKey: string) {
-  return await ctx.db
-    .query('photoAlbums')
-    .withIndex('by_album_key', (q) => q.eq('albumKey', albumKey))
-    .unique()
-}
-
-/**
- * Albumtallene efter et slettet billede.
- *
- * **Skal følges ad med `removePhotoFromAlbum` i `convex/gallery.ts`.** Den
- * ligger her som en kopi, fordi den ikke er eksporteret, og fordi en eksport
- * ville gøre galleriet tilgængeligt fra kontosletningen -- men reglerne er de
- * samme: tællingen falder med én, et tomt "Uden begivenhed"-album slettes, og
- * et cover, der pegede på det slettede billede, flyttes til det nyeste `ready`
- * billede i albummet, så albumforsiden aldrig viser en fil, der er væk.
- */
-async function removePhotoFromAlbum(ctx: MutationCtx, photo: Doc<'photos'>) {
-  const album = await albumByKey(ctx, photo.albumKey)
-  if (album === null) return
-
-  const photoCount = Math.max(0, album.photoCount - 1)
-  if (photoCount === 0 && album.eventId === undefined) {
-    // Et tomt "Uden begivenhed"-album er støj; det oprettes igen ved næste
-    // upload. Album med en begivenhed bliver stående som tomt, så det stadig
-    // kan findes fra kalenderen.
-    await ctx.db.delete(album._id)
-    return
-  }
-
-  const coverBelongsToPhoto = album.coverPhotoId === photo._id
-  const nextCover = coverBelongsToPhoto
-    ? await ctx.db
-        .query('photos')
-        .withIndex('by_album', (q) => q.eq('albumKey', photo.albumKey))
-        .order('desc')
-        .filter((q) =>
-          q.and(
-            q.eq(q.field('optimizationStatus'), 'ready'),
-            q.neq(q.field('_id'), photo._id),
-          ),
-        )
-        .first()
-    : null
-
-  await ctx.db.patch(album._id, {
-    photoCount,
-    coverPhotoId: coverBelongsToPhoto ? nextCover?._id : album.coverPhotoId,
-    coverThumbnailStorageId: coverBelongsToPhoto
-      ? nextCover?.thumbnailStorageId
-      : album.coverThumbnailStorageId,
-    coverOptimizedStorageId: coverBelongsToPhoto
-      ? nextCover?.optimizedStorageId
-      : album.coverOptimizedStorageId,
-    coverCreatedAt: coverBelongsToPhoto
-      ? nextCover?.createdAt
-      : album.coverCreatedAt,
-  })
-}
-
 /**
  * Galleriet: medlemmets billeder, filerne bag dem, kommentarerne og
  * moderationsloggen.
@@ -631,6 +579,19 @@ async function deleteMemberGallery(
   }
 
   await anonymizeModerationLog(ctx, profileId)
+}
+
+/** Lydfiler: medlemmets egne lydklip slettes sammen med filerne i fillageret. */
+async function deleteMemberAudio(ctx: MutationCtx, profileId: Id<'profiles'>) {
+  const clips = await ctx.db
+    .query('audioClips')
+    .withIndex('by_uploader', (q) => q.eq('uploaderId', profileId))
+    .collect()
+
+  for (const clip of clips) {
+    await ctx.storage.delete(clip.storageId)
+    await ctx.db.delete(clip._id)
+  }
 }
 
 /**
@@ -751,6 +712,23 @@ async function clearMemberCalendar(
     if (task.assignedTo === profileId) {
       await ctx.db.patch(task._id, { assignedTo: undefined })
     }
+  }
+
+  // Ønsket hører til indkøbslisten, ikke til personen. Forfatteren fjernes,
+  // og madansvarlig slipper planen, så den kan få en ny.
+  const wishes = await ctx.db
+    .query('eventMealWishes')
+    .withIndex('by_author', (q) => q.eq('authorId', profileId))
+    .collect()
+  for (const wish of wishes) {
+    await ctx.db.patch(wish._id, { authorId: undefined })
+  }
+  const meals = await ctx.db
+    .query('eventMeals')
+    .withIndex('by_buyer', (q) => q.eq('buyerId', profileId))
+    .collect()
+  for (const meal of meals) {
+    await ctx.db.patch(meal._id, { buyerId: undefined })
   }
 
   // Begivenhederne er klubbens historik og bliver stående. `createdBy` er
@@ -1002,25 +980,40 @@ async function exportPhotos(ctx: QueryCtx, profileId: Id<'profiles'>) {
     .collect()
 
   const rows = await Promise.all(
-    photos.map(async (photo) => ({
-      id: photo._id,
-      caption: photo.caption ?? null,
-      createdAt: photo.createdAt,
-      eventId: photo.eventId ?? null,
-      albumKey: photo.albumKey,
-      optimizationStatus: photo.optimizationStatus,
-      downloadUrls: {
-        original: await ctx.storage.getUrl(photo.storageId),
-        optimized:
-          photo.optimizedStorageId === undefined
-            ? null
-            : await ctx.storage.getUrl(photo.optimizedStorageId),
-        thumbnail:
-          photo.thumbnailStorageId === undefined
-            ? null
-            : await ctx.storage.getUrl(photo.thumbnailStorageId),
-      },
-    })),
+    photos.map(async (photo) => {
+      const isVideo = photo.mediaKind === 'video'
+      return {
+        id: photo._id,
+        mediaKind: isVideo ? ('video' as const) : ('image' as const),
+        mimeType: photo.mimeType ?? null,
+        sizeBytes: photo.sizeBytes ?? null,
+        caption: photo.caption ?? null,
+        createdAt: photo.createdAt,
+        eventId: photo.eventId ?? null,
+        albumKey: photo.albumKey,
+        optimizationStatus: photo.optimizationStatus,
+        downloadUrls: isVideo
+          ? {
+              original: videoFileUrl(photo.displayToken),
+              optimized: null,
+              thumbnail:
+                photo.thumbnailStorageId !== undefined
+                  ? photoFileUrl(photo.thumbnailToken)
+                  : null,
+            }
+          : {
+              original: await ctx.storage.getUrl(photo.storageId),
+              optimized:
+                photo.optimizedStorageId === undefined
+                  ? null
+                  : await ctx.storage.getUrl(photo.optimizedStorageId),
+              thumbnail:
+                photo.thumbnailStorageId === undefined
+                  ? null
+                  : await ctx.storage.getUrl(photo.thumbnailStorageId),
+            },
+      }
+    }),
   )
 
   return rows.sort((left, right) => left.createdAt - right.createdAt)
@@ -1041,6 +1034,47 @@ async function exportPhotoComments(ctx: QueryCtx, profileId: Id<'profiles'>) {
       body: comment.body,
       createdAt: comment.createdAt,
     }))
+}
+
+/** Medlemmets egne lydfiler, ældste først. */
+async function exportAudioClips(ctx: QueryCtx, profileId: Id<'profiles'>) {
+  const clips = await ctx.db
+    .query('audioClips')
+    .withIndex('by_uploader', (q) => q.eq('uploaderId', profileId))
+    .collect()
+
+  return clips
+    .sort((left, right) => left.createdAt - right.createdAt)
+    .map((clip) => ({
+      id: clip._id,
+      title: clip.title,
+      sizeBytes: clip.sizeBytes,
+      createdAt: clip.createdAt,
+      audioUrl: audioFileUrl(clip.playToken),
+    }))
+}
+
+/** Madønsker, medlemmet selv har skrevet, ældste først. */
+async function exportMealWishes(ctx: QueryCtx, profileId: Id<'profiles'>) {
+  const rows = await ctx.db
+    .query('eventMealWishes')
+    .withIndex('by_author', (q) => q.eq('authorId', profileId))
+    .collect()
+
+  const entries = await Promise.all(
+    rows.map(async (row) => {
+      const event = await ctx.db.get(row.eventId)
+      return {
+        eventId: row.eventId,
+        eventTitle: event?.title ?? null,
+        category: row.category,
+        text: row.text,
+        createdAt: row.createdAt,
+      }
+    }),
+  )
+
+  return entries.sort((left, right) => left.createdAt - right.createdAt)
 }
 
 /** Medlemmets svar på begivenheder, med begivenhedens titel og tid. */

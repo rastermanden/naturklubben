@@ -2,3 +2,9 @@
 # overskriver dem; de skal ikke kæmpe med repoets Prettier.
 V2/convex/_generated
 .github/MAIL_CLEANUP
+
+# Skills er kopieret uændret fra deres kilder (se .agents/skills/VENDORED.md).
+# Formaterer vi dem, holder de ikke længere ord for ord, og næste kopiering
+# giver en diff uden indhold. De holdes derfor uden for format-tjekket.
+.agents/skills
+.claude/skills
