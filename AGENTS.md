@@ -3,10 +3,15 @@
 `CLAUDE.md` importerer denne fil med `@AGENTS.md`. Ret kun her. Claude Code læser
 `CLAUDE.md`, og de andre coding agents læser `AGENTS.md`, så begge får samme tekst.
 
-Medlemsapp for Naturklubben på `https://naturklubben.dk`. Frontend hostes statisk på GitHub
-Pages med eget domæne (`public/CNAME`), backend er Supabase
-(Postgres, Auth, Storage, Realtime, Edge Functions). Se GitHub-issue #1 for det fulde
-epos/plan og #2–#15 for de nedbrudte delopgaver.
+Medlemsapp for Naturklubben på `https://naturklubben.dk`. Produktiv app og backend er
+**V2** i `V2/` på **Convex** (`quaint-parakeet-652`), med statisk frontend hostet på
+GitHub Pages (`V2/dist` via `.github/workflows/deploy.yml` og eget domæne i
+`V2/public/CNAME`).
+
+V1-koden (`src/`, `supabase/`) samt `migrate-v1.yml` og
+`V2/scripts/migrateFromSupabase.mjs` bliver liggende i repoet indtil et efterfølgende
+issue (#379), mens V1-byggepipelinen (`pr-preview.yml`, `deploy-functions.yml`,
+`sync-auth-config.yml` samt `database`- og V1/Deno-jobbene i `ci.yml`) er fjernet (#378).
 
 ## Før du gør noget
 
@@ -37,16 +42,17 @@ præcis samme kopi. Ret en skill i `.agents/skills/` — aldrig gennem symlinket
 - **JOB** — gør ændringen, så den stadig passer med `VISION.md`, og så hvert Done-tjek i
   issueet er opfyldt.
 - **KILDER** — issueet, `VISION.md`, den kode og de tests ændringen rører, og den faktiske
-  kontrakt i `supabase/` og workflows — ikke en husket version af den.
-- **FÆRDIG** — alle Done-tjek opfyldt eller markeret som ikke testbare her, `npm test`,
-  `npm run lint`, `npm run format:check` og `npx tsc -b` grønne, CI grøn på PR'en, og
-  previewet set med egne øjne når ændringen kan ses.
+  kontrakt i `V2/` og workflows — ikke en husket version af den.
+- **FÆRDIG** — alle Done-tjek opfyldt eller markeret som ikke testbare her,
+  `cd V2 && npm test && npm run lint && npx tsc -b && npx prettier --check .` grønne,
+  CI grøn på PR'en, og previewet set med egne øjne når ændringen kan ses.
 - **OUTPUT** — et pull request ejeren kan merge, med hvad der er ændret, hvilke issues der
   lukkes, hvad der er kørt, og hvad et menneske stadig skal se efter.
-- **FORBUDT** — at merge, tagge eller udgive; at pushe til `main`; at køre
-  `supabase db push` eller en anden manuel deploy; at slette en migrationsfil, der er kørt
-  i produktion; at slette branches med `git push --delete`; at lægge hemmeligheder,
-  personnavne, mailadresser eller hjemmestier i kode eller commits.
+- **FORBUDT** — at merge, tagge eller udgive; at pushe til `main`; at køre manuelle
+  prod-deploys (`npx convex deploy --prod` eller `supabase db push` fra en lokal terminal);
+  at pause, slette eller ændre i det gamle Supabase-projekt; at slette en migrationsfil; at
+  slette branches med `git push --delete`; at lægge hemmeligheder, personnavne,
+  mailadresser eller hjemmestier i kode eller commits.
 
 ## Kerneprincip: alt udvikling skal kunne ske fra Claude-appen
 
@@ -55,131 +61,51 @@ lokale terminal. Derfor gælder:
 
 - **Ingen trin i den løbende udvikling må kræve lokal Docker, lokal databasestak eller
   manuelle CLI-deploy-kommandoer kørt af et menneske.** Alt skal kunne udføres ved at
-  skrive kode/SQL, committe og pushe/åbne PR.
-- De **eneste** undtagelser er de to engangs-opsætningsopgaver, der kræver adgang til et
-  dashboard i en browser: 🖐️ #2 (opret Supabase-projekt) og 🖐️ #3 (GitHub Pages-opsætning).
-  De er allerede markeret som manuelle i deres respektive issues og udføres én gang af et
-  menneske.
-- Alt andet — migrations, edge functions, frontend, PWA, CI/CD-workflows — skrives og
-  pushes som almindelig kode. Deploy sker automatisk via de integrationer, der opsættes i
-  #2 og #3, aldrig ved at nogen manuelt kører en deploy-kommando.
+  skrive kode, committe og pushe/åbne PR.
+- Engangs-opsætningsopgaver i et dashboard (fx oprettelse af Convex-projekt, GitHub Pages
+  eller repo-secrets) udføres én gang af et menneske.
+- Alt andet — Convex-skema og -funktioner, frontend, PWA, CI/CD-workflows — skrives og
+  pushes som almindelig kode. Deploy sker automatisk via GitHub Actions (`deploy.yml` og
+  `pr-preview-v2.yml`), aldrig ved at nogen manuelt kører en deploy-kommando.
 
-## Database-migrations
+## Overgangsstatus for Supabase (V1)
 
-- **Kør ALDRIG `supabase db push` eller anden manuel deploy-kommando mod
-  produktionsdatabasen.**
-- **Antag ALDRIG en lokal `supabase start`-Docker-stak til at validere migrations.** Det
-  kræver lokalt værktøj, som ikke er en forudsætning for at kunne bidrage til projektet.
-  Bemærk forskellen på det og `ci.yml`'s `database`-job: dét kører en
-  `supabase/postgres`-service-container i GitHub's egen runner, afspiller hele
-  migrationskæden og kører pgTAP-tests ovenpå. Princippet handler om, hvad en
-  _bidragyder_ skal have installeret — en service container kræver intet af nogen.
-- Sådan laves en migration:
-  1. Opret en ny SQL-fil i `supabase/migrations/` med navnekonventionen
-     `<timestamp>_<beskrivelse>.sql`.
-  2. Skriv SQL'en direkte i filen (ingen lokal kørsel nødvendig for at skrive den).
-  3. Commit, push til en branch, og åbn PR mod `main`.
-  4. Supabase's GitHub-integration (opsat i #2) opretter automatisk en midlertidig
-     **Preview Branch**-database og kører migrationen der. Brug det midlertidige endpoint,
-     som Supabase-botten poster i en PR-kommentar, til at validere SQL'en — ikke en lokal
-     database.
-  5. Ved merge til `main` deployer samme integration migrationen automatisk til
-     produktionsdatabasen. Intet manuelt CLI-kald.
-- **CI afspiller hele migrationskæden på hver PR** — også dem uden ændringer i
-  `supabase/`. `database`-jobbet i `ci.yml` starter en tom Postgres, lægger det
-  minimale Supabase-platformsskema op (`supabase/tests/00_platform.sql`), kører alle
-  filer i `supabase/migrations/` i navnerækkefølge og kører derefter pgTAP-testene i
-  `supabase/tests/rls/`. En syntaksfejl, en manglende `grant` eller en policy, der
-  åbner mere end tilsigtet, fanges dér — før Preview Branchen og længe før produktion.
-- **Rører en ændring autorisationsmodellen, skal den have en pgTAP-test.** Politikker,
-  `security definer`-RPC'er og grants testes ved at skifte rolle og JWT-claims i
-  databasen og måle, hvad der faktisk sker — ikke ved at lede efter tekst i SQL-filen.
-  Se `supabase/README.md` for hvordan testene er bygget op.
-- **Hver migration skriver selv sine grants.** Nye Supabase-projekter -- og dermed hver
-  Preview Branch -- giver ikke længere `anon`, `authenticated` og `service_role` adgang
-  til nye tabeller og sekvenser automatisk (#209). En `create table` uden en `grant
-select ... to authenticated` er derfor usynlig for appen på preview'et og i ethvert nyt
-  projekt, selv om RLS-politikkerne er rigtige. Produktionen er et gammelt projekt med de
-  gamle, brede standarder, så fejlen viser sig ikke dér; CI's platform-bootstrap
-  (`supabase/tests/00_platform.sql`) kører med de nye standarder, så en glemt grant fejler
-  i pgTAP. Migrationen `20260911120000_explicit_api_grants.sql` gør de rettigheder,
-  produktionen allerede har, eksplicitte for alt, der fandtes før.
-- **Slet aldrig en migrationsfil, der er kørt i produktion**, og omdøb den ikke
-  bagefter. Supabase gemmer de kørte versionsnumre i databasen, og en fil, der
-  forsvinder under et af dem, brækker senere migrationskørsler. Er en migration
-  forkert, skrives en ny, der retter den. Rækkefølgen mellem versionsnumre er
-  derimod ikke et problem i sig selv: en migration med et lavere nummer end det
-  senest kørte bliver stadig anvendt ved merge.
-
-## Edge Functions
-
-- Deployes **ikke** manuelt fra en udviklers maskine.
-- Deployes via en GitHub Actions-workflow (se #13), der kører `supabase functions deploy`
-  ikke-interaktivt med `SUPABASE_ACCESS_TOKEN` som repo-secret. Dette kører i GitHub's
-  cloud-runners ved push til `main` — ikke lokalt — og kræver derfor ikke, at et menneske
-  sidder med CLI'en eller er logget ind interaktivt.
-- **Push-notifikationer ud over chatten** (ny begivenhed, påmindelse dagen før, og
-  til admins: indstilling til en badge, der skal godkendes) går gennem
-  `supabase/functions/_shared/pushDelivery.ts`: præferencer pr. type, leveringslog
-  (ingen får det samme to gange) og afsendelse ét sted. En ny type føjer sit navn til
-  `_shared/pushKinds.ts`, bygger sin payload i `_shared/pushPayloads.ts`, udvider
-  `kind`-constrainten på både
-  `notification_preferences` og `push_deliveries` i sin egen migration og kalder
-  `deliverPush` -- rør ikke `chat-push`, den har sin egen model. Den indstillede får
-  ingen besked om en indstilling; badge-modellen skjuler den, indtil badgen er tildelt.
-  Planlagte kørsler (påmindelsen) bruger pg_cron + pg_net som
-  `probation-notifications`, ikke en GitHub Actions-schedule. Se `supabase/README.md`,
-  "Notifikationer ud over chatten".
+- **Produktionen på `naturklubben.dk` kører på V2/Convex (`quaint-parakeet-652`).**
+  Supabase er ikke længere den kørende produktions-backend.
+- `pr-preview.yml`, `deploy-functions.yml` og `sync-auth-config.yml` er fjernet (#378), og
+  `ci.yml` kører ikke længere `database`-jobbet (pgTAP/`supabase/postgres`),
+  Deno-tjek af Edge Functions eller root V1-test/lint/typecheck.
+- **Vigtigt om Edge Functions:** Fjernelsen af `deploy-functions.yml` stopper kun _nye_
+  deploys. De 14 aktive Edge Functions i Supabase-projektet bliver ved med at køre, indtil
+  Martin selv pauser eller sletter Supabase-projektet.
+- **Slet ikke hemmeligheder i denne overgang:** GitHub-secrets (`SUPABASE_ACCESS_TOKEN`,
+  `SUPABASE_PROJECT_REF`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` osv.)
+  samt `migrate-v1.yml`, `V2/scripts/migrateFromSupabase.mjs`, `src/` og `supabase/`
+  bliver stående indtil #379.
 
 ## Client (frontend) & PR-previews
 
-- Al frontend-udvikling sker som almindelig kode (Vite/React/TypeScript), committes og
-  pushes/åbnes som PR.
+- Al produktiv frontend- og backend-udvikling sker i `V2/` (Vite/React/TypeScript +
+  Convex), committes og pushes/åbnes som PR.
 - Hver PR får automatisk et preview-link på `naturklubben.dk/pr-preview/pr-<nr>/` via
-  CI/CD-workflowet i #5. Intet manuelt deploy-trin.
-- Ved merge til `main` deployer samme CI/CD-workflow automatisk til
-  `https://naturklubben.dk`.
-- **Rører PR'en `supabase/`, bygges preview'et mod PR'ens egen Supabase Preview Branch**,
-  ikke mod produktion. `pr-preview.yml` slår branchen op i Supabase's Management API ud fra
-  branch-navn/PR-nummer og bygger med dens URL og publishable key. Så de to preview-lag
-  hænger automatisk sammen: UI'et fra preview-linket taler med den database, PR'ens egne
-  migrationer er kørt på. Går opslaget galt, fejler preview-buildet med en fejlbesked -- det
-  bygger **ikke** stille videre mod produktion.
-- **Rører PR'en ikke `supabase/`, bygges preview'et mod produktionsdatabasen** -- med en
-  synlig advarsel i job-loggen og i job-opsummeringen. Det er ikke en nødløsning, men den
-  eneste mulige: Supabase's GitHub-integration opretter kun en Preview Branch for PR'er med
-  ændringer i `supabase/`-mappen, og skriver ellers "This pull request has been ignored ...
-  because there are no changes detected in `supabase` directory" i en PR-kommentar. En
-  sådan PR indfører per definition ingen skemaændringer, så produktionsskemaet **er** PR'ens
-  skema. Vent derfor ikke på et Supabase-preview-link på en ren frontend-PR, og lad være med
-  at "fikse" workflowet, så det fejler på dem. Bemærk til gengæld, at preview'et af en ren
-  frontend-PR taler med de rigtige produktionsdata.
-  (Ønskes en branch på hver PR, kan opførslen ændres under Project Integrations Settings i
-  Supabase-dashboardet -- det er et manuelt dashboard-trin og koster en branch pr. PR.
-  Workflowet bruger automatisk branchen, hvis den findes.)
-- Preview-databasen er tom bortset fra det, migrationerne opretter: ingen brugere, billeder
-  eller beskeder. Skal en PR med migrationer testes som logget ind, skal man oprette en
-  bruger på selve preview'et.
+  `.github/workflows/pr-preview-v2.yml`. Intet manuelt deploy-trin.
+- Ved merge til `main` deployer `.github/workflows/deploy.yml` automatisk Convex-backend
+  og bygger `V2/dist` til `https://naturklubben.dk`.
 - **PR'er fra Copilot coding agent får ikke automatisk et preview-link — deres workflows
   skal godkendes manuelt.** Copilot åbner PR'en som sin egen GitHub App
   (`copilot-swe-agent`), ikke som en bruger med write-adgang, og GitHub behandler den
-  derfor som en ekstern bidragyder: `ci.yml` og `pr-preview.yml` bliver oprettet, men
+  derfor som en ekstern bidragyder: `ci.yml` og `pr-preview-v2.yml` bliver oprettet, men
   starter aldrig — de står med status `action_required`, indtil et menneske trykker
   **"Approve and run workflows"** i PR'ens merge-boks. Uden den godkendelse er der intet
-  build, intet `dist/` og dermed intet preview-link; den eneste check på PR'en er
-  `Supabase Preview`, som Supabase-integrationen selv poster. Godkendelsen skal gives igen
-  ved hvert nyt push fra Copilot. Det er ikke en fejl i workflowet — PR'er fra Claude Code
-  pushes med brugerens eget token og kører derfor med det samme.
+  build, intet `dist/` og dermed intet preview-link. Godkendelsen skal gives igen ved hvert
+  nyt push fra Copilot.
   Selve godkendelseskravet kan slås fra én gang for alle under Settings → Code & automation
   → Copilot → cloud agent → "Actions workflow approval" → slå **Require approval for
-  workflow runs** fra. Det er et manuelt dashboard-trin, og det giver ureviewet
-  Copilot-kode adgang til repoets Actions-secrets — her bl.a. `SUPABASE_ACCESS_TOKEN`, som
-  kan læse produktionsprojektets nøgler. Afvej det bevidst; standarden er godkendelse.
+  workflow runs** fra. Det giver ureviewet Copilot-kode adgang til repoets Actions-secrets
+  (heriblandt deploy-nøgler); standarden er godkendelse.
 - **PR'er fra forks får heller ikke et brugbart preview.** De kræver godkendelse af samme
-  grund (Settings → Actions → General → fork pull request workflows), og selv godkendt
-  fejler buildet med vilje: fork-PR'er får ingen secrets, så `VITE_SUPABASE_URL` og
-  `VITE_SUPABASE_PUBLISHABLE_KEY` er tomme, og `vite.config.ts` afviser at udgive en
-  app-løs bundle.
+  grund (Settings → Actions → General → fork pull request workflows), og uden repo-secrets
+  kan hverken Convex-previewet eller frontend-buildet gennemføres.
 
 ## Ajour med `main`
 
@@ -187,8 +113,7 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
   PR eller branch, så tjek altid, om den er bagud for `main`.** Kør fx
   `git fetch origin && git rev-list --count HEAD..origin/main`. Er tallet over
   0, så merge seneste `main` ind først (rebase, hvis branchen ikke er delt) og
-  kør tjekkene igen. En forældet branch kan give misvisende resultater — fx den
-  gamle `/naturklubben/`-base path, efter flytningen til naturklubben.dk.
+  kør tjekkene igen. En forældet branch kan give misvisende resultater.
 - **Reglen gælder også, når en agent tager en eksisterende branch op.** Bring
   den ajour med `main`, før der verificeres, testes, bygges preview eller
   meldes status.
@@ -196,70 +121,38 @@ select ... to authenticated` er derfor usynlig for appen på preview'et og i eth
 ## V2-previewets testbruger
 
 - **Hvert PR-preview af V2 har én CI-testbruger, og medlemmer logger ind med deres sædvanlige Naturklubben-konto.** `pr-preview-v2.yml` kalder den interne action `previewSeed:ensure` efter `npx convex deploy --preview-name pr-<nr>`. Testbrugeren oprettes lokalt via Convex Auths adgangskode-provider, og der lægges et par aktiviteter og en offentlig tur ind, så appen kan prøves.
-- **Medlemslogin på preview uden delt adgangskode (`V2/convex/previewMemberAuth.ts`):** På et preview falder `LoginPage.tsx` tilbage til Convex Auth-udbyderen `preview-member`, som server-til-server kalder produktionens `POST https://quaint-parakeet-652.convex.site/preview/verify-member` (rate-limiteret, konstant arbejde, afviser brugere uden profil eller med `deletionReservedAt`). Hvis produktion godkender, opretter/opdaterer `provisionVerifiedMember` den lokale bruger, `allowedEmails` og `profiles` (med `isAdmin` kopieret fra produktionsprofilen) og udsteder en lokal Convex Auth-session uden nogensinde at kopiere, gemme, hashe, returnere eller logge produktionsadgangskoden. Preview-frontendet taler fortsat kun med sit eget preview-deployment og dets seedede testdata. **Gælder previews bygget efter at `POST /preview/verify-member` er live i produktion (`quaint-parakeet-652`);** dette PR's eget preview verificerer derfor mod sit eget deployment i smoke-testen (`V2/scripts/previewVerifyMemberSmoke.mjs`) og bruger CI-testbrugeren.
+- **Medlemslogin på preview uden delt adgangskode (`V2/convex/previewMemberAuth.ts`):** På et preview falder `LoginPage.tsx` tilbage til Convex Auth-udbyderen `preview-member`, som server-til-server kalder produktionens `POST https://quaint-parakeet-652.convex.site/preview/verify-member` (rate-limiteret, konstant arbejde, afviser brugere uden profil eller med `deletionReservedAt`). Hvis produktion godkender, opretter/opdaterer `provisionVerifiedMember` den lokale bruger, `allowedEmails` og `profiles` (med `isAdmin` kopieret fra produktionsprofilen) og udsteder en lokal Convex Auth-session uden nogensinde at kopiere, gemme, hashe, returnere eller logge produktionsadgangskoden. Preview-frontendet taler fortsat kun med sit eget preview-deployment og dets seedede testdata.
 - **`PREVIEW_SHARED_PASSWORD` er ikke længere påkrævet eller måden medlemmer logger ind på.** Hvis secreten findes, kan `previewSeed:ensure` stadig lægge den på de syv adresser i `PREVIEW_GUEST_ALLOWLIST` som valgfri fallback (Grok Bot er administrator, `kaspermoller+test` er ikke); mangler den, fortsætter previewet uden fejl. Den skrives aldrig ud i loggen eller committes.
 - Adresse og adgangskode til testbrugeren er repo-secrets `PREVIEW_TEST_EMAIL` og `PREVIEW_TEST_PASSWORD`. Ingen ny secret er påkrævet. Workflowet sætter env-variabler på preview-deploymentet via stdin (`npx convex env set`), aldrig som argumenter og aldrig i loggen. `previewSeed:ensure` og `provisionVerifiedMember` kører kun, når `PREVIEW_SEED` er `1` og `CONVEX_CLOUD_URL` ikke er produktion. `deploy.yml` sætter ikke den fælles adgangskode.
 - Seedet må ikke ramme produktion. Workflowet afviser en deploy-nøgle, der starter med `prod:`, og actionen nægter, hvis `CONVEX_CLOUD_URL` er produktions-deploymentet `quaint-parakeet-652`. `deploy-v2.yml` kalder det ikke. Samme trin sætter `JWT_PRIVATE_KEY` og `JWKS` på previewet, hvis de mangler. `deploy.yml` gør det samme på prod: Convex Auth kan ellers ikke udstede en session, og nøglerne følger ikke med fra et andet deployment. Uden dem hænger nulstillingslinket på "Et øjeblik…".
 - Frontend-buildet får previewets URL som `VITE_CONVEX_URL` fra deployet. Workflowet fejler, hvis den byggede bundle peger på produktions-deploymentet.
-- **Rører PR'en `V2/`, udgiver `pr-preview.yml` ikke til `pr-preview/pr-<nr>/`.** De to workflows skriver den samme mappe. At vente på V1 og lægge V2 ovenpå taber, når V1's push til `gh-pages` lander bagefter. V1 springer derfor build og deploy over; kun V2 ender på stien. Ved lukning rydder begge workflows stadig op.
 
 ## Nye funktioner meldes til medlemmerne
 
-- **Hver ny funktion, medlemmerne kan mærke, tager sin egen nyhed med.** Nyheden er en
-  `insert` i `public.feature_announcements` i den migration, ændringen alligevel har --
-  ikke noget, nogen taster ind i et panel bagefter. Så følger beskeden med deployet,
-  præcis som koden gør.
-- Skabelonen er tre linjer i slutningen af migrationen:
-
-  ```sql
-  insert into public.feature_announcements (slug, title, body, path)
-  values (
-    'kalender-tilmelding',
-    'Du kan nu melde dig til en tur',
-    'Åbn kalenderen, vælg en tur og tryk "Jeg kommer". Så kan de andre se det.',
-    'kalender'
-  )
-  on conflict (slug) do nothing;
-  ```
-
-  `slug` er stabil og skrives i små bogstaver med bindestreger. `title` (maks. 120 tegn)
-  og `body` (maks. 600 tegn) er til medlemmerne, ikke til udviklere -- skriv, hvad man kan
-  gøre nu, ikke hvad der er refaktoreret. `path` er den side i appen, nyheden åbner,
-  relativ og uden skråstreg foran (`kalender`, `billeder`, ...); udelad den, hvis der ikke
-  er ét oplagt sted at sende folk hen.
-
+- **Hver ny funktion, medlemmerne kan mærke, tager sin egen nyhed med** (se
+  `V2/convex/announcements.ts` og `V2/convex/tables/notifications.ts`). Skriv til
+  medlemmerne, ikke til udviklere — hvad man kan gøre nu, ikke hvad der er refaktoreret.
 - **Ændringer uden en oplevelse skal ikke have en nyhed**: refaktoreringer, rettelser i
   CI, tekstjusteringer. En notifikation er et afbrud i nogens dag, og en strøm af dem om
   ting, ingen kan se, gør, at den næste rigtige nyhed også bliver slået fra.
-- Nyheden lander tre steder: i banneret "Nyt i appen" i app-shellen, på siden
-  `/nyheder`, og som en push-notifikation til de medlemmer, der har notifikationer slået
-  til og ikke har fravalgt netop dem (`profiles.feature_notifications_enabled`). Selve
-  udsendelsen sker fra Edge Functionen `feature-announcements`; se `supabase/README.md`
-  for hvorfor det er klienten, der sætter den i gang, og hvorfor en nyhed kun sendes én
-  gang og kun inden for syv dage.
 
 ## Chat uden forbindelse
 
 - Beskeder skrevet uden net lægges i en IndexedDB-kø og sendes af sig selv ved
-  app-start, ved `online`-hændelsen og på kommando fra service workeren. Se
-  `supabase/README.md`, "Chat uden forbindelse (#219)", for idempotensen (klientens id
-  **er** beskedens id, og `send_chat_message` indsætter med `on conflict ... do
-nothing`), delingen af `created_at`/`written_at` og hvad Background Sync gør og ikke
-  gør.
+  app-start, ved `online`-hændelsen og på kommando fra service workeren.
 - Kølogikken skal blive liggende som rene funktioner i
-  `src/features/chat/offlineQueue.ts` -- ingen IndexedDB, netværk eller `navigator` i
+  `V2/src/features/chat/offlineQueue.ts` -- ingen IndexedDB, netværk eller `navigator` i
   den fil. Det er den del, CI kan teste; browser-API'erne hører til i `useChatQueue.ts`
-  og `offlineQueueStore.ts` ved siden af. Ændres autorisationsmodellen i RPC'en, skal
-  `supabase/tests/rls/19_chat_offline_queue.sql` følge med.
+  og `offlineQueueStore.ts` ved siden af.
 
 ## App-version
 
-- Appens version er **commit'en**, ikke et nummer nogen vedligeholder. `vite.config.ts`
+- Appens version er **commit'en**, ikke et nummer nogen vedligeholder. `V2/vite.config.ts`
   kører `git describe --tags --always` + commit-datoen ved build og inliner resultatet;
   footeren viser det. Hæv derfor ikke `version` i `package.json` -- den bruges ikke.
 - Tags er valgfri pynt: findes der et tag, viser footeren det (`v1.2.0`), ellers
-  commit-sha'en. Derfor skal `deploy.yml` og `pr-preview.yml` blive ved med at checke ud
-  med `fetch-depth: 0` -- en shallow checkout uden tags kan `git describe` ikke bruge.
+  commit-sha'en. Derfor skal `deploy.yml` og `pr-preview-v2.yml` blive ved med at checke
+  ud med `fetch-depth: 0` -- en shallow checkout uden tags kan `git describe` ikke bruge.
 
 ## Branch-oprydning
 
@@ -279,62 +172,38 @@ nothing`), delingen af `created_at`/`written_at` og hvad Background Sync gør og
 
 ## Secrets/nøgler
 
-- **Klient** (bygges ind i frontend): `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY`.
-  Aldrig Secret key i klientkode.
-- **Server-side** (kun Edge Functions): Supabase **Secret key** (`SUPABASE_SECRET_KEY`) —
-  aldrig i klienten eller i build-workflowet til frontend.
-- **Push-notifikationer** (kun Edge Functions): VAPID-nøgleparret kræver **ingen
-  opsætning** — `chat-push` genererer det selv første gang og gemmer det i tabellen
-  `push_vapid_keys`, som kun Secret key kan læse. Sæt derfor ikke repo-secrets for det;
-  det ville være et manuelt dashboard-trin, som princippet ovenfor netop udelukker.
-  `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` findes stadig som valgfri
-  overstyring: er de sat som repo-secrets, skubber `deploy-functions.yml` dem videre som
-  function-secrets, og de vinder over tabellen. Den offentlige nøgle bygges bevidst
-  **ikke** ind i frontenden; klienten henter den fra `chat-push`, så nøglerne kan roteres
-  uden et nyt frontend-build. Se `supabase/README.md`.
+- **Klient** (bygges ind i V2-frontend): `VITE_CONVEX_URL` (leveres automatisk af
+  `npx convex deploy --cmd ...` i `deploy.yml` og `pr-preview-v2.yml`) samt evt.
+  `VITE_CONVEX_SITE_URL`. Aldrig deploy-nøgler eller server-hemmeligheder i klientkode.
+- **Server-side / CI** (kun GitHub Actions og Convex-env):
+  `CONVEX_DEPLOY_KEY` (prod), `CONVEX_PREVIEW_DEPLOY_KEY` (previews), `RESEND_API_KEY`,
+  `PREVIEW_TEST_EMAIL`, `PREVIEW_TEST_PASSWORD` (samt valgfri `PREVIEW_SHARED_PASSWORD`).
+- **Push-notifikationer (VAPID):** GitHub-secrets `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`
+  og variablen `VAPID_SUBJECT` blev kun sat på de gamle Supabase Edge Functions af den
+  nu fjernede `deploy-functions.yml`. **V2 bruger valgfri Convex-env (`V2/convex/convex.config.ts`)
+  og ellers `ensureVapidKeys` i `V2/convex/pushSend.ts`, som selv genererer og gemmer
+  nøgleparret i Convex (`pushVapidKeys`).** Slet ikke VAPID-secrets i GitHub eller felterne
+  i `V2/convex/convex.config.ts`.
 - **E-mail til gæster**: intet secret og ingen automatisk udsendelse. Et svar på en
   ansøgning om at deltage i en åben begivenhed sendes af arrangøren selv fra deres egen
-  mailklient, via "Skriv til gæsten"-kladden i kalenderen (#239). Der er derfor intet
-  mail-trin i `deploy-functions.yml`. Se `supabase/README.md`, "Svaret til ansøgeren".
-- **CI-only** (kun brugt af GitHub Actions, aldrig af en udvikler lokalt):
-  `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` — bruges til at deploye Edge Functions
-  ikke-interaktivt og til at slå PR'ens Preview Branch op, så preview-buildet rammer den
-  rigtige database.
-- Supabase er skiftet til det nye Publishable/Secret-nøglesystem (ikke de gamle
-  `anon`/`service_role` JWT-nøgler) — se #2 for detaljer.
-- `VITE_SUPABASE_URL` og `VITE_SUPABASE_PUBLISHABLE_KEY` **skal** være sat i repoets
-  Actions-indstillinger (Settings → Secrets and variables → Actions), som enten variable
-  eller secrets — begge workflows læser begge steder. Uden dem inliner Vite tomme
-  strenge, guarden i `src/lib/supabaseClient.ts` folder til et ubetinget `throw`, og hele
-  app-grafen bliver tree-shaket væk: builder _lykkes_, men bundlen indeholder ingen app,
-  er identisk fra commit til commit, og gh-pages får derfor intet nyt at committe.
-  `vite.config.ts` fejler nu buildet i stedet for at udgive sådan en bundle.
+  mailklient, via "Skriv til gæsten"-kladden i kalenderen (#239).
+- **Tilbageværende Supabase-nøgler**: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` og
+  `VITE_SUPABASE_*` bruges ikke længere til produktion eller PR-previews, men slettes ikke
+  i denne PR (bruges stadig af `migrate-v1.yml` indtil #379).
 
-## Mappestruktur (frontend)
+## Mappestruktur
 
 ```
-src/
-  pages/        # HeroPage, ActivitiesPage, CalendarPage, GalleryPage, ChatPage, GamesPage, LoginPage, ...
-  components/    # delte UI-komponenter: Navbar, BurgerMenu, ...
-  features/      # feature-specifik logik: auth, calendar, gallery, chat, games, notifications
-  lib/           # supabaseClient.ts, queryClient.ts
-  hooks/
-  sw.ts          # service worker (vite-plugin-pwa injectManifest): precaching + push
-supabase/
-  migrations/    # SQL-migrations, deployes automatisk ved merge til main (se ovenfor)
-  functions/     # Edge Functions, deployes via GitHub Actions (se #13)
-  tests/         # platform-bootstrap + pgTAP-tests, køres af ci.yml (run.sh)
+V2/
+  convex/      # produktions-backend på Convex (schema.ts, tables/, authz.ts, auth.ts, http.ts)
+  src/         # produktions-frontend (pages, features, components, lib, sw-prod.ts)
+  scripts/     # preview-smoke og V1-migration (migrateFromSupabase.mjs)
+src/           # gammel V1-frontend (bevares indtil #379)
+supabase/      # gammel V1-backend (bevares indtil #379)
 ```
 
 ## Faldgruber i frontend-tests og lint
 
-- Nye hooks under `src/features/chat/` (fx `usePolls.ts`, ved siden af
-  `useReactions.ts`/`useMessages.ts`) importerer `supabase` fra
-  `lib/supabaseClient.ts` direkte. Bruges hooket fra en komponent, der testes
-  med `vi.mock(...)` for de andre chat-hooks (se `src/pages/ChatPage.test.tsx`),
-  skal det nye hook også have sin egen `vi.mock(...)`-post der -- ellers loader
-  testen den rigtige `supabaseClient.ts`, som kaster, fordi
-  `VITE_SUPABASE_URL`/`VITE_SUPABASE_PUBLISHABLE_KEY` ikke er sat i testmiljøet.
 - `oxlint`s `react(refs)`-regel ("Cannot access refs during render") flager en
   ref, der sættes i selve render-kroppen (mønsteret `fooRef.current = ...`
   brugt til at give en `queryFn` adgang til den nyeste liste uden at indgå i
@@ -344,24 +213,6 @@ supabase/
   gøre. Mangler den kommentar, tilføj den ved den nærmeste `useEffect`, der
   bevidst udelader et stabilt lukket-over-værdi fra sin deps-liste, i stedet
   for at omstrukturere koden for at undgå advarslen.
-
-## Relevante issues
-
-- #1 — Byggeplan/epos
-- #2 🖐️ — Manuel: Supabase-projekt (Publishable/Secret keys, GitHub-integration, Preview Branching)
-- #3 🖐️ — Manuel: GitHub Pages + PR-previews
-- #4 — Projekt-scaffold
-- #5 — CI/CD: build + deploy (main + PR-previews)
-- #6 — Database-skema & RLS
-- #7 — Autentificering
-- #8 — App-shell / burger-menu
-- #9 — Hero-forside
-- #10 — Aktivitetsside
-- #11 — Kalender
-- #12 — Billedgalleri
-- #13 — Edge Function: billedoptimering
-- #14 — Gruppechat
-- #15 — PWA-finish
 
 ## Maintaining this file
 
