@@ -1,3 +1,8 @@
 # Convex skriver disse filer selv, med sit eget format. Næste `npx convex dev`
 # overskriver dem; de skal ikke kæmpe med repoets Prettier.
 convex/_generated
+
+# Lokale produktions- og preview-builds i V2/ må ikke få `npx prettier --check .` til at fejle.
+dist
+dist-ssr
+dev-dist

@@ -8,10 +8,10 @@ Medlemsapp for Naturklubben på `https://naturklubben.dk`. Produktiv app og back
 GitHub Pages (`V2/dist` via `.github/workflows/deploy.yml` og eget domæne i
 `V2/public/CNAME`).
 
-V1-koden (`src/`, `supabase/`) samt `migrate-v1.yml` og
-`V2/scripts/migrateFromSupabase.mjs` bliver liggende i repoet indtil et efterfølgende
-issue (#379), mens V1-byggepipelinen (`pr-preview.yml`, `deploy-functions.yml`,
-`sync-auth-config.yml` samt `database`- og V1/Deno-jobbene i `ci.yml`) er fjernet (#378).
+V1-byggepipelinen (`pr-preview.yml`, `deploy-functions.yml`, `sync-auth-config.yml` samt
+`database`- og V1/Deno-jobbene i `ci.yml`) blev fjernet i #378, og V1-koden (`src/`,
+`supabase/`), `migrate-v1.yml`, `V2/scripts/migrateFromSupabase.mjs` samt V1-rodconfig er
+nu fjernet (#379), så repoet er rent V2/Convex.
 
 ## Før du gør noget
 
@@ -72,16 +72,17 @@ lokale terminal. Derfor gælder:
 
 - **Produktionen på `naturklubben.dk` kører på V2/Convex (`quaint-parakeet-652`).**
   Supabase er ikke længere den kørende produktions-backend.
-- `pr-preview.yml`, `deploy-functions.yml` og `sync-auth-config.yml` er fjernet (#378), og
-  `ci.yml` kører ikke længere `database`-jobbet (pgTAP/`supabase/postgres`),
-  Deno-tjek af Edge Functions eller root V1-test/lint/typecheck.
-- **Vigtigt om Edge Functions:** Fjernelsen af `deploy-functions.yml` stopper kun _nye_
-  deploys. De 14 aktive Edge Functions i Supabase-projektet bliver ved med at køre, indtil
-  Martin selv pauser eller sletter Supabase-projektet.
-- **Slet ikke hemmeligheder i denne overgang:** GitHub-secrets (`SUPABASE_ACCESS_TOKEN`,
-  `SUPABASE_PROJECT_REF`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` osv.)
-  samt `migrate-v1.yml`, `V2/scripts/migrateFromSupabase.mjs`, `src/` og `supabase/`
-  bliver stående indtil #379.
+- V1-byggepipelinen (`pr-preview.yml`, `deploy-functions.yml`, `sync-auth-config.yml`,
+  `database`-jobbet samt Deno-/V1-tjek i `ci.yml`) blev fjernet i #378, og V1-koden
+  (`src/`, `supabase/`), `migrate-v1.yml`, `V2/scripts/migrateFromSupabase.mjs` samt
+  V1-rodconfig er fjernet i #379.
+- **Vigtigt om Edge Functions:** Fjernelsen af `deploy-functions.yml` og `supabase/`
+  stopper kun kode og _nye_ deploys. De 14 aktive Edge Functions i Supabase-projektet
+  bliver ved med at køre, indtil Martin selv pauser eller sletter Supabase-projektet.
+- **Slet ikke hemmeligheder i denne overgang:** Ingen GitHub-secrets
+  (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `VAPID_PUBLIC_KEY`,
+  `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` osv.) er slettet i denne PR; Martin rydder dem
+  op manuelt, når Supabase-projektet pauses eller slettes.
 
 ## Client (frontend) & PR-previews
 
@@ -187,9 +188,9 @@ lokale terminal. Derfor gælder:
 - **E-mail til gæster**: intet secret og ingen automatisk udsendelse. Et svar på en
   ansøgning om at deltage i en åben begivenhed sendes af arrangøren selv fra deres egen
   mailklient, via "Skriv til gæsten"-kladden i kalenderen (#239).
-- **Tilbageværende Supabase-nøgler**: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` og
-  `VITE_SUPABASE_*` bruges ikke længere til produktion eller PR-previews, men slettes ikke
-  i denne PR (bruges stadig af `migrate-v1.yml` indtil #379).
+- **Tilbageværende Supabase-nøgler**: `SUPABASE_ACCESS_TOKEN` og `SUPABASE_PROJECT_REF`
+  bruges ikke længere af nogen workflows i repoet, men er ikke slettet i denne PR; de
+  ryddes op manuelt, når Martin pauser eller sletter Supabase-projektet.
 
 ## Mappestruktur
 
@@ -197,9 +198,7 @@ lokale terminal. Derfor gælder:
 V2/
   convex/      # produktions-backend på Convex (schema.ts, tables/, authz.ts, auth.ts, http.ts)
   src/         # produktions-frontend (pages, features, components, lib, sw-prod.ts)
-  scripts/     # preview-smoke og V1-migration (migrateFromSupabase.mjs)
-src/           # gammel V1-frontend (bevares indtil #379)
-supabase/      # gammel V1-backend (bevares indtil #379)
+  scripts/     # preview-smoke og driftsscripts (authResetSmoke.mjs, ensurePreviewAuthKeys.mjs m.fl.)
 ```
 
 ## Faldgruber i frontend-tests og lint

@@ -15,14 +15,16 @@ TypeScript + Tailwind CSS, React Router, Convex (`quaint-parakeet-652`),
 `@convex-dev/auth` og `vite-plugin-pwa`. Frontend udgives statisk til GitHub
 Pages (`V2/dist` via `.github/workflows/deploy.yml`).
 
-> **Overgang fra V1/Supabase (#378 / #315):** V1-byggepipelinen
-> (`pr-preview.yml`, `deploy-functions.yml`, `sync-auth-config.yml` samt
-> `database`- og V1/Deno-jobbene i `ci.yml`) er fjernet. Fjernelsen af
-> `deploy-functions.yml` stopper kun _nye_ deploys; de 14 aktive Edge
-> Functions på Supabase-projektet bliver ved med at køre, indtil projektet
-> pauses eller slettes manuelt. Selve V1-koden (`src/`, `supabase/`) og
-> `migrate-v1.yml` bevares i repoet indtil #379. Ingen hemmeligheder er
-> slettet.
+> **Overgang fra V1/Supabase (#378 / #379 / #315):** Produktionen kører nu udelukkende
+> på V2/Convex (`quaint-parakeet-652`). V1-byggepipelinen (#378) samt V1-koden (`src/`,
+> `supabase/`), `migrate-v1.yml`, `V2/scripts/migrateFromSupabase.mjs` og V1-rodconfig
+> (#379) er fjernet.
+>
+> **Vigtigt om Supabase-projektet:** Fjernelsen af `deploy-functions.yml` og
+> `supabase/` stopper kun kode og nye deploys i repoet; de 14 aktive Edge Functions på
+> Supabase-projektet bliver ved med at køre, indtil Martin selv pauser eller sletter
+> projektet. Ingen GitHub-secrets (heller ikke `VAPID_*` eller `SUPABASE_*`) er slettet
+> i denne PR.
 
 ## Kom i gang lokalt (V2)
 
@@ -84,8 +86,6 @@ kalenderen åbner på samme måde `/kalender/<id>` direkte.
 - `.agents/skills/` — skills til coding agents, delt af alle modeller
   (`.claude/skills` er et symlink hertil). Se `AGENTS.md`.
 - `AGENTS.md` — projektets udviklingskonventioner. `CLAUDE.md` importerer samme fil.
-- `supabase/README.md` — historisk dokumentation for den tidligere V1-backend
-  (bevares indtil #379).
 
 ## Mappestruktur
 
@@ -93,7 +93,5 @@ kalenderen åbner på samme måde `/kalender/<id>` direkte.
 V2/
   convex/      # produktions-backend på Convex (schema, tabeller, auth, HTTP-ruter)
   src/         # produktions-frontend (pages, features, components, lib)
-  scripts/     # preview-smoke og V1-migration (migrateFromSupabase.mjs)
-src/           # gammel V1-frontend (bevares indtil #379)
-supabase/      # gammel V1-backend (bevares indtil #379)
+  scripts/     # preview-smoke og driftsscripts
 ```
