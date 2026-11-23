@@ -314,6 +314,7 @@ export const lookupMemberForVerify = internalQuery({
     v.object({
       source: v.literal('v2'),
       userId: v.string(),
+      legacySecret: v.optional(v.string()),
       hasActiveProfile: v.boolean(),
       isAdmin: v.boolean(),
       fullName: v.union(v.string(), v.null()),
@@ -341,26 +342,21 @@ export const lookupMemberForVerify = internalQuery({
       }
     }
 
-    let userId: Id<'users'> | null = v2UserId
-    let legacySecret: string | null = null
-    if (userId === null) {
-      const account = await ctx.db
-        .query('authAccounts')
-        .withIndex('providerAndAccountId', (q) =>
-          q.eq('provider', 'password').eq('providerAccountId', email),
-        )
-        .unique()
-      if (
-        account !== null &&
-        typeof account.secret === 'string' &&
-        account.secret.length > 0
-      ) {
-        userId = account.userId
-        legacySecret = account.secret
-      }
-    }
+    const legacyAccount = await ctx.db
+      .query('authAccounts')
+      .withIndex('providerAndAccountId', (q) =>
+        q.eq('provider', 'password').eq('providerAccountId', email),
+      )
+      .unique()
+    const legacySecret =
+      legacyAccount !== null &&
+      typeof legacyAccount.secret === 'string' &&
+      legacyAccount.secret.length > 0
+        ? legacyAccount.secret
+        : null
 
-    if (userId === null) {
+    const userId = v2UserId ?? legacyAccount?.userId ?? null
+    if (userId === null || (v2UserId === null && legacySecret === null)) {
       return null
     }
 
@@ -378,7 +374,12 @@ export const lookupMemberForVerify = internalQuery({
     }
 
     if (v2UserId !== null) {
-      return { source: 'v2' as const, userId: v2UserId, ...base }
+      return {
+        source: 'v2' as const,
+        userId: v2UserId,
+        ...(legacySecret !== null ? { legacySecret } : {}),
+        ...base,
+      }
     }
     return { source: 'legacy' as const, secret: legacySecret!, ...base }
   },
@@ -677,14 +678,25 @@ export const verifyMember = httpAction(async (ctx, req) => {
         components.authPassword.public.verifyPassword,
         { userId: candidate.userId, password },
       )
-      passwordValid = verifyResult.success
+      if (verifyResult.success) {
+        passwordValid = true
+      } else if (
+        verifyResult.userError.error === 'PASSWORD_TOO_SHORT' &&
+        candidate.legacySecret
+      ) {
+        passwordValid = await verifyPassword(password, candidate.legacySecret)
+      }
     } catch (error) {
       if (
         error instanceof Error &&
         error.message.includes('No password stored for userId')
       ) {
-        await verifyPassword(password, DUMMY_SCRYPT_HASH)
-        passwordValid = false
+        if (candidate.legacySecret) {
+          passwordValid = await verifyPassword(password, candidate.legacySecret)
+        } else {
+          await verifyPassword(password, DUMMY_SCRYPT_HASH)
+          passwordValid = false
+        }
       } else {
         throw error
       }

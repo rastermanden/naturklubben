@@ -18,14 +18,22 @@ export function savePendingSignupFullName(fullName: string): void {
   }
 }
 
-export function takePendingSignupFullName(): string | undefined {
+export function peekPendingSignupFullName(): string | undefined {
   if (typeof window === 'undefined') return undefined
   try {
     const stored = window.localStorage.getItem(PENDING_SIGNUP_FULL_NAME_KEY)
-    window.localStorage.removeItem(PENDING_SIGNUP_FULL_NAME_KEY)
     const cleaned = stored?.trim()
     return cleaned && cleaned.length > 0 ? cleaned : undefined
   } catch {
     return undefined
+  }
+}
+
+export function clearPendingSignupFullName(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(PENDING_SIGNUP_FULL_NAME_KEY)
+  } catch {
+    // Ignorer evt. blokeret localStorage.
   }
 }

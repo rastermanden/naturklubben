@@ -1,9 +1,8 @@
-import { getAuthUserId } from '@convex-dev/auth/server'
 import { ConvexError, v } from 'convex/values'
-import { components, internal } from './_generated/api'
+import { components } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
-import { action, internalMutation, internalQuery } from './_generated/server'
+import { internalMutation, internalQuery } from './_generated/server'
 import { hashPassword, isBcryptHash, verifyBcrypt } from './passwordCrypto'
 
 const MIN_LEGACY_PASSWORD_LENGTH = 6
@@ -214,48 +213,6 @@ export const emailForPasswordUser = internalQuery({
     return typeof user?.email === 'string' && user.email.includes('@')
       ? normalizeAuthEmail(user.email)
       : null
-  },
-})
-
-/**
- * Efter et lykkedes login: byt en importeret bcrypt-hash ud med Argon2id.
- * Forkert eller allerede omskrevet hash gør ingenting.
- */
-export const rehashIfImported = action({
-  args: { password: v.string() },
-  returns: v.null(),
-  handler: async (ctx, args): Promise<null> => {
-    const userId = await getAuthUserId(ctx as never)
-    if (userId === null) return null
-    const email: string | null = await ctx.runQuery(
-      internal.passwords.emailForPasswordUser,
-      { userId },
-    )
-    if (email === null) return null
-    await ctx.runMutation(internal.passwords.rehashOnSignIn, {
-      email,
-      password: args.password,
-    })
-    return null
-  },
-})
-
-export const setPasswordForUser = internalMutation({
-  args: { userId: v.id('users'), password: v.string() },
-  returns: v.null(),
-  handler: async (ctx, args): Promise<null> => {
-    const res = await ctx.runMutation(
-      components.authPassword.public._internal_dangerous_setPassword,
-      {
-        userId: args.userId,
-        password: args.password,
-        minimumLength: NEW_PASSWORD_MIN_LENGTH,
-      },
-    )
-    if (!res.success) {
-      throw new ConvexError(res.userError.error)
-    }
-    return null
   },
 })
 

@@ -334,7 +334,9 @@ describe('GalleryPage: flyt flere billeder og redigér (#345)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Flyt 1 billede' }))
 
     const notice = await screen.findByText('1 billede blev flyttet.')
-    expect(document.activeElement).toBe(notice)
+    await waitFor(() => {
+      expect(document.activeElement).toBe(notice)
+    })
   })
 
   it('viser ikke "Albummet findes ikke længere", mens albumlisten stadig indlæses (B5)', () => {

@@ -211,6 +211,7 @@ async function tryVerifyV2Password(
   ctx: MutationCtx,
   userId: string,
   password: string,
+  hasLegacySecret: boolean,
 ): Promise<
   | { found: true; success: true }
   | {
@@ -230,9 +231,15 @@ async function tryVerifyV2Password(
       components.authPassword.public.verifyPassword,
       { userId, password },
     )
-    return result.success
-      ? { found: true, success: true }
-      : { found: true, success: false, userError: result.userError }
+    if (result.success) {
+      return { found: true, success: true }
+    }
+    if (result.userError.error === 'PASSWORD_TOO_SHORT' && hasLegacySecret) {
+      // Half-migreret konto (verifiedEmails findes uden authPassword): fald tilbage
+      // til legacy-kodeordstjek, som også accepterer ældre <8-tegns koder.
+      return { found: false }
+    }
+    return { found: true, success: false, userError: result.userError }
   } catch (error) {
     if (
       error instanceof Error &&
@@ -521,11 +528,16 @@ export const signInWithEmailPassword: RegisteredMutation<
       return { status: 'error', userError: lookup.userError }
     }
 
+    const legacy = await legacyAccountByEmail(ctx, email)
+
     if (lookup.success) {
+      const hasLegacySecret =
+        legacy !== null && typeof legacy.secret === 'string'
       const verifyResult = await tryVerifyV2Password(
         ctx,
         lookup.userId,
         args.password,
+        hasLegacySecret,
       )
       if (verifyResult.found) {
         if (!verifyResult.success) {
@@ -547,7 +559,6 @@ export const signInWithEmailPassword: RegisteredMutation<
 
     // Bagudkompatibilitet: eksisterende v1-konti ligger i `authAccounts`
     // (Lucia-Scrypt eller importeret bcrypt, evt. < 8 tegn).
-    const legacy = await legacyAccountByEmail(ctx, email)
     if (legacy === null || typeof legacy.secret !== 'string') {
       return {
         status: 'error',
@@ -636,10 +647,14 @@ export const changePassword: RegisteredMutation<
     )
 
     if (v2Emails.length > 0) {
+      const legacy = await legacyAccountByUserId(ctx, userId)
+      const hasLegacySecret =
+        legacy !== null && typeof legacy.secret === 'string'
       const v2Verify = await tryVerifyV2Password(
         ctx,
         userId,
         args.currentPassword,
+        hasLegacySecret,
       )
       if (v2Verify.found) {
         if (!v2Verify.success) {
@@ -649,8 +664,7 @@ export const changePassword: RegisteredMutation<
           return { success: false, userError: { error: 'INVALID_CREDENTIALS' } }
         }
       } else {
-        const legacy = await legacyAccountByUserId(ctx, userId)
-        if (legacy === null || typeof legacy.secret !== 'string') {
+        if (!hasLegacySecret) {
           return { success: false, userError: { error: 'INVALID_CREDENTIALS' } }
         }
         const now = Date.now()
@@ -664,7 +678,7 @@ export const changePassword: RegisteredMutation<
         }
         const legacyValid = await verifyPassword(
           args.currentPassword,
-          legacy.secret,
+          legacy.secret!,
         )
         if (!legacyValid) {
           await recordLegacyFailure(ctx, rateKey, now)
@@ -896,32 +910,10 @@ export const completePasswordRecovery: RegisteredMutation<
     }
 
     let userId: Id<'users'>
-    let targetEmail: string
+    let useCompleteForNewUser = false
 
     if (peek.emailOwnerId !== null && peek.emailOwnerId !== undefined) {
-      const complete = await ctx.runMutation(
-        components.authEmail.challenge.custom.complete,
-        {
-          emailCode: args.emailCode,
-          browserSecret: args.browserSecret,
-          purpose: RECOVERY_PURPOSE,
-          currentUserId: null,
-        },
-      )
-      if (!complete.success) {
-        return {
-          status: 'error',
-          userError: narrowRecoveryLinkError(complete.userError),
-        }
-      }
-      if (!complete.emailOwnerId) {
-        return {
-          status: 'error',
-          userError: { error: 'INVALID_CHALLENGE' },
-        }
-      }
-      userId = complete.emailOwnerId as Id<'users'>
-      targetEmail = complete.email
+      userId = peek.emailOwnerId as Id<'users'>
     } else {
       const normalized = normalizeAuthEmail(peek.email)
       const legacy = await legacyAccountByEmail(ctx, normalized)
@@ -931,52 +923,16 @@ export const completePasswordRecovery: RegisteredMutation<
           userError: { error: 'INVALID_CHALLENGE' },
         }
       }
+      userId = legacy.userId
       const existingEmails = await ctx.runQuery(
         components.authEmail.verifiedEmails.getEmails,
-        { userId: legacy.userId },
+        { userId },
       )
-      if (existingEmails.length === 0) {
-        const complete = await ctx.runMutation(
-          components.authEmail.challenge.custom
-            ._internal_dangerous_completeForNewUser,
-          {
-            emailCode: args.emailCode,
-            browserSecret: args.browserSecret,
-            purpose: RECOVERY_PURPOSE,
-            userId: legacy.userId,
-          },
-        )
-        if (!complete.success) {
-          if (complete.userError.error === 'EMAIL_TAKEN') {
-            return {
-              status: 'error',
-              userError: { error: 'INVALID_CHALLENGE' },
-            }
-          }
-          return { status: 'error', userError: complete.userError }
-        }
-        targetEmail = complete.email
-      } else {
-        const complete = await ctx.runMutation(
-          components.authEmail.challenge.custom.complete,
-          {
-            emailCode: args.emailCode,
-            browserSecret: args.browserSecret,
-            purpose: RECOVERY_PURPOSE,
-            currentUserId: null,
-          },
-        )
-        if (!complete.success) {
-          return {
-            status: 'error',
-            userError: narrowRecoveryLinkError(complete.userError),
-          }
-        }
-        targetEmail = complete.email
-      }
-      userId = legacy.userId
+      useCompleteForNewUser = existingEmails.length === 0
     }
 
+    // Valider og gem den nye adgangskode FØR linket indløses, så fx
+    // PASSWORD_TOO_COMMON lader nulstillingslinket og evt. legacy-konto være intakte.
     const setResult = await ctx.runMutation(
       components.authPassword.public._internal_dangerous_setPassword,
       {
@@ -987,6 +943,40 @@ export const completePasswordRecovery: RegisteredMutation<
     )
     if (!setResult.success) {
       return { status: 'error', userError: setResult.userError }
+    }
+
+    let targetEmail: string
+    if (useCompleteForNewUser) {
+      const complete = await ctx.runMutation(
+        components.authEmail.challenge.custom
+          ._internal_dangerous_completeForNewUser,
+        {
+          emailCode: args.emailCode,
+          browserSecret: args.browserSecret,
+          purpose: RECOVERY_PURPOSE,
+          userId,
+        },
+      )
+      if (!complete.success) {
+        // Kast fejl så `_internal_dangerous_setPassword` rulles tilbage atomisk.
+        throw new ConvexError(complete.userError.error)
+      }
+      targetEmail = complete.email
+    } else {
+      const complete = await ctx.runMutation(
+        components.authEmail.challenge.custom.complete,
+        {
+          emailCode: args.emailCode,
+          browserSecret: args.browserSecret,
+          purpose: RECOVERY_PURPOSE,
+          currentUserId: null,
+        },
+      )
+      if (!complete.success) {
+        // Kast fejl så `_internal_dangerous_setPassword` rulles tilbage atomisk.
+        throw new ConvexError(complete.userError.error)
+      }
+      targetEmail = complete.email
     }
 
     await retireLegacyPasswordAccount(ctx, userId)

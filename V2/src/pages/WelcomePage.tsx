@@ -8,7 +8,10 @@ import {
   toFriendlyMemberError,
   userErrorToAuthError,
 } from '../features/auth/authErrors'
-import { takePendingSignupFullName } from '../features/auth/pendingSignupName'
+import {
+  clearPendingSignupFullName,
+  peekPendingSignupFullName,
+} from '../features/auth/pendingSignupName'
 import { useCurrentProfile } from '../features/auth/useCurrentProfile'
 
 function VerifySignupLink({
@@ -89,8 +92,11 @@ export default function WelcomePage() {
 
     attempted.current = true
     setClaiming(true)
-    const fullName = takePendingSignupFullName()
+    const fullName = peekPendingSignupFullName()
     claimProfile(fullName ? { fullName } : {})
+      .then(() => {
+        clearPendingSignupFullName()
+      })
       .catch((claimError: unknown) => {
         setError(toFriendlyMemberError(claimError))
       })

@@ -121,7 +121,7 @@ eksporteres med SQL-adgang til databasen og lægges ind i Convex.
 
 1. `importHashes` (intern) skriver bcrypt-hashen urørt ind som kontoens
    hemmelighed og markerer e-mailen som bekræftet. Den hasher ikke igen.
-2. Ved login tjekkes bcrypt, og hashen skrives om til Scrypt med det samme,
+2. Ved login tjekkes bcrypt, og hashen skrives om til Argon2id med det samme,
    så næste login kun kender Convex' egen hash.
 
 Sådan køres importen, når flytningen er aftalt -- ikke før, og ikke mod

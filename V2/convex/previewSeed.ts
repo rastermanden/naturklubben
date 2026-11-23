@@ -416,7 +416,7 @@ export const seedPasswordUser = internalMutation({
     }
 
     if (args.password.length >= 8) {
-      await ctx.runMutation(
+      const setResult = await ctx.runMutation(
         components.authPassword.public._internal_dangerous_setPassword,
         {
           userId,
@@ -424,6 +424,9 @@ export const seedPasswordUser = internalMutation({
           minimumLength: 8,
         },
       )
+      if (!setResult.success) {
+        throw new Error('PREVIEW_SEED_FAILED')
+      }
     }
 
     await ctx.runMutation(components.auth.public.markUserIdCreated, {

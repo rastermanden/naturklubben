@@ -1090,4 +1090,143 @@ describe('preview-member login på PR-preview', () => {
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ ok: false })
   })
+
+  it('falder tilbage til legacy-secret på /preview/verify-member hvis verifiedEmails findes uden authPassword, og afviser uden 500', async () => {
+    const t = createTestConvex()
+    const env = envMap()
+    env.RESEND_API_KEY = 're_test_key'
+
+    const { legacyHalfId, previewHalfId } = await t.run(async (ctx) => {
+      const legacyId = await ctx.db.insert('users', {
+        email: 'halfverify@naturklubben.dk',
+        emailVerificationTime: 1000,
+      })
+      await ctx.db.insert('authAccounts', {
+        userId: legacyId,
+        provider: 'password',
+        providerAccountId: 'halfverify@naturklubben.dk',
+        // 6-char Lucia-Scrypt hash for "abc123"
+        secret:
+          '0123456789abcdef0123456789abcdef:e600f3cf717c7ca27878d0e84eaaf126483cacfeef231dd7416855c1e36bfa28983f429c74b170cbf95b454f2f8f7eecc8c1eb6e71eae6eac9b0d24edd5ea423',
+        emailVerified: 'halfverify@naturklubben.dk',
+      })
+      await ctx.db.insert('profiles', {
+        userId: legacyId,
+        fullName: 'Half Legacy',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+
+      const previewId = await ctx.db.insert('users', {
+        email: 'halfpreviewverify@naturklubben.dk',
+        emailVerificationTime: 1000,
+      })
+      await ctx.db.insert('authAccounts', {
+        userId: previewId,
+        provider: 'preview-member',
+        providerAccountId: 'halfpreviewverify@naturklubben.dk',
+        emailVerified: 'halfpreviewverify@naturklubben.dk',
+      })
+      await ctx.db.insert('profiles', {
+        userId: previewId,
+        fullName: 'Half Preview',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+
+      return { legacyHalfId: legacyId, previewHalfId: previewId }
+    })
+
+    const { createFunctionHandle } = await import('convex/server')
+    const { sentTestEmails } = await import('../test/convexTestAuth')
+    const sendEmailHandle = await t.run(async () =>
+      createFunctionHandle(internal.authEmailSender.sendEmail),
+    )
+
+    for (const [email, userId] of [
+      ['halfverify@naturklubben.dk', legacyHalfId],
+      ['halfpreviewverify@naturklubben.dk', previewHalfId],
+    ] as const) {
+      const started = await t
+        .withRequestMetadata({ ip: '127.0.0.1' })
+        .mutation(components.authEmail.challenge.custom.start, {
+          email,
+          purpose: 'test/half-verify',
+          expectedUserId: null,
+          url: 'https://naturklubben.dk/ny-adgangskode',
+          emailSender: {
+            kind: 'resend',
+            sendEmailHandle,
+            apiKey: 're_test_key',
+            from: 'Naturklubben <noreply@naturklubben.dk>',
+            initialBackoffMs: 30_000,
+            retryAttempts: 1,
+          },
+          subject: 'Test',
+          intro: 'Test',
+        })
+      if (!started.success) throw new Error('expected start')
+      const mails = await sentTestEmails(t)
+      const match = /\?code=([^\s&]+)/.exec(mails[mails.length - 1]?.text ?? '')
+      if (!match?.[1]) throw new Error('missing code')
+      const done = await t.mutation(
+        components.authEmail.challenge.custom
+          ._internal_dangerous_completeForNewUser,
+        {
+          emailCode: decodeURIComponent(match[1]),
+          browserSecret: started.browserSecret,
+          purpose: 'test/half-verify',
+          userId,
+        },
+      )
+      expect(done.success).toBe(true)
+    }
+
+    const postVerify = (email: string, password: string, ip: string) =>
+      t.fetch(PREVIEW_VERIFY_MEMBER_PATH, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'cf-connecting-ip': ip,
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+    // Half-migreret 6-tegns legacy-konto godkendes stadig med sin 6-tegns kode
+    const ok6 = await postVerify(
+      'halfverify@naturklubben.dk',
+      'abc123',
+      '198.51.100.70',
+    )
+    expect(ok6.status).toBe(200)
+    expect(await ok6.json()).toEqual({
+      ok: true,
+      member: { isAdmin: false, fullName: 'Half Legacy' },
+    })
+
+    // Forkert >=8-tegns kode rammer catch("No password stored") -> legacy-fallback -> 401
+    const badLong = await postVerify(
+      'halfverify@naturklubben.dk',
+      'forkert-lang-kode',
+      '198.51.100.71',
+    )
+    expect(badLong.status).toBe(401)
+
+    // Preview-only konto MED verifiedEmails og UDEN authPassword -> 401 (aldrig 500)
+    const previewOnly = await postVerify(
+      'halfpreviewverify@naturklubben.dk',
+      'lang-kode-som-ikke-findes',
+      '198.51.100.72',
+    )
+    expect(previewOnly.status).toBe(401)
+    expect(await previewOnly.json()).toEqual({ ok: false })
+  })
 })
