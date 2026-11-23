@@ -1,21 +1,75 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthActions } from '@convex-dev/auth/react'
+import { useCompleteSignUpWithEmailPassword } from '@convex-dev/auth/methods/email-password/react'
 import { useConvexAuth, useMutation } from 'convex/react'
 import { api } from '../../convex/_generated/api'
-import { clearAuthCodeWait, noteAuthCode } from '../features/auth/authCodeWait'
-import { toFriendlyMemberError } from '../features/auth/authErrors'
+import {
+  toFriendlyMemberError,
+  userErrorToAuthError,
+} from '../features/auth/authErrors'
+import {
+  clearPendingSignupFullName,
+  peekPendingSignupFullName,
+} from '../features/auth/pendingSignupName'
 import { useCurrentProfile } from '../features/auth/useCurrentProfile'
+
+function VerifySignupLink({
+  emailCode,
+  onVerified,
+}: {
+  emailCode: string
+  onVerified: () => void
+}) {
+  const state = useCompleteSignUpWithEmailPassword(api.auth, { emailCode })
+
+  useEffect(() => {
+    if (state.status === 'complete') {
+      onVerified()
+    }
+  }, [onVerified, state.status])
+
+  if (state.status === 'loading') {
+    return (
+      <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
+        <h1 className="text-2xl font-semibold text-ink-body">Et øjeblik…</h1>
+      </main>
+    )
+  }
+
+  if (state.status === 'error') {
+    return (
+      <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
+        <h1 className="text-2xl font-semibold text-ink-body">
+          Linket virkede ikke
+        </h1>
+        <p className="text-ink-muted">
+          {state.userError.error === 'MISSING_SECRET'
+            ? userErrorToAuthError(state.userError)
+            : 'Bekræftelseslinket er udløbet eller allerede brugt.'}
+        </p>
+        <Link
+          to="/login"
+          className="inline-flex min-h-11 items-center justify-center rounded bg-accent px-4 py-2 text-white"
+        >
+          Log ind
+        </Link>
+      </main>
+    )
+  }
+
+  return (
+    <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
+      <h1 className="text-2xl font-semibold text-ink-body">Et øjeblik…</h1>
+    </main>
+  )
+}
 
 /**
  * Landingssiden for linket i bekræftelsesmailen (`/velkommen`).
  *
- * Convex Auth samler `?code=` op og logger ind. Siden venter på sessionen
- * og kalder derefter `members.claimProfile`, som er idempotent. En session
- * uden profil (oprettelsen blev afbrudt) lander også her.
- *
- * Forsøget gøres kun én gang pr. sidevisning (`attempted`), så en afvist
- * adresse ikke hamrer løs mod backend'en i en uendelig løkke.
+ * Indløser `?code=` sammen med browserens hemmelighed via
+ * `useCompleteSignUpWithEmailPassword`, og kalder derefter `members.claimProfile`.
  */
 export default function WelcomePage() {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
@@ -26,29 +80,23 @@ export default function WelcomePage() {
   const attempted = useRef(false)
   const [claiming, setClaiming] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [gaveUp, setGaveUp] = useState(false)
-  const waitingForCode = noteAuthCode(
-    typeof window === 'undefined' ? '' : window.location.search,
-  )
+  const [verifiedNow, setVerifiedNow] = useState(false)
 
-  const authSettling =
-    !isAuthenticated && (waitingForCode || authLoading || isLoading)
-
-  useEffect(() => {
-    if (!authSettling) {
-      if (isAuthenticated) clearAuthCodeWait()
-      return
-    }
-    const timeout = window.setTimeout(() => setGaveUp(true), 20000)
-    return () => window.clearTimeout(timeout)
-  }, [authSettling, isAuthenticated])
+  const emailCode =
+    typeof window === 'undefined'
+      ? ''
+      : (new URLSearchParams(window.location.search).get('code') ?? '')
 
   useEffect(() => {
     if (!isAuthenticated || profile !== null || attempted.current) return
 
     attempted.current = true
     setClaiming(true)
-    claimProfile({})
+    const fullName = peekPendingSignupFullName()
+    claimProfile(fullName ? { fullName } : {})
+      .then(() => {
+        clearPendingSignupFullName()
+      })
       .catch((claimError: unknown) => {
         setError(toFriendlyMemberError(claimError))
       })
@@ -57,11 +105,16 @@ export default function WelcomePage() {
       })
   }, [claimProfile, isAuthenticated, profile])
 
-  if (
-    claiming ||
-    (isAuthenticated && (authLoading || isLoading)) ||
-    (authSettling && !gaveUp)
-  ) {
+  if (emailCode && !isAuthenticated && !verifiedNow) {
+    return (
+      <VerifySignupLink
+        emailCode={emailCode}
+        onVerified={() => setVerifiedNow(true)}
+      />
+    )
+  }
+
+  if (claiming || authLoading || (isAuthenticated && isLoading)) {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold text-ink-body">Et øjeblik…</h1>

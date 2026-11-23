@@ -1,5 +1,9 @@
 import { defineApp } from 'convex/server'
 import { v } from 'convex/values'
+import auth from '@convex-dev/auth/convex.config.js'
+import authPassword from '@convex-dev/auth/components/password/convex.config.js'
+import authEmail from '@convex-dev/auth/components/email/convex.config.js'
+import resend from '@convex-dev/resend/convex.config.js'
 
 /**
  * Miljøvariabler, funktionerne læser via `env` fra `_generated/server`.
@@ -32,6 +36,8 @@ const app = defineApp({
     AUTH_EMAIL_FROM: v.optional(v.string()),
     /** Adressen i links fra mails, uden afsluttende skråstreg. */
     SITE_URL: v.optional(v.string()),
+    /** Base-sti for app-links i mails, fx `/pr-preview/pr-123/` på PR-previews. */
+    APP_BASE_PATH: v.optional(v.string()),
     /**
      * Modtageren, når nogen nævner assistenten. Profilen slås stadig op på
      * naturklubben-test@agentmail.to. Uden denne variabel sendes mailen dertil.
@@ -39,5 +45,10 @@ const app = defineApp({
     ASSISTANT_MENTION_EMAIL: v.optional(v.string()),
   },
 })
+
+app.use(auth)
+app.use(authPassword)
+app.use(authEmail)
+app.use(resend)
 
 export default app

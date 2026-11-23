@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values'
+import { components } from './_generated/api'
 import {
   internalMutation,
   internalQuery,
@@ -104,6 +105,14 @@ async function emailForUser(
   ctx: MutationCtx,
   userId: Id<'users'>,
 ): Promise<string | null> {
+  const verified = await ctx.runQuery(
+    components.authEmail.verifiedEmails.getPrimaryEmail,
+    { userId },
+  )
+  if (typeof verified === 'string' && verified.includes('@')) {
+    return normalizeEmail(verified)
+  }
+
   const accounts = await ctx.db
     .query('authAccounts')
     .filter((q) => q.eq(q.field('userId'), userId))
@@ -126,35 +135,62 @@ async function emailForUser(
     : null
 }
 
-async function readAssistantSignup(ctx: MutationCtx | QueryCtx) {
-  const email = normalizeEmail(ASSISTANT_EMAIL)
-  const allowed = await ctx.db
-    .query('allowedEmails')
-    .withIndex('by_email', (q) => q.eq('email', email))
-    .unique()
+async function assistantUserId(
+  ctx: MutationCtx | QueryCtx,
+  email: string,
+): Promise<Id<'users'> | null> {
   const account = await ctx.db
     .query('authAccounts')
     .withIndex('providerAndAccountId', (q) =>
       q.eq('provider', 'password').eq('providerAccountId', email),
     )
     .unique()
+  if (account !== null) return account.userId
+  const user = (
+    await ctx.db
+      .query('users')
+      .withIndex('email', (q) => q.eq('email', email))
+      .collect()
+  ).find((row) => row.emailVerificationTime !== undefined)
+  return user?._id ?? null
+}
+
+async function readAssistantSignup(ctx: MutationCtx | QueryCtx) {
+  const email = normalizeEmail(ASSISTANT_EMAIL)
+  const allowed = await ctx.db
+    .query('allowedEmails')
+    .withIndex('by_email', (q) => q.eq('email', email))
+    .unique()
+  const userId = await assistantUserId(ctx, email)
   const profile =
-    account === null
+    userId === null
       ? null
       : await ctx.db
           .query('profiles')
-          .withIndex('by_user', (q) => q.eq('userId', account.userId))
+          .withIndex('by_user', (q) => q.eq('userId', userId))
           .unique()
   return {
     allowlist: allowed !== null,
     allowlistAdmin: allowed?.isAdmin === true,
-    account: account !== null,
+    account: userId !== null,
     profile: profile !== null,
     profileAdmin: profile?.isAdmin === true,
   }
 }
 
 async function deleteAuthUser(ctx: MutationCtx, userId: Id<'users'>) {
+  const v2Sessions = await ctx.runQuery(components.auth.public.listSessions, {
+    userId,
+  })
+  if (v2Sessions.length > 0) {
+    await ctx.runMutation(components.auth.public.revokeSessions, {
+      sessionIds: v2Sessions.map((s) => s.sessionId),
+    })
+  }
+  await ctx.runMutation(components.authEmail.verifiedEmails.deleteUser, {
+    userId,
+  })
+
   const accounts = await ctx.db
     .query('authAccounts')
     .filter((q) => q.eq(q.field('userId'), userId))
@@ -271,8 +307,8 @@ export const me = query({
  * er idempotent og kaldes også fra velkomstsiden.
  */
 export const claimProfile = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: { fullName: v.optional(v.string()) },
+  handler: async (ctx, args) => {
     const userId = await currentUserId(ctx)
     if (userId === null) {
       throw new ConvexError('NOT_AUTHENTICATED')
@@ -298,9 +334,13 @@ export const claimProfile = mutation({
     }
 
     const user = await ctx.db.get(userId)
+    const resolvedName = normalizeName(args.fullName ?? user?.name ?? null)
+    if (resolvedName !== undefined && user !== null && !user.name) {
+      await ctx.db.patch(userId, { name: resolvedName })
+    }
     const profileId = await ctx.db.insert('profiles', {
       userId,
-      fullName: normalizeName(user?.name ?? null),
+      fullName: resolvedName,
       isAdmin: allowed.isAdmin ?? false,
       chatColor: DEFAULT_CHAT_COLOR,
       causes: [],
@@ -632,13 +672,8 @@ export const allowAssistantAdmin = internalMutation({
       await ctx.db.patch(existing._id, { isAdmin: true })
     }
 
-    const account = await ctx.db
-      .query('authAccounts')
-      .withIndex('providerAndAccountId', (q) =>
-        q.eq('provider', 'password').eq('providerAccountId', email),
-      )
-      .unique()
-    return { listed: true, isAdmin: true, accountExists: account !== null }
+    const userId = await assistantUserId(ctx, email)
+    return { listed: true, isAdmin: true, accountExists: userId !== null }
   },
 })
 
@@ -694,20 +729,15 @@ export const repairAssistantSignup = internalMutation({
       await ctx.db.patch(existing._id, { isAdmin: true })
     }
 
-    const account = await ctx.db
-      .query('authAccounts')
-      .withIndex('providerAndAccountId', (q) =>
-        q.eq('provider', 'password').eq('providerAccountId', email),
-      )
-      .unique()
+    const userId = await assistantUserId(ctx, email)
     let removedLeftoverAccount = false
-    if (account !== null) {
+    if (userId !== null) {
       const profile = await ctx.db
         .query('profiles')
-        .withIndex('by_user', (q) => q.eq('userId', account.userId))
+        .withIndex('by_user', (q) => q.eq('userId', userId))
         .unique()
       if (profile === null) {
-        await deleteAuthUser(ctx, account.userId)
+        await deleteAuthUser(ctx, userId)
         removedLeftoverAccount = true
       } else if (!profile.isAdmin) {
         await ctx.db.patch(profile._id, { isAdmin: true })

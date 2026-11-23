@@ -1,26 +1,22 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
 import { ConvexError } from 'convex/values'
-import { convexTest } from 'convex-test'
-import { Scrypt } from 'lucia'
 import { internal } from './_generated/api'
-import schema from './schema'
-import { isBcryptHash } from './passwordCrypto'
+import { isBcryptHash, verifyPassword } from './passwordCrypto'
 import {
   PASSWORD_IMPORT_CONFIRM,
   SMOKE_DELETE_CONFIRM,
   rehashImportedPassword,
   writeImportedPassword,
 } from './passwords'
-
-const modules = import.meta.glob('./**/*.ts')
+import { createTestConvex } from '../test/convexTestAuth'
 
 const BCRYPT_ABC =
   '$2a$06$If6bvum7DFjUnE9p2uDeDu0YHzrHM6tf.iqN8.yx.jNN1ILEf7h0i'
 
 describe('importerede adgangskoder', () => {
   it('gemmer bcrypt-hashen urørt og skriver den om ved rigtigt login', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     await t.run(async (ctx) => {
       await writeImportedPassword(ctx, {
         email: 'Medlem@Example.com',
@@ -52,11 +48,11 @@ describe('importerede adgangskoder', () => {
       return account?.secret ?? ''
     })
     expect(isBcryptHash(after)).toBe(false)
-    expect(await new Scrypt().verify(after, 'abc')).toBe(true)
+    expect(await verifyPassword('abc', after)).toBe(true)
   })
 
   it('tager is_admin med fra Supabase til listen og en eksisterende profil', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const userId = await t.run(async (ctx) => {
       return await writeImportedPassword(ctx, {
         email: 'Admin@Example.com',
@@ -95,7 +91,7 @@ describe('importerede adgangskoder', () => {
   })
 
   it('nægter import uden bekræftelsessætningen', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const failure = await t
       .mutation(internal.passwords.importHashes, {
         confirm: 'nej',
@@ -106,13 +102,13 @@ describe('importerede adgangskoder', () => {
         (error: unknown) => error,
       )
     expect(failure).toBeInstanceOf(ConvexError)
-    expect(JSON.parse((failure as ConvexError<string>).data)).toBe(
+    expect((failure as ConvexError<string>).data).toBe(
       'PASSWORD_IMPORT_NOT_CONFIRMED',
     )
   })
 
   it('importerer, når bekræftelsen er med', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const count = await t.mutation(internal.passwords.importHashes, {
       confirm: PASSWORD_IMPORT_CONFIRM,
       accounts: [{ email: 'a@example.com', bcryptHash: BCRYPT_ABC }],
@@ -121,7 +117,7 @@ describe('importerede adgangskoder', () => {
   })
 
   it('sletter kun en agentmail-testkonto', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     await t.mutation(internal.passwords.importHashes, {
       confirm: PASSWORD_IMPORT_CONFIRM,
       accounts: [
@@ -151,13 +147,11 @@ describe('importerede adgangskoder', () => {
         (error: unknown) => error,
       )
     expect(refused).toBeInstanceOf(ConvexError)
-    expect(JSON.parse((refused as ConvexError<string>).data)).toBe(
-      'SMOKE_EMAIL_ONLY',
-    )
+    expect((refused as ConvexError<string>).data).toBe('SMOKE_EMAIL_ONLY')
   })
 
   it('rapporterer en ugyldig kode som udløbet uden at vise den', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     await t.mutation(internal.passwords.importHashes, {
       confirm: PASSWORD_IMPORT_CONFIRM,
       accounts: [

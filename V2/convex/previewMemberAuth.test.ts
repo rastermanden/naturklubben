@@ -1,10 +1,7 @@
 // @vitest-environment edge-runtime
 /// <reference types="vite/client" />
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { convexTest } from 'convex-test'
-import { ConvexError } from 'convex/values'
-import { api, internal } from './_generated/api'
-import schema from './schema'
+import { api, components, internal } from './_generated/api'
 import { DELETION_RESERVATION_MS } from './authz'
 import { hashPassword } from './passwordCrypto'
 import { writeImportedPassword } from './passwords'
@@ -20,8 +17,7 @@ import {
   waitForSlot,
 } from './previewMemberAuth'
 import { PROD_DEPLOYMENT_SLUG } from './previewSeed'
-
-const modules = import.meta.glob('./**/*.ts')
+import { createTestConvex, sessionIdentity } from '../test/convexTestAuth'
 
 const BCRYPT_ABC =
   '$2a$06$If6bvum7DFjUnE9p2uDeDu0YHzrHM6tf.iqN8.yx.jNN1ILEf7h0i'
@@ -163,7 +159,7 @@ describe('previewMemberAuth hjælpere', () => {
 
 describe(`POST ${PREVIEW_VERIFY_MEMBER_PATH}`, () => {
   it('godkender aktivt medlem (Scrypt og bcrypt), afviser forkert kode, ikke-medlem, manglende profil og sletning ens', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const scryptHash = await hashPassword('rigtig-adgangskode')
 
     await t.run(async (ctx) => {
@@ -362,7 +358,7 @@ describe(`POST ${PREVIEW_VERIFY_MEMBER_PATH}`, () => {
   })
 
   it('tæller ikke 200-verifikationer fra samme IP/unknown mod loftet', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const scryptHash = await hashPassword('rigtig-adgangskode')
 
     await t.run(async (ctx) => {
@@ -420,7 +416,7 @@ describe(`POST ${PREVIEW_VERIFY_MEMBER_PATH}`, () => {
   }, 20_000)
 
   it('begrænser fejlforsøg pr. e-mail (under Convex Auth-grænsen) og grov IP-backstop, ignorerer spoofbare headere og rydder gamle rækker', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const env = envMap()
     env.RATE_LIMIT_HASH_SECRET = 'test-rate-limit-secret'
     expect(MAX_FAILED_PER_EMAIL_1_HOUR).toBeLessThanOrEqual(10)
@@ -509,7 +505,7 @@ describe('preview-member login på PR-preview', () => {
     env.PREVIEW_SEED = '1'
     env.CONVEX_CLOUD_URL = TEST_PREVIEW_CLOUD_URL
 
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const prodPassword = 'hemmelig-prod-adgangskode'
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
@@ -532,13 +528,10 @@ describe('preview-member login på PR-preview', () => {
         ),
       )
 
-    const firstSignIn = (await t.action(api.auth.signIn, {
-      provider: PREVIEW_MEMBER_PROVIDER_ID,
-      params: {
-        email: '  Martin@Naturklubben.dk ',
-        password: prodPassword,
-      },
-    })) as { tokens?: { token: string; refreshToken: string } | null }
+    const firstSignIn = await t.action(api.auth.signInWithPreviewMember, {
+      email: '  Martin@Naturklubben.dk ',
+      password: prodPassword,
+    })
 
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -552,25 +545,34 @@ describe('preview-member login på PR-preview', () => {
       }),
     )
 
-    expect(firstSignIn.tokens?.token).toBeTypeOf('string')
-    expect(firstSignIn.tokens?.refreshToken).toBeTypeOf('string')
+    expect(firstSignIn.status).toBe('complete')
+    if (firstSignIn.status !== 'complete') throw new Error('expected login')
+    expect(firstSignIn.tokens.accessToken).toBeTypeOf('string')
+    expect(firstSignIn.tokens.refreshToken).toBeTypeOf('string')
 
-    const jwtPayload = decodeJwtPayload(firstSignIn.tokens!.token)
-    expect(jwtPayload.iss).toBe(TEST_PREVIEW_SITE_URL)
-    expect(jwtPayload.aud).toBe('convex')
+    const jwtPayload = decodeJwtPayload(firstSignIn.tokens.accessToken)
+    expect(jwtPayload.iss).toBe(`${TEST_PREVIEW_CLOUD_URL}/components/auth`)
+    expect(jwtPayload.aud).toBe('convex-auth')
 
     const afterFirst = await t.run(async (ctx) => ({
       users: await ctx.db.query('users').collect(),
       accounts: await ctx.db.query('authAccounts').collect(),
-      sessions: await ctx.db.query('authSessions').collect(),
       profiles: await ctx.db.query('profiles').collect(),
       allowed: await ctx.db.query('allowedEmails').collect(),
     }))
 
     expect(afterFirst.users).toHaveLength(1)
     expect(afterFirst.users[0]?.email).toBe('martin@naturklubben.dk')
-    expect(String(jwtPayload.sub)).toContain(String(afterFirst.users[0]!._id))
-    expect(afterFirst.sessions).toHaveLength(1)
+    expect(firstSignIn.tokens.userId).toBe(String(afterFirst.users[0]!._id))
+    const v2Sessions = await t.query(components.auth.public.listSessions, {
+      userId: afterFirst.users[0]!._id,
+    })
+    expect(v2Sessions).toHaveLength(1)
+    expect(jwtPayload.sub).toBe(v2Sessions[0]?.sessionId)
+
+    const asMartin = t.withIdentity(sessionIdentity(firstSignIn.tokens))
+    expect(await asMartin.query(api.auth.isAuthenticated, {})).toBe(true)
+
     expect(afterFirst.profiles).toHaveLength(1)
     expect(afterFirst.profiles[0]).toMatchObject({
       userId: afterFirst.users[0]!._id,
@@ -594,12 +596,9 @@ describe('preview-member login på PR-preview', () => {
     expect(JSON.stringify(afterFirst)).not.toContain(prodPassword)
 
     // Andet login synkroniserer ændret admin-rolle uden at duplikere bruger eller profil.
-    await t.action(api.auth.signIn, {
-      provider: PREVIEW_MEMBER_PROVIDER_ID,
-      params: {
-        email: 'martin@naturklubben.dk',
-        password: prodPassword,
-      },
+    await t.action(api.auth.signInWithPreviewMember, {
+      email: 'martin@naturklubben.dk',
+      password: prodPassword,
     })
 
     const afterSecond = await t.run(async (ctx) => ({
@@ -621,7 +620,7 @@ describe('preview-member login på PR-preview', () => {
     env.PREVIEW_SEED = '1'
     env.CONVEX_CLOUD_URL = TEST_PREVIEW_CLOUD_URL
 
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const seededHash = await hashPassword('delt-test-kode')
     const existingUserId = await t.run(async (ctx) => {
       const userId = await ctx.db.insert('users', {
@@ -657,13 +656,11 @@ describe('preview-member login på PR-preview', () => {
       ),
     )
 
-    await t.action(api.auth.signIn, {
-      provider: PREVIEW_MEMBER_PROVIDER_ID,
-      params: {
-        email: 'troels@naturklubben.dk',
-        password: 'rigtig-prod-kode',
-      },
+    const result = await t.action(api.auth.signInWithPreviewMember, {
+      email: 'troels@naturklubben.dk',
+      password: 'rigtig-prod-kode',
     })
+    expect(result.status).toBe('complete')
 
     const state = await t.run(async (ctx) => ({
       users: await ctx.db.query('users').collect(),
@@ -688,7 +685,7 @@ describe('preview-member login på PR-preview', () => {
     env.PREVIEW_SEED = '1'
     env.CONVEX_CLOUD_URL = TEST_PREVIEW_CLOUD_URL
 
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ ok: false }), { status: 401 }),
@@ -706,74 +703,50 @@ describe('preview-member login på PR-preview', () => {
       .mockResolvedValueOnce(new Response('Server Error', { status: 500 }))
       .mockRejectedValueOnce(new Error('network down'))
 
-    const denied = await t
-      .action(api.auth.signIn, {
-        provider: PREVIEW_MEMBER_PROVIDER_ID,
-        params: { email: 'ikke@medlem.dk', password: 'forkert' },
-      })
-      .then(
-        () => null,
-        (error: unknown) => error,
-      )
-    expect(denied).toBeInstanceOf(ConvexError)
-    expect(JSON.parse((denied as ConvexError<string>).data)).toBe(
-      'INVALID_CREDENTIALS',
-    )
+    const denied = await t.action(api.auth.signInWithPreviewMember, {
+      email: 'ikke@medlem.dk',
+      password: 'forkert',
+    })
+    expect(denied).toEqual({
+      status: 'error',
+      userError: { error: 'INVALID_CREDENTIALS' },
+    })
 
-    const limited = await t
-      .action(api.auth.signIn, {
-        provider: PREVIEW_MEMBER_PROVIDER_ID,
-        params: { email: 'medlem@medlem.dk', password: 'forkert' },
-      })
-      .then(
-        () => null,
-        (error: unknown) => error,
-      )
-    expect(limited).toBeInstanceOf(ConvexError)
-    expect(JSON.parse((limited as ConvexError<string>).data)).toBe(
-      'RATE_LIMITED',
-    )
+    const limited = await t.action(api.auth.signInWithPreviewMember, {
+      email: 'medlem@medlem.dk',
+      password: 'forkert',
+    })
+    expect(limited).toEqual({
+      status: 'error',
+      userError: { error: 'RATE_LIMITED' },
+    })
 
     for (const statusLabel of ['403', '404', '405', '500']) {
-      const upstreamError = await t
-        .action(api.auth.signIn, {
-          provider: PREVIEW_MEMBER_PROVIDER_ID,
-          params: {
-            email: `medlem-${statusLabel}@medlem.dk`,
-            password: 'kode',
-          },
-        })
-        .then(
-          () => null,
-          (error: unknown) => error,
-        )
-      expect(upstreamError).toBeInstanceOf(ConvexError)
-      expect(JSON.parse((upstreamError as ConvexError<string>).data)).toBe(
-        'PREVIEW_AUTH_UNAVAILABLE',
-      )
+      const upstreamError = await t.action(api.auth.signInWithPreviewMember, {
+        email: `medlem-${statusLabel}@medlem.dk`,
+        password: 'kode',
+      })
+      expect(upstreamError).toEqual({
+        status: 'error',
+        userError: { error: 'PREVIEW_AUTH_UNAVAILABLE' },
+      })
     }
 
-    const offline = await t
-      .action(api.auth.signIn, {
-        provider: PREVIEW_MEMBER_PROVIDER_ID,
-        params: { email: 'medlem@medlem.dk', password: 'kode' },
-      })
-      .then(
-        () => null,
-        (error: unknown) => error,
-      )
-    expect(offline).toBeInstanceOf(ConvexError)
-    expect(JSON.parse((offline as ConvexError<string>).data)).toBe(
-      'PREVIEW_AUTH_UNAVAILABLE',
-    )
+    const offline = await t.action(api.auth.signInWithPreviewMember, {
+      email: 'medlem@medlem.dk',
+      password: 'kode',
+    })
+    expect(offline).toEqual({
+      status: 'error',
+      userError: { error: 'PREVIEW_AUTH_UNAVAILABLE' },
+    })
 
     const counts = await t.run(async (ctx) => ({
       users: (await ctx.db.query('users').collect()).length,
       profiles: (await ctx.db.query('profiles').collect()).length,
-      sessions: (await ctx.db.query('authSessions').collect()).length,
       accounts: (await ctx.db.query('authAccounts').collect()).length,
     }))
-    expect(counts).toEqual({ users: 0, profiles: 0, sessions: 0, accounts: 0 })
+    expect(counts).toEqual({ users: 0, profiles: 0, accounts: 0 })
   })
 
   it('opretter almindeligt medlem uden admin-rolle når prod svarer isAdmin: false', async () => {
@@ -781,7 +754,7 @@ describe('preview-member login på PR-preview', () => {
     env.PREVIEW_SEED = '1'
     env.CONVEX_CLOUD_URL = TEST_PREVIEW_CLOUD_URL
 
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -792,12 +765,14 @@ describe('preview-member login på PR-preview', () => {
       ),
     )
 
-    const signedIn = (await t.action(api.auth.signIn, {
-      provider: PREVIEW_MEMBER_PROVIDER_ID,
-      params: { email: 'freja@naturklubben.dk', password: 'prod-kode-freja' },
-    })) as { tokens?: { token: string } | null }
+    const signedIn = await t.action(api.auth.signInWithPreviewMember, {
+      email: 'freja@naturklubben.dk',
+      password: 'prod-kode-freja',
+    })
 
-    expect(signedIn.tokens?.token).toBeTypeOf('string')
+    expect(signedIn.status).toBe('complete')
+    if (signedIn.status !== 'complete') throw new Error('expected complete')
+    expect(signedIn.tokens.accessToken).toBeTypeOf('string')
     const profiles = await t.run(async (ctx) =>
       ctx.db.query('profiles').collect(),
     )
@@ -810,38 +785,28 @@ describe('preview-member login på PR-preview', () => {
     delete env.PREVIEW_SEED
     env.CONVEX_CLOUD_URL = TEST_PREVIEW_CLOUD_URL
 
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
 
-    const withoutFlag = await t
-      .action(api.auth.signIn, {
-        provider: PREVIEW_MEMBER_PROVIDER_ID,
-        params: { email: 'm@naturklubben.dk', password: 'kode' },
-      })
-      .then(
-        () => null,
-        (error: unknown) => error,
-      )
-    expect(withoutFlag).toBeInstanceOf(ConvexError)
-    expect(JSON.parse((withoutFlag as ConvexError<string>).data)).toBe(
-      'INVALID_CREDENTIALS',
-    )
+    const withoutFlag = await t.action(api.auth.signInWithPreviewMember, {
+      email: 'm@naturklubben.dk',
+      password: 'kode',
+    })
+    expect(withoutFlag).toEqual({
+      status: 'error',
+      userError: { error: 'INVALID_CREDENTIALS' },
+    })
 
     env.PREVIEW_SEED = '1'
     env.CONVEX_CLOUD_URL = `https://${PROD_DEPLOYMENT_SLUG}.convex.cloud`
-    const onProdHost = await t
-      .action(api.auth.signIn, {
-        provider: PREVIEW_MEMBER_PROVIDER_ID,
-        params: { email: 'm@naturklubben.dk', password: 'kode' },
-      })
-      .then(
-        () => null,
-        (error: unknown) => error,
-      )
-    expect(onProdHost).toBeInstanceOf(ConvexError)
-    expect(JSON.parse((onProdHost as ConvexError<string>).data)).toBe(
-      'INVALID_CREDENTIALS',
-    )
+    const onProdHost = await t.action(api.auth.signInWithPreviewMember, {
+      email: 'm@naturklubben.dk',
+      password: 'kode',
+    })
+    expect(onProdHost).toEqual({
+      status: 'error',
+      userError: { error: 'INVALID_CREDENTIALS' },
+    })
     expect(fetchSpy).not.toHaveBeenCalled()
 
     await expect(
@@ -858,7 +823,7 @@ describe('preview-member login på PR-preview', () => {
     env.PREVIEW_SEED = '1'
     env.CONVEX_CLOUD_URL = TEST_PREVIEW_CLOUD_URL
 
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const passwordHash = await hashPassword('ci-test-kode-123')
     await t.run(async (ctx) => {
       const userId = await ctx.db.insert('users', {
@@ -885,16 +850,14 @@ describe('preview-member login på PR-preview', () => {
     })
 
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
-    const signedIn = (await t.action(api.auth.signIn, {
-      provider: 'password',
-      params: {
-        email: 'ci-test@example.com',
-        password: 'ci-test-kode-123',
-        flow: 'signIn',
-      },
-    })) as { tokens?: { token: string } | null }
+    const signedIn = await t.mutation(api.auth.signInWithEmailPassword, {
+      email: 'ci-test@example.com',
+      password: 'ci-test-kode-123',
+    })
 
-    expect(signedIn.tokens?.token).toBeTypeOf('string')
+    expect(signedIn.status).toBe('complete')
+    if (signedIn.status !== 'complete') throw new Error('expected complete')
+    expect(signedIn.tokens.accessToken).toBeTypeOf('string')
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -903,7 +866,7 @@ describe('preview-member login på PR-preview', () => {
     env.PREVIEW_SEED = '1'
     env.CONVEX_CLOUD_URL = TEST_PREVIEW_CLOUD_URL
 
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const orphanedUserId = await t.run(async (ctx) => {
       const deletedUserId = await ctx.db.insert('users', {
         email: 'foraeldreloes@naturklubben.dk',
@@ -935,21 +898,19 @@ describe('preview-member login på PR-preview', () => {
       ),
     )
 
-    const signedIn = (await t.action(api.auth.signIn, {
-      provider: PREVIEW_MEMBER_PROVIDER_ID,
-      params: {
-        email: 'foraeldreloes@naturklubben.dk',
-        password: 'rigtig-prod-password',
-      },
-    })) as { tokens?: { token: string } | null }
+    const signedIn = await t.action(api.auth.signInWithPreviewMember, {
+      email: 'foraeldreloes@naturklubben.dk',
+      password: 'rigtig-prod-password',
+    })
 
-    expect(signedIn.tokens?.token).toBeTypeOf('string')
+    expect(signedIn.status).toBe('complete')
+    if (signedIn.status !== 'complete') throw new Error('expected complete')
+    expect(signedIn.tokens.accessToken).toBeTypeOf('string')
 
     const state = await t.run(async (ctx) => ({
       users: await ctx.db.query('users').collect(),
       accounts: await ctx.db.query('authAccounts').collect(),
       profiles: await ctx.db.query('profiles').collect(),
-      sessions: await ctx.db.query('authSessions').collect(),
     }))
 
     expect(state.users).toHaveLength(1)
@@ -961,7 +922,311 @@ describe('preview-member login på PR-preview', () => {
     }
     expect(state.profiles).toHaveLength(1)
     expect(state.profiles[0]?.userId).toBe(liveUserId)
-    expect(state.sessions).toHaveLength(1)
-    expect(state.sessions[0]?.userId).toBe(liveUserId)
+    const v2Sessions = await t.query(components.auth.public.listSessions, {
+      userId: liveUserId,
+    })
+    expect(v2Sessions).toHaveLength(1)
+  })
+
+  it('afviser gammel kode og godkender ny kode på /preview/verify-member efter nulstilling og changePassword', async () => {
+    const t = createTestConvex()
+    const env = envMap()
+    env.RESEND_API_KEY = 're_test_key'
+    env.SITE_URL = 'https://naturklubben.dk'
+
+    await t.run(async (ctx) => {
+      const resetUserId = await writeImportedPassword(ctx, {
+        email: 'reset-verify@naturklubben.dk',
+        bcryptHash: BCRYPT_ABC,
+        name: 'Reset Medlem',
+        isAdmin: true,
+      })
+      await ctx.db.insert('profiles', {
+        userId: resetUserId,
+        fullName: 'Reset Medlem',
+        isAdmin: true,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+
+      const changeHash = await hashPassword('gammel-kode-123')
+      const changeUserId = await ctx.db.insert('users', {
+        email: 'change-verify@naturklubben.dk',
+        emailVerificationTime: 1000,
+      })
+      await ctx.db.insert('authAccounts', {
+        userId: changeUserId,
+        provider: 'password',
+        providerAccountId: 'change-verify@naturklubben.dk',
+        secret: changeHash,
+        emailVerified: 'change-verify@naturklubben.dk',
+      })
+      await ctx.db.insert('profiles', {
+        userId: changeUserId,
+        fullName: 'Skift Medlem',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+    })
+
+    const client = t.withRequestMetadata({ ip: '127.0.0.1' })
+    const start = await client.mutation(api.auth.startPasswordRecovery, {
+      email: 'reset-verify@naturklubben.dk',
+    })
+    expect(start.success).toBe(true)
+    if (!start.success) throw new Error('expected recovery start')
+
+    const { sentTestEmails } = await import('../test/convexTestAuth')
+    const mails = await sentTestEmails(t)
+    const match = /\?code=([^\s&]+)/.exec(mails[0]?.text ?? '')
+    if (!match?.[1]) throw new Error('missing recovery code')
+    const emailCode = decodeURIComponent(match[1])
+
+    const completed = await client.mutation(api.auth.completePasswordRecovery, {
+      emailCode,
+      browserSecret: start.browserSecret,
+      newPassword: 'ny-nulstillet-kode-99',
+    })
+    expect(completed.status).toBe('complete')
+
+    const postVerify = (email: string, password: string, ip: string) =>
+      t.fetch(PREVIEW_VERIFY_MEMBER_PATH, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'cf-connecting-ip': ip,
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+    const oldAfterReset = await postVerify(
+      'reset-verify@naturklubben.dk',
+      'abc',
+      '198.51.100.50',
+    )
+    expect(oldAfterReset.status).toBe(401)
+    expect(await oldAfterReset.json()).toEqual({ ok: false })
+
+    const newAfterReset = await postVerify(
+      'reset-verify@naturklubben.dk',
+      'ny-nulstillet-kode-99',
+      '198.51.100.51',
+    )
+    expect(newAfterReset.status).toBe(200)
+    expect(await newAfterReset.json()).toEqual({
+      ok: true,
+      member: { isAdmin: true, fullName: 'Reset Medlem' },
+    })
+
+    // Legacy user changes password via auth:changePassword
+    const changeLogin = await client.mutation(
+      api.auth.signInWithEmailPassword,
+      {
+        email: 'change-verify@naturklubben.dk',
+        password: 'gammel-kode-123',
+      },
+    )
+    expect(changeLogin.status).toBe('complete')
+    if (changeLogin.status !== 'complete') throw new Error('expected login')
+
+    const asChangeUser = client.withIdentity(
+      sessionIdentity(changeLogin.tokens),
+    )
+    const changed = await asChangeUser.mutation(api.auth.changePassword, {
+      currentPassword: 'gammel-kode-123',
+      newPassword: 'ny-skiftet-kode-99',
+    })
+    expect(changed).toEqual({ success: true })
+
+    const oldAfterChange = await postVerify(
+      'change-verify@naturklubben.dk',
+      'gammel-kode-123',
+      '198.51.100.52',
+    )
+    expect(oldAfterChange.status).toBe(401)
+
+    const newAfterChange = await postVerify(
+      'change-verify@naturklubben.dk',
+      'ny-skiftet-kode-99',
+      '198.51.100.53',
+    )
+    expect(newAfterChange.status).toBe(200)
+    expect(await newAfterChange.json()).toEqual({
+      ok: true,
+      member: { isAdmin: false, fullName: 'Skift Medlem' },
+    })
+  })
+
+  it('svarer 401 og aldrig 500 på /preview/verify-member for preview-member-provisioneret konto uden authPassword', async () => {
+    const env = envMap()
+    env.PREVIEW_SEED = '1'
+    env.CONVEX_CLOUD_URL = TEST_PREVIEW_CLOUD_URL
+
+    const t = createTestConvex()
+    await t.mutation(internal.previewMemberAuth.provisionVerifiedMember, {
+      email: 'kunpreview@naturklubben.dk',
+      isAdmin: false,
+      fullName: 'Kun Preview',
+    })
+
+    const res = await t.fetch(PREVIEW_VERIFY_MEMBER_PATH, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'cf-connecting-ip': '198.51.100.60',
+      },
+      body: JSON.stringify({
+        email: 'kunpreview@naturklubben.dk',
+        password: 'mindst-otte-tegn-kode',
+      }),
+    })
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ ok: false })
+  })
+
+  it('falder tilbage til legacy-secret på /preview/verify-member hvis verifiedEmails findes uden authPassword, og afviser uden 500', async () => {
+    const t = createTestConvex()
+    const env = envMap()
+    env.RESEND_API_KEY = 're_test_key'
+
+    const { legacyHalfId, previewHalfId } = await t.run(async (ctx) => {
+      const legacyId = await ctx.db.insert('users', {
+        email: 'halfverify@naturklubben.dk',
+        emailVerificationTime: 1000,
+      })
+      await ctx.db.insert('authAccounts', {
+        userId: legacyId,
+        provider: 'password',
+        providerAccountId: 'halfverify@naturklubben.dk',
+        // 6-char Lucia-Scrypt hash for "abc123"
+        secret:
+          '0123456789abcdef0123456789abcdef:e600f3cf717c7ca27878d0e84eaaf126483cacfeef231dd7416855c1e36bfa28983f429c74b170cbf95b454f2f8f7eecc8c1eb6e71eae6eac9b0d24edd5ea423',
+        emailVerified: 'halfverify@naturklubben.dk',
+      })
+      await ctx.db.insert('profiles', {
+        userId: legacyId,
+        fullName: 'Half Legacy',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+
+      const previewId = await ctx.db.insert('users', {
+        email: 'halfpreviewverify@naturklubben.dk',
+        emailVerificationTime: 1000,
+      })
+      await ctx.db.insert('authAccounts', {
+        userId: previewId,
+        provider: 'preview-member',
+        providerAccountId: 'halfpreviewverify@naturklubben.dk',
+        emailVerified: 'halfpreviewverify@naturklubben.dk',
+      })
+      await ctx.db.insert('profiles', {
+        userId: previewId,
+        fullName: 'Half Preview',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+
+      return { legacyHalfId: legacyId, previewHalfId: previewId }
+    })
+
+    const { createFunctionHandle } = await import('convex/server')
+    const { sentTestEmails } = await import('../test/convexTestAuth')
+    const sendEmailHandle = await t.run(async () =>
+      createFunctionHandle(internal.authEmailSender.sendEmail),
+    )
+
+    for (const [email, userId] of [
+      ['halfverify@naturklubben.dk', legacyHalfId],
+      ['halfpreviewverify@naturklubben.dk', previewHalfId],
+    ] as const) {
+      const started = await t
+        .withRequestMetadata({ ip: '127.0.0.1' })
+        .mutation(components.authEmail.challenge.custom.start, {
+          email,
+          purpose: 'test/half-verify',
+          expectedUserId: null,
+          url: 'https://naturklubben.dk/ny-adgangskode',
+          emailSender: {
+            kind: 'resend',
+            sendEmailHandle,
+            apiKey: 're_test_key',
+            from: 'Naturklubben <noreply@naturklubben.dk>',
+            initialBackoffMs: 30_000,
+            retryAttempts: 1,
+          },
+          subject: 'Test',
+          intro: 'Test',
+        })
+      if (!started.success) throw new Error('expected start')
+      const mails = await sentTestEmails(t)
+      const match = /\?code=([^\s&]+)/.exec(mails[mails.length - 1]?.text ?? '')
+      if (!match?.[1]) throw new Error('missing code')
+      const done = await t.mutation(
+        components.authEmail.challenge.custom
+          ._internal_dangerous_completeForNewUser,
+        {
+          emailCode: decodeURIComponent(match[1]),
+          browserSecret: started.browserSecret,
+          purpose: 'test/half-verify',
+          userId,
+        },
+      )
+      expect(done.success).toBe(true)
+    }
+
+    const postVerify = (email: string, password: string, ip: string) =>
+      t.fetch(PREVIEW_VERIFY_MEMBER_PATH, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'cf-connecting-ip': ip,
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+    // Half-migreret 6-tegns legacy-konto godkendes stadig med sin 6-tegns kode
+    const ok6 = await postVerify(
+      'halfverify@naturklubben.dk',
+      'abc123',
+      '198.51.100.70',
+    )
+    expect(ok6.status).toBe(200)
+    expect(await ok6.json()).toEqual({
+      ok: true,
+      member: { isAdmin: false, fullName: 'Half Legacy' },
+    })
+
+    // Forkert >=8-tegns kode rammer catch("No password stored") -> legacy-fallback -> 401
+    const badLong = await postVerify(
+      'halfverify@naturklubben.dk',
+      'forkert-lang-kode',
+      '198.51.100.71',
+    )
+    expect(badLong.status).toBe(401)
+
+    // Preview-only konto MED verifiedEmails og UDEN authPassword -> 401 (aldrig 500)
+    const previewOnly = await postVerify(
+      'halfpreviewverify@naturklubben.dk',
+      'lang-kode-som-ikke-findes',
+      '198.51.100.72',
+    )
+    expect(previewOnly.status).toBe(401)
+    expect(await previewOnly.json()).toEqual({ ok: false })
   })
 })

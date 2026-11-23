@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent, type RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthActions } from '@convex-dev/auth/react'
-import { useConvex, useQuery } from 'convex/react'
+import { useAction, useConvex, useMutation, useQuery } from 'convex/react'
 import { api } from '../../../convex/_generated/api'
 import { signInWithPreviewFallback } from '../auth/signInWithPreviewFallback'
 import { useDialogFocus } from '../../hooks/useDialogFocus'
@@ -24,7 +24,9 @@ export function DeleteAccountSection() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const navigate = useNavigate()
-  const { signIn, signOut } = useAuthActions()
+  const { setSession, signOut } = useAuthActions()
+  const signInWithPassword = useMutation(api.auth.signInWithEmailPassword)
+  const signInWithPreviewMember = useAction(api.auth.signInWithPreviewMember)
   const { requestDeletion } = useDeleteAccount()
   const convex = useConvex()
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -34,14 +36,16 @@ export function DeleteAccountSection() {
     let signedIn: Awaited<ReturnType<typeof signInWithPreviewFallback>>
     try {
       signedIn = await signInWithPreviewFallback({
-        signIn,
+        signInWithPassword,
+        signInWithPreviewMember,
+        setSession,
         email,
         password,
       })
     } catch {
       throw new AccountDeletionError('invalid_password')
     }
-    if (signedIn.result && !signedIn.result.signingIn) {
+    if (signedIn.result.status !== 'complete') {
       throw new AccountDeletionError('invalid_password')
     }
   }

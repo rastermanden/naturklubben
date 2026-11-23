@@ -1,8 +1,11 @@
 /// <reference types="vite/client" />
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { convexTest } from 'convex-test'
+import {
+  createTestConvex,
+  withAuthUser,
+  type TestConvexInstance,
+} from '../test/convexTestAuth'
 import { api } from './_generated/api'
-import schema from './schema'
 import type { Id } from './_generated/dataModel'
 import {
   ADMIN_CHAT_TAG,
@@ -16,8 +19,6 @@ import {
   selectChatPushRecipients,
   type ChatNotificationPreference,
 } from './push'
-
-const modules = import.meta.glob('./**/*.ts')
 
 function asBuffer(bytes: Uint8Array): BufferSource {
   return bytes as BufferSource
@@ -157,7 +158,7 @@ async function decryptPushBody(
 }
 
 async function seedMember(
-  t: ReturnType<typeof convexTest>,
+  t: TestConvexInstance,
   options: {
     email: string
     fullName: string
@@ -182,7 +183,7 @@ async function seedMember(
 }
 
 async function seedSubscription(
-  t: ReturnType<typeof convexTest>,
+  t: TestConvexInstance,
   profileId: Id<'profiles'>,
   endpoint: string,
   keys: SubscriberKeys,
@@ -330,7 +331,7 @@ describe('chat.sendMessage -> Web Push', () => {
 
   it('sender krypteret push til berettigede enheder, udelader afsender/none og sender ikke dublet ved idempotent gensendelse', async () => {
     vi.useFakeTimers()
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const sender = await seedMember(t, {
       email: 'ada@example.com',
       fullName: 'Ada',
@@ -395,7 +396,7 @@ describe('chat.sendMessage -> Web Push', () => {
       }),
     )
 
-    const asSender = t.withIdentity({ subject: sender.userId })
+    const asSender = await withAuthUser(t, sender.userId)
     const sent = await asSender.mutation(api.chat.sendMessage, {
       clientId: 'msg-1',
       room: 'general',
@@ -444,7 +445,7 @@ describe('chat.sendMessage -> Web Push', () => {
 
   it('sender kun til admins i admin-rummet og sletter udløbne 410-abonnementer', async () => {
     vi.useFakeTimers()
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const adminSender = await seedMember(t, {
       email: 'admin1@example.com',
       fullName: 'Admin 1',
@@ -504,13 +505,13 @@ describe('chat.sendMessage -> Web Push', () => {
       }),
     )
 
-    const sent = await t
-      .withIdentity({ subject: adminSender.userId })
-      .mutation(api.chat.sendMessage, {
-        clientId: 'admin-msg-1',
-        room: 'admin',
-        content: 'Husk referat',
-      })
+    const sent = await (
+      await withAuthUser(t, adminSender.userId)
+    ).mutation(api.chat.sendMessage, {
+      clientId: 'admin-msg-1',
+      room: 'admin',
+      content: 'Husk referat',
+    })
 
     await t.finishAllScheduledFunctions(vi.runAllTimers)
 
@@ -538,7 +539,7 @@ describe('chat.sendMessage -> Web Push', () => {
 
   it('sender ingen push hvis beskeden slettes før leveringen kører', async () => {
     vi.useFakeTimers()
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const sender = await seedMember(t, {
       email: 'ada@example.com',
       fullName: 'Ada',
@@ -557,7 +558,7 @@ describe('chat.sendMessage -> Web Push', () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 201 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const asSender = t.withIdentity({ subject: sender.userId })
+    const asSender = await withAuthUser(t, sender.userId)
     const { messageId } = await asSender.mutation(api.chat.sendMessage, {
       clientId: 'deleted-msg',
       room: 'general',
@@ -571,7 +572,7 @@ describe('chat.sendMessage -> Web Push', () => {
 
   it('sender ingen push til et medlem med præference mentions, når det ikke er nævnt', async () => {
     vi.useFakeTimers()
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const sender = await seedMember(t, {
       email: 'ada@example.com',
       fullName: 'Ada',
@@ -612,14 +613,14 @@ describe('chat.sendMessage -> Web Push', () => {
       }),
     )
 
-    await t
-      .withIdentity({ subject: sender.userId })
-      .mutation(api.chat.sendMessage, {
-        clientId: 'general-no-mention',
-        room: 'general',
-        content: 'God tur i morgen!',
-        mentions: [],
-      })
+    await (
+      await withAuthUser(t, sender.userId)
+    ).mutation(api.chat.sendMessage, {
+      clientId: 'general-no-mention',
+      room: 'general',
+      content: 'God tur i morgen!',
+      mentions: [],
+    })
 
     await t.finishAllScheduledFunctions(vi.runAllTimers)
 
@@ -628,7 +629,7 @@ describe('chat.sendMessage -> Web Push', () => {
 
   it('sender ikke til en nævnt ikke-admin i admin-rummet, men sender mention-push til en nævnt admin', async () => {
     vi.useFakeTimers()
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const adminSender = await seedMember(t, {
       email: 'admin1@example.com',
       fullName: 'Admin 1',
@@ -677,14 +678,14 @@ describe('chat.sendMessage -> Web Push', () => {
       }),
     )
 
-    const sent = await t
-      .withIdentity({ subject: adminSender.userId })
-      .mutation(api.chat.sendMessage, {
-        clientId: 'admin-mention-privacy',
-        room: 'admin',
-        content: 'Hej @Admin 2 og @Medlem',
-        mentions: [adminMentioned.profileId, regularMember.profileId],
-      })
+    const sent = await (
+      await withAuthUser(t, adminSender.userId)
+    ).mutation(api.chat.sendMessage, {
+      clientId: 'admin-mention-privacy',
+      room: 'admin',
+      content: 'Hej @Admin 2 og @Medlem',
+      mentions: [adminMentioned.profileId, regularMember.profileId],
+    })
 
     await t.finishAllScheduledFunctions(vi.runAllTimers)
 

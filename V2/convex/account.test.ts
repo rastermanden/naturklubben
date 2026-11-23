@@ -1,9 +1,8 @@
 /// <reference types="vite/client" />
 import { describe, expect, it, vi } from 'vitest'
-import { convexTest } from 'convex-test'
+import { createTestConvex, withAuthUser } from '../test/convexTestAuth'
 import { ConvexError } from 'convex/values'
 import { api, internal } from './_generated/api'
-import schema from './schema'
 import { ACCOUNT_DELETION_CONFIRMATION } from './account'
 
 /**
@@ -18,10 +17,8 @@ import { ACCOUNT_DELETION_CONFIRMATION } from './account'
  * "Verifikation" i `V2/README.md`.
  */
 
-const modules = import.meta.glob('./**/*.ts')
-
 function setup() {
-  return convexTest(schema, modules)
+  return createTestConvex()
 }
 
 type Test = ReturnType<typeof setup>
@@ -597,8 +594,9 @@ describe('requestDeletion', () => {
     const t = setup()
     const admin = await seedMember(t, 'admin@example.com', true)
 
-    const failure = await t
-      .withIdentity({ subject: admin.userId })
+    const failure = await (
+      await withAuthUser(t, admin.userId)
+    )
       .mutation(api.account.requestDeletion, {
         confirmation: ACCOUNT_DELETION_CONFIRMATION,
       })
@@ -607,7 +605,7 @@ describe('requestDeletion', () => {
     expect(failure).toBeInstanceOf(ConvexError)
     // convex-test sender fejlen videre, som wiren gør: `data` er JSON, ikke
     // den rå værdi. Klienten parser den, før den vises.
-    expect(JSON.parse((failure as ConvexError<string>).data)).toBe('LAST_ADMIN')
+    expect((failure as ConvexError<string>).data).toBe('LAST_ADMIN')
 
     const profile = await t.run(
       async (ctx) => await ctx.db.get(admin.profileId),
@@ -622,11 +620,11 @@ describe('requestDeletion', () => {
       const admin = await seedMember(t, 'admin@example.com', true)
       await seedMember(t, 'anden-admin@example.com', true)
 
-      await t
-        .withIdentity({ subject: admin.userId })
-        .mutation(api.account.requestDeletion, {
-          confirmation: ACCOUNT_DELETION_CONFIRMATION,
-        })
+      await (
+        await withAuthUser(t, admin.userId)
+      ).mutation(api.account.requestDeletion, {
+        confirmation: ACCOUNT_DELETION_CONFIRMATION,
+      })
 
       // Reservationen er sat med det samme, så profilen ikke kan redigeres
       // eller skrives til, mens sletningen løber.

@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { ConvexAuthProvider } from '@convex-dev/auth/react'
+import { api } from '../convex/_generated/api'
 import './index.css'
 import App from './App.tsx'
 import { ThemeProvider } from './features/theme/ThemeProvider'
@@ -48,7 +49,15 @@ createRoot(document.getElementById('root')!).render(
         ThemeProvider ligger uden om alt, fordi temaet også gælder
         login-siderne -- og fordi `useTheme` kaster uden den. */}
     <ThemeProvider>
-      <ConvexAuthProvider client={convex}>
+      <ConvexAuthProvider
+        client={convex}
+        api={{
+          refreshSession: api.auth.refreshSession,
+          signOut: api.auth.signOut,
+          isAuthenticated: api.auth.isAuthenticated,
+        }}
+        ambientSignIns={[]}
+      >
         <BrowserRouter basename={import.meta.env.BASE_URL}>
           <SiteMovedNotice />
           <AppErrorBoundary>

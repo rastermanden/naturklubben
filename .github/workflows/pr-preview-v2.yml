@@ -147,6 +147,7 @@ jobs:
           preview="pr-${{ github.event.number }}"
           npx convex env set PREVIEW_SEED 1 --preview-name "$preview"
           npx convex env set SITE_URL https://naturklubben.dk --preview-name "$preview"
+          npx convex env set APP_BASE_PATH "/pr-preview/$preview" --preview-name "$preview"
           npx convex env set ASSISTANT_MENTION_EMAIL naturklubben-test@agentmail.to --preview-name "$preview"
           printf '%s' "$PREVIEW_TEST_EMAIL" | npx convex env set PREVIEW_TEST_EMAIL --preview-name "$preview"
           printf '%s' "$PREVIEW_TEST_PASSWORD" | npx convex env set PREVIEW_TEST_PASSWORD --preview-name "$preview"
@@ -188,9 +189,6 @@ jobs:
               `Adgangsliste: listed=${data.listed} accounts=${data.accounts} admins=${data.allowlistAdmins} martinAdmin=${data.martinAdmin}`,
             )
           ' "$ready" "$shared_required"
-          # Login kan først udstede en session, når Convex Auth har et
-          # nøglepar på selve previewet. Prod-nøglerne følger ikke med.
-          node scripts/ensurePreviewAuthKeys.mjs "$preview"
 
       # `pr-preview.yml` udgiver ikke, når PR'en rører V2/. Derfor er der
       # ingen venten på V1: den kørsel pushede alligevel til gh-pages efter

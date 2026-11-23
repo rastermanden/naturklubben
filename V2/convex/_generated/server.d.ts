@@ -42,6 +42,7 @@ type Env = {
   readonly RESEND_API_KEY: string | undefined;
   readonly AUTH_EMAIL_FROM: string | undefined;
   readonly SITE_URL: string | undefined;
+  readonly APP_BASE_PATH: string | undefined;
   readonly ASSISTANT_MENTION_EMAIL: string | undefined;
 };
 

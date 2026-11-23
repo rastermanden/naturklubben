@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuthActions } from '@convex-dev/auth/react'
-import { appUrl } from '../features/auth/authRedirect'
-import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
+import { useStartPasswordRecovery } from '@convex-dev/auth/methods/email-password/react'
+import { api } from '../../convex/_generated/api'
+import { userErrorToAuthError } from '../features/auth/authErrors'
 
 /**
  * Glemt adgangskode. Mailen indeholder et link til `/ny-adgangskode`.
@@ -10,41 +10,23 @@ import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
  * hvem der er oprettet.
  */
 export default function ForgotPasswordPage() {
-  const { signIn } = useAuthActions()
+  const { startPasswordRecovery, pending } = useStartPasswordRecovery(api.auth)
 
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
-    setSubmitting(true)
 
-    try {
-      await signIn('password', {
-        email,
-        flow: 'reset',
-        redirectTo: appUrl('ny-adgangskode'),
-      })
+    const result = await startPasswordRecovery({ email })
+    if (result.success || result.userError.error === 'EMAIL_NOT_FOUND') {
+      // Svar ens ved ukendt adresse, så siden ikke lækker medlemsliste.
       setSubmitted(true)
-    } catch (resetError) {
-      const raw = errorCode(resetError)?.toLowerCase() ?? ''
-      // Ukendt adresse kaster, men svaret skal være det samme som når
-      // mailen er sendt.
-      if (
-        raw.includes('invalid') ||
-        raw.includes('could not find') ||
-        raw.includes('credentials')
-      ) {
-        setSubmitted(true)
-      } else {
-        setError(toFriendlyAuthError(resetError))
-      }
-    } finally {
-      setSubmitting(false)
+      return
     }
+    setError(userErrorToAuthError(result.userError))
   }
 
   if (submitted) {
@@ -96,10 +78,10 @@ export default function ForgotPasswordPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={pending}
           className="min-h-11 rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
         >
-          {submitting ? 'Sender…' : 'Send nulstillingslink'}
+          {pending ? 'Sender…' : 'Send nulstillingslink'}
         </button>
       </form>
 

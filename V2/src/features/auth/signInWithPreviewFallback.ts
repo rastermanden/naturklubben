@@ -1,47 +1,70 @@
-import type { useAuthActions } from '@convex-dev/auth/react'
+import type { TokenBundle } from '@convex-dev/auth/react'
 import { isPreviewDeployment } from '../pwa/previewInstall'
 
-type SignInFn = ReturnType<typeof useAuthActions>['signIn']
-type SignInResult = Awaited<ReturnType<SignInFn>>
+export type PreviewAwareSignInResult =
+  | { status: 'complete'; tokens: TokenBundle }
+  | { status: 'error'; userError: { error: string; [key: string]: unknown } }
 
-/**
- * Logger ind med `password`-provideren først, og falder på PR-previews
- * tilbage til `preview-member`, når `password` enten fejler (fx ingen lokal
- * adgangskodekonto) eller returnerer `{ signingIn: false }` (fx ubekræftet
- * lokal konto). Gemmer aldrig adgangskoden.
- */
-export async function signInWithPreviewFallback({
-  signIn,
-  email,
-  password,
-  redirectTo,
-  isPreview = isPreviewDeployment(),
-}: {
-  signIn: SignInFn
+export type EmailPasswordSignInFn = (args: {
   email: string
   password: string
-  redirectTo?: string
-  isPreview?: boolean
-}): Promise<{ result: SignInResult; usedPreviewMember: boolean }> {
-  const passwordParams: Record<string, string> = {
-    email,
-    password,
-    flow: 'signIn',
-    ...(redirectTo !== undefined ? { redirectTo } : {}),
-  }
+}) => Promise<PreviewAwareSignInResult>
 
-  let passwordResult: SignInResult
+export type PreviewMemberSignInFn = (args: {
+  email: string
+  password: string
+}) => Promise<PreviewAwareSignInResult>
+
+export type SetSessionFn = (tokens: {
+  accessToken: string
+  userId: string
+  refreshToken?: string
+  refreshTokenExpiresAt?: number
+}) => Promise<void>
+
+/**
+ * Logger ind med `auth:signInWithEmailPassword` først, og falder på PR-previews
+ * tilbage til `auth:signInWithPreviewMember`, når lokalt login ikke lykkes
+ * (fx fordi medlemmet kun findes i produktion). Gemmer aldrig adgangskoden.
+ */
+export async function signInWithPreviewFallback({
+  signInWithPassword,
+  signInWithPreviewMember,
+  setSession,
+  email,
+  password,
+  isPreview = isPreviewDeployment(),
+}: {
+  signInWithPassword: EmailPasswordSignInFn
+  signInWithPreviewMember: PreviewMemberSignInFn
+  setSession: SetSessionFn
+  email: string
+  password: string
+  isPreview?: boolean
+}): Promise<{ result: PreviewAwareSignInResult; usedPreviewMember: boolean }> {
+  let passwordResult: PreviewAwareSignInResult
   try {
-    passwordResult = await signIn('password', passwordParams)
+    passwordResult = await signInWithPassword({ email, password })
   } catch (passwordError) {
     if (!isPreview) throw passwordError
-    const result = await signIn('preview-member', { email, password })
-    return { result, usedPreviewMember: true }
+    const previewResult = await signInWithPreviewMember({ email, password })
+    if (previewResult.status === 'complete') {
+      await setSession(previewResult.tokens)
+    }
+    return { result: previewResult, usedPreviewMember: true }
   }
 
-  if (passwordResult && !passwordResult.signingIn && isPreview) {
-    const result = await signIn('preview-member', { email, password })
-    return { result, usedPreviewMember: true }
+  if (passwordResult.status === 'complete') {
+    await setSession(passwordResult.tokens)
+    return { result: passwordResult, usedPreviewMember: false }
+  }
+
+  if (isPreview) {
+    const previewResult = await signInWithPreviewMember({ email, password })
+    if (previewResult.status === 'complete') {
+      await setSession(previewResult.tokens)
+    }
+    return { result: previewResult, usedPreviewMember: true }
   }
 
   return { result: passwordResult, usedPreviewMember: false }

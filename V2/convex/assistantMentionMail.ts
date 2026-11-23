@@ -29,10 +29,20 @@ export async function findAssistantProfileId(
       q.eq('provider', 'password').eq('providerAccountId', email),
     )
     .unique()
-  if (account === null) return null
+  let userId = account?.userId ?? null
+  if (userId === null) {
+    const verifiedUser = (
+      await ctx.db
+        .query('users')
+        .withIndex('email', (q) => q.eq('email', email))
+        .collect()
+    ).find((u) => u.emailVerificationTime !== undefined)
+    userId = verifiedUser?._id ?? null
+  }
+  if (userId === null) return null
   const profile = await ctx.db
     .query('profiles')
-    .withIndex('by_user', (q) => q.eq('userId', account.userId))
+    .withIndex('by_user', (q) => q.eq('userId', userId))
     .unique()
   return profile?._id ?? null
 }

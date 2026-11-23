@@ -1,15 +1,16 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
+import {
+  createTestConvex,
+  withAuthUser,
+  type TestConvexInstance,
+} from '../test/convexTestAuth'
 import { ConvexError } from 'convex/values'
-import { convexTest } from 'convex-test'
 import { api } from './_generated/api'
-import schema from './schema'
 import type { Id } from './_generated/dataModel'
 
-const modules = import.meta.glob('./**/*.ts')
-
 async function seedMember(
-  t: ReturnType<typeof convexTest>,
+  t: TestConvexInstance,
   email: string,
   fullName: string,
   isAdmin = false,
@@ -31,7 +32,7 @@ async function seedMember(
 }
 
 async function seedMessage(
-  t: ReturnType<typeof convexTest>,
+  t: TestConvexInstance,
   authorId: Id<'profiles'>,
   createdAt: number,
   room: 'general' | 'admin' = 'general',
@@ -49,10 +50,7 @@ async function seedMessage(
   })
 }
 
-async function readRow(
-  t: ReturnType<typeof convexTest>,
-  profileId: Id<'profiles'>,
-) {
+async function readRow(t: TestConvexInstance, profileId: Id<'profiles'>) {
   return await t.run(async (ctx) => {
     const rows = await ctx.db.query('chatReads').collect()
     return (
@@ -65,11 +63,11 @@ async function readRow(
 
 describe('markMessageRead', () => {
   it('flytter kun positionen fremad og gemmer beskeden', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t, 'a@example.com', 'Ada')
     const first = await seedMessage(t, member.profileId, 1_000)
     const second = await seedMessage(t, member.profileId, 2_000)
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
 
     await asMember.mutation(api.chat.markMessageRead, { messageId: second })
     await asMember.mutation(api.chat.markMessageRead, { messageId: first })
@@ -92,13 +90,14 @@ describe('markMessageRead', () => {
   })
 
   it('behandler en admin-besked som ukendt for et almindeligt medlem', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t, 'a@example.com', 'Ada')
     const admin = await seedMember(t, 'admin@example.com', 'Admin', true)
     const hidden = await seedMessage(t, admin.profileId, 1_000, 'admin')
 
-    const failure = await t
-      .withIdentity({ subject: member.userId })
+    const failure = await (
+      await withAuthUser(t, member.userId)
+    )
       .mutation(api.chat.markMessageRead, { messageId: hidden })
       .then(
         () => null,
@@ -106,19 +105,19 @@ describe('markMessageRead', () => {
       )
 
     expect(failure).toBeInstanceOf(ConvexError)
-    expect(JSON.parse((failure as ConvexError<string>).data)).toBe(
+    expect((failure as ConvexError<string>).data).toBe(
       'CHAT_READ_MESSAGE_NOT_FOUND',
     )
     expect(await readRow(t, member.profileId)).toBeNull()
   })
 
   it('tæller ikke beskeden selv som ulæst, men den næste', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const author = await seedMember(t, 'a@example.com', 'Ada')
     const reader = await seedMember(t, 'b@example.com', 'Bo')
     const first = await seedMessage(t, author.profileId, 1_000)
     await seedMessage(t, author.profileId, 2_000)
-    const asReader = t.withIdentity({ subject: reader.userId })
+    const asReader = await withAuthUser(t, reader.userId)
 
     await asReader.mutation(api.chat.markMessageRead, { messageId: first })
     const summary = await asReader.query(api.chat.unread, {})

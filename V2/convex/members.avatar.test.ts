@@ -1,12 +1,13 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
-import { convexTest } from 'convex-test'
+import {
+  createTestConvex,
+  withAuthUser,
+  type TestConvexInstance,
+} from '../test/convexTestAuth'
 import { api } from './_generated/api'
-import schema from './schema'
 
-const modules = import.meta.glob('./**/*.ts')
-
-async function seedMember(t: ReturnType<typeof convexTest>) {
+async function seedMember(t: TestConvexInstance) {
   return await t.run(async (ctx) => {
     const userId = await ctx.db.insert('users', { email: 'medlem@example.com' })
     const profileId = await ctx.db.insert('profiles', {
@@ -28,20 +29,20 @@ async function seedMember(t: ReturnType<typeof convexTest>) {
  * gør, så testen sætter feltet bagefter.
  */
 async function storeTyped(
-  t: ReturnType<typeof convexTest>,
+  t: TestConvexInstance,
   blob: Blob,
   contentType: string,
 ) {
   return await t.run(async (ctx) => {
     const storageId = await ctx.storage.store(blob)
-    await ctx.db.patch(storageId, { contentType })
+    await ctx.db.patch(storageId as never, { contentType } as never)
     return storageId
   })
 }
 
 describe('saveAvatar', () => {
   it('afviser en fil, der ikke er et billede, og sletter den', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t)
     const storageId = await storeTyped(
       t,
@@ -49,9 +50,9 @@ describe('saveAvatar', () => {
       'text/plain',
     )
 
-    const result = await t
-      .withIdentity({ subject: member.userId })
-      .mutation(api.members.saveAvatar, { storageId })
+    const result = await (
+      await withAuthUser(t, member.userId)
+    ).mutation(api.members.saveAvatar, { storageId })
 
     expect(result).toEqual({ error: 'AVATAR_NOT_AN_IMAGE' })
     const url = await t.run(async (ctx) => await ctx.storage.getUrl(storageId))
@@ -59,7 +60,7 @@ describe('saveAvatar', () => {
   })
 
   it('gemmer billedet og sletter det forrige', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t)
     const first = await storeTyped(
       t,
@@ -73,7 +74,7 @@ describe('saveAvatar', () => {
     )
     const ids = { first, second }
 
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
     await asMember.mutation(api.members.saveAvatar, { storageId: ids.first })
     await asMember.mutation(api.members.saveAvatar, { storageId: ids.second })
 
@@ -92,7 +93,7 @@ describe('saveAvatar', () => {
   })
 
   it('sletter et billede, der er større end 5 MB', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t)
     const storageId = await storeTyped(
       t,
@@ -100,9 +101,9 @@ describe('saveAvatar', () => {
       'image/png',
     )
 
-    const result = await t
-      .withIdentity({ subject: member.userId })
-      .mutation(api.members.saveAvatar, { storageId })
+    const result = await (
+      await withAuthUser(t, member.userId)
+    ).mutation(api.members.saveAvatar, { storageId })
 
     expect(result).toEqual({ error: 'AVATAR_TOO_LARGE' })
     const url = await t.run(async (ctx) => await ctx.storage.getUrl(storageId))

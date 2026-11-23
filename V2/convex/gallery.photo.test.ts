@@ -1,12 +1,13 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
-import { convexTest } from 'convex-test'
+import {
+  createTestConvex,
+  withAuthUser,
+  type TestConvexInstance,
+} from '../test/convexTestAuth'
 import { api } from './_generated/api'
-import schema from './schema'
 
-const modules = import.meta.glob('./**/*.ts')
-
-async function seedMember(t: ReturnType<typeof convexTest>) {
+async function seedMember(t: TestConvexInstance) {
   return await t.run(async (ctx) => {
     const userId = await ctx.db.insert('users', { email: 'foto@example.com' })
     const profileId = await ctx.db.insert('profiles', {
@@ -23,33 +24,38 @@ async function seedMember(t: ReturnType<typeof convexTest>) {
   })
 }
 
-async function storeImage(t: ReturnType<typeof convexTest>, bytes: string) {
+async function storeImage(t: TestConvexInstance, bytes: string) {
   return await t.run(async (ctx) => {
     const storageId = await ctx.storage.store(
       new Blob([bytes], { type: 'image/jpeg' }),
     )
-    await ctx.db.patch(storageId, { contentType: 'image/jpeg' })
+    await ctx.db.patch(
+      storageId as never,
+      {
+        contentType: 'image/jpeg',
+      } as never,
+    )
     return storageId
   })
 }
 
 describe('createPhoto', () => {
   it('gemmer et browser-skaleret billede som klar med miniature', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t)
     const storageId = await storeImage(t, 'visning')
     const thumbnailStorageId = await storeImage(t, 'mini')
 
-    const photoId = await t
-      .withIdentity({ subject: member.userId })
-      .mutation(api.gallery.createPhoto, {
-        storageId,
-        thumbnailStorageId,
-        width: 800,
-        height: 600,
-        caption: 'Et blad',
-        clientUploadId: 'forsog-1',
-      })
+    const photoId = await (
+      await withAuthUser(t, member.userId)
+    ).mutation(api.gallery.createPhoto, {
+      storageId,
+      thumbnailStorageId,
+      width: 800,
+      height: 600,
+      caption: 'Et blad',
+      clientUploadId: 'forsog-1',
+    })
 
     const after = await t.run(async (ctx) => {
       const photo = await ctx.db.get(photoId)
@@ -76,7 +82,7 @@ describe('createPhoto', () => {
 })
 
 async function seedEvent(
-  t: ReturnType<typeof convexTest>,
+  t: TestConvexInstance,
   event: { title: string; startAt: number },
 ) {
   return await t.run(async (ctx) =>
@@ -95,19 +101,19 @@ async function seedEvent(
 
 describe('createPhoto med en begivenhed (#332)', () => {
   it('lægger billedet i begivenhedens album og tager titlen fra begivenheden', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t)
     const eventId = await seedEvent(t, { title: 'Hornfisketur', startAt: 1000 })
     const storageId = await storeImage(t, 'visning')
 
-    const photoId = await t
-      .withIdentity({ subject: member.userId })
-      .mutation(api.gallery.createPhoto, {
-        storageId,
-        eventId,
-        // Klientens titel skal ikke kunne navngive albummet.
-        eventTitle: 'Noget helt andet',
-      })
+    const photoId = await (
+      await withAuthUser(t, member.userId)
+    ).mutation(api.gallery.createPhoto, {
+      storageId,
+      eventId,
+      // Klientens titel skal ikke kunne navngive albummet.
+      eventTitle: 'Noget helt andet',
+    })
 
     const after = await t.run(async (ctx) => ({
       photo: await ctx.db.get(photoId),
@@ -124,10 +130,10 @@ describe('createPhoto med en begivenhed (#332)', () => {
   })
 
   it('samler to billeder fra samme begivenhed i ét album', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t)
     const eventId = await seedEvent(t, { title: 'Fugletårnet', startAt: 2000 })
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
 
     await asMember.mutation(api.gallery.createPhoto, {
       storageId: await storeImage(t, 'et'),
@@ -146,7 +152,7 @@ describe('createPhoto med en begivenhed (#332)', () => {
   })
 
   it('lander i "Uden begivenhed", når begivenheden er slettet imens', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t)
     const eventId = await seedEvent(t, { title: 'Aflyst tur', startAt: 3000 })
     await t.run(async (ctx) => ctx.db.delete(eventId))
@@ -154,9 +160,9 @@ describe('createPhoto med en begivenhed (#332)', () => {
 
     // Billedet må ikke gå tabt, fordi turen blev slettet, mens uploaden lå i
     // køen -- og albummet må ikke komme til at hedde "Ukendt begivenhed".
-    const photoId = await t
-      .withIdentity({ subject: member.userId })
-      .mutation(api.gallery.createPhoto, { storageId, eventId })
+    const photoId = await (
+      await withAuthUser(t, member.userId)
+    ).mutation(api.gallery.createPhoto, { storageId, eventId })
 
     const after = await t.run(async (ctx) => ({
       photo: await ctx.db.get(photoId),
@@ -170,17 +176,17 @@ describe('createPhoto med en begivenhed (#332)', () => {
   })
 
   it('lander i "Uden begivenhed" for et id, der ikke er et begivenheds-id', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t)
     const storageId = await storeImage(t, 'visning')
 
-    const photoId = await t
-      .withIdentity({ subject: member.userId })
-      .mutation(api.gallery.createPhoto, {
-        storageId,
-        eventId: 'ikke-et-id',
-        eventTitle: 'Et album, ingen tur har',
-      })
+    const photoId = await (
+      await withAuthUser(t, member.userId)
+    ).mutation(api.gallery.createPhoto, {
+      storageId,
+      eventId: 'ikke-et-id',
+      eventTitle: 'Et album, ingen tur har',
+    })
 
     const after = await t.run(async (ctx) => ({
       photo: await ctx.db.get(photoId),
@@ -193,7 +199,7 @@ describe('createPhoto med en begivenhed (#332)', () => {
 
 describe('createPhoto og de migrerede album (#332)', () => {
   it('holder billedet i et V1-album, hvis nøgle ikke er et begivenheds-id', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t)
     // V1-importen bruger V1's egen UUID som både albumKey og eventId
     // (`migrateV1.ts`); begivenhederne fik nye Convex-id'er. Uploader man inde
@@ -210,9 +216,9 @@ describe('createPhoto og de migrerede album (#332)', () => {
     })
     const storageId = await storeImage(t, 'visning')
 
-    const photoId = await t
-      .withIdentity({ subject: member.userId })
-      .mutation(api.gallery.createPhoto, { storageId, eventId: legacyKey })
+    const photoId = await (
+      await withAuthUser(t, member.userId)
+    ).mutation(api.gallery.createPhoto, { storageId, eventId: legacyKey })
 
     const after = await t.run(async (ctx) => ({
       photo: await ctx.db.get(photoId),
@@ -233,10 +239,10 @@ describe('createPhoto og de migrerede album (#332)', () => {
   })
 
   it('lader albumtitlen følge en omdøbt begivenhed', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const member = await seedMember(t)
     const eventId = await seedEvent(t, { title: 'Gammelt navn', startAt: 1000 })
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
 
     await asMember.mutation(api.gallery.createPhoto, {
       storageId: await storeImage(t, 'et'),

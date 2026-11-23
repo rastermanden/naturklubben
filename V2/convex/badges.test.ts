@@ -1,12 +1,13 @@
 /// <reference types="vite/client" />
 import { describe, expect, it, vi } from 'vitest'
-import { convexTest } from 'convex-test'
+import {
+  createTestConvex,
+  withAuthUser,
+  type TestConvexInstance,
+} from '../test/convexTestAuth'
 import { api } from './_generated/api'
-import schema from './schema'
 
-const modules = import.meta.glob('./**/*.ts')
-
-async function seedUsers(t: ReturnType<typeof convexTest>) {
+async function seedUsers(t: TestConvexInstance) {
   return await t.run(async (ctx) => {
     const adminUser = await ctx.db.insert('users', {
       email: 'admin@example.com',
@@ -59,20 +60,20 @@ async function seedUsers(t: ReturnType<typeof convexTest>) {
 }
 
 async function storeTyped(
-  t: ReturnType<typeof convexTest>,
+  t: TestConvexInstance,
   blob: Blob,
   contentType: string,
 ) {
   return await t.run(async (ctx) => {
     const storageId = await ctx.storage.store(blob)
-    await ctx.db.patch(storageId, { contentType })
+    await ctx.db.patch(storageId as never, { contentType } as never)
     return storageId
   })
 }
 
 describe('badges.generateImageUploadUrl', () => {
   it('afviser anonyme og ikke-admins og giver URL til admins', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const users = await seedUsers(t)
 
     await expect(
@@ -80,14 +81,15 @@ describe('badges.generateImageUploadUrl', () => {
     ).rejects.toThrow('NOT_A_MEMBER')
 
     await expect(
-      t
-        .withIdentity({ subject: users.member.userId })
-        .mutation(api.badges.generateImageUploadUrl, {}),
+      (await withAuthUser(t, users.member.userId)).mutation(
+        api.badges.generateImageUploadUrl,
+        {},
+      ),
     ).rejects.toThrow('NOT_ADMIN')
 
-    const result = await t
-      .withIdentity({ subject: users.admin.userId })
-      .mutation(api.badges.generateImageUploadUrl, {})
+    const result = await (
+      await withAuthUser(t, users.admin.userId)
+    ).mutation(api.badges.generateImageUploadUrl, {})
     expect(typeof result.uploadUrl).toBe('string')
     expect(result.uploadUrl.length).toBeGreaterThan(0)
   })
@@ -95,7 +97,7 @@ describe('badges.generateImageUploadUrl', () => {
 
 describe('badges.createBadge og updateBadge', () => {
   it('kræver admin og opretter/opdaterer med billedvalidering og oprydning', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const users = await seedUsers(t)
     const validImage = await storeTyped(
       t,
@@ -104,9 +106,9 @@ describe('badges.createBadge og updateBadge', () => {
     )
 
     await expect(
-      t
-        .withIdentity({ subject: users.member.userId })
-        .mutation(api.badges.createBadge, {
+      (await withAuthUser(t, users.member.userId)).mutation(
+        api.badges.createBadge,
+        {
           slug: 'skovmaerke',
           name: 'Skovmærke',
           description: 'Til ture i skoven.',
@@ -119,7 +121,8 @@ describe('badges.createBadge og updateBadge', () => {
           cropSize: 1200,
           diameterMm: 58,
           bleedMm: 5,
-        }),
+        },
+      ),
     ).rejects.toThrow('NOT_ADMIN')
 
     const badMime = await storeTyped(
@@ -128,9 +131,9 @@ describe('badges.createBadge og updateBadge', () => {
       'image/svg+xml',
     )
     await expect(
-      t
-        .withIdentity({ subject: users.admin.userId })
-        .mutation(api.badges.createBadge, {
+      (await withAuthUser(t, users.admin.userId)).mutation(
+        api.badges.createBadge,
+        {
           slug: 'skovmaerke',
           name: 'Skovmærke',
           imageStorageId: badMime,
@@ -142,7 +145,8 @@ describe('badges.createBadge og updateBadge', () => {
           cropSize: 1200,
           diameterMm: 58,
           bleedMm: 5,
-        }),
+        },
+      ),
     ).rejects.toThrow('BADGE_IMAGE_TYPE_INVALID')
 
     const tooLarge = await storeTyped(
@@ -151,9 +155,9 @@ describe('badges.createBadge og updateBadge', () => {
       'image/png',
     )
     await expect(
-      t
-        .withIdentity({ subject: users.admin.userId })
-        .mutation(api.badges.createBadge, {
+      (await withAuthUser(t, users.admin.userId)).mutation(
+        api.badges.createBadge,
+        {
           slug: 'skovmaerke',
           name: 'Skovmærke',
           imageStorageId: tooLarge,
@@ -165,16 +169,17 @@ describe('badges.createBadge og updateBadge', () => {
           cropSize: 1200,
           diameterMm: 58,
           bleedMm: 5,
-        }),
+        },
+      ),
     ).rejects.toThrow('BADGE_IMAGE_TOO_LARGE')
 
     const missingType = await t.run(async (ctx) =>
-      ctx.storage.store(new Blob(['png'], { type: 'image/png' })),
+      ctx.storage.store(new Blob(['png'])),
     )
     await expect(
-      t
-        .withIdentity({ subject: users.admin.userId })
-        .mutation(api.badges.createBadge, {
+      (await withAuthUser(t, users.admin.userId)).mutation(
+        api.badges.createBadge,
+        {
           slug: 'skovmaerke',
           name: 'Skovmærke',
           imageStorageId: missingType,
@@ -186,13 +191,14 @@ describe('badges.createBadge og updateBadge', () => {
           cropSize: 1200,
           diameterMm: 58,
           bleedMm: 5,
-        }),
+        },
+      ),
     ).rejects.toThrow('BADGE_IMAGE_TYPE_INVALID')
 
     await expect(
-      t
-        .withIdentity({ subject: users.admin.userId })
-        .mutation(api.badges.createBadge, {
+      (await withAuthUser(t, users.admin.userId)).mutation(
+        api.badges.createBadge,
+        {
           slug: 'skovmaerke',
           name: 'Skovmærke',
           imageStorageId: validImage,
@@ -204,10 +210,11 @@ describe('badges.createBadge og updateBadge', () => {
           cropSize: 1200,
           diameterMm: 58,
           bleedMm: 5,
-        }),
+        },
+      ),
     ).rejects.toThrow('BADGE_IMAGE_TYPE_INVALID')
 
-    const asAdmin = t.withIdentity({ subject: users.admin.userId })
+    const asAdmin = await withAuthUser(t, users.admin.userId)
     const badgeId = await asAdmin.mutation(api.badges.createBadge, {
       slug: 'skovmaerke',
       name: 'Skovmærke',
@@ -323,7 +330,7 @@ describe('badges.createBadge og updateBadge', () => {
 
 describe('badges.startPrintRender og finishPrintRender', () => {
   it('håndhæver admin-adgang, aktiv/forældet lås, PNG-type og superseded oprydning', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const users = await seedUsers(t)
     const image = await storeTyped(
       t,
@@ -331,7 +338,7 @@ describe('badges.startPrintRender og finishPrintRender', () => {
       'image/png',
     )
 
-    const asAdmin = t.withIdentity({ subject: users.admin.userId })
+    const asAdmin = await withAuthUser(t, users.admin.userId)
     const badgeId = await asAdmin.mutation(api.badges.createBadge, {
       slug: 'testmaerke',
       name: 'Testmærke',
@@ -347,9 +354,10 @@ describe('badges.startPrintRender og finishPrintRender', () => {
     })
 
     await expect(
-      t
-        .withIdentity({ subject: users.member.userId })
-        .mutation(api.badges.startPrintRender, { badgeId }),
+      (await withAuthUser(t, users.member.userId)).mutation(
+        api.badges.startPrintRender,
+        { badgeId },
+      ),
     ).rejects.toThrow('NOT_ADMIN')
 
     const firstClaim = await asAdmin.mutation(api.badges.startPrintRender, {
@@ -423,7 +431,7 @@ describe('badges.startPrintRender og finishPrintRender', () => {
       })
       if (reClaim.status !== 'claimed') throw new Error('Forventede re-claim')
       const untypedPrint = await t.run(async (ctx) =>
-        ctx.storage.store(new Blob(['png'], { type: 'image/png' })),
+        ctx.storage.store(new Blob(['png'])),
       )
       const missingPrintType = await asAdmin.mutation(
         api.badges.finishPrintRender,
@@ -451,14 +459,14 @@ describe('badges.startPrintRender og finishPrintRender', () => {
   })
 
   it('gemmer fejl og sætter status failed når originalbilledet mangler', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const users = await seedUsers(t)
     const image = await storeTyped(
       t,
       new Blob(['png'], { type: 'image/png' }),
       'image/png',
     )
-    const asAdmin = t.withIdentity({ subject: users.admin.userId })
+    const asAdmin = await withAuthUser(t, users.admin.userId)
     const badgeId = await asAdmin.mutation(api.badges.createBadge, {
       slug: 'manglende-fil',
       name: 'Manglende fil',
@@ -496,7 +504,7 @@ describe('badges.startPrintRender og finishPrintRender', () => {
 
 describe('badges.nominate og allMemberBadges', () => {
   it('tillader indstilling af et andet medlem, afviser sig selv, og beriger tildelte badges', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const users = await seedUsers(t)
     const image = await storeTyped(
       t,
@@ -508,7 +516,7 @@ describe('badges.nominate og allMemberBadges', () => {
       'NOT_A_MEMBER',
     )
 
-    const asAdmin = t.withIdentity({ subject: users.admin.userId })
+    const asAdmin = await withAuthUser(t, users.admin.userId)
     const badgeId = await asAdmin.mutation(api.badges.createBadge, {
       slug: 'turmaerke',
       name: 'Turmærke',
@@ -524,7 +532,7 @@ describe('badges.nominate og allMemberBadges', () => {
       bleedMm: 5,
     })
 
-    const asMember = t.withIdentity({ subject: users.member.userId })
+    const asMember = await withAuthUser(t, users.member.userId)
     await expect(
       asMember.mutation(api.badges.nominate, {
         badgeId,
@@ -543,12 +551,12 @@ describe('badges.nominate og allMemberBadges', () => {
       nominationId,
       vote: 'approve',
     })
-    await t
-      .withIdentity({ subject: users.secondAdmin.userId })
-      .mutation(api.badges.vote, {
-        nominationId,
-        vote: 'approve',
-      })
+    await (
+      await withAuthUser(t, users.secondAdmin.userId)
+    ).mutation(api.badges.vote, {
+      nominationId,
+      vote: 'approve',
+    })
 
     const awarded = await asMember.query(api.badges.allMemberBadges, {})
     expect(awarded).toHaveLength(1)
@@ -598,14 +606,14 @@ describe('badges.nominate og allMemberBadges', () => {
   })
 
   it('returnerer nyeste tildelinger først i allMemberBadges', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const users = await seedUsers(t)
     const image = await storeTyped(
       t,
       new Blob(['png'], { type: 'image/png' }),
       'image/png',
     )
-    const asAdmin = t.withIdentity({ subject: users.admin.userId })
+    const asAdmin = await withAuthUser(t, users.admin.userId)
     const firstBadge = await asAdmin.mutation(api.badges.createBadge, {
       slug: 'foerste-maerke',
       name: 'Første mærke',
@@ -657,9 +665,9 @@ describe('badges.nominate og allMemberBadges', () => {
       })
     })
 
-    const awarded = await t
-      .withIdentity({ subject: users.member.userId })
-      .query(api.badges.allMemberBadges, {})
+    const awarded = await (
+      await withAuthUser(t, users.member.userId)
+    ).query(api.badges.allMemberBadges, {})
     expect(awarded.map((row) => row.badgeSlug)).toEqual([
       'andet-maerke',
       'foerste-maerke',

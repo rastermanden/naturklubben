@@ -1,19 +1,20 @@
 /// <reference types="vite/client" />
 import { ConvexError } from 'convex/values'
 import { describe, expect, it } from 'vitest'
-import { convexTest } from 'convex-test'
+import {
+  createTestConvex,
+  withAuthUser,
+  type TestConvexInstance,
+} from '../test/convexTestAuth'
 import { api } from './_generated/api'
-import schema from './schema'
 import {
   BRAL_DURATION_SECONDS,
   BRAL_MAX_COINS_PER_GAME,
   bralScoreIsPlausible,
 } from './bralRules'
 
-const modules = import.meta.glob('./**/*.ts')
-
 async function seedMember(
-  t: ReturnType<typeof convexTest>,
+  t: TestConvexInstance,
   email: string,
   fullName: string,
 ) {
@@ -64,32 +65,32 @@ describe('bralScoreIsPlausible', () => {
 
 describe('games.submit bral', () => {
   it('gemmer resultatet på resultatlisten og under seneste spil', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const spiller1 = await seedMember(t, 'spiller1@example.com', 'Spiller 1')
     const spiller2 = await seedMember(t, 'spiller2@example.com', 'Spiller 2')
 
-    await t
-      .withIdentity({ subject: spiller1.userId })
-      .mutation(api.games.submit, {
-        game: 'bral',
-        score: 16,
-        lines: 3,
-        level: 1,
-        durationSeconds: 60,
-      })
-    await t
-      .withIdentity({ subject: spiller2.userId })
-      .mutation(api.games.submit, {
-        game: 'bral',
-        score: 40,
-        lines: 4,
-        level: 1,
-        durationSeconds: 60,
-      })
+    await (
+      await withAuthUser(t, spiller1.userId)
+    ).mutation(api.games.submit, {
+      game: 'bral',
+      score: 16,
+      lines: 3,
+      level: 1,
+      durationSeconds: 60,
+    })
+    await (
+      await withAuthUser(t, spiller2.userId)
+    ).mutation(api.games.submit, {
+      game: 'bral',
+      score: 40,
+      lines: 4,
+      level: 1,
+      durationSeconds: 60,
+    })
 
-    const board = await t
-      .withIdentity({ subject: spiller1.userId })
-      .query(api.games.leaderboard, { game: 'bral' })
+    const board = await (
+      await withAuthUser(t, spiller1.userId)
+    ).query(api.games.leaderboard, { game: 'bral' })
     expect(board).toEqual([
       expect.objectContaining({
         game: 'bral',
@@ -109,17 +110,17 @@ describe('games.submit bral', () => {
       }),
     ])
 
-    const recent = await t
-      .withIdentity({ subject: spiller1.userId })
-      .query(api.games.recent, { game: 'bral' })
+    const recent = await (
+      await withAuthUser(t, spiller1.userId)
+    ).query(api.games.recent, { game: 'bral' })
     expect(recent).toHaveLength(2)
 
-    const spiller1Best = await t
-      .withIdentity({ subject: spiller1.userId })
-      .query(api.games.personalBest, { game: 'bral' })
-    const spiller2Best = await t
-      .withIdentity({ subject: spiller2.userId })
-      .query(api.games.personalBest, { game: 'bral' })
+    const spiller1Best = await (
+      await withAuthUser(t, spiller1.userId)
+    ).query(api.games.personalBest, { game: 'bral' })
+    const spiller2Best = await (
+      await withAuthUser(t, spiller2.userId)
+    ).query(api.games.personalBest, { game: 'bral' })
     expect(spiller1Best).toMatchObject({
       score: 16,
       playerId: spiller1.profileId,
@@ -131,7 +132,7 @@ describe('games.submit bral', () => {
   })
 
   it('afviser umulige Bral-resultater uden at gemme dem', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const spiller1 = await seedMember(t, 'spiller1@example.com', 'Spiller 1')
 
     const badCases: Array<{
@@ -156,8 +157,9 @@ describe('games.submit bral', () => {
     ]
 
     for (const bad of badCases) {
-      const failure = await t
-        .withIdentity({ subject: spiller1.userId })
+      const failure = await (
+        await withAuthUser(t, spiller1.userId)
+      )
         .mutation(api.games.submit, {
           game: 'bral',
           score: bad.score,
@@ -171,14 +173,12 @@ describe('games.submit bral', () => {
         )
 
       expect(failure).toBeInstanceOf(ConvexError)
-      expect(JSON.parse((failure as ConvexError<string>).data)).toBe(
-        'SCORE_NOT_PLAUSIBLE',
-      )
+      expect((failure as ConvexError<string>).data).toBe('SCORE_NOT_PLAUSIBLE')
     }
 
-    const board = await t
-      .withIdentity({ subject: spiller1.userId })
-      .query(api.games.leaderboard, { game: 'bral' })
+    const board = await (
+      await withAuthUser(t, spiller1.userId)
+    ).query(api.games.leaderboard, { game: 'bral' })
     expect(board).toEqual([])
   })
 })

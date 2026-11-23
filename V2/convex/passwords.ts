@@ -1,20 +1,19 @@
-import {
-  getAuthUserId,
-  modifyAccountCredentials,
-} from '@convex-dev/auth/server'
 import { ConvexError, v } from 'convex/values'
-import { internal } from './_generated/api'
-import type { MutationCtx } from './_generated/server'
-import { action, internalMutation, internalQuery } from './_generated/server'
+import { components } from './_generated/api'
 import type { Id } from './_generated/dataModel'
+import type { MutationCtx } from './_generated/server'
+import { internalMutation, internalQuery } from './_generated/server'
 import { hashPassword, isBcryptHash, verifyBcrypt } from './passwordCrypto'
 
-const MIN_PASSWORD_LENGTH = 6
+const MIN_LEGACY_PASSWORD_LENGTH = 6
+export const NEW_PASSWORD_MIN_LENGTH = 10
 /** Skal sendes med, så et almindeligt `convex run` ikke importerer hashes. */
 export const PASSWORD_IMPORT_CONFIRM = 'IMPORT_BCRYPT_HASHES'
+/** Eksplicit bekræftelse til manuel engangsmigrering af v1-brugerdata. */
+export const V1_AUTH_MIGRATION_CONFIRM = 'MIGRATE_V1_AUTH_TO_V2'
 
 export function assertPasswordLength(password: string): void {
-  if (password.length < MIN_PASSWORD_LENGTH) {
+  if (password.length < MIN_LEGACY_PASSWORD_LENGTH) {
     throw new Error('Password should be at least 6 characters')
   }
 }
@@ -51,10 +50,20 @@ export async function applyImportedAdmin(
       q.eq('provider', 'password').eq('providerAccountId', normalized),
     )
     .unique()
-  if (account === null) return
+  let userId = account?.userId ?? null
+  if (userId === null) {
+    const user = (
+      await ctx.db
+        .query('users')
+        .withIndex('email', (q) => q.eq('email', normalized))
+        .collect()
+    ).find((row) => row.emailVerificationTime !== undefined)
+    userId = user?._id ?? null
+  }
+  if (userId === null) return
   const profile = await ctx.db
     .query('profiles')
-    .withIndex('by_user', (q) => q.eq('userId', account.userId))
+    .withIndex('by_user', (q) => q.eq('userId', userId))
     .unique()
   if (profile !== null && profile.isAdmin !== isAdmin) {
     await ctx.db.patch(profile._id, { isAdmin })
@@ -64,9 +73,7 @@ export async function applyImportedAdmin(
 /**
  * Lægger en bcrypt-hash fra Supabase (`auth.users.encrypted_password`) ind
  * som kontoens hemmelighed, uden at hashe den igen. Første rigtige login
- * skriver den om til Scrypt. `isAdmin` er `profiles.is_admin` og følger
- * med, når flytningen køres. Kør den ikke mod rigtige data, før flytningen
- * er aftalt -- se V2/README.md.
+ * verificerer den og skriver den om til Argon2id.
  */
 export async function writeImportedPassword(
   ctx: MutationCtx,
@@ -120,7 +127,7 @@ export async function writeImportedPassword(
 
 export type RehashResult = 'skipped' | 'rehashed' | 'mismatch'
 
-/** Bytter en bcrypt-hash ud med Scrypt, når adgangskoden er den rigtige. */
+/** Bytter en bcrypt-hash ud med Argon2id, når adgangskoden er den rigtige. */
 export async function rehashImportedPassword(
   ctx: MutationCtx,
   email: string,
@@ -183,6 +190,14 @@ export const emailForPasswordUser = internalQuery({
   args: { userId: v.id('users') },
   returns: v.union(v.string(), v.null()),
   handler: async (ctx, args): Promise<string | null> => {
+    const verified = await ctx.runQuery(
+      components.authEmail.verifiedEmails.getPrimaryEmail,
+      { userId: args.userId },
+    )
+    if (typeof verified === 'string' && verified.includes('@')) {
+      return normalizeAuthEmail(verified)
+    }
+
     const account = await ctx.db
       .query('authAccounts')
       .withIndex('userIdAndProvider', (q) =>
@@ -190,64 +205,19 @@ export const emailForPasswordUser = internalQuery({
       )
       .unique()
     const id = account?.providerAccountId
-    return typeof id === 'string' && id.includes('@') ? id : null
-  },
-})
-
-/**
- * Efter et lykkedes login: byt en importeret bcrypt-hash ud med Scrypt.
- * Forkert eller allerede omskrevet hash gør ingenting.
- */
-export const rehashIfImported = action({
-  args: { password: v.string() },
-  returns: v.null(),
-  handler: async (ctx, args): Promise<null> => {
-    const userId = await getAuthUserId(ctx)
-    if (userId === null) return null
-    const email: string | null = await ctx.runQuery(
-      internal.passwords.emailForPasswordUser,
-      { userId },
-    )
-    if (email === null) return null
-    await ctx.runMutation(internal.passwords.rehashOnSignIn, {
-      email,
-      password: args.password,
-    })
-    return null
-  },
-})
-
-/**
- * Ny adgangskode for den, der allerede er logget ind. Nulstillingslinket
- * logger ind, før siden beder om koden -- samme rækkefølge som den
- * nuværende app.
- */
-export const changePassword = action({
-  args: { password: v.string() },
-  returns: v.null(),
-  handler: async (ctx, args): Promise<null> => {
-    const userId = await getAuthUserId(ctx)
-    if (userId === null) throw new ConvexError('NOT_AUTHENTICATED')
-    try {
-      assertPasswordLength(args.password)
-    } catch {
-      throw new ConvexError('PASSWORD_TOO_SHORT')
+    if (typeof id === 'string' && id.includes('@')) {
+      return normalizeAuthEmail(id)
     }
-    const email: string | null = await ctx.runQuery(
-      internal.passwords.emailForPasswordUser,
-      { userId },
-    )
-    if (email === null) throw new ConvexError('NOT_AUTHENTICATED')
-    await modifyAccountCredentials(ctx, {
-      provider: 'password',
-      account: { id: email, secret: args.password },
-    })
-    return null
+
+    const user = await ctx.db.get(args.userId)
+    return typeof user?.email === 'string' && user.email.includes('@')
+      ? normalizeAuthEmail(user.email)
+      : null
   },
 })
 
 /**
- * Om adressen har en adgangskode-konto og en kode, der ikke er udløbet.
+ * Om adressen har en adgangskode-konto og (for v1) en kode, der ikke er udløbet.
  * Returnerer ingen kode, hash eller adresse.
  */
 export const resetCodeStatus = internalQuery({
@@ -267,14 +237,26 @@ export const resetCodeStatus = internalQuery({
         q.eq('provider', 'password').eq('providerAccountId', email),
       )
       .unique()
-    if (account === null) return { account: false, unexpiredCode: false }
-    const codes = await ctx.db
-      .query('authVerificationCodes')
-      .withIndex('accountId', (q) => q.eq('accountId', account._id))
-      .collect()
+    if (account !== null) {
+      const codes = await ctx.db
+        .query('authVerificationCodes')
+        .withIndex('accountId', (q) => q.eq('accountId', account._id))
+        .collect()
+      return {
+        account: true,
+        unexpiredCode: codes.some((code) => code.expirationTime > Date.now()),
+      }
+    }
+
+    const verifiedUser = (
+      await ctx.db
+        .query('users')
+        .withIndex('email', (q) => q.eq('email', email))
+        .collect()
+    ).find((row) => row.emailVerificationTime !== undefined)
     return {
-      account: true,
-      unexpiredCode: codes.some((code) => code.expirationTime > Date.now()),
+      account: verifiedUser !== undefined,
+      unexpiredCode: false,
     }
   },
 })
@@ -312,7 +294,16 @@ export const deleteSmokeAuthUser = internalMutation({
         )
         .collect()),
     ]
-    const userIds = [...new Set(accounts.map((account) => account.userId))]
+    const v2Users = await ctx.db
+      .query('users')
+      .withIndex('email', (q) => q.eq('email', email))
+      .collect()
+    const userIds = [
+      ...new Set([
+        ...accounts.map((account) => account.userId),
+        ...v2Users.map((user) => user._id),
+      ]),
+    ]
 
     for (const account of accounts) {
       const codes = await ctx.db
@@ -324,6 +315,19 @@ export const deleteSmokeAuthUser = internalMutation({
     }
 
     for (const userId of userIds) {
+      const v2Sessions = await ctx.runQuery(
+        components.auth.public.listSessions,
+        { userId },
+      )
+      if (v2Sessions.length > 0) {
+        await ctx.runMutation(components.auth.public.revokeSessions, {
+          sessionIds: v2Sessions.map((s) => s.sessionId),
+        })
+      }
+      await ctx.runMutation(components.authEmail.verifiedEmails.deleteUser, {
+        userId,
+      })
+
       const sessions = await ctx.db
         .query('authSessions')
         .withIndex('userId', (q) => q.eq('userId', userId))
@@ -343,7 +347,8 @@ export const deleteSmokeAuthUser = internalMutation({
         .withIndex('by_user', (q) => q.eq('userId', userId))
         .unique()
       if (profile !== null) await ctx.db.delete(profile._id)
-      await ctx.db.delete(userId)
+      const user = await ctx.db.get(userId)
+      if (user !== null) await ctx.db.delete(userId)
     }
 
     const limits = await ctx.db
@@ -352,6 +357,104 @@ export const deleteSmokeAuthUser = internalMutation({
       .collect()
     for (const limit of limits) await ctx.db.delete(limit._id)
 
-    return { deletedAccounts: accounts.length }
+    return { deletedAccounts: Math.max(accounts.length, v2Users.length) }
+  },
+})
+
+/**
+ * Eksplicit, idempotent oprydning/synkronisering af v1-brugere til v2-auth.
+ * Kører aldrig automatisk ved deploy -- skal kaldes manuelt med bekræftelse.
+ * Sletter aldrig brugere eller password-hashes (`authAccounts`), men sikrer at
+ * `users.email`/`emailVerificationTime` er udfyldt og `createdUserIds` er sat
+ * i `components.auth`. Med `clearLegacySessions: true` fjernes udløbne
+ * v1-sessions-/token-/kode-rækker.
+ */
+export const migrateV1AuthToV2 = internalMutation({
+  args: {
+    confirm: v.string(),
+    clearLegacySessions: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    usersEnsured: v.number(),
+    clearedSessions: v.number(),
+    clearedRefreshTokens: v.number(),
+    clearedCodes: v.number(),
+    clearedVerifiers: v.number(),
+    clearedRateLimits: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    if (args.confirm !== V1_AUTH_MIGRATION_CONFIRM) {
+      throw new ConvexError('NOT_CONFIRMED')
+    }
+
+    const accounts = await ctx.db.query('authAccounts').collect()
+    const seenUsers = new Set<string>()
+    let usersEnsured = 0
+
+    for (const account of accounts) {
+      if (account.provider !== 'password') continue
+      const email = normalizeAuthEmail(account.providerAccountId)
+      if (!email.includes('@')) continue
+
+      const user = await ctx.db.get(account.userId)
+      if (user !== null && !seenUsers.has(account.userId)) {
+        seenUsers.add(account.userId)
+        const patch: { email?: string; emailVerificationTime?: number } = {}
+        if (user.email !== email) patch.email = email
+        if (
+          user.emailVerificationTime === undefined &&
+          account.emailVerified !== undefined
+        ) {
+          patch.emailVerificationTime = Date.now()
+        }
+        if (Object.keys(patch).length > 0) {
+          await ctx.db.patch(user._id, patch)
+        }
+        await ctx.runMutation(components.auth.public.markUserIdCreated, {
+          userId: user._id,
+        })
+        usersEnsured += 1
+      }
+    }
+
+    let clearedSessions = 0
+    let clearedRefreshTokens = 0
+    let clearedCodes = 0
+    let clearedVerifiers = 0
+    let clearedRateLimits = 0
+
+    if (args.clearLegacySessions === true) {
+      for (const token of await ctx.db.query('authRefreshTokens').collect()) {
+        await ctx.db.delete(token._id)
+        clearedRefreshTokens += 1
+      }
+      for (const session of await ctx.db.query('authSessions').collect()) {
+        await ctx.db.delete(session._id)
+        clearedSessions += 1
+      }
+      for (const code of await ctx.db
+        .query('authVerificationCodes')
+        .collect()) {
+        await ctx.db.delete(code._id)
+        clearedCodes += 1
+      }
+      for (const verifier of await ctx.db.query('authVerifiers').collect()) {
+        await ctx.db.delete(verifier._id)
+        clearedVerifiers += 1
+      }
+      for (const limit of await ctx.db.query('authRateLimits').collect()) {
+        await ctx.db.delete(limit._id)
+        clearedRateLimits += 1
+      }
+    }
+
+    return {
+      usersEnsured,
+      clearedSessions,
+      clearedRefreshTokens,
+      clearedCodes,
+      clearedVerifiers,
+      clearedRateLimits,
+    }
   },
 })

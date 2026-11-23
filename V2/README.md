@@ -121,7 +121,7 @@ eksporteres med SQL-adgang til databasen og lægges ind i Convex.
 
 1. `importHashes` (intern) skriver bcrypt-hashen urørt ind som kontoens
    hemmelighed og markerer e-mailen som bekræftet. Den hasher ikke igen.
-2. Ved login tjekkes bcrypt, og hashen skrives om til Scrypt med det samme,
+2. Ved login tjekkes bcrypt, og hashen skrives om til Argon2id med det samme,
    så næste login kun kender Convex' egen hash.
 
 Sådan køres importen, når flytningen er aftalt -- ikke før, og ikke mod
@@ -147,17 +147,21 @@ røres rollen ikke.
 ingenting. Funktionen er intern, så appen kan ikke kalde den. Den er ikke
 kørt mod produktion.
 
-Nye adgangskoder (oprettelse, nulstilling, omhashning) er Scrypt. Mindste
-længde er 6 tegn, som i den nuværende app.
+Nye adgangskoder (oprettelse, nulstilling, adgangskodeskift) hashes med
+Argon2id via `@convex-dev/auth` 2.x (`authPassword`) og kræver mindst 10 tegn.
+Eksisterende medlemmer med ældre v1 Lucia-Scrypt- eller importerede
+Supabase-bcrypt-hashes kan stadig logge ind, også med kortere eksisterende
+koder ned til 6 tegn (bcrypt skrives om til Argon2id ved første login).
 
 ### Mails
 
-Bekræftelse ved oprettelse og glemt adgangskode sendes gennem Resends REST
-API (`fetch` i `convex/authEmail.ts`, ingen `resend`-pakke). Afsenderen er
-`Naturklubben <noreply@naturklubben.dk>`, medmindre `AUTH_EMAIL_FROM` er sat.
-Linket i bekræftelsen lander på `/velkommen`, linket ved glemt adgangskode
-på `/ny-adgangskode`. Siderne og teksterne er de samme som i den nuværende
-app.
+Bekræftelse ved oprettelse og glemt adgangskode sendes via `@convex-dev/auth`
+og `@convex-dev/resend` (`convex/authEmailSender.ts`, med danske tekster fra
+`convex/authEmail.ts`). Afsenderen er `Naturklubben <noreply@naturklubben.dk>`,
+medmindre `AUTH_EMAIL_FROM` er sat. Linket i bekræftelsen lander på
+`/velkommen`, linket ved glemt adgangskode på `/ny-adgangskode` (på PR-previews
+under `APP_BASE_PATH`, fx `/pr-preview/pr-<nr>`). Siderne og teksterne er de
+samme som i den nuværende app.
 
 `RESEND_API_KEY` ligger i repoets Actions-secrets og sættes via stdin, både
 på produktion (`deploy.yml` og `deploy-v2.yml`) og på hvert preview-deploy
@@ -179,9 +183,12 @@ Prøvemedlemskab og gæsteansøgninger sender ikke mail i den nuværende app
 `SITE_URL` skal være `https://naturklubben.dk`, så et link tilbage til
 preview-stien `/pr-preview/pr-<nr>/velkommen` accepteres.
 
-`JWT_PRIVATE_KEY` og `JWKS` sættes af deployet, hvis de mangler — både på
-preview og på prod. Uden dem kan en gyldig kode i nulstillingsmailen ikke
-udstede en session, og siden bliver hængende på "Et øjeblik…".
+I `@convex-dev/auth` 2.x (`convexAuthProvider()`) bruger deploymentet sine
+indbyggede signeringsnøgler til sessioner, så deploy-workflows sætter ikke
+længere `JWT_PRIVATE_KEY` og `JWKS`. **Advarsel:** `JWT_PRIVATE_KEY` må ikke
+bare slettes fra produktionsmiljøet, medmindre `RATE_LIMIT_HASH_SECRET` er sat
+-- `hashRateLimitSignal` i `convex/previewMemberAuth.ts` falder ellers
+tilbage til usaltet SHA-256.
 
 Mailtests sendes kun til **naturklubben-test@agentmail.to**. Det er
 test-indbakken. Den kan læses fra Martins side, ikke herfra, og der sendes

@@ -1,5 +1,6 @@
-import { ConvexError, v, type Value } from 'convex/values'
-import { internal } from './_generated/api'
+import { createFunctionHandle } from 'convex/server'
+import { ConvexError, v } from 'convex/values'
+import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import type { ActionCtx } from './_generated/server'
 import {
@@ -18,7 +19,7 @@ import { assertPreviewSeedAllowed, PROD_DEPLOYMENT_SLUG } from './previewSeed'
  *
  * Produktions-deploymentet (`quaint-parakeet-652`) udstiller
  * `POST /preview/verify-member`. Et PR-preview kalder denne rute
- * server-til-server fra Convex Auth-udbyderen `preview-member`, verificerer
+ * server-til-server fra `auth:signInWithPreviewMember`, verificerer
  * adgangskoden mod produktion, og opretter derefter en lokal session på
  * preview-deploymentet -- uden nogensinde at kopiere, gemme, hashe,
  * returnere eller logge produktionsadgangskoden.
@@ -36,6 +37,14 @@ const VERIFY_FETCH_TIMEOUT_MS = 10_000
 const WINDOW_1_HOUR_MS = 60 * 60 * 1000
 const WINDOW_24_HOURS_MS = 24 * 60 * 60 * 1000
 const ATTEMPT_RETENTION_MS = 25 * 60 * 60 * 1000
+
+const ACCESS_TOKEN_TTL_SECONDS = 60
+const SESSION_MAX_LIFETIME_SECONDS = 30 * 24 * 60 * 60
+const TTL_CONFIG = {
+  accessTokenTtlSeconds: ACCESS_TOKEN_TTL_SECONDS,
+  refreshInactivityTimeoutSeconds: SESSION_MAX_LIFETIME_SECONDS,
+  sessionMaxLifetimeSeconds: SESSION_MAX_LIFETIME_SECONDS,
+}
 
 /**
  * Under `@convex-dev/auth`s indbyggede password-login-grænse (10 pr. time),
@@ -88,9 +97,6 @@ export function clientAddress(headers: Headers): string {
 
 /**
  * Hasher IP og e-mail til rate-limit-tabellen, så rå adresser aldrig gemmes.
- * Bruger `RATE_LIMIT_HASH_SECRET` hvis den er sat, ellers en domæneadskilt
- * nøgle udledt af `JWT_PRIVATE_KEY` (som allerede findes på deploymentet), og
- * falder i lokale test uden miljønøgler tilbage til domæneadskilt SHA-256.
  */
 export async function hashRateLimitSignal(
   domain: 'ip' | 'email',
@@ -201,40 +207,30 @@ export const checkVerifyRateLimit = internalQuery({
     { allowed: true } | { allowed: false; retryAfterSeconds: number }
   > => {
     const now = Date.now()
-    const perEmailHour = await ctx.db
-      .query('previewVerifyAttempts')
-      .withIndex('by_email_and_time', (q) =>
-        q
-          .eq('emailHash', args.emailHash)
-          .gt('attemptedAt', now - WINDOW_1_HOUR_MS),
-      )
-      .collect()
-    const perEmailDay = await ctx.db
-      .query('previewVerifyAttempts')
-      .withIndex('by_email_and_time', (q) =>
-        q
-          .eq('emailHash', args.emailHash)
-          .gt('attemptedAt', now - WINDOW_24_HOURS_MS),
-      )
-      .collect()
-    const perIpHour = await ctx.db
-      .query('previewVerifyAttempts')
-      .withIndex('by_ip_and_time', (q) =>
-        q.eq('ipHash', args.ipHash).gt('attemptedAt', now - WINDOW_1_HOUR_MS),
-      )
-      .collect()
-    const perIpDay = await ctx.db
-      .query('previewVerifyAttempts')
-      .withIndex('by_ip_and_time', (q) =>
-        q.eq('ipHash', args.ipHash).gt('attemptedAt', now - WINDOW_24_HOURS_MS),
-      )
-      .collect()
-    const globalDay = await ctx.db
-      .query('previewVerifyAttempts')
-      .withIndex('by_attempted_at', (q) =>
-        q.gt('attemptedAt', now - WINDOW_24_HOURS_MS),
-      )
-      .collect()
+    const since1h = now - WINDOW_1_HOUR_MS
+    const since24h = now - WINDOW_24_HOURS_MS
+
+    const [perEmailDay, perIpDay, globalDay] = await Promise.all([
+      ctx.db
+        .query('previewVerifyAttempts')
+        .withIndex('by_email_and_time', (q) =>
+          q.eq('emailHash', args.emailHash).gte('attemptedAt', since24h),
+        )
+        .collect(),
+      ctx.db
+        .query('previewVerifyAttempts')
+        .withIndex('by_ip_and_time', (q) =>
+          q.eq('ipHash', args.ipHash).gte('attemptedAt', since24h),
+        )
+        .collect(),
+      ctx.db
+        .query('previewVerifyAttempts')
+        .withIndex('by_attempted_at', (q) => q.gte('attemptedAt', since24h))
+        .collect(),
+    ])
+
+    const perEmailHour = perEmailDay.filter((row) => row.attemptedAt >= since1h)
+    const perIpHour = perIpDay.filter((row) => row.attemptedAt >= since1h)
 
     const waits = [
       waitForSlot(
@@ -309,49 +305,83 @@ export const lookupMemberForVerify = internalQuery({
   returns: v.union(
     v.null(),
     v.object({
+      source: v.literal('legacy'),
       secret: v.string(),
       hasActiveProfile: v.boolean(),
       isAdmin: v.boolean(),
       fullName: v.union(v.string(), v.null()),
     }),
+    v.object({
+      source: v.literal('v2'),
+      userId: v.string(),
+      legacySecret: v.optional(v.string()),
+      hasActiveProfile: v.boolean(),
+      isAdmin: v.boolean(),
+      fullName: v.union(v.string(), v.null()),
+    }),
   ),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    secret: string
-    hasActiveProfile: boolean
-    isAdmin: boolean
-    fullName: string | null
-  } | null> => {
+  handler: async (ctx, args) => {
     const email = normalizeAuthEmail(args.email)
-    const account = await ctx.db
+    const users = await ctx.db
+      .query('users')
+      .withIndex('email', (q) => q.eq('email', email))
+      .collect()
+    const verifiedUsers = users.filter(
+      (u) => u.emailVerificationTime !== undefined,
+    )
+
+    let v2UserId: Id<'users'> | null = null
+    for (const candidateUser of verifiedUsers) {
+      const v2Emails = await ctx.runQuery(
+        components.authEmail.verifiedEmails.getEmails,
+        { userId: candidateUser._id },
+      )
+      if (v2Emails.length > 0) {
+        v2UserId = candidateUser._id
+        break
+      }
+    }
+
+    const legacyAccount = await ctx.db
       .query('authAccounts')
       .withIndex('providerAndAccountId', (q) =>
         q.eq('provider', 'password').eq('providerAccountId', email),
       )
       .unique()
-    if (
-      account === null ||
-      typeof account.secret !== 'string' ||
-      account.secret.length === 0
-    ) {
+    const legacySecret =
+      legacyAccount !== null &&
+      typeof legacyAccount.secret === 'string' &&
+      legacyAccount.secret.length > 0
+        ? legacyAccount.secret
+        : null
+
+    const userId = v2UserId ?? legacyAccount?.userId ?? null
+    if (userId === null || (v2UserId === null && legacySecret === null)) {
       return null
     }
 
     const profile = await ctx.db
       .query('profiles')
-      .withIndex('by_user', (q) => q.eq('userId', account.userId))
+      .withIndex('by_user', (q) => q.eq('userId', userId))
       .unique()
     const hasActiveProfile =
       profile !== null && !hasActiveDeletionReservation(profile)
     const trimmedName = profile?.fullName?.trim() ?? ''
-    return {
-      secret: account.secret,
+    const base = {
       hasActiveProfile,
       isAdmin: profile?.isAdmin === true,
       fullName: trimmedName.length > 0 ? trimmedName : null,
     }
+
+    if (v2UserId !== null) {
+      return {
+        source: 'v2' as const,
+        userId: v2UserId,
+        ...(legacySecret !== null ? { legacySecret } : {}),
+        ...base,
+      }
+    }
+    return { source: 'legacy' as const, secret: legacySecret!, ...base }
   },
 })
 
@@ -491,7 +521,61 @@ export const provisionVerifiedMember = internalMutation({
       }
     }
 
+    await ctx.runMutation(components.auth.public.markUserIdCreated, {
+      userId,
+    })
+
     return userId
+  },
+})
+
+export type PreviewTokenBundle = {
+  accessToken: string
+  refreshToken: string
+  refreshTokenExpiresAt: number
+  userId: string
+}
+
+export type PreviewMemberSignInResult =
+  | { status: 'complete'; tokens: PreviewTokenBundle }
+  | {
+      status: 'error'
+      userError: {
+        error:
+          'INVALID_CREDENTIALS' | 'PREVIEW_AUTH_UNAVAILABLE' | 'RATE_LIMITED'
+      }
+    }
+
+export const completePreviewMemberSignIn = internalMutation({
+  args: {
+    email: v.string(),
+    isAdmin: v.boolean(),
+    fullName: v.union(v.string(), v.null()),
+  },
+  returns: v.object({
+    accessToken: v.string(),
+    refreshToken: v.string(),
+    refreshTokenExpiresAt: v.number(),
+    userId: v.string(),
+  }),
+  handler: async (ctx, args): Promise<PreviewTokenBundle> => {
+    const userId: Id<'users'> = await ctx.runMutation(
+      internal.previewMemberAuth.provisionVerifiedMember,
+      args,
+    )
+    const onSignInHandle = await createFunctionHandle(
+      internal.authUsers.onSignIn,
+    )
+    return await ctx.runMutation(
+      components.auth.public._internal_dangerous_signIn,
+      {
+        claims: { method: PREVIEW_MEMBER_PROVIDER_ID, profile: {} },
+        componentPath: 'auth',
+        userId,
+        onSignInHandle,
+        ...TTL_CONFIG,
+      },
+    )
   },
 })
 
@@ -582,8 +666,43 @@ export const verifyMember = httpAction(async (ctx, req) => {
     internal.previewMemberAuth.lookupMemberForVerify,
     { email },
   )
-  const hashToCheck = candidate?.secret ?? DUMMY_SCRYPT_HASH
-  const passwordValid = await verifyPassword(password, hashToCheck)
+
+  let passwordValid = false
+  if (candidate === null) {
+    await verifyPassword(password, DUMMY_SCRYPT_HASH)
+  } else if (candidate.source === 'legacy') {
+    passwordValid = await verifyPassword(password, candidate.secret)
+  } else {
+    try {
+      const verifyResult = await ctx.runMutation(
+        components.authPassword.public.verifyPassword,
+        { userId: candidate.userId, password },
+      )
+      if (verifyResult.success) {
+        passwordValid = true
+      } else if (
+        verifyResult.userError.error === 'PASSWORD_TOO_SHORT' &&
+        candidate.legacySecret
+      ) {
+        passwordValid = await verifyPassword(password, candidate.legacySecret)
+      }
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('No password stored for userId')
+      ) {
+        if (candidate.legacySecret) {
+          passwordValid = await verifyPassword(password, candidate.legacySecret)
+        } else {
+          await verifyPassword(password, DUMMY_SCRYPT_HASH)
+          passwordValid = false
+        }
+      } else {
+        throw error
+      }
+    }
+  }
+
   if (candidate === null || !passwordValid || !candidate.hasActiveProfile) {
     await ctx.runMutation(
       internal.previewMemberAuth.recordFailedVerifyAttempt,
@@ -613,36 +732,37 @@ export const previewMemberHttpRoutes = [
 ]
 
 /**
- * Preview-side `ConvexCredentials`-autorisation: kalder produktionens
- * `/preview/verify-member` server-til-server og udsteder ved godkendelse en
- * lokal preview-session uden nogensinde at gemme produktionsadgangskoden.
+ * Preview-side medlemsautorisation: kalder produktionens `/preview/verify-member`
+ * server-til-server og udsteder ved godkendelse en lokal preview-session uden
+ * nogensinde at gemme produktionsadgangskoden.
  */
-export async function authorizePreviewMember(
-  params: Partial<Record<string, Value | undefined>>,
+export async function performPreviewMemberSignIn(
   ctx: ActionCtx,
-): Promise<{ userId: Id<'users'> }> {
+  input: { email: string; password: string },
+): Promise<PreviewMemberSignInResult> {
   try {
     assertPreviewSeedAllowed({
       previewSeed: env.PREVIEW_SEED,
       cloudUrl: env.CONVEX_CLOUD_URL,
     })
   } catch {
-    throw new ConvexError('INVALID_CREDENTIALS')
+    return {
+      status: 'error' as const,
+      userError: { error: 'INVALID_CREDENTIALS' as const },
+    }
   }
 
-  const rawEmail = params.email
-  const rawPassword = params.password
-  if (typeof rawEmail !== 'string' || typeof rawPassword !== 'string') {
-    throw new ConvexError('INVALID_CREDENTIALS')
-  }
-  const email = normalizeAuthEmail(rawEmail)
+  const email = normalizeAuthEmail(input.email)
   if (
     !email.includes('@') ||
     email.length > EMAIL_MAX_LENGTH ||
-    rawPassword.length === 0 ||
-    rawPassword.length > PASSWORD_MAX_LENGTH
+    input.password.length === 0 ||
+    input.password.length > PASSWORD_MAX_LENGTH
   ) {
-    throw new ConvexError('INVALID_CREDENTIALS')
+    return {
+      status: 'error' as const,
+      userError: { error: 'INVALID_CREDENTIALS' as const },
+    }
   }
 
   const controller = new AbortController()
@@ -652,17 +772,23 @@ export async function authorizePreviewMember(
     response = await fetch(PROD_VERIFY_MEMBER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: rawPassword }),
+      body: JSON.stringify({ email, password: input.password }),
       signal: controller.signal,
     })
   } catch {
-    throw new ConvexError('PREVIEW_AUTH_UNAVAILABLE')
+    return {
+      status: 'error' as const,
+      userError: { error: 'PREVIEW_AUTH_UNAVAILABLE' as const },
+    }
   } finally {
     clearTimeout(timer)
   }
 
   if (response.status === 429) {
-    throw new ConvexError('RATE_LIMITED')
+    return {
+      status: 'error' as const,
+      userError: { error: 'RATE_LIMITED' as const },
+    }
   }
   if (
     response.status === 403 ||
@@ -670,31 +796,43 @@ export async function authorizePreviewMember(
     response.status === 405 ||
     response.status >= 500
   ) {
-    throw new ConvexError('PREVIEW_AUTH_UNAVAILABLE')
+    return {
+      status: 'error' as const,
+      userError: { error: 'PREVIEW_AUTH_UNAVAILABLE' as const },
+    }
   }
   if (!response.ok) {
-    throw new ConvexError('INVALID_CREDENTIALS')
+    return {
+      status: 'error' as const,
+      userError: { error: 'INVALID_CREDENTIALS' as const },
+    }
   }
 
   let parsed: unknown
   try {
     parsed = await response.json()
   } catch {
-    throw new ConvexError('PREVIEW_AUTH_UNAVAILABLE')
+    return {
+      status: 'error' as const,
+      userError: { error: 'PREVIEW_AUTH_UNAVAILABLE' as const },
+    }
   }
 
   const verified = parseVerifyMemberResponse(parsed)
   if (verified === null) {
-    throw new ConvexError('INVALID_CREDENTIALS')
+    return {
+      status: 'error' as const,
+      userError: { error: 'INVALID_CREDENTIALS' as const },
+    }
   }
 
-  const userId: Id<'users'> = await ctx.runMutation(
-    internal.previewMemberAuth.provisionVerifiedMember,
+  const tokens = await ctx.runMutation(
+    internal.previewMemberAuth.completePreviewMemberSignIn,
     {
       email,
       isAdmin: verified.isAdmin,
       fullName: verified.fullName,
     },
   )
-  return { userId }
+  return { status: 'complete' as const, tokens }
 }

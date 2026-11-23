@@ -1,10 +1,18 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { ConvexError } from 'convex/values'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const MOCK_TOKENS = {
+  accessToken: 'jwt-access',
+  refreshToken: 'refresh-tok',
+  refreshTokenExpiresAt: 9999999,
+  userId: 'user-1',
+}
 
 const mocks = vi.hoisted(() => ({
   email: 'medlem@naturklubben.dk',
-  signIn: vi.fn(),
+  signInWithPassword: vi.fn(),
+  signInWithPreviewMember: vi.fn(),
+  setSession: vi.fn(),
   signOut: vi.fn(),
   navigate: vi.fn(),
   convexQuery: vi.fn(),
@@ -19,7 +27,7 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('@convex-dev/auth/react', () => ({
   useAuthActions: () => ({
-    signIn: mocks.signIn,
+    setSession: mocks.setSession,
     signOut: mocks.signOut,
   }),
 }))
@@ -27,7 +35,8 @@ vi.mock('@convex-dev/auth/react', () => ({
 vi.mock('convex/react', () => ({
   useQuery: () => mocks.email,
   useConvex: () => ({ query: mocks.convexQuery }),
-  useMutation: () => vi.fn(),
+  useMutation: () => mocks.signInWithPassword,
+  useAction: () => mocks.signInWithPreviewMember,
 }))
 
 vi.mock('./deleteAccount', async (importActual) => {
@@ -53,7 +62,10 @@ vi.mock('../pwa/previewInstall', () => ({
 import { DeleteAccountSection } from './DeleteAccountSection'
 
 beforeEach(() => {
-  mocks.signIn.mockReset()
+  mocks.signInWithPassword.mockReset()
+  mocks.signInWithPreviewMember.mockReset()
+  mocks.setSession.mockReset()
+  mocks.setSession.mockResolvedValue(undefined)
   mocks.signOut.mockReset()
   mocks.signOut.mockResolvedValue(undefined)
   mocks.navigate.mockReset()
@@ -69,7 +81,10 @@ afterEach(cleanup)
 
 describe('DeleteAccountSection preview-bekræftelse', () => {
   it('falder ikke tilbage til preview-member uden for preview', async () => {
-    mocks.signIn.mockRejectedValueOnce(new ConvexError('INVALID_CREDENTIALS'))
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'INVALID_CREDENTIALS' },
+    })
     render(<DeleteAccountSection />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Hent mine data' }))
@@ -79,16 +94,22 @@ describe('DeleteAccountSection preview-bekræftelse', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hent data som JSON' }))
 
     expect(await screen.findByText('Forkert adgangskode.')).toBeTruthy()
-    expect(mocks.signIn).toHaveBeenCalledTimes(1)
+    expect(mocks.signInWithPassword).toHaveBeenCalledTimes(1)
+    expect(mocks.signInWithPreviewMember).not.toHaveBeenCalled()
     expect(mocks.convexQuery).not.toHaveBeenCalled()
     expect(mocks.downloadAccountExport).not.toHaveBeenCalled()
   })
 
   it('bekræfter dataeksport via preview-member på preview uden lokal prod-kode', async () => {
     mocks.isPreviewDeployment = true
-    mocks.signIn
-      .mockRejectedValueOnce(new Error('InvalidAccountId'))
-      .mockResolvedValueOnce({ signingIn: true })
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'USER_NOT_FOUND' },
+    })
+    mocks.signInWithPreviewMember.mockResolvedValueOnce({
+      status: 'complete',
+      tokens: MOCK_TOKENS,
+    })
     render(<DeleteAccountSection />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Hent mine data' }))
@@ -102,22 +123,26 @@ describe('DeleteAccountSection preview-bekræftelse', () => {
         exportedAt: '2026-01-01',
       })
     })
-    expect(mocks.signIn).toHaveBeenNthCalledWith(1, 'password', {
+    expect(mocks.signInWithPassword).toHaveBeenCalledWith({
       email: 'medlem@naturklubben.dk',
       password: 'prod-kode-123',
-      flow: 'signIn',
     })
-    expect(mocks.signIn).toHaveBeenNthCalledWith(2, 'preview-member', {
+    expect(mocks.signInWithPreviewMember).toHaveBeenCalledWith({
       email: 'medlem@naturklubben.dk',
       password: 'prod-kode-123',
     })
   })
 
-  it('bekræfter kontosletning via preview-member på preview når password returnerer signingIn: false', async () => {
+  it('bekræfter kontosletning via preview-member på preview ved ubekræftet lokal konto', async () => {
     mocks.isPreviewDeployment = true
-    mocks.signIn
-      .mockResolvedValueOnce({ signingIn: false })
-      .mockResolvedValueOnce({ signingIn: true })
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'USER_NOT_FOUND' },
+    })
+    mocks.signInWithPreviewMember.mockResolvedValueOnce({
+      status: 'complete',
+      tokens: MOCK_TOKENS,
+    })
     render(<DeleteAccountSection />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Start kontosletning' }))
@@ -135,7 +160,7 @@ describe('DeleteAccountSection preview-bekræftelse', () => {
     await vi.waitFor(() => {
       expect(mocks.requestDeletion).toHaveBeenCalledWith('SLET MIN KONTO')
     })
-    expect(mocks.signIn).toHaveBeenNthCalledWith(2, 'preview-member', {
+    expect(mocks.signInWithPreviewMember).toHaveBeenCalledWith({
       email: 'medlem@naturklubben.dk',
       password: 'prod-kode-123',
     })
@@ -145,9 +170,14 @@ describe('DeleteAccountSection preview-bekræftelse', () => {
 
   it('viser fejl og sletter ikke konto hvis preview-member afviser adgangskoden', async () => {
     mocks.isPreviewDeployment = true
-    mocks.signIn
-      .mockRejectedValueOnce(new Error('InvalidAccountId'))
-      .mockRejectedValueOnce(new ConvexError('INVALID_CREDENTIALS'))
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'USER_NOT_FOUND' },
+    })
+    mocks.signInWithPreviewMember.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'INVALID_CREDENTIALS' },
+    })
     render(<DeleteAccountSection />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Start kontosletning' }))

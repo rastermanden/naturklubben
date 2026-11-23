@@ -1,22 +1,26 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuthActions } from '@convex-dev/auth/react'
-import { useAction, useConvexAuth } from 'convex/react'
+import { useAction, useConvexAuth, useMutation } from 'convex/react'
 import { api } from '../../convex/_generated/api'
-import { appUrl } from '../features/auth/authRedirect'
-import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
+import {
+  errorCode,
+  toFriendlyAuthError,
+  userErrorToAuthError,
+} from '../features/auth/authErrors'
 import { signInWithPreviewFallback } from '../features/auth/signInWithPreviewFallback'
 
 /**
- * Login med e-mail og adgangskode via Convex Auth.
+ * Login med e-mail og adgangskode via Convex Auth 2.x.
  *
- * Convex Auth's `signIn('password', …)` sætter sessionen i samme kald, så der
- * er ingen session at vente på bagefter: er man logget ind, tegner
- * `useConvexAuth` det, og siden sender videre til den sti, man kom fra.
+ * `signInWithEmailPassword` / `signInWithPreviewMember` returnerer en
+ * session-bundle, som vedtages via `setSession(tokens)`. Når `useConvexAuth`
+ * viser `isAuthenticated: true`, sendes brugeren videre til `from`.
  */
 export default function LoginPage() {
-  const { signIn } = useAuthActions()
-  const rehashIfImported = useAction(api.passwords.rehashIfImported)
+  const { setSession } = useAuthActions()
+  const signInWithPassword = useMutation(api.auth.signInWithEmailPassword)
+  const signInWithPreviewMember = useAction(api.auth.signInWithPreviewMember)
   const { isAuthenticated, isLoading } = useConvexAuth()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from ?? '/'
@@ -52,26 +56,34 @@ export default function LoginPage() {
     const submittedPassword = String(data.get('password') ?? '')
 
     try {
-      const { result, usedPreviewMember } = await signInWithPreviewFallback({
-        signIn,
+      const { result } = await signInWithPreviewFallback({
+        signInWithPassword,
+        signInWithPreviewMember,
+        setSession,
         email: submittedEmail,
         password: submittedPassword,
-        redirectTo: appUrl('velkommen'),
       })
-      if (!result.signingIn) {
-        setError('Bekræft venligst din e-mail, før du logger ind.')
-        setErrorField('email')
-        emailRef.current?.focus()
-        return
-      }
-      if (!usedPreviewMember) {
-        // Importerede bcrypt-hashes skrives om, når login er lykkedes.
-        // Fejler det, er man stadig logget ind.
-        await rehashIfImported({ password: submittedPassword }).catch(() => {})
+      if (result.status !== 'complete') {
+        const rawCode = result.userError.error
+        const lower = rawCode.toLowerCase()
+        const field =
+          lower.includes('invalid') ||
+          lower.includes('secret') ||
+          lower.includes('credentials') ||
+          lower.includes('password') ||
+          lower.includes('not_found')
+            ? 'password'
+            : lower.includes('email')
+              ? 'email'
+              : null
+
+        setError(userErrorToAuthError(result.userError))
+        setErrorCodeRaw(rawCode)
+        setErrorField(field)
+        if (field === 'password') passwordRef.current?.focus()
+        if (field === 'email') emailRef.current?.focus()
       }
     } catch (signInError) {
-      // Convex Auth's tekst er engelsk og ikke en kontrakt, så feltet vælges
-      // ud fra, hvad fejlen handler om -- ikke ud fra en fast streng.
       const raw = errorCode(signInError)?.toLowerCase() ?? ''
       const field =
         raw.includes('invalid') ||

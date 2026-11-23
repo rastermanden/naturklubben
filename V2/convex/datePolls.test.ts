@@ -1,12 +1,13 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
-import { convexTest } from 'convex-test'
+import {
+  createTestConvex,
+  withAuthUser,
+  type TestConvexInstance,
+} from '../test/convexTestAuth'
 import { api } from './_generated/api'
-import schema from './schema'
 
-const modules = import.meta.glob('./**/*.ts')
-
-async function seedAdmin(t: ReturnType<typeof convexTest>) {
+async function seedAdmin(t: TestConvexInstance) {
   return await t.run(async (ctx) => {
     const userId = await ctx.db.insert('users', { email: 'admin@example.com' })
     const profileId = await ctx.db.insert('profiles', {
@@ -25,9 +26,9 @@ async function seedAdmin(t: ReturnType<typeof convexTest>) {
 
 describe('datoafstemninger og adgangsliste', () => {
   it('opretter en afstemning, tæller et svar og lukker den', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const admin = await seedAdmin(t)
-    const asAdmin = t.withIdentity({ subject: admin.userId })
+    const asAdmin = await withAuthUser(t, admin.userId)
     const pollId = await asAdmin.mutation(api.datePolls.create, {
       title: 'Næste tur',
       description: null,
@@ -48,9 +49,9 @@ describe('datoafstemninger og adgangsliste', () => {
   })
 
   it('lader en admin taste en e-mail på adgangslisten', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const admin = await seedAdmin(t)
-    const asAdmin = t.withIdentity({ subject: admin.userId })
+    const asAdmin = await withAuthUser(t, admin.userId)
     await asAdmin.mutation(api.members.addAllowedEmail, {
       email: 'Ny@Example.com',
       note: 'Anne fra bestyrelsen',
