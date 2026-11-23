@@ -1,0 +1,299 @@
+name: PR Preview V2 (manuel)
+
+# Manuelt workflow til at bygge og udgive et V2-preview for et vilkårligt
+# PR-nummer (fx Dependabot-PR'er, hvor pull_request-kørsler mangler secrets).
+# Spejler pr-preview-v2.yml, men tjekker PR-headet ud via `workflow_dispatch`.
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR-nummer (fx 384)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr-preview-v2-${{ inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Valider PR-nummer
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Ugyldigt PR-nummer: skal være et positivt heltal."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/pull/${{ inputs.pr_number }}/head
+          # Versionsstrengen i footeren bygges med `git describe --tags`; en
+          # shallow checkout uden tags giver altid den bare commit-sha.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: V2/package-lock.json
+
+      - name: Install
+        working-directory: V2
+        run: npm ci
+
+      # Backend og frontend i ét trin: `--cmd` kører buildet, når deploymentet
+      # findes, og giver dets URL videre som VITE_CONVEX_URL. Fejler deployet,
+      # bliver der intet build -- hvilket er meningen: et preview uden backend
+      # er en hvid side med en grøn check.
+      - name: Deploy preview-deployment og byg mod det
+        working-directory: V2
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          VITE_BASE_PATH: /pr-preview/pr-${{ inputs.pr_number }}/
+        run: |
+          set -euo pipefail
+          # Det første push til et nyt preview kan fejle med InvalidModules,
+          # selv om koden er i orden. Et nyt forsøg mod samme deployment lykkes.
+          deploy() {
+            npx convex deploy \
+              --preview-name "pr-${PR_NUMBER}" \
+              --cmd 'npm run build' \
+              --cmd-url-env-var-name VITE_CONVEX_URL
+          }
+          if ! deploy; then
+            echo "Første push til previewet fejlede. Prøver igen."
+            sleep 15
+            deploy
+          fi
+
+      # VITE_CONVEX_URL inlines i bundlen af deployet ovenfor. Den skal være
+      # previewets vært, ikke produktion (quaint-parakeet-652 har intet skema).
+      - name: Tjek at buildet peger på preview-deploymentet
+        working-directory: V2
+        run: |
+          set -euo pipefail
+          # ConvexReactClient har eksempel-URL'en happy-otter-123 i en
+          # fejltekst, så den ligger altid i bundlen. Den er ikke deploymentet.
+          mapfile -t hosts < <(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123' || true)
+          if [ "${#hosts[@]}" -eq 0 ]; then
+            echo "Ingen Convex-vært i dist/assets. Buildet har ikke fået VITE_CONVEX_URL."
+            exit 1
+          fi
+          echo "Convex-værter i preview-buildet:"
+          printf '%s\n' "${hosts[@]}"
+          if [ "${#hosts[@]}" -ne 1 ]; then
+            echo "Preview-buildet indeholder mere end én Convex-vært."
+            exit 1
+          fi
+          if [[ "${hosts[0]}" == *quaint-parakeet-652* ]]; then
+            echo "Preview-buildet peger på produktions-deploymentet."
+            exit 1
+          fi
+
+      # Hemmelighederne sættes via stdin. `env set` uden --secret skriver kun
+      # navnet i loggen. `convex run` skriver funktionens returværdi, som er
+      # tællere og ikke indeholder adressen eller adgangskoden.
+      # --preview-run duer ikke her: den kører kun, første gang deploymentet
+      # oprettes, og et eksisterende preview skal seede på hvert push.
+      - name: Opret testbruger på preview-deploymentet
+        working-directory: V2
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
+          PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+          PREVIEW_SHARED_PASSWORD: ${{ secrets.PREVIEW_SHARED_PASSWORD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CONVEX_DEPLOY_KEY}" ]; then
+            echo "Mangler preview-nøgle."
+            exit 1
+          fi
+          if [ -z "${RESEND_API_KEY}" ]; then
+            echo "Mangler RESEND_API_KEY."
+            exit 1
+          fi
+          case "${CONVEX_DEPLOY_KEY}" in
+            prod:*)
+              echo "Afviser prod-nøgle. Seed kører kun mod preview."
+              exit 1
+              ;;
+          esac
+          preview="pr-${PR_NUMBER}"
+          npx convex env set PREVIEW_SEED 1 --preview-name "$preview"
+          npx convex env set SITE_URL https://naturklubben.dk --preview-name "$preview"
+          npx convex env set ASSISTANT_MENTION_EMAIL naturklubben-test@agentmail.to --preview-name "$preview"
+          printf '%s' "$PREVIEW_TEST_EMAIL" | npx convex env set PREVIEW_TEST_EMAIL --preview-name "$preview"
+          printf '%s' "$PREVIEW_TEST_PASSWORD" | npx convex env set PREVIEW_TEST_PASSWORD --preview-name "$preview"
+          # Nøglen bliver liggende. Hvert preview-deploy sætter den igen,
+          # så et senere push ikke falder tilbage til at logge mailen.
+          # Uden --secret skriver loggen kun navnet.
+          printf '%s' "$RESEND_API_KEY" | npx convex env set RESEND_API_KEY --preview-name "$preview"
+          shared_required=0
+          if [ -z "${PREVIEW_SHARED_PASSWORD:-}" ]; then
+            echo "PREVIEW_SHARED_PASSWORD mangler -- fælles preview-login springes over."
+          else
+            printf '%s' "$PREVIEW_SHARED_PASSWORD" | npx convex env set PREVIEW_SHARED_PASSWORD --preview-name "$preview"
+            shared_required=1
+          fi
+          npx convex run previewSeed:ensure '{}' --preview-name "$preview"
+          ready=$(npx convex run previewSeed:guestAllowlistReady '{}' --preview-name "$preview")
+          printf '%s\n' "$ready"
+          node --input-type=module -e '
+            const raw = process.argv[1]
+            const requireShared = process.argv[2] === "1"
+            const data = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1))
+            if (
+              data.listed !== data.expected ||
+              data.expected < 7 ||
+              data.allowlistAdmins !== data.expectedAdmins ||
+              (data.martinHasProfile && data.martinAdmin !== true)
+            ) {
+              console.error("Adgangslisten eller admin-rollen mangler")
+              process.exit(1)
+            }
+            if (
+              requireShared &&
+              (data.accounts !== data.expected || data.martinAdmin !== true)
+            ) {
+              console.error("Fælles preview-konti mangler")
+              process.exit(1)
+            }
+            console.log(
+              `Adgangsliste: listed=${data.listed} accounts=${data.accounts} admins=${data.allowlistAdmins} martinAdmin=${data.martinAdmin}`,
+            )
+          ' "$ready" "$shared_required"
+          # Login kan først udstede en session, når Convex Auth har et
+          # nøglepar på selve previewet. Prod-nøglerne følger ikke med.
+          node scripts/ensurePreviewAuthKeys.mjs "$preview"
+
+      # Lægger buildet i pr-preview/pr-<nr>/ på gh-pages uden at røre resten af
+      # gh-pages. Kommentar på PR slås fra, fordi `sticky-pull-request-comment`
+      # læser `github.event.pull_request`, som ikke findes på `workflow_dispatch`.
+      - uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ./V2/dist
+          pages-base-url: naturklubben.dk
+          pr-number: ${{ inputs.pr_number }}
+          action: deploy
+          comment: false
+          deploy-commit-message: Deploy preview for PR ${{ inputs.pr_number }} 🛫
+
+      # CDN'en kan stadig have V1 et øjeblik efter push til gh-pages.
+      - name: Tjek at det udgivne preview er V2
+        working-directory: V2
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          host=$(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123')
+          expected=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
+          url="https://naturklubben.dk/pr-preview/pr-${PR_NUMBER}/"
+          # GitHub Pages cacher i op til 10 minutter. Et query-parameter
+          # rammer en ny cache-nøgle, så vi ikke bliver ved med at se V1.
+          # Filnavnet skal være dette builds, ikke et ældre V2-build med
+          # samme Convex-vært.
+          for attempt in $(seq 1 18); do
+            cb=$(date +%s)
+            html=$(curl -fsS "$url?cb=$cb" || true)
+            js=$(printf '%s' "$html" | grep -oE 'assets/index-[^"]+\.js' | head -1 || true)
+            if [ "$js" = "$expected" ]; then
+              body=$(curl -fsS "$url$js?cb=$cb" || true)
+              # Uden -q: med pipefail lukker grep -q røret, og printf dør
+              # af SIGPIPE, så et rigtigt match bliver talt som fejl.
+              if printf '%s' "$body" | grep -F "$host" >/dev/null && ! printf '%s' "$body" | grep -F 'supabase.co' >/dev/null; then
+                echo "Live bundle $js peger på $host og ikke på Supabase."
+                for route in kalender aktiviteter profil medlemmer login; do
+                  code=$(curl -s -o /dev/null -w '%{http_code}' -L "$url$route?cb=$cb")
+                  echo "/$route -> $code"
+                  if [ "$code" != "200" ]; then
+                    echo "Forventede HTTP 200 på /$route."
+                    exit 1
+                  fi
+                done
+                exit 0
+              fi
+            fi
+            echo "Live bundle ${js:-mangler} er ikke $expected (forsøg $attempt)."
+            sleep 10
+          done
+          echo "Previewet peger ikke på $host."
+          exit 1
+
+      # Samme adgangskode for medlemmerne på listen. Springer over, når
+      # hemmeligheden mangler, og skriver hverken adressen eller koden ud.
+      - name: Log ind med fælles adgangskode
+        env:
+          PREVIEW_SHARED_PASSWORD: ${{ secrets.PREVIEW_SHARED_PASSWORD }}
+          PREVIEW_PATH: /pr-preview/pr-${{ inputs.pr_number }}/
+          PUPPETEER_REQUIRE_FROM: /tmp/preview-smoke/package.json
+        run: |
+          set -euo pipefail
+          if [ -z "${PREVIEW_SHARED_PASSWORD:-}" ]; then
+            echo "PREVIEW_SHARED_PASSWORD mangler -- fælles preview-login springes over."
+            exit 0
+          fi
+          mkdir -p /tmp/preview-smoke
+          npm init -y --prefix /tmp/preview-smoke >/dev/null
+          npm install --prefix /tmp/preview-smoke --silent puppeteer@24.15.0
+          node V2/scripts/previewSharedLogin.mjs
+
+      # Bekræfter, at det udgivne preview kan logge ind med den seedede bruger
+      # og viser prøvedata. Puppeteer hentes kun til dette trin.
+      - name: Log ind som testbruger
+        env:
+          PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
+          PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+          PREVIEW_PATH: /pr-preview/pr-${{ inputs.pr_number }}/
+          PUPPETEER_REQUIRE_FROM: /tmp/preview-smoke/package.json
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/preview-smoke
+          npm init -y --prefix /tmp/preview-smoke >/dev/null
+          npm install --prefix /tmp/preview-smoke --silent puppeteer@24.15.0
+          node V2/scripts/previewLoginSmoke.mjs
+
+      # Verificerer `POST /preview/verify-member` mod previewets eget deployment
+      # (prod får først ruten, når PR'en er merget og deployed).
+      - name: Tjek /preview/verify-member med testbrugeren
+        working-directory: V2
+        env:
+          PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
+          PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+        run: |
+          set -euo pipefail
+          host=$(grep -RhoE 'https://[a-z0-9-]+\.convex\.cloud' dist/assets | sort -u | grep -v 'happy-otter-123')
+          if [[ -z "$host" || "$host" == *quaint-parakeet-652* ]]; then
+            echo "Ugyldig preview-vært til verify-member-smoke."
+            exit 1
+          fi
+          export PREVIEW_CONVEX_SITE_URL="${host%.convex.cloud}.convex.site"
+          node scripts/previewVerifyMemberSmoke.mjs
+
+      # Samme session som testbrugeren. Mutationen er den, spillet kalder,
+      # og siden skal vise rækken bagefter.
+      - name: Gem et Boble-resultat og se det på listen
+        env:
+          PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
+          PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+          PREVIEW_PATH: /pr-preview/pr-${{ inputs.pr_number }}/
+          PUPPETEER_REQUIRE_FROM: /tmp/preview-smoke/package.json
+        run: node V2/scripts/previewBobleScore.mjs
+
+      - name: Gem et Bral-resultat og se det på listen
+        env:
+          PREVIEW_TEST_EMAIL: ${{ secrets.PREVIEW_TEST_EMAIL }}
+          PREVIEW_TEST_PASSWORD: ${{ secrets.PREVIEW_TEST_PASSWORD }}
+          PREVIEW_PATH: /pr-preview/pr-${{ inputs.pr_number }}/
+          PUPPETEER_REQUIRE_FROM: /tmp/preview-smoke/package.json
+        run: node V2/scripts/previewBralScore.mjs
