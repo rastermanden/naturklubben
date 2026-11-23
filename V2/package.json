@@ -13,7 +13,7 @@
     "convex:deploy": "convex deploy"
   },
   "dependencies": {
-    "@convex-dev/auth": "^0.0.90",
+    "@convex-dev/auth": "^2.1.0",
     "@tailwindcss/vite": "^4.3.5",
     "bcryptjs": "^3.0.3",
     "convex": "^1.51.0",
