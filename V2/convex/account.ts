@@ -1,6 +1,6 @@
 import { internalMutation, mutation, query } from './_generated/server'
 import type { MutationCtx, QueryCtx } from './_generated/server'
-import { internal } from './_generated/api'
+import { components, internal } from './_generated/api'
 import { ConvexError, v } from 'convex/values'
 import { currentUserId, requireProfile } from './authz'
 import { removePhotoFromAlbum, photoFileUrl, videoFileUrl } from './gallery'
@@ -494,6 +494,19 @@ async function deleteAccount(ctx: MutationCtx, profileId: Id<'profiles'>) {
     }
     await ctx.db.delete(account._id)
   }
+
+  // 10b. Revoke v2 sessions og slet verificerede e-mails i auth-komponenterne.
+  const v2Sessions = await ctx.runQuery(components.auth.public.listSessions, {
+    userId: profile.userId,
+  })
+  if (v2Sessions.length > 0) {
+    await ctx.runMutation(components.auth.public.revokeSessions, {
+      sessionIds: v2Sessions.map((s) => s.sessionId),
+    })
+  }
+  await ctx.runMutation(components.authEmail.verifiedEmails.deleteUser, {
+    userId: profile.userId,
+  })
 
   // 11. Profilen og til sidst auth-brugeren.
   await ctx.db.delete(profile._id)

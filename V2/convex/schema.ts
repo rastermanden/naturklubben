@@ -1,5 +1,5 @@
 import { defineSchema } from 'convex/server'
-import { authTables } from '@convex-dev/auth/server'
+import { legacyAuthTables } from './tables/legacyAuth'
 import { memberTables } from './tables/members'
 import { calendarTables } from './tables/calendar'
 import { chatTables } from './tables/chat'
@@ -17,12 +17,12 @@ import { migrateTables } from './tables/migrate'
  * skal kunne ændres uden at nogen redigerer en fælles fil. Ret derfor en tabel
  * i dens egen fil -- denne fil rører man kun, når et helt nyt domæne dukker op.
  *
- * `authTables` kommer fra Convex Auth (users, authAccounts, authSessions,
- * authRefreshTokens, authVerificationCodes, authVerifiers, authRateLimits).
- * Den kan ikke erstattes af egne tabeller: biblioteket læser og skriver dem selv.
+ * `users` og overgangstabellerne fra Convex Auth v1 ligger i
+ * `tables/legacyAuth.ts`; nye sessioner, bekræftede e-mails og adgangskodehashes
+ * bor i Convex Auth 2.x-komponenterne (`auth`, `authEmail`, `authPassword`).
  */
 export default defineSchema({
-  ...authTables,
+  ...legacyAuthTables,
   ...memberTables,
   ...calendarTables,
   ...chatTables,

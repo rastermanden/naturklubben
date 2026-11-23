@@ -1,15 +1,16 @@
 /// <reference types="vite/client" />
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { convexTest } from 'convex-test'
+import {
+  createTestConvex,
+  withAuthUser,
+  type TestConvexInstance,
+} from '../test/convexTestAuth'
 import { api } from './_generated/api'
-import schema from './schema'
 import type { Id } from './_generated/dataModel'
 import { DEFAULT_ASSISTANT_EMAIL } from './assistantMention'
 
-const modules = import.meta.glob('./**/*.ts')
-
 async function seedProfile(
-  t: ReturnType<typeof convexTest>,
+  t: TestConvexInstance,
   email: string,
   fullName: string,
   isAdmin = false,
@@ -36,7 +37,7 @@ async function seedProfile(
   })
 }
 
-async function mailCount(t: ReturnType<typeof convexTest>) {
+async function mailCount(t: TestConvexInstance) {
   return await t.run(async (ctx) => {
     const rows = await ctx.db.query('assistantMentionMails').collect()
     return rows.length
@@ -44,7 +45,7 @@ async function mailCount(t: ReturnType<typeof convexTest>) {
 }
 
 async function send(
-  t: ReturnType<typeof convexTest>,
+  t: TestConvexInstance,
   userId: Id<'users'>,
   args: {
     clientId: string
@@ -53,14 +54,14 @@ async function send(
     mentions?: Id<'profiles'>[]
   },
 ) {
-  return await t
-    .withIdentity({ subject: userId })
-    .mutation(api.chat.sendMessage, {
-      clientId: args.clientId,
-      room: args.room ?? 'general',
-      content: args.content,
-      ...(args.mentions ? { mentions: args.mentions } : {}),
-    })
+  return await (
+    await withAuthUser(t, userId)
+  ).mutation(api.chat.sendMessage, {
+    clientId: args.clientId,
+    room: args.room ?? 'general',
+    content: args.content,
+    ...(args.mentions ? { mentions: args.mentions } : {}),
+  })
 }
 
 describe('omtale-mail', () => {
@@ -70,7 +71,7 @@ describe('omtale-mail', () => {
 
   it('sender én mail for tekst og for et gemt id, ikke for assistenten selv', async () => {
     vi.useFakeTimers()
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const bot = await seedProfile(t, DEFAULT_ASSISTANT_EMAIL, 'Grok Bot', true)
     const member = await seedProfile(t, 'martin@example.com', 'Martin', true)
 

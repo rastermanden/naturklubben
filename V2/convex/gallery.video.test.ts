@@ -1,10 +1,9 @@
 // @vitest-environment edge-runtime
 /// <reference types="vite/client" />
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { convexTest } from 'convex-test'
+import { createTestConvex, withAuthUser } from '../test/convexTestAuth'
 import { api, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
-import schema from './schema'
 import {
   MAX_FILE_SIZE,
   MAX_VIDEO_BYTES,
@@ -12,10 +11,8 @@ import {
   sliceReadableStream,
 } from './gallery'
 
-const modules = import.meta.glob('./**/*.ts')
-
 function setup() {
-  return convexTest(schema, modules)
+  return createTestConvex()
 }
 
 type Test = ReturnType<typeof setup>
@@ -147,12 +144,12 @@ describe('video autorisation og roller', () => {
     )
 
     const videoStorageId = await storeFile(t, 'mp4-bytes', 'video/mp4')
-    const created = await t
-      .withIdentity({ subject: member.userId })
-      .mutation(api.gallery.createVideo, {
-        storageId: videoStorageId,
-        caption: 'Rådyr i skovkanten',
-      })
+    const created = await (
+      await withAuthUser(t, member.userId)
+    ).mutation(api.gallery.createVideo, {
+      storageId: videoStorageId,
+      caption: 'Rådyr i skovkanten',
+    })
     expect(created.ok).toBe(true)
     if (!created.ok) throw new Error('expected video')
 
@@ -179,7 +176,7 @@ describe('video autorisation og roller', () => {
     ).rejects.toThrow('NOT_A_MEMBER')
 
     // Indlogget uden medlemsprofil afvises også.
-    const asNonMember = t.withIdentity({ subject: nonMemberUserId })
+    const asNonMember = await withAuthUser(t, nonMemberUserId)
     await expect(asNonMember.query(api.gallery.listAlbums, {})).rejects.toThrow(
       'NOT_A_MEMBER',
     )
@@ -190,7 +187,7 @@ describe('video autorisation og roller', () => {
     ).rejects.toThrow('NOT_A_MEMBER')
 
     // Medlem med aktiv sletningsreservation afvises ved skrivning.
-    const asDeleting = t.withIdentity({ subject: deleting.userId })
+    const asDeleting = await withAuthUser(t, deleting.userId)
     const deletingStorage = await storeFile(t, 'blocked-mp4', 'video/mp4')
     await expect(
       asDeleting.mutation(api.gallery.createVideo, {
@@ -208,7 +205,7 @@ describe('video upload-validering på serveren', () => {
       fullName: 'Video Medlem',
     })
     const eventId = await seedEvent(t, { title: 'Vintertur', startAt: 1000 })
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
 
     // Eksisterende legacy-billede uden mediaKind forbliver et billede.
     const legacyImageStorage = await storeFile(t, 'legacy-img', 'image/jpeg')
@@ -322,7 +319,7 @@ describe('video upload-validering på serveren', () => {
       email: 'other@example.com',
       fullName: 'Anden',
     })
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
 
     // Forkerte MIME-typer afvises og slettes fra storage (inkl. medfølgende thumb).
     for (const badMime of [
@@ -402,9 +399,9 @@ describe('video upload-validering på serveren', () => {
     expect(await t.run((ctx) => ctx.storage.getUrl(badThumb))).toBeNull()
 
     const otherVideoStorage = await storeFile(t, 'other-vid', 'video/mp4')
-    await t
-      .withIdentity({ subject: other.userId })
-      .mutation(api.gallery.createVideo, { storageId: otherVideoStorage })
+    await (
+      await withAuthUser(t, other.userId)
+    ).mutation(api.gallery.createVideo, { storageId: otherVideoStorage })
 
     expect(
       await asMember.mutation(api.gallery.createVideo, {
@@ -434,9 +431,9 @@ describe('redigering, flytning, sletning, kontosletning og eksport for videoer',
       isAdmin: true,
     })
     const eventId = await seedEvent(t, { title: 'Kysttur', startAt: 2000 })
-    const asUploader = t.withIdentity({ subject: uploader.userId })
-    const asOther = t.withIdentity({ subject: other.userId })
-    const asAdmin = t.withIdentity({ subject: admin.userId })
+    const asUploader = await withAuthUser(t, uploader.userId)
+    const asOther = await withAuthUser(t, other.userId)
+    const asAdmin = await withAuthUser(t, admin.userId)
 
     const vid1Storage = await storeFile(t, 'vid-1', 'video/mp4')
     const vid1Thumb = await storeFile(t, 'thumb-1', 'image/jpeg')
@@ -543,24 +540,24 @@ describe('redigering, flytning, sletning, kontosletning og eksport for videoer',
     const leavingThumb = await storeFile(t, 'leaving-thumb', 'image/jpeg')
     const stayingVideo = await storeFile(t, 'staying-mp4', 'video/mp4')
 
-    const vLeaving = await t
-      .withIdentity({ subject: leaving.userId })
-      .mutation(api.gallery.createVideo, {
-        storageId: leavingVideo,
-        thumbnailStorageId: leavingThumb,
-        caption: 'Min film',
-      })
-    const vStaying = await t
-      .withIdentity({ subject: staying.userId })
-      .mutation(api.gallery.createVideo, {
-        storageId: stayingVideo,
-        caption: 'Andens film',
-      })
+    const vLeaving = await (
+      await withAuthUser(t, leaving.userId)
+    ).mutation(api.gallery.createVideo, {
+      storageId: leavingVideo,
+      thumbnailStorageId: leavingThumb,
+      caption: 'Min film',
+    })
+    const vStaying = await (
+      await withAuthUser(t, staying.userId)
+    ).mutation(api.gallery.createVideo, {
+      storageId: stayingVideo,
+      caption: 'Andens film',
+    })
     if (!vLeaving.ok || !vStaying.ok) throw new Error('expected videos')
 
-    const exported = await t
-      .withIdentity({ subject: leaving.userId })
-      .query(api.account.exportData, {})
+    const exported = await (
+      await withAuthUser(t, leaving.userId)
+    ).query(api.account.exportData, {})
     expect(exported.photos).toHaveLength(1)
     const exportedVideo = exported.photos[0] as Record<string, unknown>
     expect(exportedVideo).toMatchObject({
@@ -612,7 +609,7 @@ describe('/video token-httpAction med streaming Range uden hele filen i RAM', ()
       email: 'stream@example.com',
       fullName: 'Streamer',
     })
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
 
     const videoContent = '0123456789'
     const videoStorage = await storeFile(t, videoContent, 'video/mp4')
@@ -837,7 +834,7 @@ describe('review-rettelser: observations og isStorageOwned (#366)', () => {
       email: 'obs@example.com',
       fullName: 'Observatør',
     })
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
 
     const videoStorage = await storeFile(t, 'vid-obs', 'video/mp4')
     const thumbStorage = await storeFile(t, 'thumb-obs', 'image/jpeg')
@@ -929,7 +926,7 @@ describe('review-rettelser: observations og isStorageOwned (#366)', () => {
       email: 'ejet@example.com',
       fullName: 'Ejer',
     })
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
 
     const avatarStorage = await storeFile(t, 'avatar-bytes', 'image/png')
     const badgeImgStorage = await storeFile(t, 'badge-img', 'image/png')

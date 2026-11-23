@@ -1,5 +1,4 @@
 import { httpRouter } from 'convex/server'
-import { auth } from './auth'
 import { registerCalendarFeedRoutes } from './calendarFeed'
 import { servePhoto, serveVideo } from './gallery'
 import { serveAudio } from './audio'
@@ -9,14 +8,11 @@ import { previewMemberHttpRoutes } from './previewMemberAuth'
 /**
  * HTTP-ruter uden for Convex's eget funktions-API.
  *
- * Convex Auth lægger sine egne ruter her (login, callback, session). Alt andet,
- * der skal kunne kaldes af noget, der ikke er appen -- den offentlige iCal-feed
- * og gæsternes tilmeldingsformular -- kommer også til at ligge her som
- * `http.route(...)`, fordi de skal kunne nås uden et Convex-login.
+ * Den offentlige iCal-feed, medier og gæsternes tilmeldingsformular ligger her
+ * som `http.route(...)`, fordi de skal kunne nås uden et Convex-login.
  */
 const http = httpRouter()
 
-auth.addHttpRoutes(http)
 registerCalendarFeedRoutes(http)
 http.route({ path: '/photo', method: 'GET', handler: servePhoto })
 http.route({ path: '/video', method: 'GET', handler: serveVideo })

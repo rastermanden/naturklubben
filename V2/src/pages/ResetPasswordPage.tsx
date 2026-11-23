@@ -1,22 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAction } from 'convex/react'
-import { useConvexAuth } from 'convex/react'
+import { useCompletePasswordRecovery } from '@convex-dev/auth/methods/email-password/react'
 import { api } from '../../convex/_generated/api'
-import { toFriendlyAuthError } from '../features/auth/authErrors'
+import { userErrorToAuthError } from '../features/auth/authErrors'
 import { useErrorFocus } from '../hooks/useErrorFocus'
 
-/**
- * Landingssiden for linket i nulstillingsmailen (`/ny-adgangskode`).
- *
- * Linket logger brugeren ind (koden i adressen samles op af Convex Auth),
- * og herfra vælges den nye adgangskode. Uden session er linket udløbet
- * eller allerede brugt.
- */
-export default function ResetPasswordPage() {
+function RecoveryResetForm({ emailCode }: { emailCode: string }) {
   const navigate = useNavigate()
-  const { isAuthenticated, isLoading } = useConvexAuth()
-  const changePassword = useAction(api.passwords.changePassword)
+  const state = useCompletePasswordRecovery(api.auth, { emailCode })
 
   const [password, setPassword] = useState('')
   const [repeated, setRepeated] = useState('')
@@ -24,50 +15,12 @@ export default function ResetPasswordPage() {
   const [errorField, setErrorField] = useState<'password' | 'repeated' | null>(
     null,
   )
-  const [submitting, setSubmitting] = useState(false)
   const passwordRef = useRef<HTMLInputElement>(null)
   const repeatedRef = useRef<HTMLInputElement>(null)
   const focusPasswordError = useErrorFocus(passwordRef)
   const focusRepeatedError = useErrorFocus(repeatedRef)
-  const [gaveUp, setGaveUp] = useState(false)
 
-  // Auth-provideren kan blive stående i isLoading, hvis kode-indløsningen
-  // kaster, eller hvis backend'en aldrig bekræfter sessionen. Så viser vi
-  // den samme besked som et udløbet link i stedet for at hænge.
-  useEffect(() => {
-    if (!isLoading || isAuthenticated) return
-    const timeout = window.setTimeout(() => setGaveUp(true), 12000)
-    return () => window.clearTimeout(timeout)
-  }, [isAuthenticated, isLoading])
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    if (password !== repeated) {
-      setError('De to adgangskoder er ikke ens.')
-      setErrorField('repeated')
-      focusRepeatedError()
-      return
-    }
-    setError(null)
-    setErrorField(null)
-    setSubmitting(true)
-
-    try {
-      await changePassword({ password })
-      navigate('/', { replace: true })
-    } catch (updateError) {
-      setError(toFriendlyAuthError(updateError))
-      const raw = toFriendlyAuthError(updateError)
-      if (raw.includes('6 tegn')) {
-        setErrorField('password')
-        focusPasswordError()
-      }
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  if (isLoading && !gaveUp) {
+  if (state.status === 'loading') {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold text-ink-body">Et øjeblik…</h1>
@@ -75,15 +28,33 @@ export default function ResetPasswordPage() {
     )
   }
 
-  if (!isAuthenticated) {
+  if (state.status === 'complete') {
+    return (
+      <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
+        <h1 className="text-2xl font-semibold text-ink-body">
+          Adgangskoden er gemt
+        </h1>
+        <p className="text-ink-muted">Du er nu logget ind med din nye kode.</p>
+        <Link
+          to="/"
+          className="inline-flex min-h-11 items-center justify-center rounded bg-accent px-4 py-2 text-white"
+        >
+          Gå til forsiden
+        </Link>
+      </main>
+    )
+  }
+
+  if (state.status === 'error') {
     return (
       <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
         <h1 className="text-2xl font-semibold text-ink-body">
           Linket virkede ikke
         </h1>
         <p className="text-ink-muted">
-          Linket er udløbet eller allerede brugt. Bed om et nyt link, så sender
-          vi en ny mail.
+          {state.userError.error === 'MISSING_SECRET'
+            ? userErrorToAuthError(state.userError)
+            : 'Linket er udløbet eller allerede brugt. Bed om et nyt link, så sender vi en ny mail.'}
         </p>
         <Link
           to="/glemt-adgangskode"
@@ -93,6 +64,30 @@ export default function ResetPasswordPage() {
         </Link>
       </main>
     )
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (state.status !== 'ready') return
+    if (password !== repeated) {
+      setError('De to adgangskoder er ikke ens.')
+      setErrorField('repeated')
+      focusRepeatedError()
+      return
+    }
+    setError(null)
+    setErrorField(null)
+
+    const result = await state.completePasswordRecovery({
+      newPassword: password,
+    })
+    if (result.status === 'complete') {
+      navigate('/', { replace: true })
+      return
+    }
+    setError(userErrorToAuthError(result.userError))
+    setErrorField('password')
+    focusPasswordError()
   }
 
   return (
@@ -109,10 +104,11 @@ export default function ResetPasswordPage() {
             ref={passwordRef}
             type="password"
             required
-            minLength={6}
+            minLength={10}
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            disabled={state.pending}
             aria-invalid={errorField === 'password' ? true : undefined}
             aria-describedby={
               errorField === 'password' ? 'reset-password-error' : undefined
@@ -128,10 +124,11 @@ export default function ResetPasswordPage() {
             ref={repeatedRef}
             type="password"
             required
-            minLength={6}
+            minLength={10}
             autoComplete="new-password"
             value={repeated}
             onChange={(event) => setRepeated(event.target.value)}
+            disabled={state.pending}
             aria-invalid={errorField === 'repeated' ? true : undefined}
             aria-describedby={
               errorField === 'repeated' ? 'reset-password-error' : undefined
@@ -152,12 +149,47 @@ export default function ResetPasswordPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={state.pending}
           className="min-h-11 rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
         >
-          {submitting ? 'Gemmer…' : 'Gem adgangskode'}
+          {state.pending ? 'Gemmer…' : 'Gem adgangskode'}
         </button>
       </form>
     </main>
   )
+}
+
+/**
+ * Landingssiden for linket i nulstillingsmailen (`/ny-adgangskode`).
+ *
+ * Indløser `?code=` sammen med browserens hemmelighed i én transaktion,
+ * sætter den nye adgangskode og logger brugeren ind.
+ */
+export default function ResetPasswordPage() {
+  const emailCode =
+    typeof window === 'undefined'
+      ? ''
+      : (new URLSearchParams(window.location.search).get('code') ?? '')
+
+  if (!emailCode) {
+    return (
+      <main className="mx-auto flex max-w-sm flex-col justify-center gap-4 p-6 text-center">
+        <h1 className="text-2xl font-semibold text-ink-body">
+          Linket virkede ikke
+        </h1>
+        <p className="text-ink-muted">
+          Linket er udløbet eller allerede brugt. Bed om et nyt link, så sender
+          vi en ny mail.
+        </p>
+        <Link
+          to="/glemt-adgangskode"
+          className="inline-flex min-h-11 items-center justify-center rounded bg-accent px-4 py-2 text-white"
+        >
+          Send et nyt link
+        </Link>
+      </main>
+    )
+  }
+
+  return <RecoveryResetForm emailCode={emailCode} />
 }

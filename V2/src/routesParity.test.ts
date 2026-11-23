@@ -13,7 +13,7 @@ vi.mock('convex/react', () => ({
   }),
 }))
 vi.mock('@convex-dev/auth/react', () => ({
-  useAuthActions: () => ({ signIn: vi.fn(), signOut: vi.fn() }),
+  useAuthActions: () => ({ setSession: vi.fn(), signOut: vi.fn() }),
   ConvexAuthProvider: ({ children }: { children: unknown }) => children,
 }))
 

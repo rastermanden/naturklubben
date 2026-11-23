@@ -12,7 +12,7 @@ vi.mock('convex/react', () => ({
 }))
 
 vi.mock('@convex-dev/auth/react', () => ({
-  useAuthActions: () => ({ signOut: vi.fn() }),
+  useAuthActions: () => ({ setSession: vi.fn(), signOut: vi.fn() }),
 }))
 
 vi.mock('react-router-dom', () => ({

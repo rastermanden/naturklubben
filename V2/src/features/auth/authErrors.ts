@@ -1,13 +1,14 @@
 /**
- * Fejlkoder fra V2's Convex-funktioner og fra Convex Auth, oversat til
- * danske beskeder.
- *
- * Backend'en kaster `ConvexError` med en fast streng (se `convex/members.ts`),
- * fordi en almindelig fejlbesked sløres i produktion. `errorCode` læser den
- * streng ud, og `toFriendlyAuthError` oversætter den. Ukendte fejl ender i en
- * generisk sætning: Convex Auth's egne tekster er ikke en del af en kontrakt,
- * så de kan ikke oversættes ord for ord uden at gætte.
+ * Fejlkoder fra V2's Convex-funktioner og fra `@convex-dev/auth` 2.x,
+ * oversat til danske beskeder.
  */
+
+export type AuthUserError = {
+  error: string
+  minimumLength?: number
+  maximumLength?: number
+  retryAfterMs?: number
+}
 
 /** Fejlkoden fra en `ConvexError`, eller fejlens besked, hvis der ikke er en. */
 export function errorCode(error: unknown): string | null {
@@ -19,16 +20,31 @@ export function errorCode(error: unknown): string | null {
   return null
 }
 
-/** De koder, backend'en selv kaster. Se `convex/authz.ts` og `convex/members.ts`. */
+/** De koder, backend'en selv returnerer eller kaster. */
 const KNOWN_CODES: Record<string, string> = {
   EMAIL_NOT_ALLOWED: 'Denne e-mailadresse er ikke inviteret til Naturklubben.',
+  EMAIL_TAKEN: 'Der findes allerede en bruger med den e-mail.',
+  INVALID_EMAIL: 'Skriv en gyldig e-mailadresse.',
+  EMAIL_NOT_FOUND: 'Ingen bruger med den e-mailadresse.',
+  USER_NOT_FOUND: 'Forkert e-mail eller adgangskode.',
   NOT_AUTHENTICATED: 'Du er ikke logget ind. Log ind og prøv igen.',
+  NOT_LOGGED_IN: 'Du er ikke logget ind. Log ind og prøv igen.',
   NOT_A_MEMBER: 'Din konto er endnu ikke medlem af Naturklubben.',
   INVALID_PROFILE:
     'Noget i profilen kunne ikke gemmes. Tjek felterne og prøv igen.',
   ACCOUNT_DELETION_RESERVED:
     'Din konto er ved at blive slettet, så den kan ikke ændres.',
-  PASSWORD_TOO_SHORT: 'Adgangskoden skal være på mindst 6 tegn.',
+  PASSWORD_TOO_SHORT: 'Adgangskoden skal være på mindst 10 tegn.',
+  PASSWORD_TOO_LONG: 'Adgangskoden må højst være på 100 tegn.',
+  PASSWORD_HAS_SURROUNDING_WHITESPACE:
+    'Adgangskoden må ikke starte eller slutte med mellemrum.',
+  PASSWORD_TOO_COMMON:
+    'Adgangskoden er for almindelig. Vælg en stærkere adgangskode.',
+  MISSING_SECRET:
+    'Åbn linket i den samme browser, hvor du begyndte. Prøv igen derfra.',
+  INVALID_CHALLENGE: 'Linket er udløbet eller allerede brugt.',
+  INCORRECT_CODE: 'Linket er ugyldigt eller allerede brugt.',
+  WRONG_USER: 'Linket hører til en anden bruger.',
   AUTH_EMAIL_NOT_SENT: 'Mailen kunne ikke sendes. Prøv igen om lidt.',
   NOT_ADMIN: 'Du har ikke længere adgang til denne handling.',
   PROFILE_NOT_FOUND: 'Profilen kunne ikke findes. Genindlæs siden.',
@@ -44,9 +60,22 @@ const KNOWN_CODES: Record<string, string> = {
     'Kunne ikke tjekke dit login lige nu. Prøv igen om lidt.',
 }
 
+export function userErrorToAuthError(userError: AuthUserError): string {
+  if (userError.error === 'PASSWORD_TOO_SHORT') {
+    const min = userError.minimumLength ?? 10
+    return `Adgangskoden skal være på mindst ${min} tegn.`
+  }
+  if (userError.error === 'PASSWORD_TOO_LONG') {
+    const max = userError.maximumLength ?? 100
+    return `Adgangskoden må højst være på ${max} tegn.`
+  }
+  const known = KNOWN_CODES[userError.error]
+  if (known) return known
+  return toFriendlyAuthError({ data: userError.error })
+}
+
 /**
- * Til login, oprettelse og adgangskode-flowene. Kender både vores egne koder
- * og de almindelige fejl fra Convex Auth's adgangskode-provider.
+ * Til login, oprettelse og adgangskode-flowene.
  */
 export function toFriendlyAuthError(error: unknown): string {
   const raw = errorCode(error)
@@ -56,7 +85,11 @@ export function toFriendlyAuthError(error: unknown): string {
   if (known) return known
 
   const message = raw.toLowerCase()
-  if (message.includes('already') || message.includes('exists')) {
+  if (
+    message.includes('already') ||
+    message.includes('exists') ||
+    message.includes('email_taken')
+  ) {
     return 'Der findes allerede en bruger med den e-mail.'
   }
   if (
@@ -67,10 +100,11 @@ export function toFriendlyAuthError(error: unknown): string {
     return 'Forkert e-mail eller adgangskode.'
   }
   if (
+    message.includes('at least 10') ||
     message.includes('at least 6') ||
     message.includes('password_too_short')
   ) {
-    return 'Adgangskoden skal være på mindst 6 tegn.'
+    return KNOWN_CODES.PASSWORD_TOO_SHORT
   }
   if (message.includes('auth_email_not_sent')) {
     return 'Mailen kunne ikke sendes. Prøv igen om lidt.'

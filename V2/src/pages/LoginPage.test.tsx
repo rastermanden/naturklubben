@@ -1,19 +1,27 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { ConvexError } from 'convex/values'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const MOCK_TOKENS = {
+  accessToken: 'jwt-access',
+  refreshToken: 'refresh-tok',
+  refreshTokenExpiresAt: 9999999,
+  userId: 'user-1',
+}
+
 const mocks = vi.hoisted(() => ({
-  signIn: vi.fn(),
-  rehashIfImported: vi.fn(),
+  signInWithPassword: vi.fn(),
+  signInWithPreviewMember: vi.fn(),
+  setSession: vi.fn(),
   isPreviewDeployment: false,
 }))
 
 vi.mock('@convex-dev/auth/react', () => ({
-  useAuthActions: () => ({ signIn: mocks.signIn }),
+  useAuthActions: () => ({ setSession: mocks.setSession }),
 }))
 
 vi.mock('convex/react', () => ({
-  useAction: () => mocks.rehashIfImported,
+  useMutation: () => mocks.signInWithPassword,
+  useAction: () => mocks.signInWithPreviewMember,
   useConvexAuth: () => ({ isAuthenticated: false, isLoading: false }),
 }))
 
@@ -43,122 +51,103 @@ function submitCredentials(email: string, password: string) {
 }
 
 beforeEach(() => {
-  mocks.signIn.mockReset()
-  mocks.rehashIfImported.mockReset()
-  mocks.rehashIfImported.mockResolvedValue(null)
+  mocks.signInWithPassword.mockReset()
+  mocks.signInWithPreviewMember.mockReset()
+  mocks.setSession.mockReset()
+  mocks.setSession.mockResolvedValue(undefined)
   mocks.isPreviewDeployment = false
 })
 
 afterEach(cleanup)
 
 describe('LoginPage preview-login', () => {
-  it('kalder kun password-provideren uden for preview', async () => {
-    mocks.signIn.mockRejectedValueOnce(new ConvexError('INVALID_CREDENTIALS'))
+  it('kalder kun e-mail/adgangskode uden for preview', async () => {
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'INVALID_CREDENTIALS' },
+    })
     submitCredentials('medlem@example.com', 'forkert-kode')
 
     const alert = await screen.findByText('Forkert e-mail eller adgangskode.')
     expect(alert).toBeTruthy()
-    expect(mocks.signIn).toHaveBeenCalledTimes(1)
-    expect(mocks.signIn).toHaveBeenCalledWith('password', {
+    expect(mocks.signInWithPassword).toHaveBeenCalledTimes(1)
+    expect(mocks.signInWithPassword).toHaveBeenCalledWith({
       email: 'medlem@example.com',
       password: 'forkert-kode',
-      flow: 'signIn',
-      redirectTo: expect.stringContaining('velkommen'),
     })
+    expect(mocks.signInWithPreviewMember).not.toHaveBeenCalled()
+    expect(mocks.setSession).not.toHaveBeenCalled()
   })
 
   it('logger testbrugeren lokalt ind på preview uden at kalde preview-member', async () => {
     mocks.isPreviewDeployment = true
-    mocks.signIn.mockResolvedValueOnce({ signingIn: true })
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      status: 'complete',
+      tokens: MOCK_TOKENS,
+    })
     submitCredentials('tester@example.com', 'test-kode-123')
 
     await vi.waitFor(() => {
-      expect(mocks.rehashIfImported).toHaveBeenCalledWith({
-        password: 'test-kode-123',
-      })
+      expect(mocks.setSession).toHaveBeenCalledWith(MOCK_TOKENS)
     })
-    expect(mocks.signIn).toHaveBeenCalledTimes(1)
-    expect(mocks.signIn).toHaveBeenCalledWith(
-      'password',
-      expect.objectContaining({
-        email: 'tester@example.com',
-        flow: 'signIn',
-      }),
-    )
+    expect(mocks.signInWithPassword).toHaveBeenCalledTimes(1)
+    expect(mocks.signInWithPreviewMember).not.toHaveBeenCalled()
   })
 
-  it('falder tilbage til preview-member på preview og springer rehash over', async () => {
+  it('falder tilbage til preview-member på preview når lokalt login returnerer fejl', async () => {
     mocks.isPreviewDeployment = true
-    mocks.signIn
-      .mockRejectedValueOnce(new Error('InvalidAccountId'))
-      .mockResolvedValueOnce({ signingIn: true })
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'USER_NOT_FOUND' },
+    })
+    mocks.signInWithPreviewMember.mockResolvedValueOnce({
+      status: 'complete',
+      tokens: MOCK_TOKENS,
+    })
     submitCredentials('medlem@naturklubben.dk', 'prod-adgangskode')
 
     await vi.waitFor(() => {
-      expect(mocks.signIn).toHaveBeenCalledTimes(2)
+      expect(mocks.setSession).toHaveBeenCalledWith(MOCK_TOKENS)
     })
-    expect(mocks.signIn).toHaveBeenNthCalledWith(2, 'preview-member', {
+    expect(mocks.signInWithPreviewMember).toHaveBeenCalledWith({
       email: 'medlem@naturklubben.dk',
       password: 'prod-adgangskode',
     })
-    expect(mocks.rehashIfImported).not.toHaveBeenCalled()
   })
 
   it('viser almindelig loginfejl ved afvist medlem eller forkert adgangskode', async () => {
     mocks.isPreviewDeployment = true
-    mocks.signIn
-      .mockRejectedValueOnce(new Error('InvalidAccountId'))
-      .mockRejectedValueOnce(new ConvexError('INVALID_CREDENTIALS'))
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'USER_NOT_FOUND' },
+    })
+    mocks.signInWithPreviewMember.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'INVALID_CREDENTIALS' },
+    })
     submitCredentials('ukendt@example.com', 'forkert')
 
     const message = await screen.findByText('Forkert e-mail eller adgangskode.')
     expect(message).toBeTruthy()
     expect(message.getAttribute('data-code')).toBe('INVALID_CREDENTIALS')
-    expect(mocks.rehashIfImported).not.toHaveBeenCalled()
+    expect(mocks.setSession).not.toHaveBeenCalled()
   })
 
   it('viser rate-limit-besked når preview-member afviser pga. for mange forsøg', async () => {
     mocks.isPreviewDeployment = true
-    mocks.signIn
-      .mockRejectedValueOnce(new Error('InvalidAccountId'))
-      .mockRejectedValueOnce(new ConvexError('RATE_LIMITED'))
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'USER_NOT_FOUND' },
+    })
+    mocks.signInWithPreviewMember.mockResolvedValueOnce({
+      status: 'error',
+      userError: { error: 'RATE_LIMITED' },
+    })
     submitCredentials('medlem@example.com', 'forkert')
 
     const message = await screen.findByText(
       'Der er forsøgt for mange gange på kort tid. Prøv igen om lidt.',
     )
     expect(message).toBeTruthy()
-  })
-
-  it('falder tilbage til preview-member når password returnerer signingIn: false på preview', async () => {
-    mocks.isPreviewDeployment = true
-    mocks.signIn
-      .mockResolvedValueOnce({ signingIn: false })
-      .mockResolvedValueOnce({ signingIn: true })
-    submitCredentials('ubekraeftet@naturklubben.dk', 'prod-adgangskode')
-
-    await vi.waitFor(() => {
-      expect(mocks.signIn).toHaveBeenCalledTimes(2)
-    })
-    expect(mocks.signIn).toHaveBeenNthCalledWith(2, 'preview-member', {
-      email: 'ubekraeftet@naturklubben.dk',
-      password: 'prod-adgangskode',
-    })
-    expect(mocks.rehashIfImported).not.toHaveBeenCalled()
-    expect(
-      screen.queryByText('Bekræft venligst din e-mail, før du logger ind.'),
-    ).toBeNull()
-  })
-
-  it('viser bekræftelsesbesked uden preview-member når password returnerer signingIn: false uden for preview', async () => {
-    mocks.isPreviewDeployment = false
-    mocks.signIn.mockResolvedValueOnce({ signingIn: false })
-    submitCredentials('ubekraeftet@naturklubben.dk', 'prod-adgangskode')
-
-    const message = await screen.findByText(
-      'Bekræft venligst din e-mail, før du logger ind.',
-    )
-    expect(message).toBeTruthy()
-    expect(mocks.signIn).toHaveBeenCalledTimes(1)
   })
 })

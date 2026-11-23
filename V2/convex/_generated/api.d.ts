@@ -15,7 +15,9 @@ import type * as assistantMentionMail from "../assistantMentionMail.js";
 import type * as audio from "../audio.js";
 import type * as auth from "../auth.js";
 import type * as authEmail from "../authEmail.js";
+import type * as authEmailSender from "../authEmailSender.js";
 import type * as authMailGate from "../authMailGate.js";
+import type * as authUsers from "../authUsers.js";
 import type * as authz from "../authz.js";
 import type * as badges from "../badges.js";
 import type * as bracket from "../bracket.js";
@@ -68,7 +70,9 @@ declare const fullApi: ApiFromModules<{
   audio: typeof audio;
   auth: typeof auth;
   authEmail: typeof authEmail;
+  authEmailSender: typeof authEmailSender;
   authMailGate: typeof authMailGate;
+  authUsers: typeof authUsers;
   authz: typeof authz;
   badges: typeof badges;
   bracket: typeof bracket;
@@ -134,4 +138,9 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  auth: import("@convex-dev/auth/_generated/component.js").ComponentApi<"auth">;
+  authEmail: import("@convex-dev/auth/components/email/_generated/component.js").ComponentApi<"authEmail">;
+  authPassword: import("@convex-dev/auth/components/password/_generated/component.js").ComponentApi<"authPassword">;
+  resend: import("@convex-dev/resend/_generated/component.js").ComponentApi<"resend">;
+};

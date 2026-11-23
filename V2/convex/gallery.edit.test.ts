@@ -1,14 +1,11 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
-import { convexTest } from 'convex-test'
+import { createTestConvex, withAuthUser } from '../test/convexTestAuth'
 import { api, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
-import schema from './schema'
-
-const modules = import.meta.glob('./**/*.ts')
 
 function setup() {
-  return convexTest(schema, modules)
+  return createTestConvex()
 }
 
 type Test = ReturnType<typeof setup>
@@ -83,16 +80,16 @@ async function createReadyPhoto(
 ) {
   const storageId = await storeImage(t, `img-${opts.tag}`)
   const thumbnailStorageId = await storeImage(t, `thumb-${opts.tag}`)
-  const photoId = await t
-    .withIdentity({ subject: userId })
-    .mutation(api.gallery.createPhoto, {
-      storageId,
-      thumbnailStorageId,
-      caption: opts.caption,
-      eventId: opts.eventId,
-      width: 800,
-      height: 600,
-    })
+  const photoId = await (
+    await withAuthUser(t, userId)
+  ).mutation(api.gallery.createPhoto, {
+    storageId,
+    thumbnailStorageId,
+    caption: opts.caption,
+    eventId: opts.eventId,
+    width: 800,
+    height: 600,
+  })
 
   if (opts.createdAt !== undefined) {
     const createdAt = opts.createdAt
@@ -129,7 +126,7 @@ async function createReadyPhoto(
 
 describe('updatePhoto og canEdit (#345)', () => {
   it('giver canEdit=true til uploader og admin, men false til andre medlemmer', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const uploader = await seedUser(t, {
       email: 'uploader@example.com',
       fullName: 'Uploader',
@@ -149,21 +146,21 @@ describe('updatePhoto og canEdit (#345)', () => {
       tag: 'roles',
     })
 
-    const asUploader = await t
-      .withIdentity({ subject: uploader.userId })
-      .query(api.gallery.getPhoto, { photoId })
-    const asAdmin = await t
-      .withIdentity({ subject: admin.userId })
-      .query(api.gallery.getPhoto, { photoId })
-    const asOther = await t
-      .withIdentity({ subject: other.userId })
-      .query(api.gallery.getPhoto, { photoId })
-    const listAsOther = await t
-      .withIdentity({ subject: other.userId })
-      .query(api.gallery.listPhotos, {
-        albumKey: 'without-event',
-        paginationOpts: { numItems: 10, cursor: null },
-      })
+    const asUploader = await (
+      await withAuthUser(t, uploader.userId)
+    ).query(api.gallery.getPhoto, { photoId })
+    const asAdmin = await (
+      await withAuthUser(t, admin.userId)
+    ).query(api.gallery.getPhoto, { photoId })
+    const asOther = await (
+      await withAuthUser(t, other.userId)
+    ).query(api.gallery.getPhoto, { photoId })
+    const listAsOther = await (
+      await withAuthUser(t, other.userId)
+    ).query(api.gallery.listPhotos, {
+      albumKey: 'without-event',
+      paginationOpts: { numItems: 10, cursor: null },
+    })
 
     expect(asUploader?.canEdit).toBe(true)
     expect(asAdmin?.canEdit).toBe(true)
@@ -172,7 +169,7 @@ describe('updatePhoto og canEdit (#345)', () => {
   })
 
   it('lader uploaderen rette billedtekst og knytte billedet fra "Uden begivenhed" til en begivenhed og tilbage igen', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const uploader = await seedUser(t, {
       email: 'uploader@example.com',
       fullName: 'Uploader',
@@ -186,7 +183,7 @@ describe('updatePhoto og canEdit (#345)', () => {
       tag: 'move-one',
     })
 
-    const asUploader = t.withIdentity({ subject: uploader.userId })
+    const asUploader = await withAuthUser(t, uploader.userId)
     const updated = await asUploader.mutation(api.gallery.updatePhoto, {
       photoId,
       caption: 'Karl Johan under bøgen',
@@ -235,7 +232,7 @@ describe('updatePhoto og canEdit (#345)', () => {
   })
 
   it('håndhæver adgang pr. rolle: uploader og admin må, andet medlem afvises med NOT_PHOTO_OWNER', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const uploader = await seedUser(t, {
       email: 'uploader@example.com',
       fullName: 'Uploader',
@@ -280,45 +277,44 @@ describe('updatePhoto og canEdit (#345)', () => {
 
     // Konto med sletningsreservation må ikke skrive.
     await expect(
-      t
-        .withIdentity({ subject: deletingMember.userId })
-        .mutation(api.gallery.updatePhoto, {
+      (await withAuthUser(t, deletingMember.userId)).mutation(
+        api.gallery.updatePhoto,
+        {
           photoId: deletingPhotoId,
           caption: 'Ny',
-        }),
+        },
+      ),
     ).rejects.toThrow('ACCOUNT_DELETION_RESERVED')
 
     // Et andet almindeligt medlem afvises, og billedet forbliver uændret.
     await expect(
-      t
-        .withIdentity({ subject: other.userId })
-        .mutation(api.gallery.updatePhoto, {
-          photoId,
-          caption: 'Hacked',
-          eventId,
-        }),
+      (await withAuthUser(t, other.userId)).mutation(api.gallery.updatePhoto, {
+        photoId,
+        caption: 'Hacked',
+        eventId,
+      }),
     ).rejects.toThrow('NOT_PHOTO_OWNER')
 
-    const untouched = await t
-      .withIdentity({ subject: uploader.userId })
-      .query(api.gallery.getPhoto, { photoId })
+    const untouched = await (
+      await withAuthUser(t, uploader.userId)
+    ).query(api.gallery.getPhoto, { photoId })
     expect(untouched).toMatchObject({
       caption: 'Oprindelig',
       albumKey: 'without-event',
     })
 
     // Admin kan rette og flytte et andet medlems billede.
-    await t
-      .withIdentity({ subject: admin.userId })
-      .mutation(api.gallery.updatePhoto, {
-        photoId,
-        caption: 'Rettet af admin',
-        eventId,
-      })
+    await (
+      await withAuthUser(t, admin.userId)
+    ).mutation(api.gallery.updatePhoto, {
+      photoId,
+      caption: 'Rettet af admin',
+      eventId,
+    })
 
-    const updatedByAdmin = await t
-      .withIdentity({ subject: uploader.userId })
-      .query(api.gallery.getPhoto, { photoId })
+    const updatedByAdmin = await (
+      await withAuthUser(t, uploader.userId)
+    ).query(api.gallery.getPhoto, { photoId })
     expect(updatedByAdmin).toMatchObject({
       caption: 'Rettet af admin',
       albumKey: eventId,
@@ -329,7 +325,7 @@ describe('updatePhoto og canEdit (#345)', () => {
 
 describe('movePhotos og albumvedligehold (#345)', () => {
   it('flytter flere billeder samlet, fjerner tomt "Uden begivenhed"-album og bevarer kommentarer og delte links', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const uploader = await seedUser(t, {
       email: 'uploader@example.com',
       fullName: 'Uploader',
@@ -354,18 +350,18 @@ describe('movePhotos og albumvedligehold (#345)', () => {
       tag: 'bulk-2',
     })
 
-    await t
-      .withIdentity({ subject: commenter.userId })
-      .mutation(api.gallery.addComment, {
-        photoId: first.photoId,
-        body: 'Flot lys over vandet!',
-      })
+    await (
+      await withAuthUser(t, commenter.userId)
+    ).mutation(api.gallery.addComment, {
+      photoId: first.photoId,
+      body: 'Flot lys over vandet!',
+    })
 
     const beforeFirst = await t.run(async (ctx) => ctx.db.get(first.photoId))
     const displayToken = beforeFirst?.displayToken
     expect(displayToken).toBeTruthy()
 
-    const asUploader = t.withIdentity({ subject: uploader.userId })
+    const asUploader = await withAuthUser(t, uploader.userId)
     const result = await asUploader.mutation(api.gallery.movePhotos, {
       photoIds: [first.photoId, second.photoId],
       eventId,
@@ -416,7 +412,7 @@ describe('movePhotos og albumvedligehold (#345)', () => {
   })
 
   it('opdaterer tællere, cover og seneste dato korrekt på begge albums ved flytning mellem begivenheder og tomme album', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const uploader = await seedUser(t, {
       email: 'uploader@example.com',
       fullName: 'Uploader',
@@ -440,7 +436,7 @@ describe('movePhotos og albumvedligehold (#345)', () => {
       tag: 'middle-b',
     })
 
-    const asUploader = t.withIdentity({ subject: uploader.userId })
+    const asUploader = await withAuthUser(t, uploader.userId)
 
     // Flyt nyeste billede fra A til B: A skal falde tilbage til olderA; B får newerA som cover.
     await asUploader.mutation(api.gallery.updatePhoto, {
@@ -508,7 +504,7 @@ describe('movePhotos og albumvedligehold (#345)', () => {
   })
 
   it('overskriver ikke coveret på et V1-migreret album uden coverCreatedAt med et ældre billede', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const uploader = await seedUser(t, {
       email: 'uploader@example.com',
       fullName: 'Uploader',
@@ -549,12 +545,12 @@ describe('movePhotos og albumvedligehold (#345)', () => {
       tag: 'older-moved',
     })
 
-    await t
-      .withIdentity({ subject: uploader.userId })
-      .mutation(api.gallery.updatePhoto, {
-        photoId: older.photoId,
-        eventId: legacyKey,
-      })
+    await (
+      await withAuthUser(t, uploader.userId)
+    ).mutation(api.gallery.updatePhoto, {
+      photoId: older.photoId,
+      eventId: legacyKey,
+    })
 
     const album = await t.run(async (ctx) =>
       ctx.db
@@ -571,7 +567,7 @@ describe('movePhotos og albumvedligehold (#345)', () => {
   })
 
   it('håndhæver roller, atomicitet, validering og idempotens i movePhotos og updatePhoto', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const alice = await seedUser(t, {
       email: 'alice@example.com',
       fullName: 'Alice',
@@ -596,12 +592,10 @@ describe('movePhotos og albumvedligehold (#345)', () => {
 
     // Alice må ikke masseflytte Bobs billede -- og hvis hendes eget er med i samme kald, flyttes intet.
     await expect(
-      t
-        .withIdentity({ subject: alice.userId })
-        .mutation(api.gallery.movePhotos, {
-          photoIds: [alicePhoto.photoId, bobPhoto.photoId],
-          eventId,
-        }),
+      (await withAuthUser(t, alice.userId)).mutation(api.gallery.movePhotos, {
+        photoIds: [alicePhoto.photoId, bobPhoto.photoId],
+        eventId,
+      }),
     ).rejects.toThrow('NOT_PHOTO_OWNER')
 
     const afterRejected = await t.run(async (ctx) => ({
@@ -613,38 +607,34 @@ describe('movePhotos og albumvedligehold (#345)', () => {
 
     // Validerer længde og ukendt begivenhed.
     await expect(
-      t
-        .withIdentity({ subject: alice.userId })
-        .mutation(api.gallery.updatePhoto, {
-          photoId: alicePhoto.photoId,
-          caption: 'x'.repeat(501),
-        }),
+      (await withAuthUser(t, alice.userId)).mutation(api.gallery.updatePhoto, {
+        photoId: alicePhoto.photoId,
+        caption: 'x'.repeat(501),
+      }),
     ).rejects.toThrow('PHOTO_CAPTION_TOO_LONG')
     await expect(
-      t
-        .withIdentity({ subject: alice.userId })
-        .mutation(api.gallery.movePhotos, {
-          photoIds: [alicePhoto.photoId],
-          eventId: 'ukendt-tur',
-        }),
+      (await withAuthUser(t, alice.userId)).mutation(api.gallery.movePhotos, {
+        photoIds: [alicePhoto.photoId],
+        eventId: 'ukendt-tur',
+      }),
     ).rejects.toThrow('PHOTO_EVENT_NOT_FOUND')
 
     // Admin kan flytte billeder fra flere medlemmer på én gang; dubletter tælles ikke dobbelt.
-    const adminMove = await t
-      .withIdentity({ subject: admin.userId })
-      .mutation(api.gallery.movePhotos, {
-        photoIds: [alicePhoto.photoId, alicePhoto.photoId, bobPhoto.photoId],
-        eventId,
-      })
+    const adminMove = await (
+      await withAuthUser(t, admin.userId)
+    ).mutation(api.gallery.movePhotos, {
+      photoIds: [alicePhoto.photoId, alicePhoto.photoId, bobPhoto.photoId],
+      eventId,
+    })
     expect(adminMove.movedCount).toBe(2)
 
     // Gentaget kald til samme album er idempotent og ændrer ikke tælleren.
-    const repeatMove = await t
-      .withIdentity({ subject: admin.userId })
-      .mutation(api.gallery.movePhotos, {
-        photoIds: [alicePhoto.photoId, bobPhoto.photoId],
-        eventId,
-      })
+    const repeatMove = await (
+      await withAuthUser(t, admin.userId)
+    ).mutation(api.gallery.movePhotos, {
+      photoIds: [alicePhoto.photoId, bobPhoto.photoId],
+      eventId,
+    })
     expect(repeatMove.movedCount).toBe(0)
 
     const album = await t.run(async (ctx) =>
@@ -675,12 +665,10 @@ describe('movePhotos og albumvedligehold (#345)', () => {
       )
     })
     await expect(
-      t
-        .withIdentity({ subject: admin.userId })
-        .mutation(api.gallery.movePhotos, {
-          photoIds: tooManyPhotoIds,
-          eventId,
-        }),
+      (await withAuthUser(t, admin.userId)).mutation(api.gallery.movePhotos, {
+        photoIds: tooManyPhotoIds,
+        eventId,
+      }),
     ).rejects.toThrow('TOO_MANY_PHOTOS')
   })
 
@@ -690,7 +678,7 @@ describe('movePhotos og albumvedligehold (#345)', () => {
       email: 'uploader@example.com',
       fullName: 'Uploader',
     })
-    const asUploader = t.withIdentity({ subject: uploader.userId })
+    const asUploader = await withAuthUser(t, uploader.userId)
 
     const { eventId } = await asUploader.mutation(api.calendar.createEvent, {
       title: 'Tur der slettes',
@@ -755,7 +743,7 @@ describe('movePhotos og albumvedligehold (#345)', () => {
       email: 'uploader@example.com',
       fullName: 'Uploader',
     })
-    const asUploader = t.withIdentity({ subject: uploader.userId })
+    const asUploader = await withAuthUser(t, uploader.userId)
 
     const eventA = await seedEvent(t, { title: 'Fugletur', startAt: 10_000 })
     const eventB = await seedEvent(t, { title: 'Skovtur', startAt: 20_000 })

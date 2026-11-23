@@ -18,6 +18,7 @@
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true
   },
   "include": ["./**/*"],

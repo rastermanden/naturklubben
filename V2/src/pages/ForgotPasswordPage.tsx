@@ -1,8 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuthActions } from '@convex-dev/auth/react'
-import { appUrl } from '../features/auth/authRedirect'
-import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
+import { useMutation } from 'convex/react'
+import { api } from '../../convex/_generated/api'
+import {
+  toFriendlyAuthError,
+  userErrorToAuthError,
+} from '../features/auth/authErrors'
+
+const RECOVERY_SECRET_STORAGE_KEY = '__convexAuthEmailPasswordRecoverySecret'
 
 /**
  * Glemt adgangskode. Mailen indeholder et link til `/ny-adgangskode`.
@@ -10,7 +15,7 @@ import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
  * hvem der er oprettet.
  */
 export default function ForgotPasswordPage() {
-  const { signIn } = useAuthActions()
+  const startRecovery = useMutation(api.auth.startPasswordRecovery)
 
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -23,25 +28,27 @@ export default function ForgotPasswordPage() {
     setSubmitting(true)
 
     try {
-      await signIn('password', {
-        email,
-        flow: 'reset',
-        redirectTo: appUrl('ny-adgangskode'),
-      })
-      setSubmitted(true)
-    } catch (resetError) {
-      const raw = errorCode(resetError)?.toLowerCase() ?? ''
-      // Ukendt adresse kaster, men svaret skal være det samme som når
-      // mailen er sendt.
-      if (
-        raw.includes('invalid') ||
-        raw.includes('could not find') ||
-        raw.includes('credentials')
-      ) {
+      const result = await startRecovery({ email })
+      if (result.success) {
+        if (result.browserSecret) {
+          try {
+            window.localStorage.setItem(
+              RECOVERY_SECRET_STORAGE_KEY,
+              result.browserSecret,
+            )
+          } catch {
+            // Ignorer evt. blokeret localStorage; nulstillingssiden forklarer det.
+          }
+        }
+        setSubmitted(true)
+      } else if (result.userError.error === 'EMAIL_NOT_FOUND') {
+        // Svar ens ved ukendt adresse, så siden ikke lækker medlemsliste.
         setSubmitted(true)
       } else {
-        setError(toFriendlyAuthError(resetError))
+        setError(userErrorToAuthError(result.userError))
       }
+    } catch (resetError) {
+      setError(toFriendlyAuthError(resetError))
     } finally {
       setSubmitting(false)
     }

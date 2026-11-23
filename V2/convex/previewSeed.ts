@@ -1,10 +1,5 @@
-import {
-  createAccount,
-  modifyAccountCredentials,
-  retrieveAccount,
-} from '@convex-dev/auth/server'
 import { v } from 'convex/values'
-import { internal } from './_generated/api'
+import { components, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import type { ActionCtx, MutationCtx, QueryCtx } from './_generated/server'
 import {
@@ -13,6 +8,7 @@ import {
   internalMutation,
   internalQuery,
 } from './_generated/server'
+import { hashPassword, verifyPassword } from './passwordCrypto'
 
 /**
  * Testbruger til PR-preview.
@@ -258,6 +254,34 @@ async function ensureAllowedEmail(
   }
 }
 
+async function findUserIdForPreviewEmail(
+  ctx: Pick<QueryCtx, 'db'>,
+  email: string,
+): Promise<Id<'users'> | null> {
+  const passwordAccount = await ctx.db
+    .query('authAccounts')
+    .withIndex('providerAndAccountId', (q) =>
+      q.eq('provider', 'password').eq('providerAccountId', email),
+    )
+    .unique()
+  if (passwordAccount !== null) return passwordAccount.userId
+
+  const previewAccount = await ctx.db
+    .query('authAccounts')
+    .withIndex('providerAndAccountId', (q) =>
+      q.eq('provider', 'preview-member').eq('providerAccountId', email),
+    )
+    .unique()
+  if (previewAccount !== null) return previewAccount.userId
+
+  const users = await ctx.db
+    .query('users')
+    .withIndex('email', (q) => q.eq('email', email))
+    .collect()
+  const verified = users.find((u) => u.emailVerificationTime !== undefined)
+  return verified?._id ?? users[0]?._id ?? null
+}
+
 /** En bruger, der allerede er oprettet, får den rolle, listen siger, medmindre prod-login styrer den. */
 async function syncExistingAdmin(
   ctx: MutationCtx,
@@ -265,17 +289,12 @@ async function syncExistingAdmin(
   isAdmin: boolean,
 ): Promise<void> {
   if (await hasPreviewMemberAccountForEmail(ctx, email)) return
-  const account = await ctx.db
-    .query('authAccounts')
-    .withIndex('providerAndAccountId', (q) =>
-      q.eq('provider', 'password').eq('providerAccountId', email),
-    )
-    .unique()
-  if (account === null) return
-  if (await hasPreviewMemberAccountForUser(ctx, account.userId)) return
+  const userId = await findUserIdForPreviewEmail(ctx, email)
+  if (userId === null) return
+  if (await hasPreviewMemberAccountForUser(ctx, userId)) return
   const profile = await ctx.db
     .query('profiles')
-    .withIndex('by_user', (q) => q.eq('userId', account.userId))
+    .withIndex('by_user', (q) => q.eq('userId', userId))
     .unique()
   if (profile === null || profile.isAdmin === isAdmin) return
   await ctx.db.patch(profile._id, { isAdmin })
@@ -318,6 +337,103 @@ export async function upsertSharedMemberProfile(
   })
 }
 
+export const seedPasswordUser = internalMutation({
+  args: {
+    email: v.string(),
+    password: v.string(),
+    name: v.optional(v.string()),
+  },
+  returns: v.id('users'),
+  handler: async (ctx, args): Promise<Id<'users'>> => {
+    assertAllowedOnThisDeployment()
+    const email = normalizePreviewEmail(args.email)
+    const now = Date.now()
+    const cleanName = args.name?.trim()
+
+    const existingPasswordAccount = await ctx.db
+      .query('authAccounts')
+      .withIndex('providerAndAccountId', (q) =>
+        q.eq('provider', 'password').eq('providerAccountId', email),
+      )
+      .unique()
+    const existingPreviewAccount = await ctx.db
+      .query('authAccounts')
+      .withIndex('providerAndAccountId', (q) =>
+        q.eq('provider', 'preview-member').eq('providerAccountId', email),
+      )
+      .unique()
+    const existingUserByEmail = await ctx.db
+      .query('users')
+      .withIndex('email', (q) => q.eq('email', email))
+      .first()
+
+    let userId =
+      existingPasswordAccount?.userId ??
+      existingPreviewAccount?.userId ??
+      existingUserByEmail?._id
+    if (userId === undefined || (await ctx.db.get(userId)) === null) {
+      userId = await ctx.db.insert('users', {
+        email,
+        ...(cleanName ? { name: cleanName } : {}),
+        emailVerificationTime: now,
+      })
+    } else {
+      const user = await ctx.db.get(userId)
+      const patch: {
+        email?: string
+        name?: string
+        emailVerificationTime?: number
+      } = {}
+      if (user?.email !== email) patch.email = email
+      if (!user?.name && cleanName) patch.name = cleanName
+      if (user?.emailVerificationTime === undefined) {
+        patch.emailVerificationTime = now
+      }
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(userId, patch)
+      }
+    }
+
+    const secret = await hashPassword(args.password)
+    if (!(await verifyPassword(args.password, secret))) {
+      throw new Error('PREVIEW_SEED_FAILED')
+    }
+
+    if (existingPasswordAccount === null) {
+      await ctx.db.insert('authAccounts', {
+        userId,
+        provider: 'password',
+        providerAccountId: email,
+        secret,
+        emailVerified: email,
+      })
+    } else {
+      await ctx.db.patch(existingPasswordAccount._id, {
+        userId,
+        secret,
+        emailVerified: email,
+      })
+    }
+
+    if (args.password.length >= 8) {
+      await ctx.runMutation(
+        components.authPassword.public._internal_dangerous_setPassword,
+        {
+          userId,
+          password: args.password,
+          minimumLength: 8,
+        },
+      )
+    }
+
+    await ctx.runMutation(components.auth.public.markUserIdCreated, {
+      userId,
+    })
+
+    return userId
+  },
+})
+
 async function provisionSharedAccount(
   ctx: ActionCtx,
   guest: (typeof PREVIEW_GUEST_ALLOWLIST)[number],
@@ -331,47 +447,15 @@ async function provisionSharedAccount(
   if (alreadyProvisionedFromProd) return
   let userId: Id<'users'>
   try {
-    const created = await createAccount(ctx, {
-      provider: 'password',
-      account: { id: email, secret: password },
-      profile: { email, name: guest.name },
-      shouldLinkViaEmail: false,
-      shouldLinkViaPhone: false,
+    userId = await ctx.runMutation(internal.previewSeed.seedPasswordUser, {
+      email,
+      password,
+      name: guest.name,
     })
-    const createdId = created.user?._id
-    if (createdId === undefined) throw new Error('PREVIEW_SEED_FAILED')
-    userId = createdId
   } catch (error) {
-    if (errorText(error) === 'PREVIEW_SEED_FAILED') throw error
-    if (!isExistingAccountError(error)) throw safePreviewSeedError(error)
-    try {
-      await modifyAccountCredentials(ctx, {
-        provider: 'password',
-        account: { id: email, secret: password },
-      })
-    } catch (modifyError) {
-      throw safePreviewSeedError(modifyError)
-    }
-    const found: Id<'users'> | null = await ctx.runQuery(
-      internal.previewSeed.userIdForAccount,
-      { accountId: email },
-    )
-    if (found === null) throw new Error('PREVIEW_SEED_FAILED')
-    userId = found
-  }
-
-  try {
-    const retrieved = await retrieveAccount(ctx, {
-      provider: 'password',
-      account: { id: email, secret: password },
-    })
-    if (retrieved.user._id !== userId) throw new Error('PREVIEW_SEED_FAILED')
-  } catch (error) {
-    if (errorText(error) === 'PREVIEW_SEED_FAILED') throw error
     throw safePreviewSeedError(error)
   }
 
-  await ctx.runMutation(internal.previewSeed.markAccountVerified, { email })
   await ctx.runMutation(internal.previewSeed.ensureSharedProfile, {
     userId,
     fullName: guest.name,
@@ -402,24 +486,11 @@ async function profileIdForAllowlistName(
 ): Promise<Id<'profiles'> | undefined> {
   const guest = PREVIEW_GUEST_ALLOWLIST.find((row) => row.name === name)
   if (guest === undefined) return undefined
-  const passwordAccount = await ctx.db
-    .query('authAccounts')
-    .withIndex('providerAndAccountId', (q) =>
-      q.eq('provider', 'password').eq('providerAccountId', guest.email),
-    )
-    .unique()
-  const account =
-    passwordAccount ??
-    (await ctx.db
-      .query('authAccounts')
-      .withIndex('providerAndAccountId', (q) =>
-        q.eq('provider', 'preview-member').eq('providerAccountId', guest.email),
-      )
-      .unique())
-  if (account === null) return undefined
+  const userId = await findUserIdForPreviewEmail(ctx, guest.email)
+  if (userId === null) return undefined
   const profile = await ctx.db
     .query('profiles')
-    .withIndex('by_user', (q) => q.eq('userId', account.userId))
+    .withIndex('by_user', (q) => q.eq('userId', userId))
     .unique()
   return profile?._id
 }
@@ -700,13 +771,10 @@ export const userIdForAccount = internalQuery({
   returns: v.union(v.id('users'), v.null()),
   handler: async (ctx, args): Promise<Id<'users'> | null> => {
     assertAllowedOnThisDeployment()
-    const account = await ctx.db
-      .query('authAccounts')
-      .withIndex('providerAndAccountId', (q) =>
-        q.eq('provider', 'password').eq('providerAccountId', args.accountId),
-      )
-      .unique()
-    return account?.userId ?? null
+    return await findUserIdForPreviewEmail(
+      ctx,
+      normalizePreviewEmail(args.accountId),
+    )
   },
 })
 
@@ -763,6 +831,18 @@ export async function removePasswordSignup(
     .unique()
   const userId = account?.userId ?? byEmail?._id
   if (userId === undefined) return false
+
+  const v2Sessions = await ctx.runQuery(components.auth.public.listSessions, {
+    userId,
+  })
+  if (v2Sessions.length > 0) {
+    await ctx.runMutation(components.auth.public.revokeSessions, {
+      sessionIds: v2Sessions.map((s) => s.sessionId),
+    })
+  }
+  await ctx.runMutation(components.authEmail.verifiedEmails.deleteUser, {
+    userId,
+  })
 
   const sessions = await ctx.db
     .query('authSessions')
@@ -851,27 +931,12 @@ export const guestAllowlistReady = internalQuery({
         .unique()
       if (allowed !== null) listed += 1
       if (allowed?.isAdmin === true) allowlistAdmins += 1
-      const passwordAccount = await ctx.db
-        .query('authAccounts')
-        .withIndex('providerAndAccountId', (q) =>
-          q.eq('provider', 'password').eq('providerAccountId', guest.email),
-        )
-        .unique()
-      const account =
-        passwordAccount ??
-        (await ctx.db
-          .query('authAccounts')
-          .withIndex('providerAndAccountId', (q) =>
-            q
-              .eq('provider', 'preview-member')
-              .eq('providerAccountId', guest.email),
-          )
-          .unique())
-      if (account !== null) accounts += 1
-      if (guest.email === PREVIEW_MARTIN_EMAIL && account !== null) {
+      const userId = await findUserIdForPreviewEmail(ctx, guest.email)
+      if (userId !== null) accounts += 1
+      if (guest.email === PREVIEW_MARTIN_EMAIL && userId !== null) {
         const profile = await ctx.db
           .query('profiles')
-          .withIndex('by_user', (q) => q.eq('userId', account.userId))
+          .withIndex('by_user', (q) => q.eq('userId', userId))
           .unique()
         martinHasProfile = profile !== null
         martinAdmin = profile?.isAdmin === true
@@ -929,41 +994,12 @@ export const ensure = internalAction({
 
     let userId: Id<'users'>
     try {
-      const created = await createAccount(ctx, {
-        provider: 'password',
-        account: { id: email, secret: password },
-        profile: { email, name: PREVIEW_MEMBER_NAME },
-        shouldLinkViaEmail: false,
-        shouldLinkViaPhone: false,
+      userId = await ctx.runMutation(internal.previewSeed.seedPasswordUser, {
+        email,
+        password,
+        name: PREVIEW_MEMBER_NAME,
       })
-      userId = created.user._id
     } catch (error) {
-      // "already exists" rummer adressen. Den må ikke videre ud i loggen.
-      if (!isExistingAccountError(error)) throw safePreviewSeedError(error)
-      try {
-        await modifyAccountCredentials(ctx, {
-          provider: 'password',
-          account: { id: email, secret: password },
-        })
-      } catch (modifyError) {
-        throw safePreviewSeedError(modifyError)
-      }
-      const found: Id<'users'> | null = await ctx.runQuery(
-        internal.previewSeed.userIdForAccount,
-        { accountId: email },
-      )
-      if (found === null) throw new Error('PREVIEW_SEED_FAILED')
-      userId = found
-    }
-
-    try {
-      const retrieved = await retrieveAccount(ctx, {
-        provider: 'password',
-        account: { id: email, secret: password },
-      })
-      if (retrieved.user._id !== userId) throw new Error('PREVIEW_SEED_FAILED')
-    } catch (error) {
-      if (errorText(error) === 'PREVIEW_SEED_FAILED') throw error
       throw safePreviewSeedError(error)
     }
 

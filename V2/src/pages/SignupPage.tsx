@@ -1,28 +1,29 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuthActions } from '@convex-dev/auth/react'
 import { useMutation } from 'convex/react'
 import { api } from '../../convex/_generated/api'
-import { appUrl } from '../features/auth/authRedirect'
-import { errorCode, toFriendlyAuthError } from '../features/auth/authErrors'
+import {
+  toFriendlyAuthError,
+  userErrorToAuthError,
+} from '../features/auth/authErrors'
 import { useErrorFocus } from '../hooks/useErrorFocus'
 
+const SIGNUP_SECRET_STORAGE_KEY = '__convexAuthEmailPasswordSignUpSecret'
+
 /**
- * Opret bruger. Med bekræftelse slået til sender Convex Auth en mail med
- * link til `/velkommen`, og der er ingen session, før linket er åbnet.
- * Velkomstsiden opretter medlemskabet, når sessionen er der.
+ * Opret bruger via `@convex-dev/auth` 2.x.
+ *
+ * Sender en bekræftelsesmail med link til `/velkommen`. Hemmeligheden gemmes
+ * i browserens lager, så brugeren logges ind, når linket åbnes i samme browser.
  */
 export default function SignupPage() {
-  const { signIn, signOut } = useAuthActions()
-  const claimProfile = useMutation(api.members.claimProfile)
+  const runSignUp = useMutation(api.auth.signUpWithEmailPassword)
 
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [outcome, setOutcome] = useState<'confirm-email' | 'signed-in' | null>(
-    null,
-  )
+  const [outcome, setOutcome] = useState<'confirm-email' | null>(null)
   const [errorField, setErrorField] = useState<'email' | 'password' | null>(
     null,
   )
@@ -38,70 +39,33 @@ export default function SignupPage() {
     setErrorField(null)
     setSubmitting(true)
 
-    let signingIn = false
     try {
-      const result = await signIn('password', {
-        email,
-        password,
-        flow: 'signUp',
-        name: fullName,
-        redirectTo: appUrl('velkommen'),
-      })
-      signingIn = result.signingIn
-    } catch (signUpError) {
-      const raw = errorCode(signUpError)?.toLowerCase() ?? ''
-      const field =
-        raw.includes('at least 6') || raw.includes('password')
-          ? 'password'
-          : 'email'
-      setError(toFriendlyAuthError(signUpError))
-      setErrorField(field)
-      if (field === 'email') focusEmailError()
-      if (field === 'password') focusPasswordError()
-      setSubmitting(false)
-      return
-    }
-
-    if (!signingIn) {
+      const result = await runSignUp({ email, password, fullName })
+      if (!result.success) {
+        const raw = result.userError.error.toLowerCase()
+        const field = raw.includes('password') ? 'password' : 'email'
+        setError(userErrorToAuthError(result.userError))
+        setErrorField(field)
+        if (field === 'email') focusEmailError()
+        if (field === 'password') focusPasswordError()
+        return
+      }
+      try {
+        window.localStorage.setItem(
+          SIGNUP_SECRET_STORAGE_KEY,
+          result.browserSecret,
+        )
+      } catch {
+        // Ignorer evt. blokeret localStorage; landingssiden forklarer det.
+      }
       setOutcome('confirm-email')
-      setSubmitting(false)
-      return
-    }
-
-    try {
-      await claimProfile({})
-      setOutcome('signed-in')
-    } catch (claimError) {
-      await signOut()
-      setError(
-        `${toFriendlyAuthError(claimError)} Er du blevet inviteret senere, kan du logge ind med den adgangskode, du valgte her.`,
-      )
+    } catch (signUpError) {
+      setError(toFriendlyAuthError(signUpError))
       setErrorField('email')
       focusEmailError()
     } finally {
       setSubmitting(false)
     }
-  }
-
-  if (outcome === 'signed-in') {
-    return (
-      <main className="mx-auto flex min-h-svh max-w-sm flex-col justify-center gap-4 p-6 text-center">
-        <h1 className="text-2xl font-semibold text-ink-body">Du er oprettet</h1>
-        <p className="text-ink-muted">
-          Din bruger er klar, og du er logget ind med det samme -- der er ingen
-          mail at bekræfte.
-        </p>
-        <Link
-          to="/kalender"
-          className="inline-flex min-h-11 items-center justify-center rounded bg-accent px-4 py-2 text-white"
-        >
-          Se kalenderen
-        </Link>
-        <Link to="/" className="text-sm text-ink-muted underline">
-          Gå til forsiden
-        </Link>
-      </main>
-    )
   }
 
   if (outcome === 'confirm-email') {
@@ -168,7 +132,7 @@ export default function SignupPage() {
             ref={passwordRef}
             type="password"
             required
-            minLength={6}
+            minLength={10}
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}

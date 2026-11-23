@@ -1,15 +1,13 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
-import { convexTest } from 'convex-test'
+import { createTestConvex } from '../test/convexTestAuth'
 import { internal } from './_generated/api'
-import schema from './schema'
 
-const modules = import.meta.glob('./**/*.ts')
 const BCRYPT = '$2a$06$If6bvum7DFjUnE9p2uDeDu0YHzrHM6tf.iqN8.yx.jNN1ILEf7h0i'
 
 describe('importBundle', () => {
   it('nægter uden bekræftelse og nægter test-indbakken', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     await expect(
       t.mutation(internal.migrateV1.importBundle, {
         confirm: 'nej',
@@ -33,7 +31,7 @@ describe('importBundle', () => {
   })
 
   it('kan køres to gange uden at fordoble aktiviteten', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const bundle = {
       activities: [
         {

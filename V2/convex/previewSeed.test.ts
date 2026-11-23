@@ -1,8 +1,7 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
-import { convexTest } from 'convex-test'
 import { internal } from './_generated/api'
-import schema from './schema'
+import { createTestConvex } from '../test/convexTestAuth'
 import {
   CLUB_ACTIVITIES,
   PREVIEW_CHAT_TEXT,
@@ -27,8 +26,6 @@ import {
   upsertSharedMemberProfile,
   writePreviewSample,
 } from './previewSeed'
-
-const modules = import.meta.glob('./**/*.ts')
 
 describe('assertPreviewSeedAllowed', () => {
   it('nægter, når preview-flaget ikke er sat', () => {
@@ -127,7 +124,7 @@ describe('preview-legitimationsoplysninger', () => {
 
 describe('upsertSharedMemberProfile', () => {
   it('opretter profilen én gang og beholder et navn, der allerede er sat', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const userId = await t.run(async (ctx) => {
       return await ctx.db.insert('users', { email: PREVIEW_MARTIN_EMAIL })
     })
@@ -160,7 +157,7 @@ describe('upsertSharedMemberProfile', () => {
   })
 
   it('udfylder et tomt navn og sætter rollen fra listen', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     await t.run(async (ctx) => {
       for (const guest of PREVIEW_GUEST_ALLOWLIST) {
         const userId = await ctx.db.insert('users', { email: guest.email })
@@ -194,7 +191,7 @@ describe('upsertSharedMemberProfile', () => {
 
 describe('writePreviewSample', () => {
   it('opretter medlemskab, aktiviteter og en offentlig tur én gang', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const userId = await t.run(async (ctx) => {
       return await ctx.db.insert('users', {
         email: 'preview@example.com',
@@ -337,7 +334,7 @@ describe('writePreviewSample', () => {
   })
 
   it('retter rækkefølge og fjerner de gamle prøveaktiviteter', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const userId = await t.run(async (ctx) => {
       const id = await ctx.db.insert('users', { email: 'preview@example.com' })
       await ctx.db.insert('authAccounts', {
@@ -406,7 +403,7 @@ describe('writePreviewSample', () => {
   })
 
   it('gør en oprettet V1-admin til admin og lader test-adressen være medlem', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const previewId = await t.run(async (ctx) => {
       const id = await ctx.db.insert('users', { email: 'preview@example.com' })
       await ctx.db.insert('authAccounts', {
@@ -489,7 +486,7 @@ describe('writePreviewSample', () => {
   })
 
   it('fjerner agentmail-brugeren og lader adressen blive på listen', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     await t.run(async (ctx) => {
       const userId = await ctx.db.insert('users', {
         email: PREVIEW_AGENTMAIL_ADDRESS,
@@ -549,7 +546,7 @@ describe('writePreviewSample', () => {
   })
 
   it('rykker en forbi preview-tur frem i stedet for at lave en ny', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const userId = await t.run(async (ctx) => {
       const id = await ctx.db.insert('users', { email: 'preview@example.com' })
       await ctx.db.insert('authAccounts', {
@@ -587,7 +584,7 @@ describe('writePreviewSample', () => {
   })
 
   it('sætter Troels som madansvarlig, når hans konto findes', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const troels = PREVIEW_GUEST_ALLOWLIST.find(
       (guest) => guest.name === 'Troels',
     )
@@ -650,7 +647,7 @@ describe('writePreviewSample', () => {
     env.PREVIEW_SEED = '1'
     env.CONVEX_CLOUD_URL = 'https://savory-possum-345.convex.cloud'
     try {
-      const t = convexTest(schema, modules)
+      const t = createTestConvex()
       const martin = PREVIEW_GUEST_ALLOWLIST.find(
         (guest) => guest.email === PREVIEW_MARTIN_EMAIL,
       )

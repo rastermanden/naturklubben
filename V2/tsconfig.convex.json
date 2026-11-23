@@ -4,5 +4,7 @@
   "extends": "./convex/tsconfig.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.convex.tsbuildinfo"
-  }
+  },
+  "include": ["./convex/**/*", "./test/**/*"],
+  "exclude": ["./convex/_generated"]
 }

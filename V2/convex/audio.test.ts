@@ -1,16 +1,13 @@
 // @vitest-environment edge-runtime
 /// <reference types="vite/client" />
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { convexTest } from 'convex-test'
+import { createTestConvex, withAuthUser } from '../test/convexTestAuth'
 import { api, internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
-import schema from './schema'
 import { MAX_AUDIO_BYTES, parseByteRange } from './audio'
 
-const modules = import.meta.glob('./**/*.ts')
-
 function setup() {
-  return convexTest(schema, modules)
+  return createTestConvex()
 }
 
 type Test = ReturnType<typeof setup>
@@ -137,9 +134,9 @@ describe('audio autorisation og roller', () => {
       ctx.db.insert('users', { email: 'gaest@example.com' }),
     )
     const storageId = await storeFile(t, 'ID3mp3data', 'audio/mpeg')
-    const created = await t
-      .withIdentity({ subject: member.userId })
-      .mutation(api.audio.createClip, { storageId, title: 'Fuglesang' })
+    const created = await (
+      await withAuthUser(t, member.userId)
+    ).mutation(api.audio.createClip, { storageId, title: 'Fuglesang' })
     expect(created.ok).toBe(true)
     if (!created.ok) throw new Error('expected clip')
 
@@ -156,7 +153,7 @@ describe('audio autorisation og roller', () => {
     ).rejects.toThrow('NOT_A_MEMBER')
 
     // Indlogget bruger uden profil er ikke medlem og afvises også.
-    const asNonMember = t.withIdentity({ subject: nonMemberUserId })
+    const asNonMember = await withAuthUser(t, nonMemberUserId)
     await expect(asNonMember.query(api.audio.list, {})).rejects.toThrow(
       'NOT_A_MEMBER',
     )
@@ -173,7 +170,7 @@ describe('audio autorisation og roller', () => {
       deletionReservedAt: Date.now(),
     })
     const storageId = await storeFile(t, 'ID3mp3', 'audio/mpeg')
-    const asDeleting = t.withIdentity({ subject: member.userId })
+    const asDeleting = await withAuthUser(t, member.userId)
 
     await expect(
       asDeleting.mutation(api.audio.generateUploadUrl, {}),
@@ -194,7 +191,7 @@ describe('audio upload-validering på serveren', () => {
       email: 'lyd@example.com',
       fullName: 'Lyd Medlem',
     })
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
 
     const mpegId = await storeFile(t, 'mpeg-bytes', 'audio/mpeg')
     const mp3Id = await storeFile(t, 'mp3-bytes', 'audio/mp3')
@@ -232,7 +229,7 @@ describe('audio upload-validering på serveren', () => {
       email: 'stor@example.com',
       fullName: 'Stor Fil',
     })
-    const asMember = t.withIdentity({ subject: member.userId })
+    const asMember = await withAuthUser(t, member.userId)
 
     const tooLargeId = await storeFile(
       t,
@@ -276,8 +273,8 @@ describe('audio upload-validering på serveren', () => {
       email: 'anden@example.com',
       fullName: 'Anden',
     })
-    const asOwner = t.withIdentity({ subject: owner.userId })
-    const asOther = t.withIdentity({ subject: other.userId })
+    const asOwner = await withAuthUser(t, owner.userId)
+    const asOther = await withAuthUser(t, other.userId)
 
     const blankTitleStorage = await storeFile(t, 'mp3', 'audio/mpeg')
     expect(
@@ -340,7 +337,7 @@ describe('audio liste, token-afspilning og sletning', () => {
       isAdmin: true,
     })
 
-    const asUploader = t.withIdentity({ subject: uploader.userId })
+    const asUploader = await withAuthUser(t, uploader.userId)
     const s1 = await storeFile(t, '0123456789', 'audio/mp3')
     const c1 = await asUploader.mutation(api.audio.createClip, {
       storageId: s1,
@@ -363,12 +360,12 @@ describe('audio liste, token-afspilning og sletning', () => {
     })
 
     const listAsUploader = await asUploader.query(api.audio.list, {})
-    const listAsOther = await t
-      .withIdentity({ subject: other.userId })
-      .query(api.audio.list, {})
-    const listAsAdmin = await t
-      .withIdentity({ subject: admin.userId })
-      .query(api.audio.list, {})
+    const listAsOther = await (
+      await withAuthUser(t, other.userId)
+    ).query(api.audio.list, {})
+    const listAsAdmin = await (
+      await withAuthUser(t, admin.userId)
+    ).query(api.audio.list, {})
 
     expect(listAsUploader.map((c) => c.title)).toEqual(['Nyest', 'Ældst'])
     expect(listAsUploader[0]).toMatchObject({
@@ -440,7 +437,7 @@ describe('audio liste, token-afspilning og sletning', () => {
       isAdmin: true,
     })
 
-    const asOwner = t.withIdentity({ subject: owner.userId })
+    const asOwner = await withAuthUser(t, owner.userId)
     const s1 = await storeFile(t, 'klip-1', 'audio/mpeg')
     const s2 = await storeFile(t, 'klip-2', 'audio/mpeg')
     const c1 = await asOwner.mutation(api.audio.createClip, {
@@ -460,9 +457,9 @@ describe('audio liste, token-afspilning og sletning', () => {
 
     // Et andet almindeligt medlem må ikke slette.
     await expect(
-      t
-        .withIdentity({ subject: other.userId })
-        .mutation(api.audio.deleteClip, { clipId: c1.id }),
+      (await withAuthUser(t, other.userId)).mutation(api.audio.deleteClip, {
+        clipId: c1.id,
+      }),
     ).rejects.toThrow('AUDIO_DELETE_NOT_AUTHORIZED')
     expect(await t.run((ctx) => ctx.storage.getUrl(s1))).not.toBeNull()
 
@@ -473,9 +470,9 @@ describe('audio liste, token-afspilning og sletning', () => {
     expect((await t.fetch(clip1Endpoint)).status).toBe(404)
 
     // En admin kan slette en andens klip: række og storage forsvinder.
-    await t
-      .withIdentity({ subject: admin.userId })
-      .mutation(api.audio.deleteClip, { clipId: c2.id })
+    await (
+      await withAuthUser(t, admin.userId)
+    ).mutation(api.audio.deleteClip, { clipId: c2.id })
     expect(await t.run((ctx) => ctx.db.get(c2.id))).toBeNull()
     expect(await t.run((ctx) => ctx.storage.getUrl(s2))).toBeNull()
   })
@@ -495,18 +492,18 @@ describe('audio liste, token-afspilning og sletning', () => {
     const leavingStorage = await storeFile(t, 'farvel-lyd', 'audio/mpeg')
     const stayingStorage = await storeFile(t, 'bliver-lyd', 'audio/mpeg')
 
-    const leavingClip = await t
-      .withIdentity({ subject: leaving.userId })
-      .mutation(api.audio.createClip, {
-        storageId: leavingStorage,
-        title: 'Farvel',
-      })
-    const stayingClip = await t
-      .withIdentity({ subject: staying.userId })
-      .mutation(api.audio.createClip, {
-        storageId: stayingStorage,
-        title: 'Bliver',
-      })
+    const leavingClip = await (
+      await withAuthUser(t, leaving.userId)
+    ).mutation(api.audio.createClip, {
+      storageId: leavingStorage,
+      title: 'Farvel',
+    })
+    const stayingClip = await (
+      await withAuthUser(t, staying.userId)
+    ).mutation(api.audio.createClip, {
+      storageId: stayingStorage,
+      title: 'Bliver',
+    })
     if (!leavingClip.ok || !stayingClip.ok) throw new Error('expected clips')
 
     await t.run((ctx) =>

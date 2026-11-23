@@ -1,16 +1,13 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
 import { ConvexError } from 'convex/values'
-import { convexTest } from 'convex-test'
 import { internal } from './_generated/api'
-import schema from './schema'
 import { ALLOW_ASSISTANT_CONFIRM } from './members'
-
-const modules = import.meta.glob('./**/*.ts')
+import { createTestConvex } from '../test/convexTestAuth'
 
 describe('assistentens adgang', () => {
   it('sætter admin-flaget uden at oprette en bruger', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const result = await t.mutation(internal.members.allowAssistantAdmin, {
       confirm: ALLOW_ASSISTANT_CONFIRM,
     })
@@ -35,7 +32,7 @@ describe('assistentens adgang', () => {
   })
 
   it('fjerner en auth-konto uden profil, så oprettelse kan prøves igen', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     await t.run(async (ctx) => {
       const userId = await ctx.db.insert('users', {
         email: 'naturklubben-test@agentmail.to',
@@ -64,7 +61,7 @@ describe('assistentens adgang', () => {
   })
 
   it('gør en eksisterende profil til admin uden at slette den', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const profileId = await t.run(async (ctx) => {
       const userId = await ctx.db.insert('users', {
         email: 'naturklubben-test@agentmail.to',
@@ -97,7 +94,7 @@ describe('assistentens adgang', () => {
   })
 
   it('nægter uden bekræftelse', async () => {
-    const t = convexTest(schema, modules)
+    const t = createTestConvex()
     const failure = await t
       .mutation(internal.members.allowAssistantAdmin, { confirm: 'nej' })
       .then(

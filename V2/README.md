@@ -147,17 +147,21 @@ røres rollen ikke.
 ingenting. Funktionen er intern, så appen kan ikke kalde den. Den er ikke
 kørt mod produktion.
 
-Nye adgangskoder (oprettelse, nulstilling, omhashning) er Scrypt. Mindste
-længde er 6 tegn, som i den nuværende app.
+Nye adgangskoder (oprettelse, nulstilling, adgangskodeskift) hashes med
+Argon2id via `@convex-dev/auth` 2.x (`authPassword`) og kræver mindst 10 tegn.
+Eksisterende medlemmer med ældre v1 Lucia-Scrypt- eller importerede
+Supabase-bcrypt-hashes kan stadig logge ind, også med kortere eksisterende
+koder ned til 6 tegn (bcrypt skrives om til Argon2id ved første login).
 
 ### Mails
 
-Bekræftelse ved oprettelse og glemt adgangskode sendes gennem Resends REST
-API (`fetch` i `convex/authEmail.ts`, ingen `resend`-pakke). Afsenderen er
-`Naturklubben <noreply@naturklubben.dk>`, medmindre `AUTH_EMAIL_FROM` er sat.
-Linket i bekræftelsen lander på `/velkommen`, linket ved glemt adgangskode
-på `/ny-adgangskode`. Siderne og teksterne er de samme som i den nuværende
-app.
+Bekræftelse ved oprettelse og glemt adgangskode sendes via `@convex-dev/auth`
+og `@convex-dev/resend` (`convex/authEmailSender.ts`, med danske tekster fra
+`convex/authEmail.ts`). Afsenderen er `Naturklubben <noreply@naturklubben.dk>`,
+medmindre `AUTH_EMAIL_FROM` er sat. Linket i bekræftelsen lander på
+`/velkommen`, linket ved glemt adgangskode på `/ny-adgangskode` (på PR-previews
+under `APP_BASE_PATH`, fx `/pr-preview/pr-<nr>`). Siderne og teksterne er de
+samme som i den nuværende app.
 
 `RESEND_API_KEY` ligger i repoets Actions-secrets og sættes via stdin, både
 på produktion (`deploy.yml` og `deploy-v2.yml`) og på hvert preview-deploy
