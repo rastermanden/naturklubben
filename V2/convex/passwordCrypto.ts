@@ -64,7 +64,7 @@ export async function luciaScryptToPhc(hash: string): Promise<string | null> {
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  return await hashArgon2id(password)
+  return await hashArgon2id(password.normalize('NFC'))
 }
 
 export async function verifyPassword(
@@ -74,14 +74,14 @@ export async function verifyPassword(
   if (isBcryptHash(hash)) return verifyBcrypt(password, hash)
   try {
     if (hash.startsWith('$argon2id$')) {
-      return await verifyArgon2id(password, hash)
+      return await verifyArgon2id(password.normalize('NFC'), hash)
     }
     if (hash.startsWith('$scrypt$')) {
-      return await verifyScryptPhc(password, hash)
+      return await verifyScryptPhc(password.normalize('NFKC'), hash)
     }
     const phc = await luciaScryptToPhc(hash)
     if (!phc) return false
-    return await verifyScryptPhc(password, phc)
+    return await verifyScryptPhc(password.normalize('NFKC'), phc)
   } catch {
     return false
   }

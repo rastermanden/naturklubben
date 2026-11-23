@@ -8,6 +8,7 @@ export type AuthUserError = {
   minimumLength?: number
   maximumLength?: number
   retryAfterMs?: number
+  cause?: unknown
 }
 
 /** Fejlkoden fra en `ConvexError`, eller fejlens besked, hvis der ikke er en. */
@@ -61,6 +62,9 @@ const KNOWN_CODES: Record<string, string> = {
 }
 
 export function userErrorToAuthError(userError: AuthUserError): string {
+  if (userError.error === 'OTHER_ERROR' && 'cause' in userError) {
+    return toFriendlyAuthError(userError.cause)
+  }
   if (userError.error === 'PASSWORD_TOO_SHORT') {
     const min = userError.minimumLength ?? 10
     return `Adgangskoden skal være på mindst ${min} tegn.`

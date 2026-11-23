@@ -927,4 +927,167 @@ describe('preview-member login på PR-preview', () => {
     })
     expect(v2Sessions).toHaveLength(1)
   })
+
+  it('afviser gammel kode og godkender ny kode på /preview/verify-member efter nulstilling og changePassword', async () => {
+    const t = createTestConvex()
+    const env = envMap()
+    env.RESEND_API_KEY = 're_test_key'
+    env.SITE_URL = 'https://naturklubben.dk'
+
+    await t.run(async (ctx) => {
+      const resetUserId = await writeImportedPassword(ctx, {
+        email: 'reset-verify@naturklubben.dk',
+        bcryptHash: BCRYPT_ABC,
+        name: 'Reset Medlem',
+        isAdmin: true,
+      })
+      await ctx.db.insert('profiles', {
+        userId: resetUserId,
+        fullName: 'Reset Medlem',
+        isAdmin: true,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+
+      const changeHash = await hashPassword('gammel-kode-123')
+      const changeUserId = await ctx.db.insert('users', {
+        email: 'change-verify@naturklubben.dk',
+        emailVerificationTime: 1000,
+      })
+      await ctx.db.insert('authAccounts', {
+        userId: changeUserId,
+        provider: 'password',
+        providerAccountId: 'change-verify@naturklubben.dk',
+        secret: changeHash,
+        emailVerified: 'change-verify@naturklubben.dk',
+      })
+      await ctx.db.insert('profiles', {
+        userId: changeUserId,
+        fullName: 'Skift Medlem',
+        isAdmin: false,
+        chatColor: '#16a34a',
+        causes: [],
+        chatNotificationPreference: 'all',
+        featureNotificationsEnabled: true,
+        createdAt: 1,
+      })
+    })
+
+    const client = t.withRequestMetadata({ ip: '127.0.0.1' })
+    const start = await client.mutation(api.auth.startPasswordRecovery, {
+      email: 'reset-verify@naturklubben.dk',
+    })
+    expect(start.success).toBe(true)
+    if (!start.success) throw new Error('expected recovery start')
+
+    const { sentTestEmails } = await import('../test/convexTestAuth')
+    const mails = await sentTestEmails(t)
+    const match = /\?code=([^\s&]+)/.exec(mails[0]?.text ?? '')
+    if (!match?.[1]) throw new Error('missing recovery code')
+    const emailCode = decodeURIComponent(match[1])
+
+    const completed = await client.mutation(api.auth.completePasswordRecovery, {
+      emailCode,
+      browserSecret: start.browserSecret,
+      newPassword: 'ny-nulstillet-kode-99',
+    })
+    expect(completed.status).toBe('complete')
+
+    const postVerify = (email: string, password: string, ip: string) =>
+      t.fetch(PREVIEW_VERIFY_MEMBER_PATH, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'cf-connecting-ip': ip,
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+    const oldAfterReset = await postVerify(
+      'reset-verify@naturklubben.dk',
+      'abc',
+      '198.51.100.50',
+    )
+    expect(oldAfterReset.status).toBe(401)
+    expect(await oldAfterReset.json()).toEqual({ ok: false })
+
+    const newAfterReset = await postVerify(
+      'reset-verify@naturklubben.dk',
+      'ny-nulstillet-kode-99',
+      '198.51.100.51',
+    )
+    expect(newAfterReset.status).toBe(200)
+    expect(await newAfterReset.json()).toEqual({
+      ok: true,
+      member: { isAdmin: true, fullName: 'Reset Medlem' },
+    })
+
+    // Legacy user changes password via auth:changePassword
+    const changeLogin = await client.mutation(
+      api.auth.signInWithEmailPassword,
+      {
+        email: 'change-verify@naturklubben.dk',
+        password: 'gammel-kode-123',
+      },
+    )
+    expect(changeLogin.status).toBe('complete')
+    if (changeLogin.status !== 'complete') throw new Error('expected login')
+
+    const asChangeUser = client.withIdentity(
+      sessionIdentity(changeLogin.tokens),
+    )
+    const changed = await asChangeUser.mutation(api.auth.changePassword, {
+      currentPassword: 'gammel-kode-123',
+      newPassword: 'ny-skiftet-kode-99',
+    })
+    expect(changed).toEqual({ success: true })
+
+    const oldAfterChange = await postVerify(
+      'change-verify@naturklubben.dk',
+      'gammel-kode-123',
+      '198.51.100.52',
+    )
+    expect(oldAfterChange.status).toBe(401)
+
+    const newAfterChange = await postVerify(
+      'change-verify@naturklubben.dk',
+      'ny-skiftet-kode-99',
+      '198.51.100.53',
+    )
+    expect(newAfterChange.status).toBe(200)
+    expect(await newAfterChange.json()).toEqual({
+      ok: true,
+      member: { isAdmin: false, fullName: 'Skift Medlem' },
+    })
+  })
+
+  it('svarer 401 og aldrig 500 på /preview/verify-member for preview-member-provisioneret konto uden authPassword', async () => {
+    const env = envMap()
+    env.PREVIEW_SEED = '1'
+    env.CONVEX_CLOUD_URL = TEST_PREVIEW_CLOUD_URL
+
+    const t = createTestConvex()
+    await t.mutation(internal.previewMemberAuth.provisionVerifiedMember, {
+      email: 'kunpreview@naturklubben.dk',
+      isAdmin: false,
+      fullName: 'Kun Preview',
+    })
+
+    const res = await t.fetch(PREVIEW_VERIFY_MEMBER_PATH, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'cf-connecting-ip': '198.51.100.60',
+      },
+      body: JSON.stringify({
+        email: 'kunpreview@naturklubben.dk',
+        password: 'mindst-otte-tegn-kode',
+      }),
+    })
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ ok: false })
+  })
 })

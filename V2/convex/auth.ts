@@ -4,15 +4,15 @@ import {
   type RegisteredMutation,
   type RegisteredQuery,
 } from 'convex/server'
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import { getAuthUserId, setupConvexAuth } from '@convex-dev/auth/server'
 import {
   setupEmailPassword,
   type CheckPasswordRecoveryResult,
-  type CompleteChangeEmailResult,
   type CompletePasswordRecoveryResult,
   type CompleteSignUpResult,
-  type StartChangeEmailResult,
+  type SignUpResult,
+  type StartPasswordRecoveryResult,
 } from '@convex-dev/auth/methods/email-password/server'
 import { components, internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
@@ -63,17 +63,7 @@ export type TokenBundle = {
   userId: string
 }
 
-export type SignUpResult =
-  | { success: true; browserSecret: string }
-  | {
-      success: false
-      userError: {
-        error: string
-        minimumLength?: number
-        maximumLength?: number
-        retryAfterMs?: number
-      }
-    }
+export type { SignUpResult }
 
 export type SignInResult =
   | { status: 'complete'; tokens: TokenBundle }
@@ -98,15 +88,6 @@ export type SimpleActionResult =
         retryAfterMs?: number
       }
     }
-
-export type StartRecoveryResult =
-  | {
-      success: true
-      skipped?: boolean
-      browserSecret?: string
-      sentTo?: string
-    }
-  | { success: false; userError: { error: string; retryAfterMs?: number } }
 
 const vTokenBundle = v.object({
   accessToken: v.string(),
@@ -195,6 +176,72 @@ async function legacyAccountByUserId(
       q.eq('userId', userId).eq('provider', 'password'),
     )
     .unique()
+}
+
+async function clearVerificationCodesForAccount(
+  ctx: MutationCtx,
+  accountId: Id<'authAccounts'>,
+): Promise<void> {
+  const codes = await ctx.db
+    .query('authVerificationCodes')
+    .withIndex('accountId', (q) => q.eq('accountId', accountId))
+    .collect()
+  for (const code of codes) {
+    await ctx.db.delete(code._id)
+  }
+}
+
+async function retireLegacyPasswordAccount(
+  ctx: MutationCtx,
+  userId: Id<'users'>,
+): Promise<void> {
+  const accounts = await ctx.db
+    .query('authAccounts')
+    .withIndex('userIdAndProvider', (q) =>
+      q.eq('userId', userId).eq('provider', 'password'),
+    )
+    .collect()
+  for (const account of accounts) {
+    await clearVerificationCodesForAccount(ctx, account._id)
+    await ctx.db.delete(account._id)
+  }
+}
+
+async function tryVerifyV2Password(
+  ctx: MutationCtx,
+  userId: string,
+  password: string,
+): Promise<
+  | { found: true; success: true }
+  | {
+      found: true
+      success: false
+      userError: {
+        error: string
+        minimumLength?: number
+        maximumLength?: number
+        retryAfterMs?: number
+      }
+    }
+  | { found: false }
+> {
+  try {
+    const result = await ctx.runMutation(
+      components.authPassword.public.verifyPassword,
+      { userId, password },
+    )
+    return result.success
+      ? { found: true, success: true }
+      : { found: true, success: false, userError: result.userError }
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes('No password stored for userId')
+    ) {
+      return { found: false }
+    }
+    throw error
+  }
 }
 
 function refillRateLimit(
@@ -338,18 +385,6 @@ export const completeSignUpWithEmailPassword =
     { emailCode: string; browserSecret: string },
     Promise<CompleteSignUpResult>
   >
-export const startChangeEmail =
-  baseEmailPassword.startChangeEmail as RegisteredMutation<
-    'public',
-    { newEmail: string; currentPassword: string },
-    Promise<StartChangeEmailResult>
-  >
-export const completeChangeEmail =
-  baseEmailPassword.completeChangeEmail as RegisteredMutation<
-    'public',
-    { emailCode: string; browserSecret: string },
-    Promise<CompleteChangeEmailResult>
-  >
 
 export const signUpWithEmailPassword: RegisteredMutation<
   'public',
@@ -368,18 +403,7 @@ export const signUpWithEmailPassword: RegisteredMutation<
       kind: 'verify',
     })
     if (decision === 'deny') {
-      return {
-        success: false,
-        userError: { error: 'EMAIL_NOT_ALLOWED' },
-      }
-    }
-
-    const legacyExisting = await legacyAccountByEmail(ctx, email)
-    if (legacyExisting !== null) {
-      return {
-        success: false,
-        userError: { error: 'EMAIL_TAKEN' },
-      }
+      throw new ConvexError('EMAIL_NOT_ALLOWED')
     }
 
     const emailError = await ctx.runMutation(
@@ -388,6 +412,25 @@ export const signUpWithEmailPassword: RegisteredMutation<
     )
     if (emailError !== null) {
       return { success: false, userError: emailError }
+    }
+
+    const now = Date.now()
+    const signupRateKey = `legacy-signup:${email}`
+    const retryAfterMs = await checkLegacyRateLimit(ctx, signupRateKey, now)
+    if (retryAfterMs !== null) {
+      return {
+        success: false,
+        userError: { error: 'RATE_LIMITED', retryAfterMs },
+      }
+    }
+
+    const legacyExisting = await legacyAccountByEmail(ctx, email)
+    if (legacyExisting !== null) {
+      await recordLegacyFailure(ctx, signupRateKey, now)
+      return {
+        success: false,
+        userError: { error: 'EMAIL_TAKEN' },
+      }
     }
 
     const formatError = validatePasswordFormat(
@@ -399,8 +442,9 @@ export const signUpWithEmailPassword: RegisteredMutation<
     }
 
     const cleanName = args.fullName?.trim()
+    // Sæt ikke `email` på `users` før bekræftelsen er indløst, så gentagne
+    // uafsluttede oprettelser ikke efterlader duplikerede e-mail-rækker.
     const userId = await ctx.db.insert('users', {
-      email,
       ...(cleanName && cleanName.length > 0 ? { name: cleanName } : {}),
     })
 
@@ -454,6 +498,16 @@ export const signInWithEmailPassword: RegisteredMutation<
     v.object({ status: v.literal('error'), userError: v.any() }),
   ),
   handler: async (ctx, args): Promise<SignInResult> => {
+    if ([...args.password].length > MAX_PASSWORD_LENGTH) {
+      return {
+        status: 'error',
+        userError: {
+          error: 'PASSWORD_TOO_LONG',
+          maximumLength: MAX_PASSWORD_LENGTH,
+        },
+      }
+    }
+
     const email = normalizeAuthEmail(args.email)
     const onSignInHandle = await createFunctionHandle(
       internal.authUsers.onSignIn,
@@ -468,24 +522,27 @@ export const signInWithEmailPassword: RegisteredMutation<
     }
 
     if (lookup.success) {
-      const verifyResult = await ctx.runMutation(
-        components.authPassword.public.verifyPassword,
-        { userId: lookup.userId, password: args.password },
+      const verifyResult = await tryVerifyV2Password(
+        ctx,
+        lookup.userId,
+        args.password,
       )
-      if (!verifyResult.success) {
-        return { status: 'error', userError: verifyResult.userError }
+      if (verifyResult.found) {
+        if (!verifyResult.success) {
+          return { status: 'error', userError: verifyResult.userError }
+        }
+        const tokens = await ctx.runMutation(
+          components.auth.public._internal_dangerous_signIn,
+          {
+            claims: { method: 'emailPassword', profile: {} },
+            componentPath: 'authPassword',
+            userId: lookup.userId,
+            onSignInHandle,
+            ...TTL_CONFIG,
+          },
+        )
+        return { status: 'complete', tokens }
       }
-      const tokens = await ctx.runMutation(
-        components.auth.public._internal_dangerous_signIn,
-        {
-          claims: { method: 'emailPassword', profile: {} },
-          componentPath: 'authPassword',
-          userId: lookup.userId,
-          onSignInHandle,
-          ...TTL_CONFIG,
-        },
-      )
-      return { status: 'complete', tokens }
     }
 
     // Bagudkompatibilitet: eksisterende v1-konti ligger i `authAccounts`
@@ -494,7 +551,9 @@ export const signInWithEmailPassword: RegisteredMutation<
     if (legacy === null || typeof legacy.secret !== 'string') {
       return {
         status: 'error',
-        userError: { error: 'USER_NOT_FOUND' },
+        userError: lookup.success
+          ? { error: 'INVALID_CREDENTIALS' }
+          : { error: 'USER_NOT_FOUND' },
       }
     }
 
@@ -567,36 +626,92 @@ export const changePassword: RegisteredMutation<
       return { success: false, userError: newPasswordError }
     }
 
-    const v2Verify = await ctx.runMutation(
-      components.authPassword.public.verifyPassword,
-      { userId, password: args.currentPassword },
-    )
-    if (!v2Verify.success) {
-      if (v2Verify.userError.error === 'RATE_LIMITED') {
-        return { success: false, userError: v2Verify.userError }
-      }
-      const legacy = await legacyAccountByUserId(ctx, userId)
-      const legacyValid =
-        legacy?.secret !== undefined &&
-        (await verifyPassword(args.currentPassword, legacy.secret))
-      if (!legacyValid) {
-        return {
-          success: false,
-          userError: { error: 'INVALID_CREDENTIALS' },
-        }
-      }
+    if ([...args.currentPassword].length > MAX_PASSWORD_LENGTH) {
+      return { success: false, userError: { error: 'INVALID_CREDENTIALS' } }
     }
 
-    const setResult = await ctx.runMutation(
-      components.authPassword.public._internal_dangerous_setPassword,
-      {
-        userId,
-        password: args.newPassword,
-        minimumLength: NEW_PASSWORD_MIN_LENGTH,
-      },
+    const v2Emails = await ctx.runQuery(
+      components.authEmail.verifiedEmails.getEmails,
+      { userId },
     )
-    if (!setResult.success) {
-      return { success: false, userError: setResult.userError }
+
+    if (v2Emails.length > 0) {
+      const v2Verify = await tryVerifyV2Password(
+        ctx,
+        userId,
+        args.currentPassword,
+      )
+      if (v2Verify.found) {
+        if (!v2Verify.success) {
+          if (v2Verify.userError.error === 'RATE_LIMITED') {
+            return { success: false, userError: v2Verify.userError }
+          }
+          return { success: false, userError: { error: 'INVALID_CREDENTIALS' } }
+        }
+      } else {
+        const legacy = await legacyAccountByUserId(ctx, userId)
+        if (legacy === null || typeof legacy.secret !== 'string') {
+          return { success: false, userError: { error: 'INVALID_CREDENTIALS' } }
+        }
+        const now = Date.now()
+        const rateKey = `legacy-changepw:${userId}`
+        const retryAfterMs = await checkLegacyRateLimit(ctx, rateKey, now)
+        if (retryAfterMs !== null) {
+          return {
+            success: false,
+            userError: { error: 'RATE_LIMITED', retryAfterMs },
+          }
+        }
+        const legacyValid = await verifyPassword(
+          args.currentPassword,
+          legacy.secret,
+        )
+        if (!legacyValid) {
+          await recordLegacyFailure(ctx, rateKey, now)
+          return { success: false, userError: { error: 'INVALID_CREDENTIALS' } }
+        }
+        await clearLegacyFailures(ctx, rateKey)
+      }
+
+      const setResult = await ctx.runMutation(
+        components.authPassword.public._internal_dangerous_setPassword,
+        {
+          userId,
+          password: args.newPassword,
+          minimumLength: NEW_PASSWORD_MIN_LENGTH,
+        },
+      )
+      if (!setResult.success) {
+        return { success: false, userError: setResult.userError }
+      }
+      await retireLegacyPasswordAccount(ctx, userId)
+    } else {
+      const legacy = await legacyAccountByUserId(ctx, userId)
+      if (legacy === null || typeof legacy.secret !== 'string') {
+        return { success: false, userError: { error: 'INVALID_CREDENTIALS' } }
+      }
+      const now = Date.now()
+      const rateKey = `legacy-changepw:${userId}`
+      const retryAfterMs = await checkLegacyRateLimit(ctx, rateKey, now)
+      if (retryAfterMs !== null) {
+        return {
+          success: false,
+          userError: { error: 'RATE_LIMITED', retryAfterMs },
+        }
+      }
+      const legacyValid = await verifyPassword(
+        args.currentPassword,
+        legacy.secret,
+      )
+      if (!legacyValid) {
+        await recordLegacyFailure(ctx, rateKey, now)
+        return { success: false, userError: { error: 'INVALID_CREDENTIALS' } }
+      }
+      await clearLegacyFailures(ctx, rateKey)
+      await ctx.db.patch(legacy._id, {
+        secret: await hashPassword(args.newPassword),
+      })
+      await clearVerificationCodesForAccount(ctx, legacy._id)
     }
 
     if (args.signOutOtherSessions) {
@@ -630,10 +745,10 @@ export const changePassword: RegisteredMutation<
 export const startPasswordRecovery: RegisteredMutation<
   'public',
   { email: string },
-  Promise<StartRecoveryResult>
+  Promise<StartPasswordRecoveryResult>
 > = mutation({
   args: { email: v.string() },
-  handler: async (ctx, args): Promise<StartRecoveryResult> => {
+  handler: async (ctx, args): Promise<StartPasswordRecoveryResult> => {
     const email = normalizeAuthEmail(args.email)
     const lookup = await ctx.runMutation(
       components.authEmail.verifiedEmails.lookupEmail,
@@ -653,10 +768,7 @@ export const startPasswordRecovery: RegisteredMutation<
       kind: 'reset',
       hasAccountOverride: hasAccount,
     })
-    if (decision === 'skip' || decision === 'deny') {
-      return { success: true, skipped: true }
-    }
-    if (!hasAccount) {
+    if (decision === 'skip' || decision === 'deny' || !hasAccount) {
       return {
         success: false,
         userError: { error: 'EMAIL_NOT_FOUND' },
@@ -877,6 +989,7 @@ export const completePasswordRecovery: RegisteredMutation<
       return { status: 'error', userError: setResult.userError }
     }
 
+    await retireLegacyPasswordAccount(ctx, userId)
     await syncVerifiedUserFields(ctx, userId, targetEmail)
     await ctx.runMutation(components.auth.public.markUserIdCreated, {
       userId,

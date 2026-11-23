@@ -125,7 +125,7 @@ lokale terminal. Derfor gælder:
 - **Medlemslogin på preview uden delt adgangskode (`V2/convex/previewMemberAuth.ts`):** På et preview falder `LoginPage.tsx` tilbage til Convex Auth-udbyderen `preview-member`, som server-til-server kalder produktionens `POST https://quaint-parakeet-652.convex.site/preview/verify-member` (rate-limiteret, konstant arbejde, afviser brugere uden profil eller med `deletionReservedAt`). Hvis produktion godkender, opretter/opdaterer `provisionVerifiedMember` den lokale bruger, `allowedEmails` og `profiles` (med `isAdmin` kopieret fra produktionsprofilen) og udsteder en lokal Convex Auth-session uden nogensinde at kopiere, gemme, hashe, returnere eller logge produktionsadgangskoden. Preview-frontendet taler fortsat kun med sit eget preview-deployment og dets seedede testdata.
 - **`PREVIEW_SHARED_PASSWORD` er ikke længere påkrævet eller måden medlemmer logger ind på.** Hvis secreten findes, kan `previewSeed:ensure` stadig lægge den på de syv adresser i `PREVIEW_GUEST_ALLOWLIST` som valgfri fallback (Grok Bot er administrator, `kaspermoller+test` er ikke); mangler den, fortsætter previewet uden fejl. Den skrives aldrig ud i loggen eller committes.
 - Adresse og adgangskode til testbrugeren er repo-secrets `PREVIEW_TEST_EMAIL` og `PREVIEW_TEST_PASSWORD`. Ingen ny secret er påkrævet. Workflowet sætter env-variabler på preview-deploymentet via stdin (`npx convex env set`), aldrig som argumenter og aldrig i loggen. `previewSeed:ensure` og `provisionVerifiedMember` kører kun, når `PREVIEW_SEED` er `1` og `CONVEX_CLOUD_URL` ikke er produktion. `deploy.yml` sætter ikke den fælles adgangskode.
-- Seedet må ikke ramme produktion. Workflowet afviser en deploy-nøgle, der starter med `prod:`, og actionen nægter, hvis `CONVEX_CLOUD_URL` er produktions-deploymentet `quaint-parakeet-652`. `deploy-v2.yml` kalder det ikke. Samme trin sætter `JWT_PRIVATE_KEY` og `JWKS` på previewet, hvis de mangler. `deploy.yml` gør det samme på prod: Convex Auth kan ellers ikke udstede en session, og nøglerne følger ikke med fra et andet deployment. Uden dem hænger nulstillingslinket på "Et øjeblik…".
+- Seedet må ikke ramme produktion. Workflowet afviser en deploy-nøgle, der starter med `prod:`, og actionen nægter, hvis `CONVEX_CLOUD_URL` er produktions-deploymentet `quaint-parakeet-652`. `deploy-v2.yml` kalder det ikke. I `@convex-dev/auth` 2.x (`convexAuthProvider()`) bruger deploymentet sine indbyggede signeringsnøgler, så deploy-workflows sætter ikke længere `JWT_PRIVATE_KEY` og `JWKS`. **Advarsel om prod:** slet ikke `JWT_PRIVATE_KEY` i produktion, medmindre `RATE_LIMIT_HASH_SECRET` er sat, da `hashRateLimitSignal` i `V2/convex/previewMemberAuth.ts` ellers falder tilbage til usaltet SHA-256.
 - Frontend-buildet får previewets URL som `VITE_CONVEX_URL` fra deployet. Workflowet fejler, hvis den byggede bundle peger på produktions-deploymentet.
 
 ## Nye funktioner meldes til medlemmerne
@@ -198,7 +198,7 @@ lokale terminal. Derfor gælder:
 V2/
   convex/      # produktions-backend på Convex (schema.ts, tables/, authz.ts, auth.ts, http.ts)
   src/         # produktions-frontend (pages, features, components, lib, sw-prod.ts)
-  scripts/     # preview-smoke og driftsscripts (authResetSmoke.mjs, ensurePreviewAuthKeys.mjs m.fl.)
+  scripts/     # preview-smoke og driftsscripts (authResetSmoke.mjs, previewLoginSmoke.mjs m.fl.)
 ```
 
 ## Faldgruber i frontend-tests og lint

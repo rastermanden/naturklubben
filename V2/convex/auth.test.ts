@@ -1,3 +1,4 @@
+import { ConvexError } from 'convex/values'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { api, internal } from './_generated/api'
 import { isBcryptHash, verifyPassword } from './passwordCrypto'
@@ -133,8 +134,21 @@ describe('auth 2.x og v1-kompatibilitet', () => {
     })
     expect(badLogin.status).toBe('error')
 
-    // Verify 6-char Scrypt hash succeeds directly in passwordCrypto
+    // Verify 6-char Scrypt hash signs in cleanly via signInWithEmailPassword (including NFKC normalization)
     expect(await verifyPassword('abc123', LUCIA_SCRYPT_LEGACY_6)).toBe(true)
+    const legacyScryptLogin = await t.mutation(
+      api.auth.signInWithEmailPassword,
+      {
+        email: 'gammel@example.com',
+        password: 'abc123',
+      },
+    )
+    expect(legacyScryptLogin.status).toBe('complete')
+    if (legacyScryptLogin.status !== 'complete') {
+      throw new Error('expected 6-char legacy Scrypt sign-in to complete')
+    }
+    const asLegacy = t.withIdentity(sessionIdentity(legacyScryptLogin.tokens))
+    expect(await asLegacy.query(api.auth.isAuthenticated, {})).toBe(true)
 
     // Existing Supabase bcrypt user signs in cleanly and atomically rehashes
     const bcryptLogin = await t.mutation(api.auth.signInWithEmailPassword, {
@@ -202,6 +216,178 @@ describe('auth 2.x og v1-kompatibilitet', () => {
       password: 'ny-sikker-kode-2026',
     })
     expect(loginNew.status).toBe('complete')
+
+    const loginOld = await t.mutation(api.auth.signInWithEmailPassword, {
+      email: 'nulstil@example.com',
+      password: 'abc',
+    })
+    expect(loginOld.status).toBe('error')
+
+    const remainingLegacy = await t.run((ctx) =>
+      ctx.db
+        .query('authAccounts')
+        .withIndex('providerAndAccountId', (q) =>
+          q
+            .eq('provider', 'password')
+            .eq('providerAccountId', 'nulstil@example.com'),
+        )
+        .collect(),
+    )
+    expect(remainingLegacy).toHaveLength(0)
+  })
+
+  it('understøtter auth:changePassword for legacy-brugere (6 og >=10 tegn) samt preview-member uden authPassword', async () => {
+    const t = createTestConvex()
+    const client = t.withRequestMetadata({ ip: '127.0.0.1' })
+
+    const { shortUserId, longUserId, previewOnlyUserId } = await t.run(
+      async (ctx) => {
+        const shortId = await ctx.db.insert('users', {
+          email: 'kort@example.com',
+          emailVerificationTime: 1000,
+        })
+        await ctx.db.insert('authAccounts', {
+          userId: shortId,
+          provider: 'password',
+          providerAccountId: 'kort@example.com',
+          secret: LUCIA_SCRYPT_LEGACY_6,
+          emailVerified: 'kort@example.com',
+        })
+
+        const longSecret = await verifyPassword(
+          'lang-kode-1234',
+          LUCIA_SCRYPT_LEGACY_6,
+        )
+        void longSecret
+        const { hashPassword } = await import('./passwordCrypto')
+        const longHash = await hashPassword('lang-gammel-kode-1234')
+        const longId = await ctx.db.insert('users', {
+          email: 'lang@example.com',
+          emailVerificationTime: 1000,
+        })
+        await ctx.db.insert('authAccounts', {
+          userId: longId,
+          provider: 'password',
+          providerAccountId: 'lang@example.com',
+          secret: longHash,
+          emailVerified: 'lang@example.com',
+        })
+
+        const previewId = await ctx.db.insert('users', {
+          email: 'previewonly@example.com',
+          emailVerificationTime: 1000,
+        })
+        await ctx.db.insert('authAccounts', {
+          userId: previewId,
+          provider: 'preview-member',
+          providerAccountId: 'previewonly@example.com',
+          emailVerified: 'previewonly@example.com',
+        })
+
+        return {
+          shortUserId: shortId,
+          longUserId: longId,
+          previewOnlyUserId: previewId,
+        }
+      },
+    )
+
+    // Preview-member uden authPassword må ikke crashe med "No password stored"
+    const asPreviewOnly = await client.mutation(api.auth.changePassword, {
+      currentPassword: 'noget-over-8-tegn',
+      newPassword: 'ny-lang-kode-1234',
+    })
+    expect(asPreviewOnly).toEqual({
+      success: false,
+      userError: { error: 'NOT_LOGGED_IN' },
+    })
+
+    const { withAuthUser } = await import('../test/convexTestAuth')
+    const previewSession = await withAuthUser(t, previewOnlyUserId)
+    const previewChange = await previewSession.mutation(
+      api.auth.changePassword,
+      {
+        currentPassword: 'noget-over-8-tegn',
+        newPassword: 'ny-lang-kode-1234',
+      },
+    )
+    expect(previewChange).toEqual({
+      success: false,
+      userError: { error: 'INVALID_CREDENTIALS' },
+    })
+
+    // Legacy 6-tegns bruger ændrer adgangskode
+    const shortSession = await withAuthUser(t, shortUserId)
+    const wrongShort = await shortSession.mutation(api.auth.changePassword, {
+      currentPassword: 'forkert',
+      newPassword: 'ny-sikker-6-til-10',
+    })
+    expect(wrongShort).toEqual({
+      success: false,
+      userError: { error: 'INVALID_CREDENTIALS' },
+    })
+
+    const okShort = await shortSession.mutation(api.auth.changePassword, {
+      currentPassword: 'abc123',
+      newPassword: 'ny-sikker-6-til-10',
+    })
+    expect(okShort).toEqual({ success: true })
+
+    expect(
+      (
+        await client.mutation(api.auth.signInWithEmailPassword, {
+          email: 'kort@example.com',
+          password: 'abc123',
+        })
+      ).status,
+    ).toBe('error')
+    expect(
+      (
+        await client.mutation(api.auth.signInWithEmailPassword, {
+          email: 'kort@example.com',
+          password: 'ny-sikker-6-til-10',
+        })
+      ).status,
+    ).toBe('complete')
+
+    // Legacy >=8-tegns bruger må ikke crashe på verifyPassword
+    const longSession = await withAuthUser(t, longUserId)
+    const okLong = await longSession.mutation(api.auth.changePassword, {
+      currentPassword: 'lang-gammel-kode-1234',
+      newPassword: 'ny-lang-sikker-kode',
+    })
+    expect(okLong).toEqual({ success: true })
+
+    expect(
+      (
+        await client.mutation(api.auth.signInWithEmailPassword, {
+          email: 'lang@example.com',
+          password: 'lang-gammel-kode-1234',
+        })
+      ).status,
+    ).toBe('error')
+    expect(
+      (
+        await client.mutation(api.auth.signInWithEmailPassword, {
+          email: 'lang@example.com',
+          password: 'ny-lang-sikker-kode',
+        })
+      ).status,
+    ).toBe('complete')
+  })
+
+  it('returnerer EMAIL_NOT_FOUND fra startPasswordRecovery når mailen ikke sendes (skip/deny)', async () => {
+    nodeEnv.PREVIEW_SEED = '1'
+    const t = createTestConvex()
+    const client = t.withRequestMetadata({ ip: '127.0.0.1' })
+
+    const missing = await client.mutation(api.auth.startPasswordRecovery, {
+      email: 'ukendt@example.com',
+    })
+    expect(missing).toEqual({
+      success: false,
+      userError: { error: 'EMAIL_NOT_FOUND' },
+    })
   })
 
   it('migrerer v1-konti idempotent via migrateV1AuthToV2 og håndhæver preview allowlist', async () => {
@@ -218,14 +404,19 @@ describe('auth 2.x og v1-kompatibilitet', () => {
       })
     })
 
-    const blockedSignUp = await t.mutation(api.auth.signUpWithEmailPassword, {
-      email: 'uvedkommende@example.com',
-      password: 'sikker-adgangskode-10',
-    })
-    expect(blockedSignUp).toEqual({
-      success: false,
-      userError: { error: 'EMAIL_NOT_ALLOWED' },
-    })
+    const blockedFailure = await t
+      .mutation(api.auth.signUpWithEmailPassword, {
+        email: 'uvedkommende@example.com',
+        password: 'sikker-adgangskode-10',
+      })
+      .then(
+        () => null,
+        (error: unknown) => error,
+      )
+    expect(blockedFailure).toBeInstanceOf(ConvexError)
+    expect((blockedFailure as ConvexError<string>).data).toBe(
+      'EMAIL_NOT_ALLOWED',
+    )
 
     const migrated = await t.mutation(internal.passwords.migrateV1AuthToV2, {
       confirm: 'MIGRATE_V1_AUTH_TO_V2',

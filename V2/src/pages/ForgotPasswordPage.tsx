@@ -1,13 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation } from 'convex/react'
+import { useStartPasswordRecovery } from '@convex-dev/auth/methods/email-password/react'
 import { api } from '../../convex/_generated/api'
-import {
-  toFriendlyAuthError,
-  userErrorToAuthError,
-} from '../features/auth/authErrors'
-
-const RECOVERY_SECRET_STORAGE_KEY = '__convexAuthEmailPasswordRecoverySecret'
+import { userErrorToAuthError } from '../features/auth/authErrors'
 
 /**
  * Glemt adgangskode. Mailen indeholder et link til `/ny-adgangskode`.
@@ -15,43 +10,23 @@ const RECOVERY_SECRET_STORAGE_KEY = '__convexAuthEmailPasswordRecoverySecret'
  * hvem der er oprettet.
  */
 export default function ForgotPasswordPage() {
-  const startRecovery = useMutation(api.auth.startPasswordRecovery)
+  const { startPasswordRecovery, pending } = useStartPasswordRecovery(api.auth)
 
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
-    setSubmitting(true)
 
-    try {
-      const result = await startRecovery({ email })
-      if (result.success) {
-        if (result.browserSecret) {
-          try {
-            window.localStorage.setItem(
-              RECOVERY_SECRET_STORAGE_KEY,
-              result.browserSecret,
-            )
-          } catch {
-            // Ignorer evt. blokeret localStorage; nulstillingssiden forklarer det.
-          }
-        }
-        setSubmitted(true)
-      } else if (result.userError.error === 'EMAIL_NOT_FOUND') {
-        // Svar ens ved ukendt adresse, så siden ikke lækker medlemsliste.
-        setSubmitted(true)
-      } else {
-        setError(userErrorToAuthError(result.userError))
-      }
-    } catch (resetError) {
-      setError(toFriendlyAuthError(resetError))
-    } finally {
-      setSubmitting(false)
+    const result = await startPasswordRecovery({ email })
+    if (result.success || result.userError.error === 'EMAIL_NOT_FOUND') {
+      // Svar ens ved ukendt adresse, så siden ikke lækker medlemsliste.
+      setSubmitted(true)
+      return
     }
+    setError(userErrorToAuthError(result.userError))
   }
 
   if (submitted) {
@@ -103,10 +78,10 @@ export default function ForgotPasswordPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={pending}
           className="min-h-11 rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
         >
-          {submitting ? 'Sender…' : 'Send nulstillingslink'}
+          {pending ? 'Sender…' : 'Send nulstillingslink'}
         </button>
       </form>
 

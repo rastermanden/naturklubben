@@ -825,59 +825,66 @@ export async function removePasswordSignup(
       q.eq('provider', 'password').eq('providerAccountId', email),
     )
     .unique()
-  const byEmail = await ctx.db
+  const usersByEmail = await ctx.db
     .query('users')
     .withIndex('email', (q) => q.eq('email', email))
-    .unique()
-  const userId = account?.userId ?? byEmail?._id
-  if (userId === undefined) return false
+    .collect()
+  const userIds = [
+    ...new Set<Id<'users'>>([
+      ...(account ? [account.userId] : []),
+      ...usersByEmail.map((u) => u._id),
+    ]),
+  ]
+  if (userIds.length === 0) return false
 
-  const v2Sessions = await ctx.runQuery(components.auth.public.listSessions, {
-    userId,
-  })
-  if (v2Sessions.length > 0) {
-    await ctx.runMutation(components.auth.public.revokeSessions, {
-      sessionIds: v2Sessions.map((s) => s.sessionId),
+  for (const userId of userIds) {
+    const v2Sessions = await ctx.runQuery(components.auth.public.listSessions, {
+      userId,
     })
-  }
-  await ctx.runMutation(components.authEmail.verifiedEmails.deleteUser, {
-    userId,
-  })
+    if (v2Sessions.length > 0) {
+      await ctx.runMutation(components.auth.public.revokeSessions, {
+        sessionIds: v2Sessions.map((s) => s.sessionId),
+      })
+    }
+    await ctx.runMutation(components.authEmail.verifiedEmails.deleteUser, {
+      userId,
+    })
 
-  const sessions = await ctx.db
-    .query('authSessions')
-    .withIndex('userId', (q) => q.eq('userId', userId))
-    .collect()
-  for (const session of sessions) {
-    const tokens = await ctx.db
-      .query('authRefreshTokens')
-      .withIndex('sessionId', (q) => q.eq('sessionId', session._id))
+    const sessions = await ctx.db
+      .query('authSessions')
+      .withIndex('userId', (q) => q.eq('userId', userId))
       .collect()
-    for (const token of tokens) await ctx.db.delete(token._id)
-    await ctx.db.delete(session._id)
-  }
+    for (const session of sessions) {
+      const tokens = await ctx.db
+        .query('authRefreshTokens')
+        .withIndex('sessionId', (q) => q.eq('sessionId', session._id))
+        .collect()
+      for (const token of tokens) await ctx.db.delete(token._id)
+      await ctx.db.delete(session._id)
+    }
 
-  const accounts = await ctx.db
-    .query('authAccounts')
-    .withIndex('userIdAndProvider', (q) => q.eq('userId', userId))
-    .collect()
-  for (const row of accounts) {
-    const codes = await ctx.db
-      .query('authVerificationCodes')
-      .withIndex('accountId', (q) => q.eq('accountId', row._id))
+    const accounts = await ctx.db
+      .query('authAccounts')
+      .withIndex('userIdAndProvider', (q) => q.eq('userId', userId))
       .collect()
-    for (const code of codes) await ctx.db.delete(code._id)
-    await ctx.db.delete(row._id)
+    for (const row of accounts) {
+      const codes = await ctx.db
+        .query('authVerificationCodes')
+        .withIndex('accountId', (q) => q.eq('accountId', row._id))
+        .collect()
+      for (const code of codes) await ctx.db.delete(code._id)
+      await ctx.db.delete(row._id)
+    }
+
+    const profile = await ctx.db
+      .query('profiles')
+      .withIndex('by_user', (q) => q.eq('userId', userId))
+      .unique()
+    if (profile !== null) await ctx.db.delete(profile._id)
+
+    const user = await ctx.db.get(userId)
+    if (user !== null) await ctx.db.delete(userId)
   }
-
-  const profile = await ctx.db
-    .query('profiles')
-    .withIndex('by_user', (q) => q.eq('userId', userId))
-    .unique()
-  if (profile !== null) await ctx.db.delete(profile._id)
-
-  const user = await ctx.db.get(userId)
-  if (user !== null) await ctx.db.delete(userId)
   return true
 }
 

@@ -321,32 +321,42 @@ export const lookupMemberForVerify = internalQuery({
   ),
   handler: async (ctx, args) => {
     const email = normalizeAuthEmail(args.email)
-    const account = await ctx.db
-      .query('authAccounts')
-      .withIndex('providerAndAccountId', (q) =>
-        q.eq('provider', 'password').eq('providerAccountId', email),
-      )
-      .unique()
+    const users = await ctx.db
+      .query('users')
+      .withIndex('email', (q) => q.eq('email', email))
+      .collect()
+    const verifiedUsers = users.filter(
+      (u) => u.emailVerificationTime !== undefined,
+    )
 
-    let userId: Id<'users'> | null = null
-    let legacySecret: string | null = null
-    if (
-      account !== null &&
-      typeof account.secret === 'string' &&
-      account.secret.length > 0
-    ) {
-      userId = account.userId
-      legacySecret = account.secret
-    } else {
-      const users = await ctx.db
-        .query('users')
-        .withIndex('email', (q) => q.eq('email', email))
-        .collect()
-      const verifiedUser = users.find(
-        (u) => u.emailVerificationTime !== undefined,
+    let v2UserId: Id<'users'> | null = null
+    for (const candidateUser of verifiedUsers) {
+      const v2Emails = await ctx.runQuery(
+        components.authEmail.verifiedEmails.getEmails,
+        { userId: candidateUser._id },
       )
-      if (verifiedUser) {
-        userId = verifiedUser._id
+      if (v2Emails.length > 0) {
+        v2UserId = candidateUser._id
+        break
+      }
+    }
+
+    let userId: Id<'users'> | null = v2UserId
+    let legacySecret: string | null = null
+    if (userId === null) {
+      const account = await ctx.db
+        .query('authAccounts')
+        .withIndex('providerAndAccountId', (q) =>
+          q.eq('provider', 'password').eq('providerAccountId', email),
+        )
+        .unique()
+      if (
+        account !== null &&
+        typeof account.secret === 'string' &&
+        account.secret.length > 0
+      ) {
+        userId = account.userId
+        legacySecret = account.secret
       }
     }
 
@@ -367,10 +377,10 @@ export const lookupMemberForVerify = internalQuery({
       fullName: trimmedName.length > 0 ? trimmedName : null,
     }
 
-    if (legacySecret !== null) {
-      return { source: 'legacy' as const, secret: legacySecret, ...base }
+    if (v2UserId !== null) {
+      return { source: 'v2' as const, userId: v2UserId, ...base }
     }
-    return { source: 'v2' as const, userId, ...base }
+    return { source: 'legacy' as const, secret: legacySecret!, ...base }
   },
 })
 
@@ -662,11 +672,23 @@ export const verifyMember = httpAction(async (ctx, req) => {
   } else if (candidate.source === 'legacy') {
     passwordValid = await verifyPassword(password, candidate.secret)
   } else {
-    const verifyResult = await ctx.runMutation(
-      components.authPassword.public.verifyPassword,
-      { userId: candidate.userId, password },
-    )
-    passwordValid = verifyResult.success
+    try {
+      const verifyResult = await ctx.runMutation(
+        components.authPassword.public.verifyPassword,
+        { userId: candidate.userId, password },
+      )
+      passwordValid = verifyResult.success
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('No password stored for userId')
+      ) {
+        await verifyPassword(password, DUMMY_SCRYPT_HASH)
+        passwordValid = false
+      } else {
+        throw error
+      }
+    }
   }
 
   if (candidate === null || !passwordValid || !candidate.hasActiveProfile) {

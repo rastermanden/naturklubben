@@ -1,23 +1,20 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation } from 'convex/react'
+import { useSignUpWithEmailPassword } from '@convex-dev/auth/methods/email-password/react'
 import { api } from '../../convex/_generated/api'
-import {
-  toFriendlyAuthError,
-  userErrorToAuthError,
-} from '../features/auth/authErrors'
+import { userErrorToAuthError } from '../features/auth/authErrors'
+import { savePendingSignupFullName } from '../features/auth/pendingSignupName'
 import { useErrorFocus } from '../hooks/useErrorFocus'
-
-const SIGNUP_SECRET_STORAGE_KEY = '__convexAuthEmailPasswordSignUpSecret'
 
 /**
  * Opret bruger via `@convex-dev/auth` 2.x.
  *
  * Sender en bekræftelsesmail med link til `/velkommen`. Hemmeligheden gemmes
- * i browserens lager, så brugeren logges ind, når linket åbnes i samme browser.
+ * af `useSignUpWithEmailPassword` i det deployment-namespacede lager, så
+ * brugeren logges ind, når linket åbnes i samme browser.
  */
 export default function SignupPage() {
-  const runSignUp = useMutation(api.auth.signUpWithEmailPassword)
+  const { signUp, pending } = useSignUpWithEmailPassword(api.auth)
 
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
@@ -27,7 +24,6 @@ export default function SignupPage() {
   const [errorField, setErrorField] = useState<'email' | 'password' | null>(
     null,
   )
-  const [submitting, setSubmitting] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
   const focusEmailError = useErrorFocus(emailRef)
@@ -37,35 +33,19 @@ export default function SignupPage() {
     event.preventDefault()
     setError(null)
     setErrorField(null)
-    setSubmitting(true)
 
-    try {
-      const result = await runSignUp({ email, password, fullName })
-      if (!result.success) {
-        const raw = result.userError.error.toLowerCase()
-        const field = raw.includes('password') ? 'password' : 'email'
-        setError(userErrorToAuthError(result.userError))
-        setErrorField(field)
-        if (field === 'email') focusEmailError()
-        if (field === 'password') focusPasswordError()
-        return
-      }
-      try {
-        window.localStorage.setItem(
-          SIGNUP_SECRET_STORAGE_KEY,
-          result.browserSecret,
-        )
-      } catch {
-        // Ignorer evt. blokeret localStorage; landingssiden forklarer det.
-      }
-      setOutcome('confirm-email')
-    } catch (signUpError) {
-      setError(toFriendlyAuthError(signUpError))
-      setErrorField('email')
-      focusEmailError()
-    } finally {
-      setSubmitting(false)
+    const result = await signUp({ email, password })
+    if (!result.success) {
+      const raw = result.userError.error.toLowerCase()
+      const field = raw.includes('password') ? 'password' : 'email'
+      setError(userErrorToAuthError(result.userError))
+      setErrorField(field)
+      if (field === 'email') focusEmailError()
+      if (field === 'password') focusPasswordError()
+      return
     }
+    savePendingSignupFullName(fullName)
+    setOutcome('confirm-email')
   }
 
   if (outcome === 'confirm-email') {
@@ -156,10 +136,10 @@ export default function SignupPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={pending}
           className="min-h-11 rounded bg-accent px-4 py-2 text-white disabled:opacity-60"
         >
-          {submitting ? 'Opretter…' : 'Opret bruger'}
+          {pending ? 'Opretter…' : 'Opret bruger'}
         </button>
       </form>
 

@@ -260,32 +260,6 @@ export const setPasswordForUser = internalMutation({
 })
 
 /**
- * Ny adgangskode for den, der allerede er logget ind.
- * Kræver mindst 10 tegn i `@convex-dev/auth` 2.x.
- */
-export const changePassword = action({
-  args: { password: v.string() },
-  returns: v.null(),
-  handler: async (ctx, args): Promise<null> => {
-    const userId = await getAuthUserId(ctx as never)
-    if (userId === null) throw new ConvexError('NOT_AUTHENTICATED')
-    if ([...args.password].length < NEW_PASSWORD_MIN_LENGTH) {
-      throw new ConvexError('PASSWORD_TOO_SHORT')
-    }
-    const email: string | null = await ctx.runQuery(
-      internal.passwords.emailForPasswordUser,
-      { userId },
-    )
-    if (email === null) throw new ConvexError('NOT_AUTHENTICATED')
-    await ctx.runMutation(internal.passwords.setPasswordForUser, {
-      userId,
-      password: args.password,
-    })
-    return null
-  },
-})
-
-/**
  * Om adressen har en adgangskode-konto og (for v1) en kode, der ikke er udløbet.
  * Returnerer ingen kode, hash eller adresse.
  */

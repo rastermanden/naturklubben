@@ -183,9 +183,12 @@ Prøvemedlemskab og gæsteansøgninger sender ikke mail i den nuværende app
 `SITE_URL` skal være `https://naturklubben.dk`, så et link tilbage til
 preview-stien `/pr-preview/pr-<nr>/velkommen` accepteres.
 
-`JWT_PRIVATE_KEY` og `JWKS` sættes af deployet, hvis de mangler — både på
-preview og på prod. Uden dem kan en gyldig kode i nulstillingsmailen ikke
-udstede en session, og siden bliver hængende på "Et øjeblik…".
+I `@convex-dev/auth` 2.x (`convexAuthProvider()`) bruger deploymentet sine
+indbyggede signeringsnøgler til sessioner, så deploy-workflows sætter ikke
+længere `JWT_PRIVATE_KEY` og `JWKS`. **Advarsel:** `JWT_PRIVATE_KEY` må ikke
+bare slettes fra produktionsmiljøet, medmindre `RATE_LIMIT_HASH_SECRET` er sat
+-- `hashRateLimitSignal` i `convex/previewMemberAuth.ts` falder ellers
+tilbage til usaltet SHA-256.
 
 Mailtests sendes kun til **naturklubben-test@agentmail.to**. Det er
 test-indbakken. Den kan læses fra Martins side, ikke herfra, og der sendes
